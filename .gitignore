@@ -1,2 +1,7 @@
 .idea/
-rawls.iml
+project/
+target/
+*.iml
+.cache
+.classpath
+.project
