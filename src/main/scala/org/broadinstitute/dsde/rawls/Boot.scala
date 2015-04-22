@@ -17,23 +17,8 @@ import scala.sys.process.Process
 
 object Boot extends App {
 
-  private def setupSsl(conf: Config): Unit = {
-    System.setProperty("javax.net.ssl.trustStore", conf.getString("ssl.truststore"))
-    System.setProperty("javax.net.ssl.trustStorePassword", conf.getString("ssl.tsPasswd"))
-    System.setProperty("javax.net.ssl.keyStore", conf.getString("ssl.keystore"))
-    System.setProperty("javax.net.ssl.keyStorePassword", conf.getString("ssl.ksPasswd"))
-    val toolOpts = List(
-      "-Djavax.net.ssl.trustStore=/etc/truststore",
-      "-Djavax.net.ssl.trustStorePassword=truststore",
-      "-Djavax.net.ssl.keyStore=/etc/keystore",
-      "-Djavax.net.ssl.keyStorePassword=keystore"
-    )
-    Process("env", None, "JAVA_TOOL_OPTIONS" -> toolOpts.mkString(";"))
-  }
-
   private def startup(): Unit = {
     val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
-    setupSsl(conf)
 
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
