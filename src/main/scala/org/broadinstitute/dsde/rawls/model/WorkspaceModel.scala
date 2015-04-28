@@ -1,15 +1,34 @@
 package org.broadinstitute.dsde.rawls.model
 
+import com.wordnik.swagger.annotations.{ApiModelProperty, ApiModel}
 import org.joda.time.DateTime
 import org.joda.time.format.{ISODateTimeFormat, DateTimeFormatter}
 import spray.json._
 
+import scala.annotation.meta.field
+
 /**
  * Created by dvoet on 4/24/15.
  */
-case class Workspace(name: String, createdDate: DateTime, createdBy: String, entities: Map[String, Map[String, Entity]])
+@ApiModel(value = "Workspace")
+case class Workspace(
+                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
+                      namespace: String,
+                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
+                      name: String,
+                      @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ssZZ format")
+                      createdDate: DateTime,
+                      @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
+                      createdBy: String,
+                      @(ApiModelProperty@field)(required = true, value = "Entities in the workspace, first key: entity type, second key: entity name")
+                      entities: Map[String, Map[String, Entity]])
 
-case class Entity(name: String, attributes: Map[String, Attribute])
+@ApiModel(value = "Entity")
+case class Entity(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the entity")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The attributes of the entity")
+                   attributes: Map[String, Attribute])
 
 trait Attribute
 
@@ -60,5 +79,5 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
     }
   }
 
-  implicit val WorkspaceFormat = jsonFormat4(Workspace)
+  implicit val WorkspaceFormat = jsonFormat5(Workspace)
 }

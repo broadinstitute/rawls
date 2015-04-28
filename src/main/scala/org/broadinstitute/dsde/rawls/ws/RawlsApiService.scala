@@ -4,6 +4,8 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
+import org.broadinstitute.dsde.rawls.model.Workspace
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -11,8 +13,8 @@ import spray.routing._
 import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
-  def props(swaggerService: SwaggerService): Props = {
-    Props(new RawlsApiServiceActor(swaggerService))
+  def props(swaggerService: SwaggerService, workspaceServiceConstructor: () => WorkspaceService): Props = {
+    Props(new RawlsApiServiceActor(swaggerService, workspaceServiceConstructor))
   }
 }
 
@@ -25,12 +27,12 @@ class SwaggerService(override val apiVersion: String,
   (implicit val actorRefFactory: ActorRefFactory)
   extends SwaggerHttpService
 
-class RawlsApiServiceActor(swaggerService: SwaggerService) extends Actor with RootRawlsApiService {
+class RawlsApiServiceActor(swaggerService: SwaggerService, val workspaceServiceConstructor: () => WorkspaceService) extends Actor with RootRawlsApiService with WorkspaceApiService {
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ swaggerService.routes
+  def possibleRoutes = baseRoute ~ swaggerService.routes ~ workspaceRoutes
   def receive = runRoute(possibleRoutes)
-  def apiTypes = Seq(typeOf[RootRawlsApiService])
+  def apiTypes = Seq(typeOf[RootRawlsApiService], typeOf[WorkspaceApiService])
 }
 
 @Api(value = "", description = "Rawls Base API", position = 1)
@@ -61,6 +63,33 @@ trait RootRawlsApiService extends HttpService {
     path("headers") {
       get {
         requestContext => requestContext.complete(requestContext.request.headers.mkString(",\n"))
+      }
+    }
+  }
+}
+
+@Api(value = "workspace", description = "APIs for Workspace CRUD", position = 1)
+trait WorkspaceApiService extends HttpService with PerRequestCreator {
+  import spray.httpx.SprayJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+
+  val workspaceServiceConstructor: () => WorkspaceService
+
+  val workspaceRoutes = putWorkspaceRoute
+
+  @ApiOperation(value = "Create/replace workspace",
+    nickname = "create",
+    httpMethod = "PUT")
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def putWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment) { (namespace, name) =>
+      put {
+        entity(as[Workspace]) { workspace =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.SaveWorkspace(workspace.copy(namespace = namespace, name = name)))
+        }
       }
     }
   }
