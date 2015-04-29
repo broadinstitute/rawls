@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io._
-import java.nio.file.Paths
+import java.nio.file.{Files, Path, Paths}
 
-import org.apache.commons.io.FileUtils
 import org.broadinstitute.dsde.rawls.RawlsException
 import spray.json._
 
@@ -20,23 +18,23 @@ trait WorkspaceDAO {
 
 class WorkspaceDoesNotExistException(message: String) extends RawlsException(message)
 
-class FileSystemWorkspaceDAO(storageDirectory: File) extends WorkspaceDAO {
+class FileSystemWorkspaceDAO(storageDirectory: Path) extends WorkspaceDAO {
   private def storageLocation(namespace: String, name: String) = {
-    Paths.get(storageDirectory.getAbsolutePath, namespace, name).toFile
+    storageDirectory.resolve(Paths.get(namespace, name))
   }
 
   def save(workspace: Workspace): Unit = {
     val location = storageLocation(workspace.namespace, workspace.name)
-    location.getParentFile.mkdirs()
-    FileUtils.write(location, workspace.toJson.toString())
+    Files.createDirectories(location.getParent)
+    Files.write(location, workspace.toJson.prettyPrint.getBytes)
   }
 
   def load(namespace: String, name: String): Workspace = {
     val location = storageLocation(namespace, name)
-    if (!location.canRead || !location.isFile) {
-      throw new WorkspaceDoesNotExistException(s"${location.getAbsolutePath} does not exist, cannot be read, or is not a file")
+    if (!Files.exists(location) || !Files.isReadable(location) || !Files.isRegularFile(location)) {
+      throw new WorkspaceDoesNotExistException(s"${location.toString} does not exist, cannot be read, or is not a file")
     }
-    val json = FileUtils.readFileToString(location).parseJson
+    val json = new String(Files.readAllBytes(location)).parseJson
     WorkspaceFormat.read(json)
   }
 }

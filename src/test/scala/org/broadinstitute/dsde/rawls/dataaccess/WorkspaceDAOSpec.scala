@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.File
+import java.nio.file.{Files, Paths}
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model._
@@ -23,16 +23,16 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
     )
   )
 
-  val storageDir = new File(System.getProperty("java.io.tmpdir"))
+  val storageDir = Paths.get(System.getProperty("java.io.tmpdir"))
   val dao = new FileSystemWorkspaceDAO(storageDir)
-  val namespaceDir = new File(storageDir, workspace.namespace)
-  val workspaceFile = new File(namespaceDir, workspace.name)
-  workspaceFile.deleteOnExit()
+  val namespaceDir = storageDir.resolve(workspace.namespace)
+  val workspaceFile = namespaceDir.resolve(workspace.name)
+  workspaceFile.toFile.deleteOnExit()
 
   "WorkspaceDAO" should "save a workspace" in {
-    assertResult(false) { workspaceFile.exists() }
+    assertResult(false) { Files.exists(workspaceFile) }
     dao.save(workspace)
-    assertResult(true) { workspaceFile.exists() }
+    assertResult(true) { Files.exists(workspaceFile) }
   }
 
   it should "load a workspace" in {

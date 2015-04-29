@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import akka.actor.ActorSystem
 import akka.io.IO
@@ -15,7 +16,6 @@ import spray.can.Http
 
 import scala.concurrent.duration._
 import scala.reflect.runtime.universe._
-import scala.sys.process.Process
 import scala.util.{Failure, Success}
 
 object Boot extends App {
@@ -42,8 +42,8 @@ object Boot extends App {
         swaggerConfig.getString("licenseUrl"))
       ))
 
-    val storageDir = new File(conf.getString("workspace.storageDir"))
-    storageDir.mkdirs()
+    val storageDir = Paths.get(conf.getString("workspace.storageDir"))
+    Files.createDirectories(storageDir)
     val workspaceDAO = new FileSystemWorkspaceDAO(storageDir)
     val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO)), "rawls-service")
 
