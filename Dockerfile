@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y wget && \
     echo debconf shared/accepted-oracle-license-v1-1 select true | sudo debconf-set-selections && \
     echo debconf shared/accepted-oracle-license-v1-1 seen true | sudo debconf-set-selections && \
     apt-get update && \
-    apt-get install -y oracle-java6-installer && \
+    apt-get install -y oracle-java7-installer && \
     wget http://www.scala-lang.org/files/archive/scala-2.11.4.deb && \
     wget http://dl.bintray.com/sbt/debian/sbt-0.13.7.deb && \
     dpkg -i scala-2.11.4.deb && \
