@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import akka.actor.ActorSystem
 import akka.io.IO
@@ -8,12 +9,14 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.wordnik.swagger.model.ApiInfo
+import org.broadinstitute.dsde.rawls.dataaccess.{FileSystemWorkspaceDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.ws._
 import spray.can.Http
 
 import scala.concurrent.duration._
 import scala.reflect.runtime.universe._
-import scala.sys.process.Process
+import scala.util.{Failure, Success}
 
 object Boot extends App {
 
@@ -39,11 +42,23 @@ object Boot extends App {
         swaggerConfig.getString("licenseUrl"))
       ))
 
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService), "rawls-service")
+    val storageDir = Paths.get(conf.getString("workspace.storageDir"))
+    Files.createDirectories(storageDir)
+    val workspaceDAO = new FileSystemWorkspaceDAO(storageDir)
+    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO)), "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
-    IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)
+    import scala.concurrent.ExecutionContext.Implicits.global
+    (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
+      case Success(Http.CommandFailed(failure)) =>
+        system.log.error("could not bind to port: " + failure.toString)
+        system.shutdown()
+      case Failure(t) =>
+        system.log.error(t, "could not bind to port")
+        system.shutdown()
+      case _ =>
+    }
   }
 
   startup()
