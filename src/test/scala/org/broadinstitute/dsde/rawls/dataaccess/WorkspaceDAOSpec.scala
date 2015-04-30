@@ -23,7 +23,7 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
     )
   )
 
-  val storageDir = Paths.get(System.getProperty("java.io.tmpdir"))
+  val storageDir = Paths.get(System.getProperty("java.io.tmpdir"), "rawls-test")
   val dao = new FileSystemWorkspaceDAO(storageDir)
   val namespaceDir = storageDir.resolve(workspace.namespace)
   val workspaceFile = namespaceDir.resolve(workspace.name)
@@ -46,5 +46,10 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
 
   it should "throw an exception when a workspace does not exist" in {
     intercept[WorkspaceDoesNotExistException] { dao.load(workspace.namespace, workspace.name+"x") }
+  }
+
+  it should "show workspace in list" in {
+    val results = dao.list()
+    assertResult(true) { results.contains(WorkspaceShort(workspace.namespace, workspace.name, workspace.createdDate, workspace.createdBy)) }
   }
 }

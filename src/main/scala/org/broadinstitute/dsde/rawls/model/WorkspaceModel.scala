@@ -10,6 +10,17 @@ import scala.annotation.meta.field
 /**
  * Created by dvoet on 4/24/15.
  */
+@ApiModel(value = "WorkspaceShort")
+case class WorkspaceShort(
+                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
+                      namespace: String,
+                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
+                      name: String,
+                      @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ssZZ format")
+                      createdDate: DateTime,
+                      @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
+                      createdBy: String)
+
 @ApiModel(value = "Workspace")
 case class Workspace(
                       @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
@@ -69,9 +80,13 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
 
-    private val parserISO : DateTimeFormatter = ISODateTimeFormat.dateTimeNoMillis();
+    private val parserISO : DateTimeFormatter = {
+      ISODateTimeFormat.dateTimeNoMillis()
+    }
 
-    override def write(obj: DateTime) = JsString(parserISO.print(obj))
+    override def write(obj: DateTime) = {
+      JsString(parserISO.print(obj))
+    }
 
     override def read(json: JsValue) : DateTime = json match {
       case JsString(s) => parserISO.parseDateTime(s)
@@ -80,4 +95,6 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   }
 
   implicit val WorkspaceFormat = jsonFormat5(Workspace)
+
+  implicit val WorkspaceShortFormat = jsonFormat4(WorkspaceShort)
 }

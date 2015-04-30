@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.model.Workspace
+import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceShort}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
 import spray.routing.Directive.pimpApply
@@ -75,7 +75,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
 
   val workspaceServiceConstructor: () => WorkspaceService
 
-  val workspaceRoutes = putWorkspaceRoute
+  val workspaceRoutes = putWorkspaceRoute ~ listWorkspacesRoute
 
   @ApiOperation(value = "Create/replace workspace",
     nickname = "create",
@@ -90,6 +90,23 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
         entity(as[Workspace]) { workspace =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.SaveWorkspace(workspace.copy(namespace = namespace, name = name)))
         }
+      }
+    }
+  }
+
+  @ApiOperation(value = "List workspaces",
+    nickname = "list",
+    httpMethod = "GET",
+    produces = "application/json",
+    response = classOf[Seq[WorkspaceShort]])
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def listWorkspacesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces") {
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.ListWorkspaces)
       }
     }
   }
