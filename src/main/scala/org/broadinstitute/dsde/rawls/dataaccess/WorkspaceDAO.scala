@@ -18,11 +18,9 @@ import scala.collection.mutable
  */
 trait WorkspaceDAO {
   def save(workspace: Workspace)
-  def load(namespace: String, name: String): Workspace
+  def load(namespace: String, name: String): Option[Workspace]
   def list(): Seq[WorkspaceShort]
 }
-
-class WorkspaceDoesNotExistException(message: String) extends RawlsException(message)
 
 class FileSystemWorkspaceDAO(storageDirectory: Path) extends WorkspaceDAO {
   private def storageLocation(namespace: String, name: String) = {
@@ -35,13 +33,14 @@ class FileSystemWorkspaceDAO(storageDirectory: Path) extends WorkspaceDAO {
     Files.write(location, workspace.toJson.prettyPrint.getBytes)
   }
 
-  def load(namespace: String, name: String): Workspace = {
+  def load(namespace: String, name: String): Option[Workspace] = {
     val location = storageLocation(namespace, name)
     if (!Files.exists(location) || !Files.isReadable(location) || !Files.isRegularFile(location)) {
-      throw new WorkspaceDoesNotExistException(s"${location.toString} does not exist, cannot be read, or is not a file")
+      None
+    } else {
+      val json = new String(Files.readAllBytes(location)).parseJson
+      Option( WorkspaceFormat.read(json) )
     }
-    val json = new String(Files.readAllBytes(location)).parseJson
-    WorkspaceFormat.read(json)
   }
 
   def list(): Seq[WorkspaceShort] = {
