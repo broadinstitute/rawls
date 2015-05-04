@@ -39,12 +39,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val dao = MockWorkspaceDAO
 
   "rawls" should "return 201 for put to workspaces" in {
-    Put(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(putWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) { status }
         assertResult(workspace) { MockWorkspaceDAO.store((workspace.namespace, workspace.name)) }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspace.namespace}/${workspace.name}"))))) { header("Location") }
       }
   }
 
