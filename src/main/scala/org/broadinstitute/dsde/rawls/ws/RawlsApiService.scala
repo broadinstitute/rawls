@@ -7,6 +7,7 @@ import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceShort}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
+import spray.http.Uri
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -85,10 +86,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def putWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment) { (namespace, name) =>
-      put {
+    path("workspaces") {
+      post {
         entity(as[Workspace]) { workspace =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.SaveWorkspace(workspace.copy(namespace = namespace, name = name)))
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.SaveWorkspace(workspace, requestContext.request.uri.copy(path = Uri.Path.Empty)))
         }
       }
     }

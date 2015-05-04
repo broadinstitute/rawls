@@ -5,11 +5,10 @@ import akka.actor.SupervisorStrategy.Stop
 import org.broadinstitute.dsde.rawls.ws.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.ToResponseMarshaller
-import spray.json.{DefaultJsonProtocol, JsonFormat, RootJsonFormat}
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
-import spray.http.StatusCode
+import spray.http.HttpHeader
 
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
@@ -23,6 +22,7 @@ import spray.http.StatusCode
  */
 trait PerRequest extends Actor {
   import context._
+  import spray.json.DefaultJsonProtocol._
 
   def r: RequestContext
   def target: ActorRef
@@ -33,9 +33,8 @@ trait PerRequest extends Actor {
   target ! message
 
   def receive = {
-    case RequestCompleteOK_(response, marshaller) => complete(OK, response)(marshaller)
-    case RequestComplete_(response, statusCode, marshaller) => complete(statusCode, response)(marshaller)
-    case RequestCompleteNoContent(statusCode) => complete(statusCode)
+    case RequestComplete_(response, marshaller) => complete(response)(marshaller)
+    case RequestCompleteWithHeaders_(response, headers, marshaller) => complete(response, headers:_*)(marshaller)
     case ReceiveTimeout => complete(GatewayTimeout)
     case x =>
       system.log.error("Unsupported response message sent to PreRequest actor: " + Option(x).getOrElse("null").toString)
@@ -44,23 +43,13 @@ trait PerRequest extends Actor {
 
   /**
    * Complete the request sending the given response and status code
-   * @param status http status code
    * @param response to send to the caller
    * @param marshaller to use for marshalling the response
    * @tparam T the type of the response
    * @return
    */
-  private def complete[T](status: StatusCode, response: T)(implicit marshaller: ToResponseMarshaller[T]) = {
-    r.complete(response)(marshaller)
-    stop(self)
-  }
-
-  /**
-   * Complete the request with no content, just a status code
-   * @param status http status code
-   */
-  private def complete(status: StatusCode) = {
-    r.complete(status)
+  private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]) = {
+    r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
     stop(self)
   }
 
@@ -78,28 +67,27 @@ trait PerRequest extends Actor {
 object PerRequest {
   sealed trait PerRequestMessage
   /**
-   * Report complete, specifying a specific status code
+   * Report complete, follows same pattern as spray.routing.RequestContext.complete; examples of how to call
+   * that method should apply here too. E.g. even though this method has only one parameter, it can be called
+   * with 2 where the first is a StatusCode: RequestComplete(StatusCode.Created, response)
    */
-  case class RequestComplete[T](statusCode: StatusCode, response: T)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
+  case class RequestComplete[T](response: T)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
 
   /**
-   * Report complete, use the OK status code
+   * Report complete with response headers. To response with a special status code the first parameter can be a
+   * tuple where the first element is StatusCode: RequestCompleteWithHeaders((StatusCode.Created, results), header).
+   * Note that this is here so that RequestComplete above can behave like spray.routing.RequestContext.complete.
    */
-  case class RequestCompleteOK[T](response: T)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
+  case class RequestCompleteWithHeaders[T](response: T, headers: HttpHeader*)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
 
-  /**
-   * Report complete with no content, specifying a specific status code
-   */
-  case class RequestCompleteNoContent(statusCode: StatusCode) extends PerRequestMessage
-
-  // the RequestCompleteOK_ and RequestComplete_ objects allow us to pattern match on the associated case classes
-  // and pull out the marshaller as well. But we can't name them the same, thus the trailing _
-  private object RequestCompleteOK_ {
-    def unapply[T](requestCompleteOK: RequestCompleteOK[T]) = Some((requestCompleteOK.response, requestCompleteOK.marshaller))
+  /** allows for pattern matching with extraction of marshaller */
+  private object RequestComplete_ {
+    def unapply[T](requestComplete: RequestComplete[T]) = Some((requestComplete.response, requestComplete.marshaller))
   }
 
-  private object RequestComplete_ {
-    def unapply[T](requestComplete: RequestComplete[T]) = Some((requestComplete.response, requestComplete.statusCode, requestComplete.marshaller))
+  /** allows for pattern matching with extraction of marshaller */
+  private object RequestCompleteWithHeaders_ {
+    def unapply[T](requestComplete: RequestCompleteWithHeaders[T]) = Some((requestComplete.response, requestComplete.headers, requestComplete.marshaller))
   }
 
   case class WithProps(r: RequestContext, props: Props, message: AnyRef, timeout: Duration) extends PerRequest {
