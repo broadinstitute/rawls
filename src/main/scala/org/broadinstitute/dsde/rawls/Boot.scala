@@ -11,7 +11,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.dataaccess.{FileSystemWorkspaceDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.rawls.ws._
+import org.broadinstitute.dsde.rawls.webservice._
 import spray.can.Http
 
 import scala.concurrent.duration._

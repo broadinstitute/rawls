@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.ws
+package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService

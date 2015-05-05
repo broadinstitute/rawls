@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.ws.WorkspaceApiService
+import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
