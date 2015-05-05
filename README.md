@@ -1,30 +1,32 @@
+[![Build Status](https://travis-ci.org/broadinstitute/rawls.svg?branch=master)](https://travis-ci.org/broadinstitute/rawls)
+
 DSDE Workspace Service
 
 Current workspace json looks like
-
+```json
   {
     "name": "foo",
     "createdDate": "yyyy-MM-dd'T'HH:mm:ssZZ",
     "entities": {
       "individuals": {
-        "indiv id": {
-          "name": "indiv name",
+        "individual id": {
+          "name": "individual name",
           "attributes": {
-            "key": value,
+            "key": "SOME_VALUE",
             "samples": [
-              { "entityType": "samples", "entityName": "samp id" }
+              { "entityType": "samples", "entityName": "sample id" }
             ]
           }
         }
-      }
+      },
       "samples": {
-        "samp id": {
-          "name": "sampe name",
+        "sample id": {
+          "name": "sample name",
           "attributes": {
-            "key": value,
+            "key": "SOME_VALUE",
           }
         }
       }
     }
   }
-
+```
