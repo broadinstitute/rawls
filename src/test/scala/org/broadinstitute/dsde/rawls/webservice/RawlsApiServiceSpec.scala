@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.ws
+package org.broadinstitute.dsde.rawls.webservice
 
 import org.scalatest.{FlatSpec, Matchers}
 import spray.testkit.ScalatestRouteTest

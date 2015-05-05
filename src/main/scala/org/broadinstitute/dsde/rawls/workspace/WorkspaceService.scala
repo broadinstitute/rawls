@@ -4,7 +4,7 @@ import akka.actor.{Props, Actor}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceDAO
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
-import org.broadinstitute.dsde.rawls.ws.PerRequest
+import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import spray.http.{Uri, HttpHeaders, StatusCodes}
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._

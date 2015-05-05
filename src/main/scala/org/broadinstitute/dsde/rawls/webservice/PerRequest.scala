@@ -1,8 +1,8 @@
-package org.broadinstitute.dsde.rawls.ws
+package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
-import org.broadinstitute.dsde.rawls.ws.PerRequest._
+import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.ToResponseMarshaller
 import spray.routing.RequestContext
