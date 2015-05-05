@@ -36,7 +36,7 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
   }
 
   it should "load a workspace" in {
-    assertResult(workspace) { dao.load(workspace.namespace, workspace.name) }
+    assertResult(Some(workspace)) { dao.load(workspace.namespace, workspace.name) }
     assertResult(Seq(None, Option(s1))) {
       for(("samples", AttributeList(x)) <- workspace.entities("individuals")("i").attributes;
         AttributeReference(a,b) <- x
@@ -44,8 +44,8 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
     }
   }
 
-  it should "throw an exception when a workspace does not exist" in {
-    intercept[WorkspaceDoesNotExistException] { dao.load(workspace.namespace, workspace.name+"x") }
+  it should "return None when a workspace does not exist" in {
+    assertResult(None) { dao.load(workspace.namespace, workspace.name+"x") }
   }
 
   it should "show workspace in list" in {

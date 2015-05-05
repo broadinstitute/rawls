@@ -61,6 +61,43 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
 
   }
+
+  val workspaceCopy = WorkspaceName(namespace=workspace.namespace, name="test_copy")
+
+  it should "return 404 Not Found on copy if the source workspace cannot be found" in {
+    Post(s"/workspaces/${workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString()) ) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "copy a workspace if the source exists" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString()) ) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+        val copiedWorkspace = MockWorkspaceDAO.store((workspaceCopy.namespace, workspaceCopy.name))
+
+        //Name, namespace, creation date, and owner might change, so this is all that remains.
+        assert( copiedWorkspace.entities == workspace.entities )
+
+        assertResult(StatusCodes.Created) { status }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) { header("Location") }
+      }
+  }
+
+  it should "return 409 Conflict on copy if the destination already exists" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
 }
 
 object MockWorkspaceDAO extends WorkspaceDAO {
@@ -68,7 +105,13 @@ object MockWorkspaceDAO extends WorkspaceDAO {
   def save(workspace: Workspace): Unit = {
     store.put((workspace.namespace, workspace.name), workspace)
   }
-  def load(namespace: String, name: String): Workspace = store((namespace, name))
+  def load(namespace: String, name: String): Option[Workspace] = {
+    try {
+      Option( store((namespace, name)) )
+    } catch {
+      case t: NoSuchElementException => None
+    }
+  }
 
   override def list(): Seq[WorkspaceShort] = store.values.map(w => WorkspaceShort(w.namespace, w.name, w.createdDate, w.createdBy)).toSeq
 }

@@ -10,6 +10,13 @@ import scala.annotation.meta.field
 /**
  * Created by dvoet on 4/24/15.
  */
+@ApiModel(value = "WorkspaceName")
+case class WorkspaceName(
+                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
+                      namespace: String,
+                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
+                      name: String)
+
 @ApiModel(value = "WorkspaceShort")
 case class WorkspaceShort(
                       @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
@@ -97,4 +104,6 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val WorkspaceFormat = jsonFormat5(Workspace)
 
   implicit val WorkspaceShortFormat = jsonFormat4(WorkspaceShort)
+
+  implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 }

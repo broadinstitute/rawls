@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceShort}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace, WorkspaceShort}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
 import spray.http.Uri
@@ -75,12 +75,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
   val workspaceServiceConstructor: () => WorkspaceService
-
-  val workspaceRoutes = putWorkspaceRoute ~ listWorkspacesRoute
+  val workspaceRoutes = putWorkspaceRoute ~ listWorkspacesRoute ~ copyWorkspaceRoute
 
   @ApiOperation(value = "Create/replace workspace",
     nickname = "create",
-    httpMethod = "PUT")
+    httpMethod = "POST")
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
@@ -110,6 +109,27 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     path("workspaces") {
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.ListWorkspaces)
+      }
+    }
+  }
+
+  @ApiOperation(value = "Clone workspace",
+    nickname = "clone",
+    httpMethod = "POST")
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Source workspace not found"),
+    new ApiResponse(code = 409, message = "Destination workspace already exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def copyWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "clone" ) { (sourceNamespace, sourceWorkspace) =>
+      post {
+        entity(as[WorkspaceName]) { destWorkspace =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name,
+              requestContext.request.uri.copy(path = Uri.Path.Empty)))
+        }
       }
     }
   }
