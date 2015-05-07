@@ -20,6 +20,7 @@ trait WorkspaceDAO {
   def save(workspace: Workspace)
   def load(namespace: String, name: String): Option[Workspace]
   def list(): Seq[WorkspaceShort]
+  def loadShort(namespace: String, name: String): Option[WorkspaceShort]
 }
 
 class FileSystemWorkspaceDAO(storageDirectory: Path) extends WorkspaceDAO {
@@ -41,6 +42,10 @@ class FileSystemWorkspaceDAO(storageDirectory: Path) extends WorkspaceDAO {
       val json = new String(Files.readAllBytes(location)).parseJson
       Option( WorkspaceFormat.read(json) )
     }
+  }
+
+  def loadShort(namespace: String, name: String): Option[WorkspaceShort] = {
+    load(namespace, name).map(workspace => WorkspaceShort(workspace.namespace, workspace.name, workspace.createdDate, workspace.createdBy))
   }
 
   def list(): Seq[WorkspaceShort] = {

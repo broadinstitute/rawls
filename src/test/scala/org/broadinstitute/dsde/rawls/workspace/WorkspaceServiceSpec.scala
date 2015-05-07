@@ -2,9 +2,11 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceDAO
+import akka.testkit.TestActorRef
+import org.broadinstitute.dsde.rawls.dataaccess.{MockWorkspaceDAO, MockEntityDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
+import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
@@ -16,16 +18,15 @@ import WorkspaceJsonSupport._
 
 import scala.collection.mutable
 
-/**
- * Created by dvoet on 4/24/15.
- */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with ScalatestRouteTest with Matchers {
-  def actorRefFactory = system
+
+
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers {
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
 
-  val s1 = Entity("s1", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> AttributeList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))), WorkspaceName(wsns, wsname))
+  val attributeList = AttributeList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val workspace = Workspace(
     wsns,
     wsname,
@@ -33,88 +34,77 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
     "test",
     Map(
       "samples" -> Map("s1" -> s1),
-      "individuals" -> Map("i" -> Entity("i", Map("samples" -> AttributeList(Seq(AttributeReference("samples", "s2"), AttributeReference("samples", "s1")))), WorkspaceName(wsns, wsname)))
+      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeList(Seq(AttributeReference("samples", "s2"), AttributeReference("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(MockWorkspaceDAO)
+  val workspaceServiceConstructor = WorkspaceService.constructor(MockWorkspaceDAO, MockEntityDAO)
+  lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
 
-  val dao = MockWorkspaceDAO
-
-  "rawls" should "return 201 for put to workspaces" in {
-    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(putWorkspaceRoute) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-        assertResult(workspace) { MockWorkspaceDAO.store((workspace.namespace, workspace.name)) }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspace.namespace}/${workspace.name}"))))) { header("Location") }
-      }
-  }
-
-  it should "list workspaces" in {
-    Get("/workspaces") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(listWorkspacesRoute) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(MockWorkspaceDAO.store.values.map(w => WorkspaceShort(w.namespace, w.name, w.createdDate, w.createdBy)).toSeq) {
-          responseAs[Array[WorkspaceShort]]
-        }
-      }
-
-  }
-
-  val workspaceCopy = WorkspaceName(namespace=workspace.namespace, name="test_copy")
-
-  it should "return 404 Not Found on copy if the source workspace cannot be found" in {
-    Post(s"/workspaces/${workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString()) ) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(copyWorkspaceRoute) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "copy a workspace if the source exists" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString()) ) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(copyWorkspaceRoute) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-        val copiedWorkspace = MockWorkspaceDAO.store((workspaceCopy.namespace, workspaceCopy.name))
-
-        //Name, namespace, creation date, and owner might change, so this is all that remains.
-        assert( copiedWorkspace.entities == workspace.entities )
-
-        assertResult(StatusCodes.Created) { status }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) { header("Location") }
-      }
-  }
-
-  it should "return 409 Conflict on copy if the destination already exists" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(copyWorkspaceRoute) ~>
-      check {
-        assertResult(StatusCodes.Conflict) { status }
-      }
-  }
-
-}
-
-object MockWorkspaceDAO extends WorkspaceDAO {
-  var store = new mutable.HashMap[Tuple2[String, String], Workspace]()
-  def save(workspace: Workspace): Unit = {
-    store.put((workspace.namespace, workspace.name), workspace)
-  }
-  def load(namespace: String, name: String): Option[Workspace] = {
-    try {
-      Option( store((namespace, name)) )
-    } catch {
-      case t: NoSuchElementException => None
+  "WorkspaceService" should "add attribute to entity" in {
+    assertResult(Some(AttributeString("foo"))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute("newAttribute", AttributeString("foo")))).attributes.get("newAttribute")
     }
   }
 
-  override def list(): Seq[WorkspaceShort] = store.values.map(w => WorkspaceShort(w.namespace, w.name, w.createdDate, w.createdBy)).toSeq
+  it should "update attribute in entity" in {
+    assertResult(Some(AttributeString("biz"))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(AddUpdateAttribute("foo", AttributeString("biz")))).attributes.get("foo")
+    }
+  }
+
+  it should "remove attribute from entity" in {
+    assertResult(None) {
+      workspaceService.applyOperationsToEntity(s1, Seq(RemoveAttribute("foo"))).attributes.get("foo")
+    }
+  }
+
+  it should "add item to existing list in entity" in {
+    assertResult(Some(AttributeList(attributeList.value :+ AttributeString("new")))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("splat", AttributeString("new")))).attributes.get("splat")
+    }
+  }
+
+  it should "add item to non-existing list in entity" in {
+    assertResult(Some(AttributeList(Seq(AttributeString("new"))))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("bob", AttributeString("new")))).attributes.get("bob")
+    }
+  }
+
+  it should "remove item from existing listing entity" in {
+    assertResult(Some(AttributeList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember("splat", AttributeString("a")))).attributes.get("splat")
+    }
+  }
+
+  it should "throw AttributeNotFoundException when removing from a list that does not exist" in {
+    intercept[AttributeNotFoundException] {
+      workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember("bingo", AttributeString("a"))))
+    }
+  }
+
+  it should "throw AttributeUpdateOperationException when remove from an attribute that is not a list" in {
+    intercept[AttributeUpdateOperationException] {
+      workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember("foo", AttributeString("a"))))
+    }
+  }
+
+  it should "throw AttributeUpdateOperationException when adding to an attribute that is not a list" in {
+    intercept[AttributeUpdateOperationException] {
+      workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("foo", AttributeString("a"))))
+    }
+  }
+
+  it should "apply attribute updates in order to entity" in {
+    assertResult(Some(AttributeString("splat"))) {
+      workspaceService.applyOperationsToEntity(s1, Seq(
+        AddUpdateAttribute("newAttribute", AttributeString("foo")),
+        AddUpdateAttribute("newAttribute", AttributeString("bar")),
+        AddUpdateAttribute("newAttribute", AttributeString("splat"))
+      )).attributes.get("newAttribute")
+    }
+  }
 }
+
+
+
