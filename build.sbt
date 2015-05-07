@@ -23,7 +23,11 @@ libraryDependencies ++= {
     "io.spray" %% "spray-json" % "1.3.1",
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-    "org.mongodb" %% "casbah" % "2.8.0",
+    "com.orientechnologies" % "orientdb-core" % "2.0.8",
+    "com.orientechnologies" % "orientdb-graphdb" % "2.0.8",
+    "com.orientechnologies" % "orientdb-server" % "2.0.8",
+    "com.orientechnologies" % "orientdb-client" % "2.0.8",
+    "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
       .exclude("com.google.guava", "guava-jdk5")
   )
