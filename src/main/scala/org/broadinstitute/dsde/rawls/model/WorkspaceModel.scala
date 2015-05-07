@@ -7,6 +7,10 @@ import spray.json._
 
 import scala.annotation.meta.field
 
+trait Identifiable {
+  def path : String
+}
+
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -15,7 +19,9 @@ case class WorkspaceName(
                       @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
                       namespace: String,
                       @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
-                      name: String)
+                      name: String) extends Identifiable {
+  def path : String = "workspaces/" + namespace + "/" + name
+}
 
 @ApiModel(value = "WorkspaceShort")
 case class WorkspaceShort(
@@ -26,10 +32,12 @@ case class WorkspaceShort(
                       @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ssZZ format")
                       createdDate: DateTime,
                       @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
-                      createdBy: String)
+                      createdBy: String) extends Identifiable {
+  def path : String = "workspaces/" + namespace + "/" + name
+}
 
 @ApiModel(value = "Workspace")
-case class Workspace(
+case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
                       namespace: String,
                       @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
@@ -39,14 +47,20 @@ case class Workspace(
                       @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
                       createdBy: String,
                       @(ApiModelProperty@field)(required = true, value = "Entities in the workspace, first key: entity type, second key: entity name")
-                      entities: Map[String, Map[String, Entity]])
+                      entities: Map[String, Map[String, Entity]] ) extends Identifiable {
+  def path : String = "workspaces/" + namespace + "/" + name
+}
 
 @ApiModel(value = "Entity")
 case class Entity(
                    @(ApiModelProperty@field)(required = true, value = "The name of the entity")
                    name: String,
                    @(ApiModelProperty@field)(required = true, value = "The attributes of the entity")
-                   attributes: Map[String, Attribute])
+                   attributes: Map[String, Attribute],
+                   @(ApiModelProperty@field)(required = true, value = "This entity's owning workspace")
+                   workspaceName:WorkspaceName ) extends Identifiable {
+  def path : String = workspaceName.path + "/" + name
+}
 
 trait Attribute
 
@@ -83,8 +97,6 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
     }
   }
 
-  implicit val EntityFormat = jsonFormat2(Entity)
-
   implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
 
     private val parserISO : DateTimeFormatter = {
@@ -101,9 +113,12 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
     }
   }
 
-  implicit val WorkspaceFormat = jsonFormat5(Workspace)
-
   implicit val WorkspaceShortFormat = jsonFormat4(WorkspaceShort)
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
+
+  implicit val EntityFormat = jsonFormat3(Entity)
+
+  implicit val WorkspaceFormat = jsonFormat5(Workspace)
+
 }

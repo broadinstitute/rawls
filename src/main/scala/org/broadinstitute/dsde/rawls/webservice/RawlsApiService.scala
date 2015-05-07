@@ -90,7 +90,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
         entity(as[Workspace]) { workspace =>
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.SaveWorkspace(workspace, requestContext.request.uri.copy(path = Uri.Path.Empty)))
+            WorkspaceService.SaveWorkspace(workspace))
         }
       }
     }
@@ -127,8 +127,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
       post {
         entity(as[WorkspaceName]) { destWorkspace =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name,
-              requestContext.request.uri.copy(path = Uri.Path.Empty)))
+            WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name))
         }
       }
     }
