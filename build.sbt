@@ -33,6 +33,13 @@ libraryDependencies ++= {
   )
 }
 
+assemblyMergeStrategy in assembly := {
+  case PathList("org", "apache", xs @ _*) => MergeStrategy.last
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}
+
 Revolver.settings
 
 Revolver.enableDebugging(port = 5050, suspend = false)
