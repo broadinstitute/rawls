@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
+import com.sun.corba.se.spi.ior.Identifiable
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.ToResponseMarshaller
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
-import spray.http.HttpHeader
+import spray.http.{StatusCodes, HttpHeaders, HttpHeader, Uri}
 
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
@@ -23,6 +24,7 @@ import spray.http.HttpHeader
 trait PerRequest extends Actor {
   import context._
   import spray.json.DefaultJsonProtocol._
+  import org.broadinstitute.dsde.rawls.model.Identifiable
 
   def r: RequestContext
   def target: ActorRef
@@ -49,7 +51,14 @@ trait PerRequest extends Actor {
    * @return
    */
   private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]) = {
-    r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
+    val additionalHeaders = response match {
+      case ( StatusCodes.Created, entity : Identifiable ) => {
+        Option( HttpHeaders.Location(r.request.uri.copy(path = Uri.Path("/"+entity.path))) )
+    }
+      case _ => None
+    }
+
+    r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(response)
     stop(self)
   }
 
