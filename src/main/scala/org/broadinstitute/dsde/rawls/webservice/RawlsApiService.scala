@@ -4,8 +4,9 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace, WorkspaceShort}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations.EntityUpdateOperation
+import org.broadinstitute.dsde.rawls.workspace.{EntityUpdateOperations, WorkspaceService}
 import spray.http.MediaTypes._
 import spray.http.Uri
 import spray.routing.Directive.pimpApply
@@ -75,7 +76,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
   val workspaceServiceConstructor: () => WorkspaceService
-  val workspaceRoutes = putWorkspaceRoute ~ listWorkspacesRoute ~ copyWorkspaceRoute
+  val workspaceRoutes =
+    putWorkspaceRoute ~
+    listWorkspacesRoute ~
+    copyWorkspaceRoute ~
+    createEntityRoute ~
+    getEntityRoute ~
+    updateEntityRoute ~
+    deleteEntityRoute ~
+    renameEntityRoute
 
   @ApiOperation(value = "Create/replace workspace",
     nickname = "create",
@@ -128,6 +137,106 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
         entity(as[WorkspaceName]) { destWorkspace =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
             WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "Create entity in a workspace",
+    nickname = "create entity",
+    httpMethod = "POST",
+    produces = "application/json",
+    response = classOf[Entity])
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace not found"),
+    new ApiResponse(code = 409, message = "Entity already exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def createEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[Entity]) { entity =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CreateEntity(workspaceNamespace, workspaceName, entity))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "Get entity in a workspace",
+    nickname = "get entity",
+    httpMethod = "Get",
+    produces = "application/json",
+    response = classOf[Entity])
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def getEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          WorkspaceService.GetEntity(workspaceNamespace, workspaceName, entityType, entityName))
+      }
+    }
+  }
+
+  @ApiOperation(value = "Update entity in a workspace",
+    nickname = "update entity",
+    httpMethod = "Post",
+    produces = "application/json",
+    response = classOf[Entity])
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 400, message = "Attribute does not exists or is of an unexpected type"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def updateEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    import EntityUpdateOperations._
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      post {
+        entity(as[Array[EntityUpdateOperation]]) { operations =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "delete entity in a workspace",
+    nickname = "delete entity",
+    httpMethod = "Delete")
+  @ApiResponses(Array(
+    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def deleteEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      delete {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          WorkspaceService.DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName))
+      }
+    }
+  }
+
+  @ApiOperation(value = "rename entity in a workspace",
+    nickname = "renameentity",
+    httpMethod = "Post")
+  @ApiResponses(Array(
+    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def renameEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      post {
+        entity(as[EntityName]) { newEntityName =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
         }
       }
     }

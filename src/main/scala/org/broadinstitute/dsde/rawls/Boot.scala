@@ -9,7 +9,8 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.dataaccess.{FileSystemWorkspaceDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{EntityDAO, FileSystemWorkspaceDAO}
+import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.webservice._
 import spray.can.Http
@@ -45,7 +46,7 @@ object Boot extends App {
     val storageDir = Paths.get(conf.getString("workspace.storageDir"))
     Files.createDirectories(storageDir)
     val workspaceDAO = new FileSystemWorkspaceDAO(storageDir)
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO)), "rawls-service")
+    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO, NoOpEntityDAO)), "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
@@ -62,4 +63,12 @@ object Boot extends App {
   }
 
   startup()
+}
+
+object NoOpEntityDAO extends EntityDAO {
+  override def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): Option[Entity] = { None }
+  override def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String): Unit = { }
+  override def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): Unit = { }
+  override def list(workspaceNamespace: String, workspaceName: String, entityType: String): TraversableOnce[Entity] = Seq.empty
+  override def save(workspaceNamespace: String, workspaceName: String, entity: Entity): Entity = entity
 }
