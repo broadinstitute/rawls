@@ -212,7 +212,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
     new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
     new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name"),
-    new ApiImplicitParam(name = "entityUpdateJson", required = true, dataType = "org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations.EntityUpdateOperation", paramType = "body", value = "Update operations")
+    new ApiImplicitParam(name = "entityUpdateJson", required = true, dataType = "org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations$EntityUpdateOperation", paramType = "body", value = "Update operations")
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
