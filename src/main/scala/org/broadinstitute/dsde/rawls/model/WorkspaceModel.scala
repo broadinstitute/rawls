@@ -69,6 +69,27 @@ case class Entity(
   def path : String = workspaceName.path + "/entities/" + name
 }
 
+@ApiModel(value = "Task configuration name")
+case class TaskConfigurationName(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the task configuration")
+                   name: String)
+
+case class TaskConfiguration(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the entity")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the task will be running on")
+                   rootEntityType: String,
+                   @(ApiModelProperty@field)(required = true, value = "The task LSID")
+                   taskLSID: String,
+                   @(ApiModelProperty@field)(required = true, value = "Inputs for the task")
+                   inputs: Map[String, String],
+                   @(ApiModelProperty@field)(required = false, value = "Outputs for the task")
+                   outputs: Map[String, String],
+                   @(ApiModelProperty@field)(required = true, value = "This task configuration's owning workspace")
+                   workspaceName:WorkspaceName) extends Identifiable {
+  def path : String = workspaceName.path + "/taskConfigs/" + name
+}
+
 trait Attribute
 trait AttributeValue extends Attribute
 trait AttributeReference extends Attribute
@@ -137,4 +158,8 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val WorkspaceFormat = jsonFormat5(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
+
+  implicit val TaskConfigurationNameFormat = jsonFormat1(TaskConfigurationName)
+
+  implicit val TaskConfigurationFormat = jsonFormat6(TaskConfiguration)
 }
