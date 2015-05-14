@@ -38,8 +38,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
+  val task = Task("Task-a", wsns, "1")
+  val taskConfig = TaskConfiguration("testConfig", "samples", task, Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
+  val taskConfig2 = TaskConfiguration("testConfig2", "samples", task, Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
+  val taskConfig3 = TaskConfiguration("testConfig", "samples", task, Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO)
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockTaskConfigurationDAO)
+
 
   val dao = MockWorkspaceDAO
 
@@ -326,7 +331,115 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
         }
       }
   }
+  it should "return 201 on create task configuration" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs", HttpEntity(ContentTypes.`application/json`, taskConfig.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(createTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(taskConfig) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name)(taskConfig.name)
+        }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${taskConfig.path}"))))) {
+          header("Location")
+        }
+      }
+  }
 
-  //  delete
-//  delete 404
+  it should "return 409 on task configuration rename when rename already exists" in {
+    MockTaskConfigurationDAO.save(workspace.namespace, workspace.name, taskConfig2)
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, TaskConfigurationName(taskConfig2.name, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(renameTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 on task configuration rename" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, TaskConfigurationName("testConfig2_changed", WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(renameTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(true) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name).get("testConfig2_changed").isDefined
+        }
+        assertResult(None) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name).get(taskConfig2.name)
+        }
+      }
+  }
+
+  it should "return 404 on task configuration rename, task configuration does not exist" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, TaskConfigurationName("testConfig2_changed", WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(renameTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+        assertResult(true) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name).get("testConfig2_changed").isDefined
+        }
+      }
+  }
+
+  it should "return 204 task configuration delete" in {
+    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/testConfig2_changed") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(deleteTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name).get("testConfig2_changed")
+        }
+      }
+  }
+  it should "return 404 task configuration delete, task configuration does not exist" in {
+    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig.name}x") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(deleteTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 200 on update task configuration" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig.name}", HttpEntity(ContentTypes.`application/json`, taskConfig3.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(updateTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Option("foo2")) {
+          MockTaskConfigurationDAO.store(workspace.namespace, workspace.name)(taskConfig3.name).inputs.get("param2")
+        }
+      }
+  }
+
+  it should "return 404 on update task configuration" in {
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/taskConfigs/${taskConfig.name}", HttpEntity(ContentTypes.`application/json`, taskConfig2.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(updateTaskConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+
+
 }

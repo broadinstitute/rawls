@@ -9,9 +9,6 @@ trait TaskConfigurationDAO {
   /** gets by task config name*/
   def get(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String) : Option[TaskConfiguration]
 
-  /** gets by task config name*/
-  def getByTaskLSID(workspaceNamespace: String, workspaceName: String, taskLSID: String) : Option[TaskConfiguration]
-
   /** creates or replaces a task configuration */
   def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration) : TaskConfiguration
 

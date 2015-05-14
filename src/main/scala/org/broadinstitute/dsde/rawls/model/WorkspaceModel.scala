@@ -72,15 +72,28 @@ case class Entity(
 @ApiModel(value = "Task configuration name")
 case class TaskConfigurationName(
                    @(ApiModelProperty@field)(required = true, value = "The name of the task configuration")
-                   name: String)
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "This task configuration's owning workspace")
+                   workspaceName: WorkspaceName
+                   )
 
+@ApiModel(value = "Task")
+case class Task(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the task")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The namespace of the task")
+                   nameSpace: String,
+                   @(ApiModelProperty@field)(required = true, value = "The version of the task")
+                   version: String
+                 )
+@ApiModel(value = "Task Configuration")
 case class TaskConfiguration(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the entity")
+                   @(ApiModelProperty@field)(required = true, value = "The name of the task configuration")
                    name: String,
                    @(ApiModelProperty@field)(required = true, value = "The root entity type that the task will be running on")
                    rootEntityType: String,
                    @(ApiModelProperty@field)(required = true, value = "The task LSID")
-                   taskLSID: String,
+                   task: Task,
                    @(ApiModelProperty@field)(required = true, value = "Inputs for the task")
                    inputs: Map[String, String],
                    @(ApiModelProperty@field)(required = false, value = "Outputs for the task")
@@ -107,6 +120,7 @@ case class AttributeReferenceSingle(val entityType: String, val entityName: Stri
 }
 
 object WorkspaceJsonSupport extends DefaultJsonProtocol {
+
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
 
     override def write(obj: Attribute): JsValue = obj match {
@@ -143,7 +157,7 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
       JsString(parserISO.print(obj))
     }
 
-    override def read(json: JsValue) : DateTime = json match {
+    override def read(json: JsValue): DateTime = json match {
       case JsString(s) => parserISO.parseDateTime(s)
       case _ => throw new DeserializationException("only string supported")
     }
@@ -159,7 +173,9 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
-  implicit val TaskConfigurationNameFormat = jsonFormat1(TaskConfigurationName)
+  implicit val TaskConfigurationNameFormat = jsonFormat2(TaskConfigurationName)
+
+  implicit val TaskFormat = jsonFormat3(Task)
 
   implicit val TaskConfigurationFormat = jsonFormat6(TaskConfiguration)
 }

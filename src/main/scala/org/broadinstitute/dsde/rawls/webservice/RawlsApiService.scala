@@ -78,7 +78,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     getEntityRoute ~
     updateEntityRoute ~
     deleteEntityRoute ~
-    renameEntityRoute
+    renameEntityRoute ~
+    createTaskConfigurationRoute ~
+    deleteTaskConfigurationRoute ~
+    renameTaskConfigurationRoute ~
+    updateTaskConfigurationRoute
 
   @ApiOperation(value = "Create/replace workspace",
     nickname = "create",
@@ -276,6 +280,85 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
         entity(as[EntityName]) { newEntityName =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
             WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "Create task configuration in a workspace",
+    nickname = "create task configuration",
+    httpMethod = "POST",
+    produces = "application/json",
+    response = classOf[TaskConfiguration])
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace not found"),
+    new ApiResponse(code = 409, message = "TaskConfiguration already exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def createTaskConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "taskConfigs") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[TaskConfiguration]) { taskConfiguration =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CreateTaskConfiguration(workspaceNamespace, workspaceName, taskConfiguration))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "delete task configuration in a workspace",
+    nickname = "delete task configuration",
+    httpMethod = "Delete")
+  @ApiResponses(Array(
+    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or Task Configuration does not exist"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def deleteTaskConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "taskConfigs" / Segment) { (workspaceNamespace, workspaceName, taskConfigName) =>
+      delete {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          WorkspaceService.DeleteTaskConfiguration(workspaceNamespace, workspaceName, taskConfigName))
+      }
+    }
+  }
+
+  @ApiOperation(value = "rename task configuration in a workspace",
+    nickname = "renametaskconfig",
+    httpMethod = "Post")
+  @ApiResponses(Array(
+    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or Task Configuration does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def renameTaskConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "taskConfigs" / Segment / "rename") { (workspaceNamespace, workspaceName, taskConfigurationName) =>
+      post {
+        entity(as[TaskConfigurationName]) { newEntityName =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.RenameTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName, newEntityName.name))
+        }
+      }
+    }
+  }
+
+  @ApiOperation(value = "Update task configuration in a workspace",
+    nickname = "update task configuration",
+    httpMethod = "Post",
+    produces = "application/json",
+    response = classOf[Entity])
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Workspace or task configuration does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def updateTaskConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "taskConfigs" / Segment ) { (workspaceNamespace, workspaceName, taskConfigurationName) =>
+      post {
+        entity(as[TaskConfiguration]) { newTaskConfiguration =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.UpdateTaskConfiguration(workspaceNamespace, workspaceName, newTaskConfiguration))
         }
       }
     }
