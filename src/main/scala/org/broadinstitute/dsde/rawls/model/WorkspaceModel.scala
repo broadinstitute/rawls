@@ -5,6 +5,8 @@ import org.broadinstitute.dsde.rawls.VertexProperty
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
 import spray.json._
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import scala.annotation.meta.field
 
@@ -184,6 +186,25 @@ case class JobStatus(
   @(ApiModelProperty@field)("Job status")
   status: String)
 
+object AttributeConversions {
+  // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
+  def attributeToProperty(att: AttributeValue): Any = att match {
+    case AttributeBoolean(b) => b
+    case AttributeNumber(n) => n.bigDecimal
+    case AttributeString(s) => s
+    case AttributeValueList(l) => l.map(attributeToProperty(_)).asJava
+    case _ => throw new IllegalArgumentException("Cannot serialize " + att + " as a property")
+  }
+
+  def propertyToAttribute(prop: Any): AttributeValue = prop match {
+    case b: Boolean => AttributeBoolean(b)
+    case n: java.math.BigDecimal => AttributeNumber(n)
+    case s: String => AttributeString(s)
+    case l: java.util.List[_] => AttributeValueList(l.map(propertyToAttribute(_)))
+    case _ => throw new IllegalArgumentException("Cannot deserialize " + prop + " as an attribute")
+  }
+}
+
 object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
@@ -225,6 +246,17 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
     override def read(json: JsValue): DateTime = json match {
       case JsString(s) => parserISO.parseDateTime(s)
       case _ => throw new DeserializationException("only string supported")
+    }
+  }
+
+  implicit object SeqAttributeFormat extends RootJsonFormat[Seq[AttributeValue]] {
+    override def write(obj: Seq[AttributeValue]) = {
+      JsArray(obj.map( AttributeFormat.write ).toVector)
+    }
+
+    override def read(json: JsValue): Seq[AttributeValue] = json match {
+      case JsArray(a) if a.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => a.map(AttributeFormat.read(_).asInstanceOf[AttributeValue]).toSeq
+      case _ => throw new DeserializationException("unexpected json type")
     }
   }
 

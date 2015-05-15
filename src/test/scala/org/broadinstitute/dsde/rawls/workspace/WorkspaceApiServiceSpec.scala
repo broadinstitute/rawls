@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.MethodRepoMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, JobApiService}
@@ -20,7 +21,7 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with JobApiService with ScalatestRouteTest with Matchers with BeforeAndAfterAll {
+class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with JobApiService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -29,7 +30,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   def addMockOpenAmCookie = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", "test_token")))
 
   def actorRefFactory = system
-  val dataSource = DataSource("memory:rawls", "admin", "admin")
+
+  override val testDbName = "WorkspaceApiServiceTest"
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
@@ -70,6 +72,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, new HttpMethodRepoDAO(MethodRepoMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(MethodRepoMockServer.mockServerBaseUrl))
   val dao = MockWorkspaceDAO
+
+  initializeTestGraph()
 
   override def beforeAll() = MethodRepoMockServer.startServer
   override def afterAll() = MethodRepoMockServer.stopServer
@@ -421,6 +425,32 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
       }
   }
+
+  it should "return 200 on successfully parsing an expression" in {
+    Post(s"/workspaces/workspaces/test_workspace/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(evaluateExpressionRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array("normal", "tumor", "tumor")) {
+          responseAs[Array[String]]
+        }
+      }
+  }
+
+  it should "return 400 on failing to parse an expression" in {
+    Post(s"/workspaces/workspaces/test_workspace/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(evaluateExpressionRoute) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
   it should "return 201 on create method configuration" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>

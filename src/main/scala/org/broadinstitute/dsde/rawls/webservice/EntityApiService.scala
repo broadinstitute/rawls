@@ -24,6 +24,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     updateEntityRoute ~
     deleteEntityRoute ~
     renameEntityRoute ~
+    evaluateExpressionRoute ~
     listEntityTypesRoute ~
     listEntitiesPerTypeRoute
 
@@ -69,7 +70,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
-    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def getEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
@@ -97,7 +98,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 400, message = "Attribute does not exists or is of an unexpected type"),
-    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def updateEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
@@ -123,7 +124,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
-    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def deleteEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
@@ -148,7 +149,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
-    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def renameEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
@@ -157,6 +158,33 @@ trait EntityApiService extends HttpService with PerRequestCreator {
         entity(as[EntityName]) { newEntityName =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
             WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
+        }
+      }
+    }
+  }
+
+  @Path("/{entityType}/{entityName}/evaluate")
+  @ApiOperation(value = "evaluate expression on an entity",
+    nickname = "evaluateExpression",
+    httpMethod = "Post")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 400, message = "Invalid entity expression"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def evaluateExpressionRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      post {
+        entity(as[String]) { expression =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.EvaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression))
         }
       }
     }
