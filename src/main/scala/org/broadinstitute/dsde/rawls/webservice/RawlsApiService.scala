@@ -285,11 +285,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
   @ApiOperation(value = "Create Method configuration in a workspace",
     nickname = "create method configuration",
     httpMethod = "POST",
     produces = "application/json",
     response = classOf[MethodConfiguration])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "methodConfigJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfiguration", paramType = "body", value = "Method Configuration contents")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace not found"),
@@ -307,9 +311,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
   @ApiOperation(value = "delete method configuration in a workspace",
     nickname = "delete method configuration",
     httpMethod = "Delete")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exist"),
@@ -324,9 +334,16 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
   @ApiOperation(value = "rename method configuration in a workspace",
     nickname = "renamemethodconfig",
     httpMethod = "Post")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name"),
+    new ApiImplicitParam(name = "newMethodConfigurationName", required = true, dataType = "string", paramType = "path", value = "New Method Configuration Name")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exists"),
@@ -343,11 +360,18 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
   @ApiOperation(value = "Update method configuration in a workspace",
     nickname = "update method configuration",
     httpMethod = "Post",
     produces = "application/json",
-    response = classOf[Entity])
+    response = classOf[MethodConfiguration])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name"),
+    new ApiImplicitParam(name = "newMethodConfigJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfiguration", paramType = "body", value = "New Method Configuration contents")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or method configuration does not exists"),
