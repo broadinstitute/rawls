@@ -20,5 +20,9 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
     assertResult( Success(ArrayBuffer("normal", "tumor", "tumor")) ) {
       evaluator.evaluate("workspaces", "test_workspace", "SampleSet", "sset1", "this.samples.type")
     }
+
+    assertResult( Success(ArrayBuffer("normal")) ) {
+      evaluator.evaluate("workspaces", "test_workspace", "Sample", "sample1", "this.type")
+    }
   }
 }
