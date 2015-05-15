@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
-import com.wordnik.swagger.annotations.{ApiModelProperty, ApiModel}
+import com.wordnik.swagger.annotations.{ApiModel, ApiModelProperty}
 import org.joda.time.DateTime
-import org.joda.time.format.{ISODateTimeFormat, DateTimeFormatter}
+import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
 import spray.json._
 
 import scala.annotation.meta.field
@@ -70,17 +70,20 @@ case class Entity(
 }
 
 trait Attribute
+trait AttributeValue extends Attribute
+trait AttributeReference extends Attribute
 
-case class AttributeString(val value: String) extends Attribute
-case class AttributeNumber(val value: BigDecimal) extends Attribute
-case class AttributeBoolean(val value: Boolean) extends Attribute
-case class AttributeList(val value: Seq[Attribute]) extends Attribute
-case class AttributeReference(val entityType: String, val entityName: String) extends Attribute {
+case class AttributeString(val value: String) extends AttributeValue
+case class AttributeNumber(val value: BigDecimal) extends AttributeValue
+case class AttributeBoolean(val value: Boolean) extends AttributeValue
+case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeValue // recursive
+case class AttributeReferenceList(val list: Seq[AttributeReferenceSingle]) extends AttributeReference // non-recursive
+
+case class AttributeReferenceSingle(val entityType: String, val entityName: String) extends AttributeReference {
   def resolve(context: Workspace): Option[Entity] = {
     context.entities.getOrElse(entityType, Map.empty).get(entityName)
   }
 }
-
 
 object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
@@ -89,23 +92,28 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
       case AttributeBoolean(b) => JsBoolean(b)
       case AttributeNumber(n) => JsNumber(n)
       case AttributeString(s) => JsString(s)
-      case AttributeList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeReference(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
+      case AttributeValueList(l) => JsArray(l.map(write(_)):_*)
+      case AttributeReferenceList(l) => JsArray(l.map(write(_)):_*)
+      case AttributeReferenceSingle(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
     }
 
-    override def read(json: JsValue) : Attribute = json match {
+    override def read(json: JsValue): Attribute = json match {
       case JsString(s) => AttributeString(s)
       case JsBoolean(b) => AttributeBoolean(b)
       case JsNumber(n) => AttributeNumber(n)
-      case JsArray(a) => AttributeList(a.map(read(_)))
-      case JsObject(members) => AttributeReference(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
-
+      case JsArray(a) => getAttributeList(a.map(read(_)))
+      case JsObject(members) => AttributeReferenceSingle(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
       case _ => throw new DeserializationException("unexpected json type")
+    }
+
+    def getAttributeList(s: Seq[Attribute]) = s match {
+      case v: Seq[AttributeValue] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
+      case r: Seq[AttributeReferenceSingle] if (s.map(_.isInstanceOf[AttributeReferenceSingle]).reduce(_&&_)) => AttributeReferenceList(r)
+      case _ => throw new DeserializationException("illegal array type")
     }
   }
 
   implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
-
     private val parserISO : DateTimeFormatter = {
       ISODateTimeFormat.dateTimeNoMillis()
     }

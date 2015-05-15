@@ -1,18 +1,18 @@
 package org.broadinstitute.dsde.rawls
 
 import java.io.File
-import java.nio.file.{Files, Paths}
 
 import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
-import com.typesafe.config.{Config, ConfigFactory}
+import com.tinkerpop.blueprints.impls.orient.OrientGraph
+import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.dataaccess.{EntityDAO, FileSystemWorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{GraphEntityDAO, EntityDAO, GraphWorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model.Entity
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.webservice._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
 
 import scala.concurrent.duration._
@@ -43,10 +43,14 @@ object Boot extends App {
         swaggerConfig.getString("licenseUrl"))
       ))
 
-    val storageDir = Paths.get(conf.getString("workspace.storageDir"))
-    Files.createDirectories(storageDir)
-    val workspaceDAO = new FileSystemWorkspaceDAO(storageDir)
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO, NoOpEntityDAO)), "rawls-service")
+    //val storageDir = Paths.get(conf.getString("workspace.storageDir"))
+    //Files.createDirectories(storageDir)
+    //val workspaceDAO = new FileSystemWorkspaceDAO(storageDir)
+    //val entityDAO = NoOpEntityDAO
+    val backingDB = new OrientGraph("memory:rawls") // TODO: use orientdb-dev
+    val workspaceDAO = new GraphWorkspaceDAO(backingDB)
+    val entityDAO = new GraphEntityDAO(backingDB)
+    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(workspaceDAO, entityDAO)), "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler

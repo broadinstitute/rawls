@@ -2,9 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import java.util.UUID
-
-import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess.{MockWorkspaceDAO, MockEntityDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
@@ -18,8 +15,6 @@ import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
 
-import scala.collection.mutable
-
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -29,7 +24,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
 
-  val attributeList = AttributeList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+  val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val workspace = Workspace(
@@ -39,7 +34,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
     "test",
     Map(
       "samples" -> Map("s1" -> s1),
-      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeList(Seq(AttributeReference("samples", "s2"), AttributeReference("samples", "s1")))), WorkspaceName(wsns, wsname)))
+      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
 
