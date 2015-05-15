@@ -69,38 +69,38 @@ case class Entity(
   def path : String = workspaceName.path + "/entities/" + name
 }
 
-@ApiModel(value = "Task configuration name")
-case class TaskConfigurationName(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the task configuration")
+@ApiModel(value = "Method configuration name")
+case class MethodConfigurationName(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "This task configuration's owning workspace")
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName: WorkspaceName
                    )
 
-@ApiModel(value = "Task")
-case class Task(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the task")
+@ApiModel(value = "Method")
+case class Method(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method")
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "The namespace of the task")
+                   @(ApiModelProperty@field)(required = true, value = "The namespace of the method")
                    nameSpace: String,
-                   @(ApiModelProperty@field)(required = true, value = "The version of the task")
+                   @(ApiModelProperty@field)(required = true, value = "The version of the method")
                    version: String
                  )
-@ApiModel(value = "Task Configuration")
-case class TaskConfiguration(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the task configuration")
+@ApiModel(value = "Method Configuration")
+case class MethodConfiguration(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the task will be running on")
+                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
                    rootEntityType: String,
-                   @(ApiModelProperty@field)(required = true, value = "The task LSID")
-                   task: Task,
-                   @(ApiModelProperty@field)(required = true, value = "Inputs for the task")
+                   @(ApiModelProperty@field)(required = true, value = "The method from method store")
+                   method: Method,
+                   @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
                    inputs: Map[String, String],
-                   @(ApiModelProperty@field)(required = false, value = "Outputs for the task")
+                   @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
                    outputs: Map[String, String],
-                   @(ApiModelProperty@field)(required = true, value = "This task configuration's owning workspace")
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName:WorkspaceName) extends Identifiable {
-  def path : String = workspaceName.path + "/taskConfigs/" + name
+  def path : String = workspaceName.path + "/methodConfigs/" + name
 }
 
 trait Attribute
@@ -173,9 +173,9 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
-  implicit val TaskConfigurationNameFormat = jsonFormat2(TaskConfigurationName)
+  implicit val MethodConfigurationNameFormat = jsonFormat2(MethodConfigurationName)
 
-  implicit val TaskFormat = jsonFormat3(Task)
+  implicit val MethodFormat = jsonFormat3(Method)
 
-  implicit val TaskConfigurationFormat = jsonFormat6(TaskConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat6(MethodConfiguration)
 }

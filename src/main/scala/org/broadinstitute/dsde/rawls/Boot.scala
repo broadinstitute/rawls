@@ -9,8 +9,9 @@ import akka.util.Timeout
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, EntityDAO, GraphWorkspaceDAO, TaskConfigurationDAO}
-import org.broadinstitute.dsde.rawls.model.{TaskConfiguration, Entity}
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, EntityDAO, GraphWorkspaceDAO, MethodConfigurationDAO}
+import org.broadinstitute.dsde.rawls.model.{MethodConfiguration, Entity}
+
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -68,10 +69,10 @@ object Boot extends App {
   startup()
 }
 
-object NoOpMethodConfigurationDAO extends TaskConfigurationDAO {
-  override def get(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): Option[TaskConfiguration] = { None }
+object NoOpMethodConfigurationDAO extends MethodConfigurationDAO {
+  override def get(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): Option[MethodConfiguration] = { None }
   override def rename(workspaceNamespace: String, workspaceName: String, taskConfiguration: String, newName: String): Unit = {}
   override def delete(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): Unit = {}
-  override def list(workspaceNamespace: String, workspaceName: String): TraversableOnce[TaskConfiguration] = Seq.empty
-  override def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration): TaskConfiguration = taskConfiguration
+  override def list(workspaceNamespace: String, workspaceName: String): TraversableOnce[MethodConfiguration] = Seq.empty
+  override def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: MethodConfiguration): MethodConfiguration = taskConfiguration
 }

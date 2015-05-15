@@ -4,7 +4,7 @@ import akka.actor.{Actor, Props}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.dataaccess.{TaskConfigurationDAO, EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
@@ -32,20 +32,21 @@ object WorkspaceService {
   case class DeleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class RenameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
 
-  case class CreateTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration) extends WorkspaceServiceMessage
-  case class GetTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String) extends WorkspaceServiceMessage
-  case class UpdateTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration) extends WorkspaceServiceMessage
-  case class DeleteTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String) extends WorkspaceServiceMessage
-  case class RenameTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String, newName: String) extends WorkspaceServiceMessage
+  case class CreateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
+  case class GetMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String) extends WorkspaceServiceMessage
+  case class UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
+  case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String) extends WorkspaceServiceMessage
+  case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, taskConfigurationDAO: TaskConfigurationDAO) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO, taskConfigurationDAO)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO)
 }
 
-class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, taskConfigurationDAO: TaskConfigurationDAO) extends Actor {
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO) extends Actor {
+
 
   override def receive = {
     case SaveWorkspace(workspace) => context.parent ! saveWorkspace(workspace)
@@ -57,11 +58,11 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! deleteEntity(workspaceNamespace, workspaceName, entityType, entityName)
     case RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName) => context.parent ! renameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName)
 
-    case CreateTaskConfiguration(workspaceNamespace, workspaceName, taskConfiguration) => context.parent ! createTaskConfiguration(workspaceNamespace, workspaceName, taskConfiguration)
-    case RenameTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName, newName) => context.parent ! renameTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName, newName)
-    case DeleteTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName) => context.parent ! deleteTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName)
-    case GetTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName) => context.parent ! getTaskConfiguration(workspaceNamespace, workspaceName, taskConfigurationName)
-    case UpdateTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration) => context.parent ! updateTaskConfiguration(workspaceNamespace, workspaceName, taskConfiguration)
+    case CreateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
+    case RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName, newName)
+    case DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName) => context.parent ! deleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName)
+    case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName)
+    case UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
 }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -223,64 +224,64 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     }
   }
 
-  private def withTaskConfig(workspace: WorkspaceShort, taskConfigurationName: String)(op: (TaskConfiguration) => PerRequestMessage): PerRequestMessage = {
-    taskConfigurationDAO.get(workspace.namespace, workspace.name, taskConfigurationName) match {
-      case None => RequestComplete(http.StatusCodes.NotFound, s"${taskConfigurationName} does not exists in ${workspace.namespace}/${workspace.name}")
-      case Some(taskConfiguration) => op(taskConfiguration)
+  private def withMethodConfig(workspace: WorkspaceShort, methodConfigurationName: String)(op: (MethodConfiguration) => PerRequestMessage): PerRequestMessage = {
+    methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfigurationName) match {
+      case None => RequestComplete(http.StatusCodes.NotFound, s"${methodConfigurationName} does not exists in ${workspace.namespace}/${workspace.name}")
+      case Some(methodConfiguration) => op(methodConfiguration)
     }
   }
 
-  def createTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration): PerRequestMessage =
+
+  def createMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-         taskConfigurationDAO.get(workspace.namespace, workspace.name, taskConfiguration.name) match {
-           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${taskConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
-           case None => RequestComplete(StatusCodes.Created, taskConfigurationDAO.save(workspaceNamespace, workspaceName, taskConfiguration))
+         methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.name) match {
+           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
+           case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration))
          }
      }
     }
 
-  def deleteTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): PerRequestMessage =
+  def deleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-        withTaskConfig(workspace, taskConfigurationName) { taskConfig =>
-          taskConfigurationDAO.delete(workspace.namespace, workspace.name, taskConfigurationName)
+        withMethodConfig(workspace, methodConfigurationName) { methodConfig =>
+          methodConfigurationDAO.delete(workspace.namespace, workspace.name, methodConfigurationName)
           RequestComplete(http.StatusCodes.NoContent)
         }
       }
     }
 
-  def renameTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String, newName: String): PerRequestMessage =
+  def renameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String, newName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-        withTaskConfig(workspace, taskConfigurationName) { taskConfiguration =>
-          taskConfigurationDAO.get(workspace.namespace, workspace.name, newName) match {
+        withMethodConfig(workspace, methodConfigurationName) { methodConfiguration =>
+          methodConfigurationDAO.get(workspace.namespace, workspace.name, newName) match {
             case None =>
-              taskConfigurationDAO.rename(workspace.namespace, workspace.name, taskConfigurationName, newName)
+              methodConfigurationDAO.rename(workspace.namespace, workspace.name, methodConfigurationName, newName)
               RequestComplete(http.StatusCodes.NoContent)
             case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination ${newName} already exists")
           }
         }
       }
     }
-
-  def updateTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfiguration: TaskConfiguration): PerRequestMessage =
+  def updateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName,txn) { workspace =>
-        taskConfigurationDAO.get(workspace.namespace, workspace.name, taskConfiguration.name) match {
+        methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.name) match {
           case Some(_) =>
-            taskConfigurationDAO.save(workspaceNamespace, workspaceName, taskConfiguration)
+            methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration)
             RequestComplete(StatusCodes.OK)
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }
     }
 
-  def getTaskConfiguration(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): PerRequestMessage =
+  def getMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-        withTaskConfig(workspace, taskConfigurationName) { taskConfig =>
-          PerRequest.RequestComplete(taskConfig)
+        withMethodConfig(workspace, methodConfigurationName) { methodConfig =>
+          PerRequest.RequestComplete(methodConfig)
         }
       }
     }
