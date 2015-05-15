@@ -33,7 +33,7 @@ object Boot extends App {
       swaggerConfig.getString("baseUrl"),
       swaggerConfig.getString("apiDocs"),
       swaggerConfig.getString("swaggerVersion"),
-      Seq(typeOf[RootRawlsApiService]),
+      Seq(typeOf[RootRawlsApiService], typeOf[WorkspaceApiService]),
       Option(new ApiInfo(
         swaggerConfig.getString("info"),
         swaggerConfig.getString("description"),

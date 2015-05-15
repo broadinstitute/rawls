@@ -50,7 +50,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   "WorkspaceApi" should "return 201 for post to workspaces" in {
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
-      sealRoute(putWorkspaceRoute) ~>
+      sealRoute(postWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status

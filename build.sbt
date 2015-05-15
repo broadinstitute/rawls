@@ -21,6 +21,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-client" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
+    "org.webjars" % "swagger-ui" % "2.0.24",
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "com.orientechnologies" % "orientdb-core" % "2.0.8",

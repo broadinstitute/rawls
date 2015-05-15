@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import javax.ws.rs.Path
+
 import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
@@ -32,9 +34,14 @@ class SwaggerService(override val apiVersion: String,
 class RawlsApiServiceActor(swaggerService: SwaggerService, val workspaceServiceConstructor: () => WorkspaceService) extends Actor with RootRawlsApiService with WorkspaceApiService {
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ swaggerService.routes ~ workspaceRoutes
+  def possibleRoutes = baseRoute ~ workspaceRoutes ~ swaggerService.routes ~
+    get {
+      pathSingleSlash {
+        getFromResource("swagger/index.html")
+      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
+    }
+
   def receive = runRoute(possibleRoutes)
-  def apiTypes = Seq(typeOf[RootRawlsApiService], typeOf[WorkspaceApiService])
 }
 
 @Api(value = "", description = "Rawls Base API", position = 1)
@@ -49,19 +56,6 @@ trait RootRawlsApiService extends HttpService {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def baseRoute = {
-    path("") {
-      get {
-        respondWithMediaType(`text/html`) {
-          complete {
-            <html>
-              <body>
-                <h1>Rawls web service is operational</h1>
-              </body>
-            </html>
-          }
-        }
-      }
-    } ~
     path("headers") {
       get {
         requestContext => requestContext.complete(requestContext.request.headers.mkString(",\n"))
@@ -70,14 +64,14 @@ trait RootRawlsApiService extends HttpService {
   }
 }
 
-@Api(value = "workspace", description = "APIs for Workspace CRUD", position = 1)
+@Api(value = "workspaces", description = "APIs for Workspace CRUD", position = 1)
 trait WorkspaceApiService extends HttpService with PerRequestCreator {
   import spray.httpx.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
   val workspaceServiceConstructor: () => WorkspaceService
   val workspaceRoutes =
-    putWorkspaceRoute ~
+    postWorkspaceRoute ~
     listWorkspacesRoute ~
     copyWorkspaceRoute ~
     createEntityRoute ~
@@ -89,11 +83,14 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @ApiOperation(value = "Create/replace workspace",
     nickname = "create",
     httpMethod = "POST")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.Workspace", paramType = "body", value = "Workspace contents")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def putWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def postWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
     path("workspaces") {
       post {
         entity(as[Workspace]) { workspace =>
@@ -122,9 +119,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/clone")
   @ApiOperation(value = "Clone workspace",
     nickname = "clone",
     httpMethod = "POST")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "workspaceNameJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.WorkspaceName", paramType = "body", value = "Name of new workspace")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Source workspace not found"),
@@ -142,11 +145,19 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/entities")
   @ApiOperation(value = "Create entity in a workspace",
     nickname = "create entity",
     httpMethod = "POST",
     produces = "application/json",
     response = classOf[Entity])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name"),
+    new ApiImplicitParam(name = "entityJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.Entity", paramType = "body", value = "Entity data")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace not found"),
@@ -164,11 +175,18 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}")
   @ApiOperation(value = "Get entity in a workspace",
     nickname = "get entity",
     httpMethod = "Get",
     produces = "application/json",
     response = classOf[Entity])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
@@ -183,11 +201,19 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
+  @Path("/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}")
   @ApiOperation(value = "Update entity in a workspace",
     nickname = "update entity",
     httpMethod = "Post",
     produces = "application/json",
     response = classOf[Entity])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name"),
+    new ApiImplicitParam(name = "entityUpdateJson", required = true, dataType = "org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations$EntityUpdateOperation", paramType = "body", value = "Update operations")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 400, message = "Attribute does not exists or is of an unexpected type"),
@@ -209,6 +235,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @ApiOperation(value = "delete entity in a workspace",
     nickname = "delete entity",
     httpMethod = "Delete")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
@@ -224,8 +256,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   }
 
   @ApiOperation(value = "rename entity in a workspace",
-    nickname = "renameentity",
+    nickname = "renameEntity",
     httpMethod = "Post")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name"),
+    new ApiImplicitParam(name = "newEntityNameJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.EntityName", paramType = "body", value = "New entity name")
+  ))
   @ApiResponses(Array(
     new ApiResponse(code = 204, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),

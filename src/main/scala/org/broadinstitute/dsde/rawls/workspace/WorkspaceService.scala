@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.{Props, Actor}
+import com.wordnik.swagger.annotations.ApiModel
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
