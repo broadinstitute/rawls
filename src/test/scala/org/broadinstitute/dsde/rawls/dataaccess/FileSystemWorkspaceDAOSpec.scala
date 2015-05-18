@@ -13,7 +13,7 @@ import org.scalatest.{Matchers, FlatSpec}
 class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
-  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> AttributeList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))), WorkspaceName(wsns, wsname))
+  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))), WorkspaceName(wsns, wsname))
   val workspace = Workspace(
     wsns,
     wsname,
@@ -21,7 +21,7 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
     "test",
     Map(
       "samples" -> Map("s1" -> s1),
-      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeList(Seq(AttributeReference("samples", "s2"), AttributeReference("samples", "s1")))), WorkspaceName(wsns, wsname)))
+      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
 
@@ -40,9 +40,9 @@ class FileSystemWorkspaceDAOSpec extends FlatSpec with Matchers {
   it should "load a workspace" in {
     assertResult(Some(workspace)) { dao.load(workspace.namespace, workspace.name) }
     assertResult(Seq(None, Option(s1))) {
-      for(("samples", AttributeList(x)) <- workspace.entities("individuals")("i").attributes;
-        AttributeReference(a,b) <- x
-      ) yield (AttributeReference(a,b).resolve(workspace))
+      for(("samples", AttributeReferenceList(x)) <- workspace.entities("individuals")("i").attributes;
+        AttributeReferenceSingle(a,b) <- x
+      ) yield (AttributeReferenceSingle(a,b).resolve(workspace))
     }
   }
 

@@ -1,22 +1,19 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.actor.{Props, Actor}
-import com.wordnik.swagger.annotations.ApiModel
+import akka.actor.{Actor, Props}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestComplete, PerRequestMessage}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import spray.http
-import spray.http.{Uri, HttpHeaders, StatusCodes}
 import org.joda.time.DateTime
+import spray.http
+import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
-
-import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -149,18 +146,38 @@ class WorkspaceService(workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) extends
 
         case AddListMember(attributeListName, newMember) =>
           currentEntity.attributes.get(attributeListName) match {
-            case Some(l: AttributeList) =>
-              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeList(l.value :+ newMember)))
-            case None => currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeList(Seq(newMember))))
+            case Some(l: AttributeValueList) =>
+              newMember match {
+                case newMember: AttributeValue =>
+                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(l.list :+ newMember)))
+                case _ => throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+              }
+
+            case Some(l: AttributeReferenceList) =>
+              newMember match {
+                case newMember: AttributeReferenceSingle =>
+                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(l.list :+ newMember)))
+                case _ => throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
+              }
+
+            case None =>
+              newMember match {
+                case newMember: AttributeValue =>
+                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(Seq(newMember))))
+                case newMember: AttributeReferenceSingle =>
+                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(Seq(newMember))))
+                case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
+              }
 
             case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${entity.entityType} ${entity.name} is not a list")
           }
 
         case RemoveListMember(attributeListName, removeMember) =>
           currentEntity.attributes.get(attributeListName) match {
-            case Some(l: AttributeList) =>
-              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeList(l.value.filterNot(_ == removeMember))))
-
+            case Some(l: AttributeValueList) =>
+              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember))))
+            case Some(l: AttributeReferenceList) =>
+              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(l.list.filterNot(_ == removeMember))))
             case None => throw new AttributeNotFoundException(s"$attributeListName of ${entity.entityType} ${entity.name} does not exists")
             case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${entity.entityType} ${entity.name} is not a list")
           }

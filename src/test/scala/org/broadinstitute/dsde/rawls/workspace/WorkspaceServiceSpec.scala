@@ -3,20 +3,12 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import akka.testkit.TestActorRef
-import org.broadinstitute.dsde.rawls.dataaccess.{MockWorkspaceDAO, MockEntityDAO, EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{MockEntityDAO, MockWorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
 import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http._
 import spray.testkit.ScalatestRouteTest
-import spray.json._
-import spray.httpx.SprayJsonSupport
-import SprayJsonSupport._
-import WorkspaceJsonSupport._
-
-import scala.collection.mutable
 
 
 
@@ -25,7 +17,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
 
-  val attributeList = AttributeList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+  val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val workspace = Workspace(
     wsns,
@@ -34,7 +26,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     "test",
     Map(
       "samples" -> Map("s1" -> s1),
-      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeList(Seq(AttributeReference("samples", "s2"), AttributeReference("samples", "s1")))), WorkspaceName(wsns, wsname)))
+      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
 
@@ -60,19 +52,19 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "add item to existing list in entity" in {
-    assertResult(Some(AttributeList(attributeList.value :+ AttributeString("new")))) {
+    assertResult(Some(AttributeValueList(attributeList.list :+ AttributeString("new")))) {
       workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("splat", AttributeString("new")))).attributes.get("splat")
     }
   }
 
   it should "add item to non-existing list in entity" in {
-    assertResult(Some(AttributeList(Seq(AttributeString("new"))))) {
+    assertResult(Some(AttributeValueList(Seq(AttributeString("new"))))) {
       workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("bob", AttributeString("new")))).attributes.get("bob")
     }
   }
 
   it should "remove item from existing listing entity" in {
-    assertResult(Some(AttributeList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
+    assertResult(Some(AttributeValueList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
       workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember("splat", AttributeString("a")))).attributes.get("splat")
     }
   }
