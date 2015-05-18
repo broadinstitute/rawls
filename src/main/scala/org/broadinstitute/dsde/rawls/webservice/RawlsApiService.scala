@@ -311,7 +311,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}")
   @ApiOperation(value = "delete method configuration in a workspace",
     nickname = "delete method configuration",
     httpMethod = "Delete")
@@ -334,7 +334,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}/rename")
   @ApiOperation(value = "rename method configuration in a workspace",
     nickname = "renamemethodconfig",
     httpMethod = "Post")
@@ -360,7 +360,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}")
   @ApiOperation(value = "Update method configuration in a workspace",
     nickname = "update method configuration",
     httpMethod = "Post",
