@@ -28,6 +28,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+
+  val method = Method("method-a", wsns, "1")
+  val methodConfig = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
+  val methodConfig2 = MethodConfiguration("testConfig2", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
+  val methodConfig3 = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
+
   val workspace = Workspace(
     wsns,
     wsname,
@@ -38,10 +44,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
     )
   )
-  val method = Method("method-a", wsns, "1")
-  val methodConfig = MethodConfiguration("testConfig", "samples", method, Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
-  val methodConfig2 = MethodConfiguration("testConfig2", "samples", method, Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
-  val methodConfig3 = MethodConfiguration("testConfig", "samples", method, Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname))
 
   val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO)
 

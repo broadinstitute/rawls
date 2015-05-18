@@ -47,7 +47,8 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
                       createdBy: String,
                       @(ApiModelProperty@field)(required = true, value = "Entities in the workspace, first key: entity type, second key: entity name")
-                      entities: Map[String, Map[String, Entity]] ) extends Identifiable {
+                      entities: Map[String, Map[String, Entity]]
+                      ) extends Identifiable {
   def path : String = "workspaces/" + namespace + "/" + name
 }
 
@@ -94,6 +95,8 @@ case class MethodConfiguration(
                    rootEntityType: String,
                    @(ApiModelProperty@field)(required = true, value = "The method from method store")
                    method: Method,
+                   @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
+                   prerequisite: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
                    inputs: Map[String, String],
                    @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
@@ -177,5 +180,5 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val MethodFormat = jsonFormat3(Method)
 
-  implicit val MethodConfigurationFormat = jsonFormat6(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat7(MethodConfiguration)
 }
