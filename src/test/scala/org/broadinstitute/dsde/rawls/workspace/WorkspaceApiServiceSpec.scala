@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.{MockWorkspaceDAO, MockEntityDAO, EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
 import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
@@ -20,6 +20,7 @@ import WorkspaceJsonSupport._
  */
 class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with ScalatestRouteTest with Matchers {
   def actorRefFactory = system
+  val dataSource = DataSource("memory:rawls", "admin", "admin")
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
@@ -38,7 +39,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
     )
   )
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(MockWorkspaceDAO, MockEntityDAO)
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO)
 
   val dao = MockWorkspaceDAO
 
@@ -264,7 +265,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 409 on entity rename when rename already exists" in {
-    MockEntityDAO.save(workspace.namespace, workspace.name, s1)
+    MockEntityDAO.save(workspace.namespace, workspace.name, s1, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s1").toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameEntityRoute) ~>

@@ -10,7 +10,7 @@ import org.joda.time.DateTime
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
-class GraphWorkspaceDAO(db: Graph) extends WorkspaceDAO with GraphDAO {
+class GraphWorkspaceDAO() extends WorkspaceDAO with GraphDAO {
 
   implicit def toJodaTime(d: Date): DateTime = new DateTime(d)
 
@@ -27,7 +27,7 @@ class GraphWorkspaceDAO(db: Graph) extends WorkspaceDAO with GraphDAO {
     Workspace(ws.namespace, ws.name, ws.createdDate, ws.createdBy, entities)
   }
 
-  def save(workspace: Workspace) = {
+  def save(workspace: Workspace, txn: RawlsTransaction) = txn withGraph { db =>
     val workspaceVertex = getWorkspaceVertex(db, workspace.namespace, workspace.name).getOrElse({
       val created = db.addVertex(null)
       created.setProperty("_name", workspace.name)
@@ -38,32 +38,32 @@ class GraphWorkspaceDAO(db: Graph) extends WorkspaceDAO with GraphDAO {
       created
     })
 
-    val entityDAO = new GraphEntityDAO(db)
-    workspace.entities.foreach(e => e._2.foreach(f => entityDAO.save(workspace.namespace, workspace.name, f._2)))
+    val entityDAO = new GraphEntityDAO()
+    workspace.entities.foreach(e => e._2.foreach(f => entityDAO.save(workspace.namespace, workspace.name, f._2, txn)))
   }
 
-  def load(namespace: String, name: String): Option[Workspace] = {
+  def load(namespace: String, name: String, txn: RawlsTransaction): Option[Workspace] = txn withGraph { db =>
     val workspaceVertex = getWorkspaceVertex(db, namespace, name)
     // for now, assume that all edges coming out of workspace vertex are entity types.
-    val entityDAO = new GraphEntityDAO(db)
+    val entityDAO = new GraphEntityDAO()
     workspaceVertex.map(v => workspaceFromShort(
       toWorkspaceShort(v),
       v.getEdges(Direction.OUT).map(
         entityTypeEdge =>
           entityTypeEdge.getLabel ->
             entityDAO
-              .list(namespace, name, entityTypeEdge.getLabel)
+              .list(namespace, name, entityTypeEdge.getLabel, txn)
               .map(entity => entity.name -> entity)
               .toMap
       ).toMap
     ))
   }
 
-  def loadShort(namespace: String, name: String): Option[WorkspaceShort] = {
+  def loadShort(namespace: String, name: String, txn: RawlsTransaction): Option[WorkspaceShort] = txn withGraph { db =>
     getWorkspaceVertex(db, namespace, name).map(toWorkspaceShort(_))
   }
 
-  def list(): Seq[WorkspaceShort] = {
+  def list(txn: RawlsTransaction): Seq[WorkspaceShort] = txn withGraph { db =>
     new GremlinPipeline(db).V("_clazz", "workspace").transform((v: Vertex) => toWorkspaceShort(v)).toList.asScala
   }
 }
