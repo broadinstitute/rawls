@@ -14,11 +14,16 @@ import spray.json._
 import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
+import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
  */
 class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with ScalatestRouteTest with Matchers {
+  // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
+  // intermittent failures occur on requests not completing in time
+  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+
   def actorRefFactory = system
   val dataSource = DataSource("memory:rawls", "admin", "admin")
 
