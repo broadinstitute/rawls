@@ -6,12 +6,10 @@ import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
-import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, EntityDAO, GraphWorkspaceDAO, MethodConfigurationDAO}
-import org.broadinstitute.dsde.rawls.model.{MethodConfiguration, Entity}
-
+import org.broadinstitute.dsde.rawls.model.MethodConfiguration
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, MethodConfigurationDAO, GraphWorkspaceDAO}
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -44,7 +42,9 @@ object Boot extends App {
         swaggerConfig.getString("licenseUrl"))
       ))
 
-    val dataSource = DataSource("memory:rawls", "", "", 0, 30)
+    val orientConfig = conf.getConfig("orientdb")
+    val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
+    val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
 
     system.registerOnTermination {
       dataSource.shutdown()

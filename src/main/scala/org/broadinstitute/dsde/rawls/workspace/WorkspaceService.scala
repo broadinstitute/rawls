@@ -318,7 +318,7 @@ object EntityUpdateOperations {
         op match {
           case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
           case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
-          case JsString("AddListMemberFormat") => AddListMemberFormat.read(json)
+          case JsString("AddListMember") => AddListMemberFormat.read(json)
           case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
           case x => throw new DeserializationException("unrecognized op: " + x)
         }
