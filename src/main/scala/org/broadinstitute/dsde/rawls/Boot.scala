@@ -9,8 +9,9 @@ import akka.util.Timeout
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, EntityDAO, GraphWorkspaceDAO}
-import org.broadinstitute.dsde.rawls.model.Entity
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, EntityDAO, GraphWorkspaceDAO, MethodConfigurationDAO}
+import org.broadinstitute.dsde.rawls.model.{MethodConfiguration, Entity}
+
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -49,7 +50,7 @@ object Boot extends App {
       dataSource.shutdown()
     }
 
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO())), "rawls-service")
+    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), NoOpMethodConfigurationDAO)), "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
@@ -66,4 +67,12 @@ object Boot extends App {
   }
 
   startup()
+}
+
+object NoOpMethodConfigurationDAO extends MethodConfigurationDAO {
+  override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Option[MethodConfiguration] = { None }
+  override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String): Unit = {}
+  override def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Unit = {}
+  override def list(workspaceNamespace: String, workspaceName: String): TraversableOnce[MethodConfiguration] = Seq.empty
+  override def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: MethodConfiguration): MethodConfiguration = taskConfiguration
 }

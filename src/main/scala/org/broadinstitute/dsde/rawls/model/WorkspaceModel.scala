@@ -47,7 +47,8 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
                       createdBy: String,
                       @(ApiModelProperty@field)(required = true, value = "Entities in the workspace, first key: entity type, second key: entity name")
-                      entities: Map[String, Map[String, Entity]] ) extends Identifiable {
+                      entities: Map[String, Map[String, Entity]]
+                      ) extends Identifiable {
   def path : String = "workspaces/" + namespace + "/" + name
 }
 
@@ -69,6 +70,44 @@ case class Entity(
   def path : String = workspaceName.path + "/entities/" + name
 }
 
+@ApiModel(value = "Method configuration name")
+case class MethodConfigurationName(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
+                   workspaceName: WorkspaceName
+                   )
+
+@ApiModel(value = "Method")
+case class Method(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The namespace of the method")
+                   nameSpace: String,
+                   @(ApiModelProperty@field)(required = true, value = "The version of the method")
+                   version: String
+                 )
+@ApiModel(value = "Method Configuration")
+case class MethodConfiguration(
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
+                   rootEntityType: String,
+                   @(ApiModelProperty@field)(required = true, value = "The method from method store")
+                   method: Method,
+                   @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
+                   prerequisite: Map[String, String],
+                   @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
+                   inputs: Map[String, String],
+                   @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
+                   outputs: Map[String, String],
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
+                   workspaceName:WorkspaceName,
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
+                   methodConfigurationNamespace: String) extends Identifiable {
+  def path : String = workspaceName.path + "/methodConfigs/" + methodConfigurationNamespace + "/" + name
+}
+
 trait Attribute
 trait AttributeValue extends Attribute
 trait AttributeReference extends Attribute
@@ -86,6 +125,7 @@ case class AttributeReferenceSingle(val entityType: String, val entityName: Stri
 }
 
 object WorkspaceJsonSupport extends DefaultJsonProtocol {
+
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
 
     override def write(obj: Attribute): JsValue = obj match {
@@ -122,7 +162,7 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
       JsString(parserISO.print(obj))
     }
 
-    override def read(json: JsValue) : DateTime = json match {
+    override def read(json: JsValue): DateTime = json match {
       case JsString(s) => parserISO.parseDateTime(s)
       case _ => throw new DeserializationException("only string supported")
     }
@@ -137,4 +177,10 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val WorkspaceFormat = jsonFormat5(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
+
+  implicit val MethodConfigurationNameFormat = jsonFormat2(MethodConfigurationName)
+
+  implicit val MethodFormat = jsonFormat3(Method)
+
+  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
 }
