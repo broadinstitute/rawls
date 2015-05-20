@@ -102,8 +102,10 @@ case class MethodConfiguration(
                    @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
                    outputs: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
-                   workspaceName:WorkspaceName) extends Identifiable {
-  def path : String = workspaceName.path + "/methodConfigs/" + name
+                   workspaceName:WorkspaceName,
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
+                   methodConfigurationNamespace: String) extends Identifiable {
+  def path : String = workspaceName.path + "/methodConfigs/" + methodConfigurationNamespace + "/" + name
 }
 
 trait Attribute
@@ -180,5 +182,5 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val MethodFormat = jsonFormat3(Method)
 
-  implicit val MethodConfigurationFormat = jsonFormat7(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
 }

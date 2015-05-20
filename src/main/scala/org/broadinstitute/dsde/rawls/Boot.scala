@@ -70,9 +70,9 @@ object Boot extends App {
 }
 
 object NoOpMethodConfigurationDAO extends MethodConfigurationDAO {
-  override def get(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): Option[MethodConfiguration] = { None }
-  override def rename(workspaceNamespace: String, workspaceName: String, taskConfiguration: String, newName: String): Unit = {}
-  override def delete(workspaceNamespace: String, workspaceName: String, taskConfigurationName: String): Unit = {}
+  override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Option[MethodConfiguration] = { None }
+  override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String): Unit = {}
+  override def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Unit = {}
   override def list(workspaceNamespace: String, workspaceName: String): TraversableOnce[MethodConfiguration] = Seq.empty
   override def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: MethodConfiguration): MethodConfiguration = taskConfiguration
 }

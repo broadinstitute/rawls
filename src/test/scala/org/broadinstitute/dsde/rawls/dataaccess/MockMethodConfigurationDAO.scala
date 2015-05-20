@@ -8,25 +8,25 @@ import scala.collection.mutable
  * Created by plin on 5/13/15.
  */
 object MockMethodConfigurationDAO extends MethodConfigurationDAO {
-  val store = new mutable.HashMap[(String, String), mutable.HashMap[String, MethodConfiguration]]()
+  val store = new mutable.HashMap[(String, String), mutable.HashMap[(String,String), MethodConfiguration]]()
 
   /** gets by method config name */
-  override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String): Option[MethodConfiguration] = {
-    store.get(workspaceNamespace, workspaceName).flatMap(_.get(methodConfigurationName))
+  override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Option[MethodConfiguration] = {
+    store.get(workspaceNamespace, workspaceName).flatMap(_.get(methodConfigurationNamespace, methodConfigurationName))
   }
 
   /** rename method configuration */
-  override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String, newName: String): Unit = {
-    get(workspaceNamespace, workspaceName, methodConfigurationName).foreach { methodConfig =>
-      delete(workspaceNamespace, workspaceName, methodConfigurationName)
+  override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): Unit = {
+    get(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName).foreach { methodConfig =>
+      delete(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
       save(workspaceNamespace, workspaceName, methodConfig.copy(name = newName))
     }
   }
 
   /** delete a method configuration, not sure if we need to delete all or a specific version? */
-  override def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationName: String): Unit = {
+  override def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): Unit = {
     store.get(workspaceNamespace, workspaceName).flatMap { workspace =>
-      workspace.remove(methodConfigurationName)
+      workspace.remove(methodConfigurationNamespace, methodConfigurationName)
     }
   }
 
@@ -42,7 +42,7 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
     store.get(workspaceNamespace, workspaceName).getOrElse({
       store.put((workspaceNamespace, workspaceName), new mutable.HashMap())
       store(workspaceNamespace, workspaceName)
-    }).put((methodConfiguration.name), methodConfiguration)
+    }).put((methodConfiguration.methodConfigurationNamespace, methodConfiguration.name), methodConfiguration)
     methodConfiguration
   }
 

@@ -311,13 +311,14 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationNamespace}/{methodConfigurationName}")
   @ApiOperation(value = "delete method configuration in a workspace",
     nickname = "delete method configuration",
     httpMethod = "Delete")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "methodConfigurationNamespace", required = true, dataType = "string", paramType = "path", value = "Method Configuration Namespace"),
     new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name")
   ))
   @ApiResponses(Array(
@@ -326,21 +327,22 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def deleteMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" / Segment) { (workspaceNamespace, workspaceName, methodConfigName) =>
+    path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       delete {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigName))
+          WorkspaceService.DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName))
       }
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}/rename")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationNamespace}/{methodConfigurationName}/rename")
   @ApiOperation(value = "rename method configuration in a workspace",
     nickname = "renamemethodconfig",
     httpMethod = "Post")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "methodConfigurationNamespace", required = true, dataType = "string", paramType = "path", value = "Method Configuration Namespace"),
     new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name"),
     new ApiImplicitParam(name = "newMethodConfigurationName", required = true, dataType = "string", paramType = "path", value = "New Method Configuration Name")
   ))
@@ -350,17 +352,17 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def renameMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationName) =>
+    path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
       post {
         entity(as[MethodConfigurationName]) { newEntityName =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationName, newEntityName.name))
+            WorkspaceService.RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newEntityName.name))
         }
       }
     }
   }
 
-  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationName}")
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/update")
   @ApiOperation(value = "Update method configuration in a workspace",
     nickname = "update method configuration",
     httpMethod = "Post",
@@ -369,7 +371,6 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
-    new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name"),
     new ApiImplicitParam(name = "newMethodConfigJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfiguration", paramType = "body", value = "New Method Configuration contents")
   ))
   @ApiResponses(Array(
@@ -378,7 +379,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def updateMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" / Segment ) { (workspaceNamespace, workspaceName, methodConfigurationName) =>
+    path("workspaces" / Segment / Segment / "methodconfigs" / "update" ) { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
