@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.{Actor, Props}
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
@@ -36,13 +36,13 @@ object WorkspaceService {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) = () => new WorkspaceService(workspaceDAO, entityDAO)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO)
 }
 
-class WorkspaceService(workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) extends Actor {
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) extends Actor {
   override def receive = {
     case SaveWorkspace(workspace) => context.parent ! saveWorkspace(workspace)
-    case ListWorkspaces => context.parent ! listWorkspaces()
+    case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
     case CloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
     case CreateEntity(workspaceNamespace, workspaceName, entity) => context.parent ! createEntity(workspaceNamespace, workspaceName, entity)
     case GetEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceNamespace, workspaceName, entityType, entityName)
@@ -51,79 +51,90 @@ class WorkspaceService(workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) extends
     case RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName) => context.parent ! renameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName)
   }
 
-  def saveWorkspace(workspace: Workspace): PerRequestMessage = {
-//    workspaceDAO.load(workspace.namespace, workspace.name) match {
-//      case Some(_) => context.parent ! PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspace.namespace}/${workspace.name} already exists")
-//      case None =>
-//        workspaceDAO.save(workspace)
-//        context.parent ! PerRequest.RequestComplete((StatusCodes.Created, workspace))
-//    }
-
-    workspaceDAO.save(workspace)
-    RequestComplete((StatusCodes.Created, workspace))
-  }
-
-  def listWorkspaces(): PerRequestMessage = {
-    RequestComplete(workspaceDAO.list())
-  }
-
-  def cloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String): PerRequestMessage = {
-    val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace)
-    val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace)
-    (originalWorkspace, copyWorkspace) match {
-      case ( Some(ws), None ) => {
-        val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
-        workspaceDAO.save( newWorkspace )
-        RequestComplete((StatusCodes.Created, newWorkspace))
-      }
-      case ( None, _ ) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
-      case ( _, Some(_) ) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+  def saveWorkspace(workspace: Workspace): PerRequestMessage =
+    dataSource inTransaction { txn =>
+    workspaceDAO.load(workspace.namespace, workspace.name, txn) match {
+      case Some(_) =>
+        PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspace.namespace}/${workspace.name} already exists")
+      case None =>
+        workspaceDAO.save(workspace, txn)
+        PerRequest.RequestComplete((StatusCodes.Created, workspace))
     }
   }
 
+  def listWorkspaces(dataSource: DataSource): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      RequestComplete(workspaceDAO.list(txn))
+    }
+
+  def cloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace, txn)
+      val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace, txn)
+      (originalWorkspace, copyWorkspace) match {
+        case ( Some(ws), None ) => {
+          val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
+          workspaceDAO.save(newWorkspace, txn)
+          RequestComplete((StatusCodes.Created, newWorkspace))
+        }
+        case ( None, _ ) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
+        case ( _, Some(_) ) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+      }
+    }
+
   def createEntity(workspaceNamespace: String, workspaceName: String, entity: Entity): PerRequestMessage =
-    withWorkspace(workspaceNamespace, workspaceName) { workspace =>
-      entityDAO.get(workspaceNamespace, workspaceName, entity.entityType, entity.name) match {
-        case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in $workspaceNamespace/$workspaceName")
-        case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceNamespace, workspaceName, entity))
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        entityDAO.get(workspaceNamespace, workspaceName, entity.entityType, entity.name, txn) match {
+          case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in $workspaceNamespace/$workspaceName")
+          case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceNamespace, workspaceName, entity, txn))
+        }
       }
     }
 
   def getEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): PerRequestMessage =
-    withWorkspace(workspaceNamespace, workspaceName) { workspace =>
-      withEntity(workspace, entityType, entityName) { entity =>
-        PerRequest.RequestComplete(entity)
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        withEntity(workspace, entityType, entityName, txn) { entity =>
+          PerRequest.RequestComplete(entity)
+        }
       }
     }
 
   def updateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[EntityUpdateOperation]): PerRequestMessage =
-    withWorkspace(workspaceNamespace, workspaceName) { workspace =>
-      withEntity(workspace, entityType, entityName) { entity =>
-        try {
-          val updatedEntity = applyOperationsToEntity(entity, operations)
-          RequestComplete(entityDAO.save(workspaceNamespace, workspaceName, updatedEntity))
-        } catch {
-          case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in $workspaceNamespace/$workspaceName, ${e.getMessage}")
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        withEntity(workspace, entityType, entityName, txn) { entity =>
+          try {
+            val updatedEntity = applyOperationsToEntity(entity, operations)
+            RequestComplete(entityDAO.save(workspaceNamespace, workspaceName, updatedEntity, txn))
+          } catch {
+            case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in $workspaceNamespace/$workspaceName, ${e.getMessage}")
+          }
         }
       }
     }
 
   def deleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): PerRequestMessage =
-    withWorkspace(workspaceNamespace, workspaceName) { workspace =>
-      withEntity(workspace, entityType, entityName) { entity =>
-        entityDAO.delete(workspace.namespace, workspace.name, entity.entityType, entity.name)
-        RequestComplete(http.StatusCodes.NoContent)
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        withEntity(workspace, entityType, entityName, txn) { entity =>
+          entityDAO.delete(workspace.namespace, workspace.name, entity.entityType, entity.name, txn)
+          RequestComplete(http.StatusCodes.NoContent)
+        }
       }
     }
 
   def renameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String): PerRequestMessage =
-    withWorkspace(workspaceNamespace, workspaceName) { workspace =>
-      withEntity(workspace, entityType, entityName) { entity =>
-        entityDAO.get(workspace.namespace, workspace.name, entity.entityType, newName) match {
-          case None =>
-            entityDAO.rename(workspace.namespace, workspace.name, entity.entityType, entity.name, newName)
-            RequestComplete(http.StatusCodes.NoContent)
-          case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        withEntity(workspace, entityType, entityName, txn) { entity =>
+          entityDAO.get(workspace.namespace, workspace.name, entity.entityType, newName, txn) match {
+            case None =>
+              entityDAO.rename(workspace.namespace, workspace.name, entity.entityType, entity.name, newName, txn)
+              RequestComplete(http.StatusCodes.NoContent)
+            case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
+          }
         }
       }
     }
@@ -185,15 +196,15 @@ class WorkspaceService(workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO) extends
     }
   }
 
-  private def withWorkspace(workspaceNamespace: String, workspaceName: String)(op: (WorkspaceShort) => PerRequestMessage): PerRequestMessage = {
-    workspaceDAO.loadShort(workspaceNamespace, workspaceName) match {
+  private def withWorkspace(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(op: (WorkspaceShort) => PerRequestMessage): PerRequestMessage = {
+    workspaceDAO.loadShort(workspaceNamespace, workspaceName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"$workspaceNamespace/$workspaceName does not exist")
       case Some(workspace) => op(workspace)
     }
   }
 
-  private def withEntity(workspace: WorkspaceShort, entityType: String, entityName: String)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
-    entityDAO.get(workspace.namespace, workspace.name, entityType, entityName) match {
+  private def withEntity(workspace: WorkspaceShort, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
+    entityDAO.get(workspace.namespace, workspace.name, entityType, entityName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"${entityType} ${entityName} does not exists in ${workspace.namespace}/${workspace.name}")
       case Some(entity) => op(entity)
     }

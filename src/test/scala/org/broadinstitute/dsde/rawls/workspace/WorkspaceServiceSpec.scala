@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import akka.testkit.TestActorRef
-import org.broadinstitute.dsde.rawls.dataaccess.{MockEntityDAO, MockWorkspaceDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, MockEntityDAO, MockWorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
 import org.joda.time.DateTime
@@ -30,7 +30,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     )
   )
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(MockWorkspaceDAO, MockEntityDAO)
+  val dataSource = DataSource("memory:rawls", "admin", "admin")
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO)
   lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
 
   "WorkspaceService" should "add attribute to entity" in {

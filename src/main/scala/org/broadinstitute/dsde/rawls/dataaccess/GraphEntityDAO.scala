@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.{Edge, Vertex, Graph}
+import com.tinkerpop.blueprints.{Edge, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
-class GraphEntityDAO(db: Graph) extends EntityDAO with GraphDAO {
+class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
   private def attributeToProperty(att: AttributeValue): Any = att match {
@@ -55,11 +55,11 @@ class GraphEntityDAO(db: Graph) extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
-  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): Option[Entity] = {
+  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
     getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).map(loadEntity(_, workspaceNamespace, workspaceName))
   }
 
-  def save(workspaceNamespace: String, workspaceName: String, entity: Entity): Entity = {
+  def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot save entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
 
@@ -94,21 +94,21 @@ class GraphEntityDAO(db: Graph) extends EntityDAO with GraphDAO {
     entity
   }
 
-  def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) = {
+  def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
     getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName) match {
       case Some(v) => v.remove()
       case None => Unit
     }
   }
 
-  def list(workspaceNamespace: String, workspaceName: String, entityType: String): TraversableOnce[Entity] = {
+  def list(workspaceNamespace: String, workspaceName: String, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
     getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
       case Some(w) => new GremlinPipeline(w).out(entityType).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
       case None => List.empty
     }
   }
 
-  def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String) = {
+  def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
     getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).foreach(_.setProperty("_name", newName))
   }
 }

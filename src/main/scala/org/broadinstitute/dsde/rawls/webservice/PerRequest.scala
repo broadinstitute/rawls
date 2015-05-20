@@ -2,14 +2,13 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
-import com.sun.corba.se.spi.ior.Identifiable
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.ToResponseMarshaller
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
-import spray.http.{StatusCodes, HttpHeaders, HttpHeader, Uri}
+import spray.http._
 
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
@@ -71,7 +70,6 @@ trait PerRequest extends Actor {
       }
     }
 }
-
 
 object PerRequest {
   sealed trait PerRequestMessage
