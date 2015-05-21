@@ -388,4 +388,31 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
       }
     }
   }
+
+  @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/copy")
+  @ApiOperation(value = "Copy method configuration in a workspace from another workspace",
+    nickname = "copy method configuration",
+    httpMethod = "Post",
+    produces = "application/json",
+    response = classOf[MethodConfiguration])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "srcMethodConfigurationName", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfigurationName", paramType = "body", value = "Source Method Configuration Info")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Source Workspace or method configuration does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def copyMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("workspaces" / Segment / Segment / "methodconfigs" / "copy" ) { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[MethodConfigurationName]) { srcMethodConfigurationName =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CopyMethodConfiguration(workspaceNamespace, workspaceName, srcMethodConfigurationName))
+        }
+      }
+    }
+  }
 }

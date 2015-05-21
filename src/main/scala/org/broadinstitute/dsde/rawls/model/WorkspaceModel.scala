@@ -74,6 +74,8 @@ case class Entity(
 case class MethodConfigurationName(
                    @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    name: String,
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
+                   methodConfigurationNamespace: String,
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName: WorkspaceName
                    )
@@ -178,7 +180,7 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
-  implicit val MethodConfigurationNameFormat = jsonFormat2(MethodConfigurationName)
+  implicit val MethodConfigurationNameFormat = jsonFormat3(MethodConfigurationName)
 
   implicit val MethodFormat = jsonFormat3(Method)
 
