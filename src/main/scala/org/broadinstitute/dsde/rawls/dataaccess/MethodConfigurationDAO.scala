@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.MethodConfiguration
+import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, MethodConfiguration}
 
 /**
  * Created by plin on 5/13/15.
@@ -16,7 +16,7 @@ trait MethodConfigurationDAO {
   def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)
 
   /** list all method configurations in the workspace */
-  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[MethodConfiguration]
+  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort]
 
   /** rename method configuration */
   def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String, txn: RawlsTransaction)

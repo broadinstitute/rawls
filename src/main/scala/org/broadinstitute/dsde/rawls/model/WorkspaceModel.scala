@@ -85,7 +85,7 @@ case class Method(
                    @(ApiModelProperty@field)(required = true, value = "The name of the method")
                    name: String,
                    @(ApiModelProperty@field)(required = true, value = "The namespace of the method")
-                   nameSpace: String,
+                   namespace: String,
                    @(ApiModelProperty@field)(required = true, value = "The version of the method")
                    version: String
                  )
@@ -98,16 +98,30 @@ case class MethodConfiguration(
                    @(ApiModelProperty@field)(required = true, value = "The method from method store")
                    method: Method,
                    @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
-                   prerequisite: Map[String, String],
+                   prerequisites: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
                    inputs: Map[String, String],
                    @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
                    outputs: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName:WorkspaceName,
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
-                   methodConfigurationNamespace: String) extends Identifiable {
-  def path : String = workspaceName.path + "/methodConfigs/" + methodConfigurationNamespace + "/" + name
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
+                   namespace: String) extends Identifiable {
+  def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
+}
+@ApiModel(value = "Method Configuration without inputs, outputs, or prerequisites")
+case class MethodConfigurationShort(
+                                @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
+                                name: String,
+                                @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
+                                rootEntityType: String,
+                                @(ApiModelProperty@field)(required = true, value = "The method from method store")
+                                method: Method,
+                                @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
+                                @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
+                                workspaceName:WorkspaceName,
+                                @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
+                                namespace: String) {
 }
 
 trait Attribute
@@ -185,4 +199,6 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val MethodFormat = jsonFormat3(Method)
 
   implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
+
+  implicit val MethodConfigurationShortFormat = jsonFormat5(MethodConfigurationShort)
 }

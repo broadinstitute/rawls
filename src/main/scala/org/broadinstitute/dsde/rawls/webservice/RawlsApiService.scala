@@ -316,7 +316,9 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs/{methodConfigurationNamespace}/{methodConfigurationName}")
   @ApiOperation(value = "get method configuration in a workspace",
     nickname = "get method configuration",
-    httpMethod = "GET")
+    httpMethod = "GET",
+    produces = "application/json",
+    response = classOf[MethodConfiguration])
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
@@ -340,7 +342,9 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @Path("/{workspaceNamespace}/{workspaceName}/methodconfigs")
   @ApiOperation(value = "list method configurations in a workspace",
     nickname = "list method configurations",
-    httpMethod = "GET")
+    httpMethod = "GET",
+    response = classOf[Seq[MethodConfigurationShort]]
+  )
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name")

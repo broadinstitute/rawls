@@ -38,7 +38,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val methodConfig = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig3 = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.methodConfigurationNamespace, methodConfig.workspaceName)
+  val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
 
   val workspace = Workspace(
     wsns,
@@ -347,7 +347,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(methodConfig) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.methodConfigurationNamespace, methodConfig.name)
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.namespace, methodConfig.name)
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${methodConfig.path}"))))) {
           header("Location")
@@ -358,7 +358,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   it should "return 409 on method configuration rename when rename already exists" in {
     MockMethodConfigurationDAO.save(workspace.namespace, workspace.name, methodConfig2, null)
 
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -369,7 +369,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 204 on method configuration rename" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -377,16 +377,16 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(true) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.methodConfigurationNamespace, "testConfig2_changed").isDefined
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed").isDefined
         }
         assertResult(None) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.methodConfigurationNamespace, methodConfig2.name)
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, methodConfig2.name)
         }
       }
   }
 
   it should "return 404 on method configuration rename, method configuration does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -394,13 +394,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(true) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.methodConfigurationNamespace, "testConfig2_changed").isDefined
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed").isDefined
         }
       }
   }
 
   it should "return 204 method configuration delete" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.methodConfigurationNamespace}/testConfig2_changed") ~>
+    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/testConfig2_changed") ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(deleteMethodConfigurationRoute) ~>
       check {
@@ -408,12 +408,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(None) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.methodConfigurationNamespace, "testConfig2_changed")
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed")
         }
       }
   }
   it should "return 404 method configuration delete, method configuration does not exist" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}x") ~>
+    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}x") ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(deleteMethodConfigurationRoute) ~>
       check {
@@ -432,7 +432,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(Option("foo2")) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig3.methodConfigurationNamespace, methodConfig3.name).inputs.get("param2")
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig3.namespace, methodConfig3.name).inputs.get("param2")
         }
       }
   }
@@ -457,7 +457,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult("testConfig") {
-          MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name)(methodConfig.methodConfigurationNamespace, methodConfig.name).name
+          MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name)(methodConfig.namespace, methodConfig.name).name
         }
       }
   }
@@ -474,7 +474,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 200 on get method configuration" in {
-    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}") ~>
+    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}") ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(getMethodConfigurationRoute) ~>
       check {
@@ -493,8 +493,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
         assertResult(MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name).values.map(mc =>
-          MethodConfiguration(mc.name, mc.rootEntityType, mc.method, mc.prerequisite, mc.inputs, mc.outputs, mc.workspaceName, mc.methodConfigurationNamespace)).toSeq) {
-          responseAs[Array[MethodConfiguration]]
+          MethodConfigurationShort(mc.name, mc.rootEntityType, mc.method, mc.workspaceName, mc.namespace)).toSeq) {
+          responseAs[Array[MethodConfigurationShort]]
         }
       }
   }
