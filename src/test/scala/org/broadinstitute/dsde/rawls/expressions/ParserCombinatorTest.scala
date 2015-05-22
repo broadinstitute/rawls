@@ -1,15 +1,13 @@
-package org.broadinstitute.dsde.rawls
+package org.broadinstitute.dsde.rawls.expressions
 
-import com.tinkerpop.blueprints.{Direction, Graph, Edge, Vertex}
+import com.tinkerpop.blueprints.{Direction, Edge, Graph, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import com.tinkerpop.pipes.{Pipe, PipeFunction}
+import com.tinkerpop.pipes.PipeFunction
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.scalatest.FunSuite
 
 import scala.collection.JavaConversions._
-
 import scala.util.parsing.combinator.JavaTokenParsers
-import scala.util.parsing.combinator._
 
 /**
  * Created by abaumann on 5/12/15.
@@ -59,7 +57,7 @@ class ParserCombinatorTest extends FunSuite with OrientDbTestFixture {
   }
 
   test("get sample from sample set") {
-    println("get sampleSet1's sample called sample1 from the root sampleSets")
+    println("get all samples from all sample sets from the root sampleSets")
 //    val value = new QueryExecutor(graph).execute("root")("sampleSets")
     val value = new QueryExecutor(graph).execute("root.sampleSet.samples")("sampleSets")
     println("results: " + value)
@@ -67,8 +65,32 @@ class ParserCombinatorTest extends FunSuite with OrientDbTestFixture {
   }
 
   test("get sample from sample set attribute") {
-    println("get the entityType from sampleSet1's sample called sample1 from the root sampleSets")
+    println("get the entity type from all samples from all sample sets from the root sampleSets")
     val value = new QueryExecutor(graph).execute("root.sampleSet.samples._entityType")("sampleSets")
+    println("results: " + value)
+    println()
+  }
+  test("conditional") {
+//    val value = new QueryExecutor(graph).execute("root.sampleSet.samples._entityType")("sampleSets")
+//    println("results: " + value)
+//    println()
+    val value = new QueryExecutor(graph).testExecute("if(false) then (1) else (2)")
+    println("results: " + value)
+    println()
+  }
+  test("choose") {
+//    val value = new QueryExecutor(graph).execute("root.sampleSet.samples._entityType")("sampleSets")
+//    println("results: " + value)
+//    println()
+    val value = new QueryExecutor(graph).testChoose("choose(root.sampleSet.samples.not_exists, root.sampleSet.samples._entityType)")
+    println("results: " + value)
+    println()
+  }
+  test("value") {
+//    val value = new QueryExecutor(graph).execute("root.sampleSet.samples._entityType")("sampleSets")
+//    println("results: " + value)
+//    println()
+    val value = new QueryExecutor(graph).testValue("trUE")
     println("results: " + value)
     println()
   }
@@ -77,7 +99,9 @@ class ParserCombinatorTest extends FunSuite with OrientDbTestFixture {
 
 class QueryExecutor(graph:Graph) extends JavaTokenParsers {
 
-  def applySteps(pipeline:PipeType, rootName:String, steps:PipelineQuery):Seq[String] = {
+  def applySteps(rootName:String, steps:PipelineQuery):Seq[String] = {
+    val pipeline = new PipeType(graph)
+
     // TODO: more idiomatic way to do this?  the GremlinPipeline has side effects, and adds pipes to each .out() and similar calls anyway, so maybe not...
     var pipelineQueryText = ""
     var result:PipeResult = null
@@ -119,10 +143,11 @@ class QueryExecutor(graph:Graph) extends JavaTokenParsers {
 
   def execute(expression:String)(rootName:String) = parseAll(path, expression) match {
     case Success(result, _) => {
-      val pipeline = new PipeType(graph)
+      // TODO: the creation of the pipeline(s) needs to occur at the parser level because we could have multiple statements
+      // TODO: that we need to evalulate using separate pipelines
       // result is a list of functions to apply to the pipeline in order
 
-      applySteps(pipeline, rootName, result)
+      applySteps(rootName, result)
     }
     case NoSuccess(msg, next) => {
       println("Failed at line %s, column %s: %s".format(
@@ -169,7 +194,86 @@ class QueryExecutor(graph:Graph) extends JavaTokenParsers {
   // a query goes from a root through pipes to the last action, which returns a Seq[String] of processed data from the requested Entities or attributes on entities
   case class PipelineQuery(rootFunc:RootFunc, pipes:Option[List[PipeFunc]], lastAction:Option[ResultFunc])
 
+
+  // TODO: define the type
+  type ComplexQuery = String
+  type Result = String
   /** syntax definition **/
+
+  def testExecute(expression:String) = parseAll(ifStatement, expression) match {
+    case Success(result, _) => {
+      result
+    }
+    case NoSuccess(msg, next) => {
+      println("Failed at line %s, column %s: %s".format(
+        next.pos.line, next.pos.column, msg))
+      println("On expression: " + next.source)
+      null
+    }
+  }
+  def testChoose(expression:String) = parseAll(choose, expression) match {
+    case Success(result, _) => {
+      result
+    }
+    case NoSuccess(msg, next) => {
+      println("Failed at line %s, column %s: %s".format(
+        next.pos.line, next.pos.column, msg))
+      println("On expression: " + next.source)
+      null
+    }
+  }
+  def testValue(expression:String) = parseAll(value, expression) match {
+    case Success(result, _) => {
+      result
+    }
+    case NoSuccess(msg, next) => {
+      println("Failed at line %s, column %s: %s".format(
+        next.pos.line, next.pos.column, msg))
+      println("On expression: " + next.source)
+      null
+    }
+  }
+
+  private def conditional:Parser[ComplexQuery] = "";
+
+  private def ifStatement:Parser[Any] = ("if" ~> parens) ~ ("then" ~> parens) ~ ("else" ~> parens) ^^ {
+    case (ifpart:Boolean) ~ thenpart ~ elsepart => println("if: " + ifpart + " then: " + thenpart + " else: " + elsepart); ifFunc(ifpart, thenpart, elsepart)
+    case (ifpart:Any) ~ thenpart ~ elsepart => throw new RuntimeException("the value inside the if must be a Boolean: " + ifpart.getClass)
+    case _ => throw new RuntimeException("the value inside the if must be a Boolean")
+  }
+
+  // type checking of a value - order matters here - whole needs to be before float, otherwise float will think a whole is a float
+  private def value:Parser[Any] = (boolean | whole | float | path | ifStatement) ^^ {
+    case value: Boolean => println("boolean"); value
+    case value: Int => println("int"); value
+    case value: Float => println("float"); value
+    case value: PipelineQuery => println("pipelinequery"); value
+    case value: Result => println("ifStatement"); value
+  }
+
+  private def optionalParens:Parser[Result] = ("(" ~> (optionalParens | value) <~ ")" | value) ^^ {case value => value.toString}
+  private def parens:Parser[Any] = "(" ~> value <~ ")" ^^ {case value => value}
+
+  private def choose:Parser[Seq[String]] = "choose" ~> ("(" ~> pathList <~ ")") ^^ {case paths => paths.filter(_.size > 0).head}
+  private def pathList:Parser[List[Seq[String]]] = rep(path <~ "," | path) ^^ {case paths  => paths.map(path => applySteps("sampleSets", path))}
+  private def ifFunc[Boolean, T](ifValue:Boolean, thenValue:T, elseValue:T): T = {
+    if (ifValue == true) {
+      thenValue
+    }
+    else {
+      elseValue
+    }
+  }
+
+  private def parserCaseInsensitive(value:String):Parser[String] = {
+    ("""(?i)\Q""" + value + """\E""").r
+  }
+
+  // TODO: add stringLiteral for functions that take string
+  private def float:Parser[Float] = floatingPointNumber ^^ (_.toFloat)
+  private def whole:Parser[Int] = wholeNumber ^^ (_.toInt)
+  private def boolean:Parser[Boolean] = (parserCaseInsensitive("true") | parserCaseInsensitive("false")) ^^ {case value => value.toBoolean}
+
   // this is the definition for just a simple entity.entity.attribute expression.  This type of expression may be found
   // in a more complex expression
   private def path:Parser[PipelineQuery] =
@@ -199,7 +303,7 @@ class QueryExecutor(graph:Graph) extends JavaTokenParsers {
     "root$".r ^^ {_ => rootFunc}
   // root followed by dot meaning it is to be followed by refs or attributes
   private def rootDot:Parser[RootFunc] =
-    "root." ^^ {_ => rootFunc}
+    "root" ~ "." ^^ {_ => rootFunc}
 
 
   /** functions against pipes **/
