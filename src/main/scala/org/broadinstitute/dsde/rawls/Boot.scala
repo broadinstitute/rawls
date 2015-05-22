@@ -73,6 +73,6 @@ object NoOpMethodConfigurationDAO extends MethodConfigurationDAO {
   override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Option[MethodConfiguration] = { None }
   override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String, txn: RawlsTransaction): Unit = {}
   override def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Unit = {}
-  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfiguration] = Seq.empty
+  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[MethodConfiguration] = Seq.empty
   override def save(workspaceNamespace: String, workspaceName: String, taskConfiguration: MethodConfiguration, txn: RawlsTransaction): MethodConfiguration = taskConfiguration
 }

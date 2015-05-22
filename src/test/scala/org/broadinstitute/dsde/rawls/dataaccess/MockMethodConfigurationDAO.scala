@@ -31,9 +31,9 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
   }
 
   /** list all method configurations in the workspace */
-  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfiguration] = {
+  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[MethodConfiguration] = {
     store.get(workspaceNamespace, workspaceName).map { workspace =>
-      workspace.values
+      workspace.values.toSeq
     }
   }.getOrElse(Seq.empty)
 

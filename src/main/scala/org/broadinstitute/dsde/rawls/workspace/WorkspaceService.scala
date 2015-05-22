@@ -38,6 +38,7 @@ object WorkspaceService {
   case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName) extends WorkspaceServiceMessage
+  case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
@@ -65,6 +66,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
     case CopyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName) => context.parent ! copyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName)
+    case ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -299,6 +301,11 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }
+    }
+
+  def listMethodConfigurations(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn))
     }
 }
 

@@ -472,4 +472,30 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
         }
       }
   }
+
+  it should "return 200 on get method configuration" in {
+    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(getMethodConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "list method Configuration" in {
+    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(listMethodConfigurationsRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name).values.map(mc =>
+          MethodConfiguration(mc.name, mc.rootEntityType, mc.method, mc.prerequisite, mc.inputs, mc.outputs, mc.workspaceName, mc.methodConfigurationNamespace)).toSeq) {
+          responseAs[Array[MethodConfiguration]]
+        }
+      }
+  }
 }

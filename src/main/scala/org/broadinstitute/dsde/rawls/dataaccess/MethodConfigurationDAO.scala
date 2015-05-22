@@ -16,7 +16,7 @@ trait MethodConfigurationDAO {
   def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)
 
   /** list all method configurations in the workspace */
-  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfiguration]
+  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[MethodConfiguration]
 
   /** rename method configuration */
   def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String, txn: RawlsTransaction)
