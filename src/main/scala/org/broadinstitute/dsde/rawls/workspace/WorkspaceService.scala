@@ -294,8 +294,8 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       withWorkspace(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, txn) { srcWorkspace =>
         methodConfigurationDAO.get(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, sourceMethodConfigName.methodConfigurationNamespace, sourceMethodConfigName.name, txn) match {
           case Some(srcMethodConfig) =>
-            methodConfigurationDAO.save(workspaceNamespace, workspaceName, srcMethodConfig.copy(workspaceName = WorkspaceName(workspaceNamespace, workspaceName)), txn)
-            RequestComplete(StatusCodes.OK)
+            val targetMethodConfig = methodConfigurationDAO.save(workspaceNamespace, workspaceName, srcMethodConfig.copy(workspaceName = WorkspaceName(workspaceNamespace, workspaceName)), txn)
+            RequestComplete(StatusCodes.Created, targetMethodConfig)
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }

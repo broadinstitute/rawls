@@ -448,12 +448,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
   }
 
-  it should "return 200 on copy method configuration" in {
+  it should "return 201 on copy method configuration" in {
     Post(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigName.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.Created) {
           status
         }
         assertResult("testConfig") {

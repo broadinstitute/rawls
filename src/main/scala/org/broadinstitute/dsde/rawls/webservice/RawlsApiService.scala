@@ -401,7 +401,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiImplicitParam(name = "srcMethodConfigurationName", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfigurationName", paramType = "body", value = "Source Method Configuration Info")
   ))
   @ApiResponses(Array(
-    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Source Workspace or method configuration does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
