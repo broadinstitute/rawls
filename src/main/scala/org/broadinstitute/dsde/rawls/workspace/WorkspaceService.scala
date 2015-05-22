@@ -239,7 +239,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def createMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-         methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.methodConfigurationNamespace, methodConfiguration.name, txn) match {
+         methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
            case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
            case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn))
          }
@@ -273,7 +273,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def updateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName,txn) { workspace =>
-        methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.methodConfigurationNamespace, methodConfiguration.name, txn) match {
+        methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) =>
             methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn)
             RequestComplete(StatusCodes.OK)
@@ -305,7 +305,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   def listMethodConfigurations(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn))
+      RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toSeq)
     }
 }
 

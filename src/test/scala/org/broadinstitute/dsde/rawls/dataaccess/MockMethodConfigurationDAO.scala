@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.MethodConfiguration
+import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, MethodConfiguration}
 
 import scala.collection.mutable
 
@@ -18,7 +18,7 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
   /** rename method configuration */
   override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String, txn: RawlsTransaction): Unit = {
     get(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, txn).foreach { methodConfig =>
-      delete(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName,txn)
+      delete(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, txn)
       save(workspaceNamespace, workspaceName, methodConfig.copy(name = newName), txn)
     }
   }
@@ -31,9 +31,9 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
   }
 
   /** list all method configurations in the workspace */
-  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[MethodConfiguration] = {
+  override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = {
     store.get(workspaceNamespace, workspaceName).map { workspace =>
-      workspace.values.toSeq
+      workspace.values.map(x => MethodConfigurationShort(x.name, x.rootEntityType, x.method, x.workspaceName, x.namespace))
     }
   }.getOrElse(Seq.empty)
 
@@ -42,7 +42,7 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
     store.get(workspaceNamespace, workspaceName).getOrElse({
       store.put((workspaceNamespace, workspaceName), new mutable.HashMap())
       store(workspaceNamespace, workspaceName)
-    }).put((methodConfiguration.methodConfigurationNamespace, methodConfiguration.name), methodConfiguration)
+    }).put((methodConfiguration.namespace, methodConfiguration.name), methodConfiguration)
     methodConfiguration
   }
 
