@@ -38,6 +38,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val methodConfig = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig3 = MethodConfiguration("testConfig", "samples", method, Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
+  val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.methodConfigurationNamespace, methodConfig.workspaceName)
 
   val workspace = Workspace(
     wsns,
@@ -355,9 +356,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 409 on method configuration rename when rename already exists" in {
-    MockMethodConfigurationDAO.save(workspace.namespace, workspace.name, methodConfig2)
+    MockMethodConfigurationDAO.save(workspace.namespace, workspace.name, methodConfig2, null)
 
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -368,7 +369,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 204 on method configuration rename" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -385,7 +386,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 404 on method configuration rename, method configuration does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.methodConfigurationNamespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
@@ -443,6 +444,57 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       check {
         assertResult(StatusCodes.NotFound) {
           status
+        }
+      }
+  }
+
+  it should "return 201 on copy method configuration" in {
+    Post(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigName.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyMethodConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult("testConfig") {
+          MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name)(methodConfig.methodConfigurationNamespace, methodConfig.name).name
+        }
+      }
+  }
+
+  it should "return 404 on copy method configuration" in {
+    Post(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, methodConfig2.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyMethodConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 200 on get method configuration" in {
+    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs/${methodConfig.methodConfigurationNamespace}/${methodConfig.name}") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(getMethodConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "list method Configuration" in {
+    Get(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}/methodconfigs") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(listMethodConfigurationsRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(MockMethodConfigurationDAO.store(workspaceCopy.namespace, workspaceCopy.name).values.map(mc =>
+          MethodConfiguration(mc.name, mc.rootEntityType, mc.method, mc.prerequisite, mc.inputs, mc.outputs, mc.workspaceName, mc.methodConfigurationNamespace)).toSeq) {
+          responseAs[Array[MethodConfiguration]]
         }
       }
   }
