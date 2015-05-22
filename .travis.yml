@@ -1,4 +1,5 @@
 language: scala
 scala:
   - 2.11.1
-script: sbt clean test -Denv.type=test
+script: sbt clean coverage test -Denv.type=test
+after_success: sbt coveralls
