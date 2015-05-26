@@ -305,7 +305,9 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   def listMethodConfigurations(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toSeq)
+      // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
+      // to ensure it is evaluated within the transaction
+      RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toList)
     }
 }
 
