@@ -66,7 +66,9 @@ case class Entity(
                    @(ApiModelProperty@field)(required = true, value = "The attributes of the entity")
                    attributes: Map[String, Attribute],
                    @(ApiModelProperty@field)(required = true, value = "This entity's owning workspace")
-                   workspaceName:WorkspaceName ) extends Identifiable {
+                   workspaceName:WorkspaceName,
+                   @(ApiModelProperty@field)(required = false, value = "This entity's Vault ID")
+                   vaultId:String="") extends Identifiable {
   def path : String = workspaceName.path + "/entities/" + name
 }
 
@@ -121,8 +123,7 @@ case class MethodConfigurationShort(
                                 @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                                 workspaceName:WorkspaceName,
                                 @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
-                                namespace: String) {
-}
+                                namespace: String)
 
 trait Attribute
 trait AttributeValue extends Attribute
@@ -188,7 +189,7 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
-  implicit val EntityFormat = jsonFormat4(Entity)
+  implicit val EntityFormat = jsonFormat5(Entity)
 
   implicit val WorkspaceFormat = jsonFormat5(Workspace)
 

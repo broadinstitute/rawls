@@ -45,7 +45,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     val multipleRefs = multiples.map(_.right.get).groupBy(_._1).map(kv => kv._1 -> AttributeReferenceList(kv._2.map(_._2)))
 
     Entity(entity.getProperty("_name"), entity.getProperty("_clazz"), attributeVals ++ singleRefs ++ multipleRefs,
-      WorkspaceName(workspaceNamespace, workspaceName))
+      WorkspaceName(workspaceNamespace, workspaceName), entity.getProperty("_vaultId") )
   }
 
   private def addEdge(workspace: Vertex, sourceEntity: Vertex, ref: AttributeReferenceSingle, label: String) = {
@@ -71,6 +71,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       workspace.addEdge(entity.entityType, newVertex)
       newVertex
     })
+    entityVertex.setProperty("_vaultId", entity.vaultId)
 
     // split the attributes into references (which will get turned into edges) and non-references (which get turned into properties)
     val (references, properties) = entity.attributes.partition(_._2.isInstanceOf[AttributeReference])
