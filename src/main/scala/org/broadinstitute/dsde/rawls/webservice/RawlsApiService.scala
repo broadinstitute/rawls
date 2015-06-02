@@ -112,7 +112,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     nickname = "list",
     httpMethod = "GET",
     produces = "application/json",
-    response = classOf[Seq[WorkspaceShort]])
+    response = classOf[Seq[Workspace]])
   @ApiResponses(Array(
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")

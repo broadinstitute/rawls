@@ -30,7 +30,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     // NB: when starting from an edge, inV() returns the DESTINATION vertices, not the source vertices, and vice versa.
     def edgeOutgoingReferenceFunc(e: Edge) = {
       val kv = e.getLabel -> new GremlinPipeline(e).inV().transform(
-        (v: Vertex) => AttributeReferenceSingle(v.getProperty("_clazz"), v.getProperty("_name"))
+        (v: Vertex) => AttributeReferenceSingle(v.getProperty("_entityType"), v.getProperty("_name"))
       ).head
       // we need some way of distinguishing single references from multiple references, so we use left/right
       if (e.getProperty[Boolean]("_unique")) Left(kv) else Right(kv)
@@ -44,8 +44,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     val singleRefs = singles.map(_.left.get)
     val multipleRefs = multiples.map(_.right.get).groupBy(_._1).map(kv => kv._1 -> AttributeReferenceList(kv._2.map(_._2)))
 
-    Entity(entity.getProperty("_name"), entity.getProperty("_clazz"), attributeVals ++ singleRefs ++ multipleRefs,
-      WorkspaceName(workspaceNamespace, workspaceName), entity.getProperty("_vaultId") )
+    fromVertex[Entity](entity, Map("attributes" -> (attributeVals ++ singleRefs ++ multipleRefs), "workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName)))
   }
 
   private def addEdge(workspace: Vertex, sourceEntity: Vertex, ref: AttributeReferenceSingle, label: String) = {
@@ -65,32 +64,27 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
 
     // get the entity, creating if it doesn't already exist
     val entityVertex = getEntityVertex(db, workspaceNamespace, workspaceName, entity.entityType, entity.name).getOrElse({
-      val newVertex = db.addVertex(null)
-      newVertex.setProperty("_name", entity.name)
-      newVertex.setProperty("_clazz", entity.entityType)
+      val newVertex = setVertexProperties(entity, db.addVertex(null))
       workspace.addEdge(entity.entityType, newVertex)
       newVertex
     })
     entityVertex.setProperty("_vaultId", entity.vaultId)
 
-    // split the attributes into references (which will get turned into edges) and non-references (which get turned into properties)
-    val (references, properties) = entity.attributes.partition(_._2.isInstanceOf[AttributeReference])
-
-    properties.foreach(p => {
-      if (isReservedProperty(p._1)) throw new IllegalArgumentException("Illegal property name: " + p._1)
-      entityVertex.setProperty(p._1, attributeToProperty(p._2.asInstanceOf[AttributeValue]))
-    })
-
     // TODO is there a better solution than deleting all the existing edges and re-creating them?
     new GremlinPipeline(entityVertex).outE().iterator().foreach(_.remove())
+    for (key <- entityVertex.getPropertyKeys; if !isReservedProperty(key)) {
+      entityVertex.removeProperty(key).asInstanceOf[Object] //cast to Object required to prevent cast to Nothing which fails at runtime
+    }
 
-    references.foreach(r => {
-      val label = r._1
-      r._2 match {
-        case ref: AttributeReferenceSingle => addEdge(workspace, entityVertex, ref, label).setProperty("_unique", true)
-        case AttributeReferenceList(refList) => refList.foreach(addEdge(workspace, entityVertex, _, label).setProperty("_unique", false))
+    entity.attributes.foreach {
+      _ match {
+        case (label, ref: AttributeReferenceSingle) => addEdge(workspace, entityVertex, ref, label).setProperty("_unique", true)
+        case (label, AttributeReferenceList(refList)) => refList.foreach(addEdge(workspace, entityVertex, _, label).setProperty("_unique", false))
+        case (name, value: AttributeValue) =>
+          if (isReservedProperty(name)) throw new IllegalArgumentException("Illegal property name: " + name)
+          entityVertex.setProperty(name, attributeToProperty(value))
       }
-    })
+    }
 
     entity
   }
@@ -111,5 +105,17 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
     getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).foreach(_.setProperty("_name", newName))
+  }
+
+  def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String] = txn withGraph { graph =>
+    workspacePipeline(graph, workspaceNamespace, workspaceName).outE().label().dedup().toList.filterNot(_ == MethodConfigEdgeType)
+  }
+
+  def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
+    val entityTypes = getEntityTypes(workspaceNamespace, workspaceName, txn)
+    getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
+      case Some(w) => new GremlinPipeline(w).out(entityTypes:_*).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
+      case None => List.empty
+    }
   }
 }

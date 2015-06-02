@@ -41,4 +41,12 @@ object MockEntityDAO extends EntityDAO {
     }).put((entity.entityType, entity.name), entity)
     entity
   }
+
+  override def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String] = {
+    store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.keySet.map(_._1).toSet).getOrElse(Seq.empty).toSeq
+  }
+
+  override def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = {
+    store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
+  }
 }

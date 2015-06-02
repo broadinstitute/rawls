@@ -24,10 +24,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     wsname,
     DateTime.now().withMillis(0),
     "test",
-    Map(
-      "samples" -> Map("s1" -> s1),
-      "individuals" -> Map("i" -> Entity("i", "individuals", Map("samples" -> AttributeReferenceList(Seq(AttributeReferenceSingle("samples", "s2"), AttributeReferenceSingle("samples", "s1")))), WorkspaceName(wsns, wsname)))
-    )
+    Map.empty
   )
 
   val dataSource = DataSource("memory:rawls", "admin", "admin")

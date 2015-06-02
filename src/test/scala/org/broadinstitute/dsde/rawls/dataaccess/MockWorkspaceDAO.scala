@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceShort}
+import org.broadinstitute.dsde.rawls.model.Workspace
 
 import scala.collection.mutable
 
@@ -9,8 +9,9 @@ import scala.collection.mutable
  */
 object MockWorkspaceDAO extends WorkspaceDAO {
   val store = new mutable.HashMap[Tuple2[String, String], Workspace]()
-  def save(workspace: Workspace, txn: RawlsTransaction): Unit = {
+  def save(workspace: Workspace, txn: RawlsTransaction): Workspace = {
     store.put((workspace.namespace, workspace.name), workspace)
+    workspace
   }
   def load(namespace: String, name: String, txn: RawlsTransaction): Option[Workspace] = {
     try {
@@ -20,7 +21,5 @@ object MockWorkspaceDAO extends WorkspaceDAO {
     }
   }
 
-  override def loadShort(namespace: String, name: String, txn: RawlsTransaction): Option[WorkspaceShort] = load(namespace, name, txn).map(workspace => WorkspaceShort(workspace.namespace, workspace.name, workspace.createdDate, workspace.createdBy))
-
-  override def list(txn: RawlsTransaction): Seq[WorkspaceShort] = store.values.map(w => WorkspaceShort(w.namespace, w.name, w.createdDate, w.createdBy)).toSeq
+  override def list(txn: RawlsTransaction): Seq[Workspace] = store.values.toSeq
 }
