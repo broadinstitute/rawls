@@ -89,7 +89,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     assert {
       txn.withGraph { graph =>
         graph.getVertices("_entityType", "pair")
-          .filter(v => v.getProperty("_name") == "pair2")
+          .filter(v => v.getProperty[String]("_name") == "pair2")
           .headOption.isDefined
       }
     }
@@ -105,7 +105,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       wsName)
     dao.save(workspace.namespace, workspace.name, pair1Updated, txn)
     txn.withGraph { graph =>
-      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty("_name") == "pair1").head
+      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty[String]("_name") == "pair1").head
       assert { fetched.getPropertyKeys.contains("isItAPair") }
       // TODO check edges?
     }
@@ -117,7 +117,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       wsName)
     dao.save(workspace.namespace, workspace.name, pair1UpdatedAgain, txn)
     txn.withGraph { graph =>
-      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty("_name") == "pair1").head
+      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty[String]("_name") == "pair1").head
       assert { !fetched.getPropertyKeys.contains("isItAPair") }
     }
   }
@@ -142,7 +142,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     assert {
       txn.withGraph { graph =>
         graph.getVertices("_entityType", "pair")
-          .filter(v => v.getProperty("_name") == "pair2")
+          .filter(v => v.getProperty[String]("_name") == "pair2")
           .headOption.isEmpty
       }
     }

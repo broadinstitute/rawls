@@ -11,6 +11,7 @@ import org.joda.time.DateTime
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.language.implicitConversions
 
 trait GraphDAO {
 
