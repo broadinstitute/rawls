@@ -31,7 +31,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     assert {
       txn.withGraph { graph =>
         graph.getVertices("_clazz", classOf[Workspace].getSimpleName)
-          .filter(v => v.getProperty("_name") == workspace.name && v.getProperty("_namespace") == workspace.namespace)
+          .filter(v => v.getProperty[String]("_name") == workspace.name && v.getProperty[String]("_namespace") == workspace.namespace)
           .headOption.isDefined
       }
     }

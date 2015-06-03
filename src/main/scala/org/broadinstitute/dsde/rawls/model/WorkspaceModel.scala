@@ -165,8 +165,8 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
     }
 
     def getAttributeList(s: Seq[Attribute]) = s match {
-      case v: Seq[AttributeValue] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
-      case r: Seq[AttributeReferenceSingle] if (s.map(_.isInstanceOf[AttributeReferenceSingle]).reduce(_&&_)) => AttributeReferenceList(r)
+      case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
+      case r: Seq[AttributeReferenceSingle @unchecked] if (s.map(_.isInstanceOf[AttributeReferenceSingle]).reduce(_&&_)) => AttributeReferenceList(r)
       case _ => throw new DeserializationException("illegal array type")
     }
   }

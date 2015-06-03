@@ -9,6 +9,7 @@ import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
 import spray.http._
+import scala.language.postfixOps
 
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
