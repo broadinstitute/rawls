@@ -10,6 +10,7 @@ import scala.collection.JavaConversions._
 class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   override val testDbName = "GraphWorkspaceDAOSpec"
   lazy val dao: GraphWorkspaceDAO = new GraphWorkspaceDAO()
+  lazy val entityDao = new GraphEntityDAO()
 
   // setup workspace objects
   val wsName = WorkspaceName("myNamespace", "myWorkspace")
@@ -21,17 +22,15 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     name = wsName.name,
     createdDate = DateTime.now(),
     createdBy = "Barack Obama",
-    Map("sample" -> Map(sample1.name -> sample1), "individual" -> Map(individual1.name -> individual1))
+    attributes = Map("workspace_attrib" -> AttributeString("foo"))
   )
-
-  val workspaceShort = WorkspaceShort(workspace.namespace, workspace.name, workspace.createdDate, workspace.createdBy)
 
   "GraphWorkspaceDAO" should "save a new workspace" in {
     dao.save(workspace, txn)
     // now check explicitly that the vertex exists. note that this will fail if our reserved keywords change.
     assert {
       txn.withGraph { graph =>
-        graph.getVertices("_clazz", "workspace")
+        graph.getVertices("_clazz", classOf[Workspace].getSimpleName)
           .filter(v => v.getProperty("_name") == workspace.name && v.getProperty("_namespace") == workspace.namespace)
           .headOption.isDefined
       }
@@ -54,10 +53,10 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "load the short version of a workspace" in {
-    assertResult(Some(workspaceShort)) { dao.loadShort(workspace.namespace, workspace.name, txn) }
+    assertResult(Some(workspace)) { dao.load(workspace.namespace, workspace.name, txn) }
   }
 
   it should "show workspace in list" in {
-    assert { dao.list(txn).contains(workspaceShort) }
+    assert { dao.list(txn).contains(workspace) }
   }
 }

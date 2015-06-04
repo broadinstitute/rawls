@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.tinkerpop.blueprints.Direction
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -41,22 +42,26 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     name = wsName.name,
     createdDate = DateTime.now(),
     createdBy = "Joe Biden",
-    Map(
-      "sample" -> Map(
-        sample1.name -> sample1,
-        sample2.name -> sample2,
-        sample3.name -> sample3),
-      "pair" -> Map(
-        pair1.name -> pair1),
-      "sampleSet" -> Map(
-        sampleSet1.name -> sampleSet1)
-    )
+    Map.empty
   )
 
   // for the initial upload, we need the workspace DAO
   // unfortunately because of how BeforeAndAfterAll works, this has to be inside a test...
   "GraphEntityDAO" should "setup a workspace" in {
     new GraphWorkspaceDAO().save(workspace, txn)
+    dao.save(workspace.namespace, workspace.name, sample1, txn)
+    dao.save(workspace.namespace, workspace.name, sample2, txn)
+    dao.save(workspace.namespace, workspace.name, sample3, txn)
+    dao.save(workspace.namespace, workspace.name, pair1, txn)
+    dao.save(workspace.namespace, workspace.name, sampleSet1, txn)
+  }
+
+  it should "get entity types" in {
+    assertResult(Seq("sample", "pair", "sampleSet")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn) }
+  }
+
+  it should "list all entities of all entity types" in {
+    assertResult(Seq(sample1, sample2, sample3, pair1, sampleSet1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSeq }
   }
 
   it should "get an entity" in {
@@ -83,7 +88,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     dao.save(workspace.namespace, workspace.name, pair2, txn)
     assert {
       txn.withGraph { graph =>
-        graph.getVertices("_clazz", "pair")
+        graph.getVertices("_entityType", "pair")
           .filter(v => v.getProperty("_name") == "pair2")
           .headOption.isDefined
       }
@@ -91,7 +96,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   }
 
   it should "save updates to an existing entity" in {
-    // flip case / control and add property
+    // flip case / control and add property, remove a property
     val pair1Updated = Entity("pair1", "pair",
       Map(
         "isItAPair" -> AttributeBoolean(true),
@@ -100,9 +105,20 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       wsName)
     dao.save(workspace.namespace, workspace.name, pair1Updated, txn)
     txn.withGraph { graph =>
-      val fetched = graph.getVertices("_clazz", "pair").filter(v => v.getProperty("_name") == "pair1").head
+      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty("_name") == "pair1").head
       assert { fetched.getPropertyKeys.contains("isItAPair") }
       // TODO check edges?
+    }
+
+    val pair1UpdatedAgain = Entity("pair1", "pair",
+      Map(
+        "case" -> AttributeReferenceSingle("sample", "sample2"),
+        "control" -> AttributeReferenceSingle("sample", "sample1")),
+      wsName)
+    dao.save(workspace.namespace, workspace.name, pair1UpdatedAgain, txn)
+    txn.withGraph { graph =>
+      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty("_name") == "pair1").head
+      assert { !fetched.getPropertyKeys.contains("isItAPair") }
     }
   }
 
@@ -112,7 +128,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   }
 
   it should "throw an exception if trying to save reserved-keyword attributes" in {
-    val bar = Entity("boo", "far", Map("_clazz" -> AttributeString("myAmazingClazzzz")), wsName)
+    val bar = Entity("boo", "far", Map("_entityType" -> AttributeString("myAmazingClazzzz")), wsName)
     intercept[IllegalArgumentException] { dao.save(workspace.namespace, workspace.name, bar, txn) }
   }
 
@@ -125,7 +141,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     dao.delete(workspace.namespace, workspace.name, "pair", "pair2", txn)
     assert {
       txn.withGraph { graph =>
-        graph.getVertices("_clazz", "pair")
+        graph.getVertices("_entityType", "pair")
           .filter(v => v.getProperty("_name") == "pair2")
           .headOption.isEmpty
       }
@@ -142,7 +158,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   it should "rename an entity" in {
     dao.rename(workspace.namespace, workspace.name, "pair", "pair1", "amazingPair", txn)
     txn.withGraph { graph =>
-      val pairNames = graph.getVertices("_clazz", "pair").map(_.getProperty[String]("_name")).toList
+      val pairNames = graph.getVertices("_entityType", "pair").map(_.getProperty[String]("_name")).toList
       assert {
         pairNames.contains("amazingPair")
       }

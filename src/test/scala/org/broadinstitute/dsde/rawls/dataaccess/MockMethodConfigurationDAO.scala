@@ -33,7 +33,7 @@ object MockMethodConfigurationDAO extends MethodConfigurationDAO {
   /** list all method configurations in the workspace */
   override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = {
     store.get(workspaceNamespace, workspaceName).map { workspace =>
-      workspace.values.map(x => MethodConfigurationShort(x.name, x.rootEntityType, x.method, x.workspaceName, x.namespace))
+      workspace.values.map(x => MethodConfigurationShort(x.name, x.rootEntityType, x.methodNamespace, x.methodName, x.methodVersion, x.workspaceName, x.namespace))
     }
   }.getOrElse(Seq.empty)
 

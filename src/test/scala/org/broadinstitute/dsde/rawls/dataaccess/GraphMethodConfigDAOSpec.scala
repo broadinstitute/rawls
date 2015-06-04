@@ -24,7 +24,9 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
   val methodConfig = MethodConfiguration(
     "config1",
     "sample",
-    Method("meth1", "ns", "1"),
+    "ns",
+    "meth1",
+    "1",
     Map("i1" -> "input expr"),
     Map("o1" -> "output expr"),
     Map("p1" -> "prereq expr"),
@@ -52,7 +54,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
   }
 
   it should "list method configs" in {
-    assertResult(List(MethodConfigurationShort("config1", "goober", Method("meth1", "ns", "1"), wsName, "ns"))) {
+    assertResult(List(MethodConfigurationShort("config1", "goober", "ns", "meth1", "1", wsName, "ns"))) {
       new GraphMethodConfigurationDAO().list(wsName.namespace, wsName.name, txn).toList
     }
   }

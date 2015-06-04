@@ -93,6 +93,12 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         case ( Some(ws), None ) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
           workspaceDAO.save(newWorkspace, txn)
+          entityDAO.listEntitiesAllTypes(ws.namespace, ws.name, txn).foreach { entity =>
+            entityDAO.save(newWorkspace.namespace, newWorkspace.name, entity, txn)
+          }
+          methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
+            methodConfigurationDAO.save(newWorkspace.namespace, newWorkspace.name, methodConfigurationDAO.get(ws.namespace, ws.name, methodConfig.namespace, methodConfig.name, txn).get, txn)
+          }
           RequestComplete((StatusCodes.Created, newWorkspace))
         }
         case ( None, _ ) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
@@ -214,21 +220,21 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     }
   }
 
-  private def withWorkspace(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(op: (WorkspaceShort) => PerRequestMessage): PerRequestMessage = {
-    workspaceDAO.loadShort(workspaceNamespace, workspaceName, txn) match {
+  private def withWorkspace(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage): PerRequestMessage = {
+    workspaceDAO.load(workspaceNamespace, workspaceName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"$workspaceNamespace/$workspaceName does not exist")
       case Some(workspace) => op(workspace)
     }
   }
 
-  private def withEntity(workspace: WorkspaceShort, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
+  private def withEntity(workspace: Workspace, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
     entityDAO.get(workspace.namespace, workspace.name, entityType, entityName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"${entityType} ${entityName} does not exists in ${workspace.namespace}/${workspace.name}")
       case Some(entity) => op(entity)
     }
   }
 
-  private def withMethodConfig(workspace: WorkspaceShort, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)(op: (MethodConfiguration) => PerRequestMessage): PerRequestMessage = {
+  private def withMethodConfig(workspace: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)(op: (MethodConfiguration) => PerRequestMessage): PerRequestMessage = {
     methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfigurationNamespace, methodConfigurationName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exists in ${workspace.namespace}/${workspace.name}")
       case Some(methodConfiguration) => op(methodConfiguration)

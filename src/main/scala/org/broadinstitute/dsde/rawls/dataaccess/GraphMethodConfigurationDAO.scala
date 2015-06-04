@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.{Graph, Vertex, Direction}
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, Method, WorkspaceName, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, WorkspaceName, MethodConfiguration}
 import scala.collection.JavaConversions._
 
 /**
@@ -25,23 +25,19 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
       val outputs = getVertexProperties[String](methodConfigPipe.out(OutputsEdge))
       val prerequisites = getVertexProperties[String](methodConfigPipe.out(PrerequisitesEdge))
 
-      MethodConfiguration(
-        namespace = methodConfigProps("namespace"),
-        name = methodConfigProps("name"),
-        rootEntityType = methodConfigProps("rootEntityType"),
-        workspaceName = WorkspaceName(workspaceNamespace, workspaceName),
-        inputs = inputs.getOrElse(Map.empty),
-        outputs = outputs.getOrElse(Map.empty),
-        prerequisites = prerequisites.getOrElse(Map.empty),
-        method = Method(methodConfigProps("methodName"), methodConfigProps("methodNamespace"), methodConfigProps("methodVersion"))
-      )
+      fromPropertyMap[MethodConfiguration](methodConfigProps ++
+        Map(
+          "inputs" -> inputs.getOrElse(Map.empty),
+          "outputs" -> outputs.getOrElse(Map.empty),
+          "prerequisites" -> prerequisites.getOrElse(Map.empty),
+          "workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName)))
     }
   }
 
   /** rename method configuration */
   override def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String, txn: RawlsTransaction): Unit = txn withGraph { graph =>
     getSinglePipelineResult(methodConfigPipeline(graph, workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)).foreach {
-      _.setProperty("name", newName)
+      _.setProperty("_name", newName)
     }
   }
 
@@ -55,13 +51,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   /** list all method configurations in the workspace */
   override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = txn withGraph { graph =>
     getPropertiesOfVertices[String](workspacePipeline(graph, workspaceNamespace, workspaceName).out(MethodConfigEdgeType)) map { methodConfigProps =>
-      MethodConfigurationShort(
-        namespace = methodConfigProps("namespace"),
-        name = methodConfigProps("name"),
-        rootEntityType = methodConfigProps("rootEntityType"),
-        workspaceName = WorkspaceName(workspaceNamespace, workspaceName),
-        method = Method(methodConfigProps("methodName"), methodConfigProps("methodNamespace"), methodConfigProps("methodVersion"))
-      )
+      fromPropertyMap[MethodConfigurationShort](methodConfigProps ++ Map("workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName)))
     }
   }
 
@@ -77,8 +67,6 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
       getSinglePipelineResult(methodConfigPipe) match {
         case None => {
           val configVertex = graph.addVertex(null)
-          configVertex.setProperty("namespace", methodConfiguration.namespace)
-          configVertex.setProperty("name", methodConfiguration.name)
           workspace.addEdge(MethodConfigEdgeType, configVertex)
 
           val (inputsVertex, outputsVertex, prerequisitesVertex) = createSubVertices(graph, configVertex)
@@ -93,10 +81,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
         }
       }
 
-    configVertex.setProperty("rootEntityType", methodConfiguration.rootEntityType)
-    configVertex.setProperty("methodNamespace", methodConfiguration.method.namespace)
-    configVertex.setProperty("methodName", methodConfiguration.method.name)
-    configVertex.setProperty("methodVersion", methodConfiguration.method.version)
+    setVertexProperties(methodConfiguration, configVertex)
 
     methodConfiguration.inputs.foreach { entry => inputsVertex.setProperty(entry._1, entry._2) }
     methodConfiguration.outputs.foreach { entry => outputsVertex.setProperty(entry._1, entry._2) }
