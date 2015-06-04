@@ -14,7 +14,7 @@ libraryDependencies ++= {
   Seq(
     "com.gettyimages" %% "spray-swagger" % "0.5.0",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
-    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "it, test",
     "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing" % sprayV,
@@ -22,8 +22,8 @@ libraryDependencies ++= {
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
     "org.webjars" % "swagger-ui" % "2.0.24",
-    "io.spray" %% "spray-testkit" % sprayV % "test",
-    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
+    "io.spray" %% "spray-testkit" % sprayV % "it, test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "it, test",
     "com.orientechnologies" % "orientdb-core" % "2.0.8",
     "com.orientechnologies" % "orientdb-graphdb" % "2.0.8",
     "com.orientechnologies" % "orientdb-server" % "2.0.8",
@@ -44,3 +44,7 @@ assemblyMergeStrategy in assembly := {
 Revolver.settings
 
 Revolver.enableDebugging(port = 5050, suspend = false)
+
+Defaults.itSettings
+
+lazy val root = project.in(file(".")).configs(IntegrationTest)
