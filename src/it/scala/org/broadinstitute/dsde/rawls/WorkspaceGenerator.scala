@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations.{EntityUpdateOperation, RemoveAttribute, AddUpdateAttribute}
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.{AttributeUpdateOperation, RemoveAttribute, AddUpdateAttribute}
 import org.joda.time.DateTime
 
 import scala.util.Random
@@ -139,7 +139,7 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
    * Create a series of update operations on an entity's annotations.
    * For now, this is just add/update/delete. TODO include add/remove from list
    */
-  def updateEntityAnnotations(entity: Entity, nDelete: Int, nModify: Int, nCreate: Int): Seq[EntityUpdateOperation] = {
+  def updateEntityAnnotations(entity: Entity, nDelete: Int, nModify: Int, nCreate: Int): Seq[AttributeUpdateOperation] = {
     val (toDelete, toModify) = rand.shuffle(entity.attributes.filter(_._2.isInstanceOf[AttributeValue]).keys).take(nDelete + nModify).splitAt(nDelete)
     val toCreate = for (i <- 0 to nCreate) yield generatePropertyKey
     val addOrUpdateOps = (toModify ++ toCreate).map(k => AddUpdateAttribute(k, generateAnyValue))

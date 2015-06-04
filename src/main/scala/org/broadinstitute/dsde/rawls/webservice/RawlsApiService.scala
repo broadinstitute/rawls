@@ -7,8 +7,8 @@ import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations.EntityUpdateOperation
-import org.broadinstitute.dsde.rawls.workspace.{EntityUpdateOperations, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
+import org.broadinstitute.dsde.rawls.workspace.{AttributeUpdateOperations, WorkspaceService}
 import spray.http.MediaTypes._
 import spray.http.Uri
 import spray.routing.Directive.pimpApply
@@ -72,6 +72,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   val workspaceServiceConstructor: () => WorkspaceService
   val workspaceRoutes =
     postWorkspaceRoute ~
+    updateWorkspaceRoute ~
     listWorkspacesRoute ~
     copyWorkspaceRoute ~
     createEntityRoute ~
@@ -103,6 +104,37 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor),
             WorkspaceService.SaveWorkspace(workspace))
+        }
+      }
+    }
+  }
+
+  @Path("/{workspaceNamespace}/{workspaceName}")
+  @ApiOperation(value = "Update attributes of a workspace",
+    nickname = "update workspace",
+    httpMethod = "Patch",
+    produces = "application/json",
+    response = classOf[Workspace])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
+    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
+    new ApiImplicitParam(name = "entityType", required = true, dataType = "string", paramType = "path", value = "Entity Type"),
+    new ApiImplicitParam(name = "entityName", required = true, dataType = "string", paramType = "path", value = "Entity Name"),
+    new ApiImplicitParam(name = "entityUpdateJson", required = true, dataType = "org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations$EntityUpdateOperation", paramType = "body", value = "Update operations")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "Successful Request"),
+    new ApiResponse(code = 400, message = "Attribute does not exists or is of an unexpected type"),
+    new ApiResponse(code = 404, message = "Workspace or Entity does not exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def updateWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    import AttributeUpdateOperations._
+    path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+      patch {
+        entity(as[Array[AttributeUpdateOperation]]) { operations =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.UpdateWorkspace(workspaceNamespace, workspaceName, operations))
         }
       }
     }
@@ -210,7 +242,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
   @Path("/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}")
   @ApiOperation(value = "Update entity in a workspace",
     nickname = "update entity",
-    httpMethod = "Post",
+    httpMethod = "Patch",
     produces = "application/json",
     response = classOf[Entity])
   @ApiImplicitParams(Array(
@@ -227,10 +259,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def updateEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    import EntityUpdateOperations._
+    import AttributeUpdateOperations._
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
-      post {
-        entity(as[Array[EntityUpdateOperation]]) { operations =>
+      patch {
+        entity(as[Array[AttributeUpdateOperation]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
             WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
         }

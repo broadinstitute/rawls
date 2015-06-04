@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.WorkspaceSimulation._
 import org.scalatest.{Matchers, FlatSpec}
 import spray.http._

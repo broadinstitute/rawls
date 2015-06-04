@@ -5,7 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
@@ -102,7 +102,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           status
         }
       }
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -183,8 +183,34 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
   }
 
+  it should "return 200 on update workspace attributes" in {
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(AttributeString("bang"))) {
+          MockWorkspaceDAO.store(workspace.namespace, workspace.name).attributes.get("boo")
+        }
+      }
+
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(None) {
+          MockWorkspaceDAO.store(workspace.namespace, workspace.name).attributes.get("boo")
+        }
+      }
+  }
+
   it should "return 200 on update entity" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -198,7 +224,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 200 on remove attribute from entity" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -212,7 +238,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 404 on update to non-existing entity" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -223,7 +249,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 400 on remove from an attribute that is not a list" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -233,7 +259,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
   }
   it should "return 400 on remove from list attribute that does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
@@ -243,7 +269,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
   }
   it should "return 400 on add to list attribute that is not a list" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("foo", AttributeString("adsf")): EntityUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateEntityRoute) ~>
       check {
