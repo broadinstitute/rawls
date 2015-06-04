@@ -22,7 +22,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     case b: Boolean => AttributeBoolean(b)
     case n: java.math.BigDecimal => AttributeNumber(n)
     case s: String => AttributeString(s)
-    case l: java.util.List[Any] => AttributeValueList(l.map(propertyToAttribute(_)))
+    case l: java.util.List[_] => AttributeValueList(l.map(propertyToAttribute(_)))
     case _ => throw new IllegalArgumentException("Cannot deserialize " + prop + " as an attribute")
   }
 
