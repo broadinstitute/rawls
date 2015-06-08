@@ -12,6 +12,10 @@ trait Identifiable {
   def path : String
 }
 
+trait Attributable extends Identifiable {
+  def attributes: Map[String, Attribute]
+}
+
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -40,7 +44,7 @@ case class Workspace (
                       createdBy: String,
                       @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
                       attributes: Map[String, Attribute]
-                      ) extends Identifiable {
+                      ) extends Identifiable with Attributable {
   def path : String = "workspaces/" + namespace + "/" + name
 }
 
@@ -63,7 +67,7 @@ case class Entity(
                    workspaceName:WorkspaceName,
                    @(ApiModelProperty@field)(required = false, value = "This entity's Vault ID")
                    @(VertexProperty@field)
-                   vaultId:String="") extends Identifiable {
+                   vaultId:String="") extends Identifiable with Attributable {
   def path : String = workspaceName.path + "/entities/" + name
 }
 

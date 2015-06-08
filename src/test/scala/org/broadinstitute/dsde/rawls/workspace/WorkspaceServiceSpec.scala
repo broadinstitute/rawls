@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
 import spray.testkit.ScalatestRouteTest

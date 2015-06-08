@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityD
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
-import org.broadinstitute.dsde.rawls.workspace.EntityUpdateOperations._
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http
@@ -23,12 +23,13 @@ import spray.json._
 object WorkspaceService {
   sealed trait WorkspaceServiceMessage
   case class SaveWorkspace(workspace: Workspace) extends WorkspaceServiceMessage
+  case class UpdateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceNamespace: String, workspaceName: String, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
-  case class UpdateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[EntityUpdateOperation]) extends WorkspaceServiceMessage
+  case class UpdateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case class DeleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class RenameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
 
@@ -52,8 +53,10 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   override def receive = {
     case SaveWorkspace(workspace) => context.parent ! saveWorkspace(workspace)
+    case UpdateWorkspace(workspaceNamespace, workspaceName, operations) => context.parent ! updateWorkspace(workspaceNamespace, workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
     case CloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
+
     case CreateEntity(workspaceNamespace, workspaceName, entity) => context.parent ! createEntity(workspaceNamespace, workspaceName, entity)
     case GetEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceNamespace, workspaceName, entityType, entityName)
     case UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations) => context.parent ! updateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations)
@@ -79,6 +82,18 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         PerRequest.RequestComplete((StatusCodes.Created, workspace))
     }
   }
+
+  def updateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        try {
+          val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
+          RequestComplete(workspaceDAO.save(updatedWorkspace, txn))
+        } catch {
+          case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in $workspaceNamespace/$workspaceName, ${e.getMessage}")
+        }
+      }
+    }
 
   def listWorkspaces(dataSource: DataSource): PerRequestMessage =
     dataSource inTransaction { txn =>
@@ -125,7 +140,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
-  def updateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[EntityUpdateOperation]): PerRequestMessage =
+  def updateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
         withEntity(workspace, entityType, entityName, txn) { entity =>
@@ -172,49 +187,66 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
    * @return the updated entity
    */
-  def applyOperationsToEntity(entity: Entity, operations: Seq[EntityUpdateOperation]): Entity = {
-    operations.foldLeft(entity) { (currentEntity, operation) =>
-      operation match {
-        case AddUpdateAttribute(attributeName, attribute) => currentEntity.copy(attributes = currentEntity.attributes + (attributeName -> attribute))
+  def applyOperationsToEntity(entity: Entity, operations: Seq[AttributeUpdateOperation]): Entity = {
+    entity.copy(attributes = applyAttributeUpdateOperations(entity, operations))
+  }
 
-        case RemoveAttribute(attributeName) => currentEntity.copy(attributes = currentEntity.attributes - attributeName)
+  /**
+   * Applies the sequence of operations in order to the workspace.
+   *
+   * @param workspace to update
+   * @param operations sequence of operations
+   * @throws AttributeNotFoundException when removing from a list attribute that does not exist
+   * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
+   * @return the updated entity
+   */
+  def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace = {
+    workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
+  }
+
+  private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): Map[String, Attribute] = {
+    operations.foldLeft(attributable.attributes) { (startingAttributes, operation) =>
+      operation match {
+        case AddUpdateAttribute(attributeName, attribute) => startingAttributes + (attributeName -> attribute)
+
+        case RemoveAttribute(attributeName) => startingAttributes - attributeName
 
         case AddListMember(attributeListName, newMember) =>
-          currentEntity.attributes.get(attributeListName) match {
+          startingAttributes.get(attributeListName) match {
             case Some(l: AttributeValueList) =>
               newMember match {
                 case newMember: AttributeValue =>
-                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(l.list :+ newMember)))
+                  startingAttributes + (attributeListName -> AttributeValueList(l.list :+ newMember))
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
               }
 
             case Some(l: AttributeReferenceList) =>
               newMember match {
                 case newMember: AttributeReferenceSingle =>
-                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(l.list :+ newMember)))
+                  startingAttributes + (attributeListName -> AttributeReferenceList(l.list :+ newMember))
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
               }
 
             case None =>
               newMember match {
                 case newMember: AttributeValue =>
-                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(Seq(newMember))))
+                  startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeReferenceSingle =>
-                  currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(Seq(newMember))))
+                  startingAttributes + (attributeListName -> AttributeReferenceList(Seq(newMember)))
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
-            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${entity.entityType} ${entity.name} is not a list")
+            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
           }
 
         case RemoveListMember(attributeListName, removeMember) =>
-          currentEntity.attributes.get(attributeListName) match {
+          startingAttributes.get(attributeListName) match {
             case Some(l: AttributeValueList) =>
-              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember))))
+              startingAttributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember)))
             case Some(l: AttributeReferenceList) =>
-              currentEntity.copy(attributes = currentEntity.attributes + (attributeListName -> AttributeReferenceList(l.list.filterNot(_ == removeMember))))
-            case None => throw new AttributeNotFoundException(s"$attributeListName of ${entity.entityType} ${entity.name} does not exists")
-            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${entity.entityType} ${entity.name} is not a list")
+              startingAttributes + (attributeListName -> AttributeReferenceList(l.list.filterNot(_ == removeMember)))
+            case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.path} does not exists")
+            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
           }
       }
     }
@@ -317,21 +349,21 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     }
 }
 
-object EntityUpdateOperations {
-  sealed trait EntityUpdateOperation
-  case class AddUpdateAttribute(attributeName: String, addUpdateAttribute: Attribute) extends EntityUpdateOperation
-  case class RemoveAttribute(attributeName: String) extends EntityUpdateOperation
-  case class AddListMember(attributeListName: String, newMember: Attribute) extends EntityUpdateOperation
-  case class RemoveListMember(attributeListName: String, removeMember: Attribute) extends EntityUpdateOperation
+object AttributeUpdateOperations {
+  sealed trait AttributeUpdateOperation
+  case class AddUpdateAttribute(attributeName: String, addUpdateAttribute: Attribute) extends AttributeUpdateOperation
+  case class RemoveAttribute(attributeName: String) extends AttributeUpdateOperation
+  case class AddListMember(attributeListName: String, newMember: Attribute) extends AttributeUpdateOperation
+  case class RemoveListMember(attributeListName: String, removeMember: Attribute) extends AttributeUpdateOperation
 
   private val AddUpdateAttributeFormat = jsonFormat2(AddUpdateAttribute)
   private val RemoveAttributeFormat = jsonFormat1(RemoveAttribute)
   private val AddListMemberFormat = jsonFormat2(AddListMember)
   private val RemoveListMemberFormat = jsonFormat2(RemoveListMember)
 
-  implicit object EntityUpdateOperationFormat extends RootJsonFormat[EntityUpdateOperation] {
+  implicit object EntityUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
 
-    override def write(obj: EntityUpdateOperation): JsValue = {
+    override def write(obj: AttributeUpdateOperation): JsValue = {
       val json = obj match {
         case x: AddUpdateAttribute => AddUpdateAttributeFormat.write(x)
         case x: RemoveAttribute => RemoveAttributeFormat.write(x)
@@ -342,7 +374,7 @@ object EntityUpdateOperations {
       JsObject(json.asJsObject.fields + ("op" -> JsString(obj.getClass.getSimpleName)))
     }
 
-    override def read(json: JsValue) : EntityUpdateOperation = json match {
+    override def read(json: JsValue) : AttributeUpdateOperation = json match {
       case JsObject(fields) =>
         val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
         op match {
