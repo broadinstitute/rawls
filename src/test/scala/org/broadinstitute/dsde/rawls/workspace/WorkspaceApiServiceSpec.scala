@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
@@ -19,7 +19,7 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with ScalatestRouteTest with Matchers {
+class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -66,6 +66,33 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
           header("Location")
         }
       }
+  }
+
+  it should "get a workspace" in {
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(MockWorkspaceDAO.load(workspace.namespace, workspace.name, null).get) {
+          responseAs[Workspace]
+        }
+      }
+
+  }
+
+  it should "return 404 getting a non-existent workspace" in {
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}x") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+
   }
 
   it should "list workspaces" in {
@@ -172,6 +199,35 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
         }
       }
   }
+
+  it should "return 200 on list entity types" in {
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(listEntityTypesRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array("samples")) {
+          responseAs[Array[String]]
+        }
+      }
+  }
+
+  it should "return 200 on list all samples" in {
+    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}") ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(listEntitiesPerTypeRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Array(s2)) {
+          responseAs[Array[Entity]]
+        }
+      }
+  }
+
   it should "return 404 on non-existing entity" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x") ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
@@ -427,7 +483,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   }
 
   it should "return 200 on update method configuration" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/update", HttpEntity(ContentTypes.`application/json`, methodConfig3.toJson.toString())) ~>
+    Put(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig3.namespace}/${methodConfig3.name}", HttpEntity(ContentTypes.`application/json`, methodConfig3.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(updateMethodConfigurationRoute) ~>
       check {

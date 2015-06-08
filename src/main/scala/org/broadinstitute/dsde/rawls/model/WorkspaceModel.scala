@@ -76,7 +76,7 @@ case class MethodConfigurationName(
                    @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    name: String,
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
-                   methodConfigurationNamespace: String,
+                   namespace: String,
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName: WorkspaceName
                    )
