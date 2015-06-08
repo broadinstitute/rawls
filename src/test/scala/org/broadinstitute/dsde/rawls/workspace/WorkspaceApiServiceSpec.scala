@@ -34,6 +34,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
 
+  val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(wsns, wsname))
+  val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(wsns, wsname))
+  val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c4")), WorkspaceName(wsns, wsname))
+  val c4 = Entity("c4", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle4" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
+
+
   val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
@@ -264,6 +270,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
         }
       }
   }
+
   it should "return 204 on entity rename" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
@@ -476,7 +483,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
       }
   }
 
-  it should "copy a workspace if the source exists" in {
+  it should "copy a workspace if the source exists and there are cycles in the entity graph" in {
+    MockEntityDAO.save(workspace.namespace, workspace.name, c1, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, c2, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, c3, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, c4, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyWorkspaceRoute) ~>

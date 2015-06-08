@@ -54,6 +54,14 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
+  def cloneVertex(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
+    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+    db.addVertex(null)
+
+    entity
+  }
+
   def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
     getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).map(loadEntity(_, workspaceNamespace, workspaceName))
   }

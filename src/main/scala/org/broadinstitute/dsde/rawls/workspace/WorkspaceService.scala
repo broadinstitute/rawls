@@ -93,6 +93,11 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         case ( Some(ws), None ) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
           workspaceDAO.save(newWorkspace, txn)
+          //clone the vertices first
+          entityDAO.listEntitiesAllTypes(ws.namespace, ws.name, txn).foreach { entity =>
+            entityDAO.cloneVertex(newWorkspace.namespace, newWorkspace.name, entity, txn)
+          }
+          //then link them up
           entityDAO.listEntitiesAllTypes(ws.namespace, ws.name, txn).foreach { entity =>
             entityDAO.save(newWorkspace.namespace, newWorkspace.name, entity, txn)
           }

@@ -25,4 +25,6 @@ trait EntityDAO {
   def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String]
 
   def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity]
+
+  def cloneVertex(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity
 }
