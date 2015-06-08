@@ -36,9 +36,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
 
   val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(wsns, wsname))
   val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(wsns, wsname))
-  val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c4")), WorkspaceName(wsns, wsname))
-  val c4 = Entity("c4", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle4" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
-
+  val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
 
   val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
@@ -487,7 +485,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
     MockEntityDAO.save(workspace.namespace, workspace.name, c1, null)
     MockEntityDAO.save(workspace.namespace, workspace.name, c2, null)
     MockEntityDAO.save(workspace.namespace, workspace.name, c3, null)
-    MockEntityDAO.save(workspace.namespace, workspace.name, c4, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyWorkspaceRoute) ~>
@@ -505,6 +502,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Sca
         assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSeq) {
           MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSeq
         }
+
+        println(MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null).mkString + "\n")
+        println(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).mkString)
 
         assertResult(StatusCodes.Created) {
           status
