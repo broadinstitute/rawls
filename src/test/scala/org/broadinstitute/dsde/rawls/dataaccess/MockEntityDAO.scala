@@ -49,4 +49,11 @@ object MockEntityDAO extends EntityDAO {
   override def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = {
     store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
+
+  override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
+    store.get(newWorkspaceNamespace, newWorkspaceName).getOrElse({
+      store.put((workspaceNamespace, workspaceName), new mutable.HashMap())
+      store(workspaceNamespace, workspaceName)
+    })
+  }
 }

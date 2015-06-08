@@ -346,6 +346,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
       }
   }
+
   it should "return 204 on entity rename" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>

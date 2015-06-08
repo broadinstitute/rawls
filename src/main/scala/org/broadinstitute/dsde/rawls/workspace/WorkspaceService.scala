@@ -119,9 +119,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         case ( Some(ws), None ) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
           workspaceDAO.save(newWorkspace, txn)
-          entityDAO.listEntitiesAllTypes(ws.namespace, ws.name, txn).foreach { entity =>
-            entityDAO.save(newWorkspace.namespace, newWorkspace.name, entity, txn)
-          }
+          entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
           methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
             methodConfigurationDAO.save(newWorkspace.namespace, newWorkspace.name, methodConfigurationDAO.get(ws.namespace, ws.name, methodConfig.namespace, methodConfig.name, txn).get, txn)
           }
