@@ -31,7 +31,7 @@ object Boot extends App {
       swaggerConfig.getString("baseUrl"),
       swaggerConfig.getString("apiDocs"),
       swaggerConfig.getString("swaggerVersion"),
-      Seq(typeOf[RootRawlsApiService], typeOf[WorkspaceApiService]),
+      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService]),
       Option(new ApiInfo(
         swaggerConfig.getString("info"),
         swaggerConfig.getString("description"),

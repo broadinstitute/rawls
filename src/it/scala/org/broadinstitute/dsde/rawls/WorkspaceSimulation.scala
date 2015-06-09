@@ -8,7 +8,7 @@ import com.orientechnologies.orient.client.remote.OServerAdmin
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.WorkspaceApiService
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.WorkspaceSimulation._
@@ -42,7 +42,7 @@ object WorkspaceSimulation {
   val numAnnotationUpdatesLarge = 200
 }
 
-class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with ScalatestRouteTest with Matchers {
+class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers {
   implicit val routeTestTimeout = RouteTestTimeout(600.seconds) // this is a load test, so response times may be slow
   def actorRefFactory = system
 

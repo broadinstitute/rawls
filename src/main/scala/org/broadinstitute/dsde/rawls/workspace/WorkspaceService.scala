@@ -23,6 +23,7 @@ import spray.json._
 object WorkspaceService {
   sealed trait WorkspaceServiceMessage
   case class SaveWorkspace(workspace: Workspace) extends WorkspaceServiceMessage
+  case class GetWorkspace(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String) extends WorkspaceServiceMessage
@@ -32,6 +33,8 @@ object WorkspaceService {
   case class UpdateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case class DeleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class RenameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
+  case class ListEntityTypes(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
+  case class ListEntities(workspaceNamespace: String, workspaceName: String, entityType: String) extends WorkspaceServiceMessage
 
   case class CreateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class GetMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
@@ -53,6 +56,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   override def receive = {
     case SaveWorkspace(workspace) => context.parent ! saveWorkspace(workspace)
+    case GetWorkspace(workspaceNamespace, workspaceName) => context.parent ! getWorkspace(workspaceNamespace, workspaceName)
     case UpdateWorkspace(workspaceNamespace, workspaceName, operations) => context.parent ! updateWorkspace(workspaceNamespace, workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
     case CloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
@@ -62,14 +66,16 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations) => context.parent ! updateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations)
     case DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! deleteEntity(workspaceNamespace, workspaceName, entityType, entityName)
     case RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName) => context.parent ! renameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName)
+    case ListEntityTypes(workspaceNamespace, workspaceName) => context.parent ! listEntityTypes(workspaceNamespace, workspaceName)
+    case ListEntities(workspaceNamespace, workspaceName, entityType) => context.parent ! listEntities(workspaceNamespace, workspaceName, entityType)
 
     case CreateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
     case RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
     case DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! deleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
-    case UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
-    case CopyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName) => context.parent ! copyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName)
-    case ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
+    case UpdateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
+    case CopyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName) => context.parent ! copyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName)
+    case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -82,6 +88,11 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         PerRequest.RequestComplete((StatusCodes.Created, workspace))
     }
   }
+
+  def getWorkspace(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { RequestComplete(_) }
+    }
 
   def updateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
     dataSource inTransaction { txn =>
@@ -128,6 +139,20 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in $workspaceNamespace/$workspaceName")
           case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceNamespace, workspaceName, entity, txn))
         }
+      }
+    }
+
+  def listEntityTypes(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        RequestComplete(entityDAO.getEntityTypes(workspaceNamespace, workspaceName, txn))
+      }
+    }
+
+  def listEntities(workspaceNamespace: String, workspaceName: String, entityType: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        RequestComplete(entityDAO.list(workspaceNamespace, workspaceName, entityType, txn).toIterable)
       }
     }
 
@@ -332,7 +357,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def copyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, txn) { srcWorkspace =>
-        methodConfigurationDAO.get(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, sourceMethodConfigName.methodConfigurationNamespace, sourceMethodConfigName.name, txn) match {
+        methodConfigurationDAO.get(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, sourceMethodConfigName.namespace, sourceMethodConfigName.name, txn) match {
           case Some(srcMethodConfig) =>
             val targetMethodConfig = methodConfigurationDAO.save(workspaceNamespace, workspaceName, srcMethodConfig.copy(workspaceName = WorkspaceName(workspaceNamespace, workspaceName)), txn)
             RequestComplete(StatusCodes.Created, targetMethodConfig)
@@ -361,7 +386,7 @@ object AttributeUpdateOperations {
   private val AddListMemberFormat = jsonFormat2(AddListMember)
   private val RemoveListMemberFormat = jsonFormat2(RemoveListMember)
 
-  implicit object EntityUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
+  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
 
     override def write(obj: AttributeUpdateOperation): JsValue = {
       val json = obj match {
