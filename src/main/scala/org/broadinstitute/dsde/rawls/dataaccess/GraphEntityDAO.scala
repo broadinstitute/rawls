@@ -54,8 +54,8 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
-  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
-    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
+  def cloneAllEntities(entityDAO: EntityDAO, workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
+    val workspace = getWorkspaceVertex(db, newWorkspaceNamespace, newWorkspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
 
     //copy the entities
@@ -64,8 +64,8 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     }
 
     //link them up -- TODO: make sure edges are being properly placed
-    listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).foreach { entity =>
-      save(newWorkspaceNamespace, newWorkspaceName, entity, txn)
+    entityDAO.listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).foreach { entity =>
+      entityDAO.save(newWorkspaceNamespace, newWorkspaceName, entity, txn)
     }
   }
 

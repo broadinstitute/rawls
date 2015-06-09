@@ -15,7 +15,6 @@ import spray.http
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import com.tinkerpop.blueprints.{Edge, Vertex}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -94,7 +93,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         case ( Some(ws), None ) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
           workspaceDAO.save(newWorkspace, txn)
-          entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
+          entityDAO.cloneAllEntities(entityDAO, ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
           methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
             methodConfigurationDAO.save(newWorkspace.namespace, newWorkspace.name, methodConfigurationDAO.get(ws.namespace, ws.name, methodConfig.namespace, methodConfig.name, txn).get, txn)
           }

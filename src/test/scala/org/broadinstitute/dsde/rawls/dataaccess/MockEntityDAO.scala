@@ -50,10 +50,14 @@ object MockEntityDAO extends EntityDAO {
     store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
 
-  override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
+  override def cloneAllEntities(entityDAO: EntityDAO, workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
     store.get(workspaceNamespace, workspaceName).getOrElse({
       store.put((workspaceNamespace, workspaceName), new mutable.HashMap())
       store(workspaceNamespace, workspaceName)
+    })
+    store.get(workspaceNamespace, workspaceName).getOrElse({
+      store.put((newWorkspaceNamespace, newWorkspaceName), new mutable.HashMap())
+      store(newWorkspaceNamespace, newWorkspaceName)
     })
   }
 }
