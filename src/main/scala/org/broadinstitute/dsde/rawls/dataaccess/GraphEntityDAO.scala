@@ -57,13 +57,15 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
     val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+    val newWorkspace = getWorkspaceVertex(db, newWorkspaceNamespace, newWorkspaceName)
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
 
     //map the entities to ((entity type, entity name), vertex)
-    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> createVertex(workspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
+    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> createVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
     entities.foreach(entity => {
       val vertex = entityToVertexMap((entity.entityType, entity.name))
-      addEdges(workspace, newWorkspaceNamespace, newWorkspaceName, entity, vertex, txn)
+      addEdges(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, vertex, txn)
     })
   }
 
