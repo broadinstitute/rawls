@@ -58,11 +58,6 @@ object WorkspaceGenerator {
     // this works equally well for inputs, outputs or prerequisites
     (for (i <- 0 to n) yield (generatePropertyKey, generateMethodConfigValue)).toMap
   }
-
-  def generateMethod = {
-    // don't really care about method content
-    Method("foo", "bar", "baz")
-  }
 }
 
 class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
@@ -148,8 +143,8 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
   }
 
   def createMethodConfig(nParamsEachType: Int) = {
-    // don't care about entity type, namespace, etc
-    MethodConfiguration(makeMethodConfigName, "foo", generateMethod,
+    MethodConfiguration(makeMethodConfigName,
+      "foo", "bar", "baz", "1", // don't care about entity type or method details
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
@@ -170,7 +165,8 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
    * For now we apply the same operations to prereqs, inputs and outputs, for simplicity.
    */
   def createUpdatedMethodConfig(config: MethodConfiguration, nDelete: Int, nModify: Int, nCreate: Int) = {
-    MethodConfiguration(config.name, config.rootEntityType, config.method,
+    MethodConfiguration(config.name, config.rootEntityType,
+      config.methodNamespace, config.methodName, config.methodVersion,
       updateParameterSet(config.prerequisites, nDelete, nModify, nCreate),
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),

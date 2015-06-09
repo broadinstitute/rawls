@@ -174,7 +174,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with Scalate
         nCreate = numAnnotationUpdatesSmall
       )
       updateEntityTimer.timedOperation {
-        Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}", httpJson(updateOps)) ~>
+        Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}", httpJson(updateOps)) ~>
           addCookie ~> sealRoute(updateEntityRoute) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
@@ -245,7 +245,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with Scalate
     )
 
     updateEntityTimer.timedOperation {
-      Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}", httpJson(sampleUpdates)) ~>
+      Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}", httpJson(sampleUpdates)) ~>
         addCookie ~> sealRoute(updateEntityRoute) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
