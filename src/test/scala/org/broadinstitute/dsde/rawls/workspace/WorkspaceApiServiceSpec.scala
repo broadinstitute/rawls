@@ -34,6 +34,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
 
+  val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(wsns, wsname))
+  val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(wsns, wsname))
+  val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
+
   val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
@@ -560,6 +564,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
 
   it should "copy a workspace if the source exists" in {
+    //MockEntityDAO.save(workspace.namespace, workspace.name, c1, null)
+    //MockEntityDAO.save(workspace.namespace, workspace.name, c2, null)
+    //MockEntityDAO.save(workspace.namespace, workspace.name, c3, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyWorkspaceRoute) ~>
@@ -568,6 +575,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
           status
         }
         val copiedWorkspace = MockWorkspaceDAO.store((workspaceCopy.namespace, workspaceCopy.name))
+
+        println(MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null).mkString + "\n")
+        println(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).mkString)
 
         //Name, namespace, creation date, and owner might change, so this is all that remains.
         assert(copiedWorkspace.attributes == workspace.attributes)
