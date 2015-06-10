@@ -42,6 +42,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
+  val methodConfigName2 = methodConfigName.copy(name="novelName")
+  val methodConfigName3 = methodConfigName.copy(name="noSuchName")
+  val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName,methodConfigName2)
+  val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
+  val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
 
   val workspace = Workspace(
     wsns,
@@ -513,7 +518,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
 
   it should "return 201 on copy method configuration" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigName.toJson.toString())) ~>
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairCreated.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {
@@ -526,8 +531,19 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 404 on copy method configuration" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, methodConfig2.toJson.toString())) ~>
+  it should "return 409 on copy method configuration to existing name" in {
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairConflict.toJson.toString())) ~>
+      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      sealRoute(copyMethodConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 on copy method configuration from bogus source" in {
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairNotFound.toJson.toString())) ~>
       addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {

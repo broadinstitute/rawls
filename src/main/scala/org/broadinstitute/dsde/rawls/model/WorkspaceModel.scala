@@ -81,6 +81,14 @@ case class MethodConfigurationName(
                    workspaceName: WorkspaceName
                    )
 
+@ApiModel(value = "Method configuration name pair")
+case class MethodConfigurationNamePair(
+                   @(ApiModelProperty@field)(required = true, value = "The source of a copied method configuration")
+                   source: MethodConfigurationName,
+                   @(ApiModelProperty@field)(required = true, value = "The destination for a copied method configuration")
+                   destination: MethodConfigurationName
+                   )
+
 @ApiModel(value = "Method Configuration")
 case class MethodConfiguration(
                    @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
@@ -199,6 +207,8 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
   implicit val MethodConfigurationNameFormat = jsonFormat3(MethodConfigurationName)
+
+  implicit val MethodConfigurationNamePairFormat = jsonFormat2(MethodConfigurationNamePair)
 
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 

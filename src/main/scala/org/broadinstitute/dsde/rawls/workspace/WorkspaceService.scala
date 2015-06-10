@@ -41,7 +41,7 @@ object WorkspaceService {
   case class UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
-  case class CopyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName) extends WorkspaceServiceMessage
+  case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
@@ -74,7 +74,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! deleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case UpdateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
-    case CopyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName) => context.parent ! copyMethodConfiguration(workspaceNamespace, workspaceName, sourceMethodConfigName)
+    case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
   }
 
@@ -352,14 +352,21 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
-  def copyMethodConfiguration(workspaceNamespace: String, workspaceName: String, sourceMethodConfigName: MethodConfigurationName): PerRequestMessage =
+  def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, txn) { srcWorkspace =>
-        methodConfigurationDAO.get(sourceMethodConfigName.workspaceName.namespace, sourceMethodConfigName.workspaceName.name, sourceMethodConfigName.namespace, sourceMethodConfigName.name, txn) match {
-          case Some(srcMethodConfig) =>
-            val targetMethodConfig = methodConfigurationDAO.save(workspaceNamespace, workspaceName, srcMethodConfig.copy(workspaceName = WorkspaceName(workspaceNamespace, workspaceName)), txn)
-            RequestComplete(StatusCodes.Created, targetMethodConfig)
+      withWorkspace(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, txn) { srcWorkspace =>
+        methodConfigurationDAO.get(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, mcnp.source.namespace, mcnp.source.name, txn) match {
           case None => RequestComplete(StatusCodes.NotFound)
+          case Some(methodConfig) =>
+            withWorkspace(mcnp.destination.workspaceName.namespace, mcnp.destination.workspaceName.name, txn) { destWorkspace =>
+              methodConfigurationDAO.get(mcnp.destination.workspaceName.namespace, mcnp.destination.workspaceName.name, mcnp.destination.namespace, mcnp.destination.name, txn) match {
+                case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict,existingMethodConfig)
+                case None =>
+                  val target = methodConfig.copy(name = mcnp.destination.name, namespace = mcnp.destination.namespace, workspaceName = mcnp.destination.workspaceName)
+                  val targetMethodConfig = methodConfigurationDAO.save(target.workspaceName.namespace, target.workspaceName.name, target, txn)
+                  RequestComplete(StatusCodes.Created, targetMethodConfig)
+            }
+          }
         }
       }
     }

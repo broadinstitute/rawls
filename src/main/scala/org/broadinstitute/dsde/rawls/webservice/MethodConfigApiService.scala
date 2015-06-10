@@ -24,6 +24,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     deleteMethodConfigurationRoute ~
     renameMethodConfigurationRoute ~
     updateMethodConfigurationRoute ~
+    copyMethodConfigurationRoute ~
     listMethodConfigurationsRoute
 
   @Path("")
@@ -184,28 +185,27 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/copy")
+  @Path("/methodconfigs/copy")
   @ApiOperation(value = "Copy method configuration in a workspace from another workspace",
     nickname = "copy method configuration",
     httpMethod = "Post",
     produces = "application/json",
     response = classOf[MethodConfiguration])
   @ApiImplicitParams(Array(
-    new ApiImplicitParam(name = "workspaceNamespace", required = true, dataType = "string", paramType = "path", value = "Workspace Namespace"),
-    new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name"),
-    new ApiImplicitParam(name = "srcMethodConfigurationName", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfigurationName", paramType = "body", value = "Source Method Configuration Info")
+    new ApiImplicitParam(name = "methodConfigurationNamePair", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodConfigurationNamePair", paramType = "body", value = "Source and destination method configuration names")
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
-    new ApiResponse(code = 404, message = "Source Workspace or method configuration does not exists"),
+    new ApiResponse(code = 404, message = "Source Workspace or method configuration does not exist"),
+    new ApiResponse(code = 409, message = "Destination method configuration by that name already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def copyMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" / "copy" ) { (workspaceNamespace, workspaceName) =>
+    path("methodconfigs" / "copy" ) {
       post {
-        entity(as[MethodConfigurationName]) { srcMethodConfigurationName =>
+        entity(as[MethodConfigurationNamePair]) { confNames =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CopyMethodConfiguration(workspaceNamespace, workspaceName, srcMethodConfigurationName))
+            WorkspaceService.CopyMethodConfiguration(confNames))
         }
       }
     }
