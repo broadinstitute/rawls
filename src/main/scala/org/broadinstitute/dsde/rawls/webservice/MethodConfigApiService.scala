@@ -24,6 +24,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     deleteMethodConfigurationRoute ~
     renameMethodConfigurationRoute ~
     updateMethodConfigurationRoute ~
+    copyMethodConfigurationRoute ~
     listMethodConfigurationsRoute
 
   @Path("")
