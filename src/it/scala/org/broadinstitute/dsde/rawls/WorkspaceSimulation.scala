@@ -23,23 +23,20 @@ import scala.concurrent.duration._
 
 object WorkspaceSimulation {
   // TODO move these to config?
-  // TODO Rawls seems to become unresponsive if the numbers are much higher,
-  // TODO so we should try to gain a better understanding of the performance issues,
-  // TODO before trying to increase these numbers
-  val numSamples = 20
-  val numPairs = 10
-  val numSampleSets = 5
-  val numPairSets = 2
-  val numMethodConfigs = 20
+  val numSamples = 200
+  val numPairs = 100
+  val numSampleSets = 50
+  val numPairSets = 20
+  val numMethodConfigs = 200
 
   val numAnnotationsSmall = 5
   val numSetMembersSmall = 5
 
-  val numObjectUpdates = 10
+  val numObjectUpdates = 100
   val numAnnotationUpdatesSmall = 1
 
-  val numAnnotationsLarge = 1000
-  val numAnnotationUpdatesLarge = 200
+  val numAnnotationsLarge = 10000
+  val numAnnotationUpdatesLarge = 2000
 }
 
 class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers {
@@ -51,9 +48,14 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
   def repeat[T](n: Int)(exp: => T) = (1 to n) map (_ => exp)
 
+  // get config defined by Jenkins, which is where integration tests usually run.
+  // as a fallback, get config from the usual rawls.conf
+  val etcConf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+  val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
+  val orientConfig = jenkinsConf.withFallback(etcConf).getConfig("orientdb")
+
   // setup DB. if it already exists, drop and then re-create it.
   val dbName = "integration-test-latest" // TODO move this into config?
-  val orientConfig = ConfigFactory.parseFile(new File("/etc/rawls.conf")).getConfig("orientdb")
   val dbUrl = s"remote:${orientConfig.getString("server")}/${dbName}"
   val admin = new OServerAdmin(dbUrl).connect(orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"))
   if (admin.existsDatabase()) admin.dropDatabase(dbName)
@@ -204,7 +206,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
         nCreate = numAnnotationUpdatesSmall
       )
       updateMethodConfigTimer.timedOperation {
-        Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/update", httpJson(updatedConfig)) ~>
+        Put(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}", httpJson(updatedConfig)) ~>
           addCookie ~> sealRoute(updateMethodConfigurationRoute) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
