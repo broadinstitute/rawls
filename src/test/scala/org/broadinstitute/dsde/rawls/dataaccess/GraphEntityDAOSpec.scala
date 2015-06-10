@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.util.UUID
+
 import com.tinkerpop.blueprints.Direction
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
@@ -93,6 +95,53 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           .headOption.isDefined
       }
     }
+  }
+
+  it should "clone all entities containing cycles" in {
+    lazy val daoCycles: GraphEntityDAO = new GraphEntityDAO()
+    lazy val daoCyclesClone: GraphEntityDAO = new GraphEntityDAO()
+    lazy val workspaceDaoOriginal: GraphWorkspaceDAO = new GraphWorkspaceDAO()
+    lazy val workspaceDaoClone: GraphWorkspaceDAO = new GraphWorkspaceDAO()
+
+    val workspaceOriginal = Workspace(
+      namespace = wsName.namespace + "Original",
+      name = wsName.name + "Original",
+      createdDate = DateTime.now(),
+      createdBy = "Joe Biden",
+      Map.empty
+    )
+
+    val workspaceClone = Workspace(
+      namespace = wsName.namespace + "Clone",
+      name = wsName.name + "Clone",
+      createdDate = DateTime.now(),
+      createdBy = "Joe Biden",
+      Map.empty
+    )
+
+    val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+
+    val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(workspace.namespace, workspace.name))
+    val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(workspace.namespace, workspace.name))
+    var c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(workspace.namespace, workspace.name))
+
+    workspaceDaoOriginal.save(workspaceOriginal, txn)
+    workspaceDaoClone.save(workspaceClone, txn)
+
+    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
+    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c2, txn)
+    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c1, txn)
+
+    c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(workspace.namespace, workspace.name))
+
+    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
+
+    daoCycles.cloneAllEntities(workspaceOriginal.namespace, workspaceClone.namespace, workspaceOriginal.name, workspaceClone.name, txn)
+
+    assertResult(dao.listEntitiesAllTypes(workspaceOriginal.namespace, workspaceOriginal.name, txn).map(_.copy(workspaceName = WorkspaceName(workspaceClone.namespace, workspaceClone.name))).toList) {
+      dao.listEntitiesAllTypes(workspaceClone.namespace, workspaceClone.name, txn).toList
+    }
+
   }
 
   it should "save updates to an existing entity" in {

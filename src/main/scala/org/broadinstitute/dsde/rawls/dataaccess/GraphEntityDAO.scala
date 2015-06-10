@@ -54,24 +54,34 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
-  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
-    getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).map(loadEntity(_, workspaceNamespace, workspaceName))
+  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
+    val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
+    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+    val newWorkspace = getWorkspaceVertex(db, newWorkspaceNamespace, newWorkspaceName)
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
+
+    //map the entities to ((entity type, entity name), vertex)
+    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> createVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
+    entities.foreach(entity => {
+      val vertex = entityToVertexMap((entity.entityType, entity.name))
+      addEdges(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, vertex, txn)
+    })
   }
 
-  def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
-    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot save entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
-
+  private def createVertex(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
     // get the entity, creating if it doesn't already exist
     val entityVertex = getEntityVertex(db, workspaceNamespace, workspaceName, entity.entityType, entity.name).getOrElse({
       val newVertex = setVertexProperties(entity, db.addVertex(null))
       workspace.addEdge(entity.entityType, newVertex)
       newVertex
     })
-    entityVertex.setProperty("_vaultId", entity.vaultId)
+    entityVertex
+  }
 
-    // TODO is there a better solution than deleting all the existing edges and re-creating them?
+  private def addEdges(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, entityVertex: Vertex, txn: RawlsTransaction): Entity = txn withGraph { db =>
     new GremlinPipeline(entityVertex).outE().iterator().foreach(_.remove())
+
     for (key <- entityVertex.getPropertyKeys; if !isReservedProperty(key)) {
       entityVertex.removeProperty(key).asInstanceOf[Object] //cast to Object required to prevent cast to Nothing which fails at runtime
     }
@@ -85,8 +95,18 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
           entityVertex.setProperty(name, attributeToProperty(value))
       }
     }
-
     entity
+  }
+
+  def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
+    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
+      .getOrElse(throw new IllegalArgumentException("Cannot save entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+    val entityVertex = createVertex(workspace, workspaceNamespace, workspaceName, entity, txn)
+    addEdges(workspace, workspaceNamespace, workspaceName, entity, entityVertex, txn)
+  }
+
+  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
+    getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).map(loadEntity(_, workspaceNamespace, workspaceName))
   }
 
   def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
