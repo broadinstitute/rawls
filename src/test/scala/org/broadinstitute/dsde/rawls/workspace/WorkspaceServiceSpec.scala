@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.mock.MethodRepoMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
@@ -28,7 +29,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   )
 
   val dataSource = DataSource("memory:rawls", "admin", "admin")
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO)
+
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, MethodRepoMockServer.mockServerBaseUrl)
 
   lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
 

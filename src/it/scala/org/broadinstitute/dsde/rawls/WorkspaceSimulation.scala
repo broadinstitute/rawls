@@ -1,24 +1,13 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.File
-import java.util.logging.{Logger, LogManager}
-
-import akka.testkit.TestActorRef
-import com.orientechnologies.orient.client.remote.OServerAdmin
-import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService}
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.WorkspaceSimulation._
-import org.scalatest.{Matchers, FlatSpec}
 import spray.http._
-import spray.json._
 import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
-import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
 
 object WorkspaceSimulation {
@@ -39,36 +28,12 @@ object WorkspaceSimulation {
   val numAnnotationUpdatesLarge = 2000
 }
 
-class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers {
+class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService with EntityApiService with MethodConfigApiService {
   implicit val routeTestTimeout = RouteTestTimeout(600.seconds) // this is a load test, so response times may be slow
   def actorRefFactory = system
 
-  // convenience methods - TODO add these to unit tests too?
-  def addCookie = addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token")))
-  def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
-  def repeat[T](n: Int)(exp: => T) = (1 to n) map (_ => exp)
+  val workspaceServiceConstructor = workspaceServiceWithDbName("integration-test-latest") // TODO move this into config?
 
-  // get config defined by Jenkins, which is where integration tests usually run.
-  // as a fallback, get config from the usual rawls.conf
-  val etcConf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
-  val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
-  val orientConfig = jenkinsConf.withFallback(etcConf).getConfig("orientdb")
-
-  // setup DB. if it already exists, drop and then re-create it.
-  val dbName = "integration-test-latest" // TODO move this into config?
-  val dbUrl = s"remote:${orientConfig.getString("server")}/${dbName}"
-  val admin = new OServerAdmin(dbUrl).connect(orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"))
-  if (admin.existsDatabase()) admin.dropDatabase(dbName)
-  admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
-  val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
-
-  // suppress Java logging (otherwise OrientDB will produce a ton of useless log messages)
-  LogManager.getLogManager().reset()
-  Logger.getLogger(java.util.logging.Logger.GLOBAL_LOGGER_NAME).setLevel(java.util.logging.Level.SEVERE)
-
-  // setup workspace service
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO())
-  lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
   val gen = new WorkspaceGenerator("foo", System.currentTimeMillis().toString())
 
   "WorkspaceSimulation" should "create a workspace" in {
@@ -76,7 +41,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
 
     postWorkspaceTimer.timedOperation {
       Post(s"/workspaces", httpJson(gen.workspace)) ~>
-        addCookie ~> sealRoute(postWorkspaceRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(postWorkspaceRoute) ~>
         check { assertResult(StatusCodes.Created) {status} }
     }
 
@@ -91,7 +56,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val sample = gen.createSample(numAnnotationsSmall)
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
-          addCookie ~> sealRoute(createEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(createEntityRoute) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -100,7 +65,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val pair = gen.createPair(numAnnotationsSmall)
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pair)) ~>
-          addCookie ~> sealRoute(createEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(createEntityRoute) ~>
           check {assertResult(StatusCodes.Created) {status}}
       }
     }
@@ -114,7 +79,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val sampleSet = gen.createEntitySet("sample", numSetMembersSmall)
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sampleSet)) ~>
-          addCookie ~> sealRoute(createEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(createEntityRoute) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -123,7 +88,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val pairSet = gen.createEntitySet("pair", numSetMembersSmall)
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pairSet)) ~>
-          addCookie ~> sealRoute(createEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(createEntityRoute) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -137,7 +102,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val methodConfig = gen.createMethodConfig(numAnnotationsSmall)
       postMethodConfigTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs", httpJson(methodConfig)) ~>
-          addCookie ~> sealRoute(createMethodConfigurationRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(createMethodConfigurationRoute) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -149,7 +114,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
 
     listMethodConfigTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs") ~>
-        addCookie ~> sealRoute(listMethodConfigurationsRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(listMethodConfigurationsRoute) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
 
@@ -163,7 +128,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val name = gen.pickEntity("sample")
       val sample: Entity = getEntityTimer.timedOperation {
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}") ~>
-          addCookie ~> sealRoute(getEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(getEntityRoute) ~>
           check {
             assertResult(StatusCodes.OK) {status}
             responseAs[Entity]
@@ -177,7 +142,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       )
       updateEntityTimer.timedOperation {
         Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}", httpJson(updateOps)) ~>
-          addCookie ~> sealRoute(updateEntityRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(updateEntityRoute) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
     }
@@ -193,7 +158,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       val name = gen.pickMethodConfig
       val methodConfig: MethodConfiguration = getMethodConfigTimer.timedOperation {
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}") ~>
-          addCookie ~> sealRoute(getMethodConfigurationRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(getMethodConfigurationRoute) ~>
           check {
             assertResult(StatusCodes.OK) {status}
             responseAs[MethodConfiguration]
@@ -207,7 +172,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
       )
       updateMethodConfigTimer.timedOperation {
         Put(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}", httpJson(updatedConfig)) ~>
-          addCookie ~> sealRoute(updateMethodConfigurationRoute) ~>
+          addMockOpenAmCookie ~> sealRoute(updateMethodConfigurationRoute) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
     }
@@ -225,7 +190,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
     val postEntityTimer = new Timer("Post large entity")
     postEntityTimer.timedOperation {
       Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
-        addCookie ~> sealRoute(createEntityRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(createEntityRoute) ~>
         check { assertResult(StatusCodes.Created) {status} }
     }
     postEntityTimer.printElapsed
@@ -233,7 +198,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
     val getEntityTimer = new Timer("Get large entity")
     getEntityTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
-        addCookie ~> sealRoute(getEntityRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(getEntityRoute) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
     getEntityTimer.printElapsed
@@ -248,7 +213,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
 
     updateEntityTimer.timedOperation {
       Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}", httpJson(sampleUpdates)) ~>
-        addCookie ~> sealRoute(updateEntityRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(updateEntityRoute) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
     updateEntityTimer.printElapsed
@@ -256,7 +221,7 @@ class WorkspaceSimulation extends FlatSpec with WorkspaceApiService with EntityA
     val deleteEntityTimer = new Timer("Delete large entity")
     deleteEntityTimer.timedOperation {
       Delete(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
-        addCookie ~> sealRoute(deleteEntityRoute) ~>
+        addMockOpenAmCookie ~> sealRoute(deleteEntityRoute) ~>
         check { assertResult(StatusCodes.NoContent) {status} }
     }
     deleteEntityTimer.printElapsed

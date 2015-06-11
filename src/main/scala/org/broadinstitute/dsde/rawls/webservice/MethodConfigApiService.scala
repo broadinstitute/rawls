@@ -4,7 +4,6 @@ import javax.ws.rs.Path
 
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -14,6 +13,7 @@ import spray.routing._
  */
 @Api(value = "/{workspaceNamespace}/{workspaceName}/methodconfigs", description = "Method Configuration manipulation API", position = 3)
 trait MethodConfigApiService extends HttpService with PerRequestCreator {
+
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
   import spray.httpx.SprayJsonSupport._
 
@@ -25,7 +25,8 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     renameMethodConfigurationRoute ~
     updateMethodConfigurationRoute ~
     copyMethodConfigurationRoute ~
-    listMethodConfigurationsRoute
+    listMethodConfigurationsRoute ~
+    copyMethodRepoConfigurationRoute
 
   @Path("")
   @ApiOperation(value = "Create Method configuration in a workspace",
@@ -97,7 +98,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def listMethodConfigurationsRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" ) { (workspaceNamespace, workspaceName) =>
+    path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
           WorkspaceService.ListMethodConfigurations(workspaceNamespace, workspaceName))
@@ -175,7 +176,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def updateMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment ) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
+    path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       put {
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
@@ -210,4 +211,32 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
       }
     }
   }
+
+  @Path("/methodconfigs/copyFromMethodRepo")
+  @ApiOperation(value = "Copy method configuration from the method repository",
+    nickname = "copy repo configuration",
+    httpMethod = "Post",
+    produces = "application/json",
+    response = classOf[MethodConfiguration])
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "methodRepoQuery", required = true, dataType = "org.broadinstitute.dsde.rawls.model.MethodRepoConfigurationQuery", paramType = "body", value = "Method Repository Query")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Source method configuration does not exist"),
+    new ApiResponse(code = 422, message = "Error parsing source method configuration"),
+    new ApiResponse(code = 409, message = "Destination method configuration by that name already exists"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def copyMethodRepoConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("methodconfigs" / "copyFromMethodRepo") {
+      post {
+        entity(as[MethodRepoConfigurationQuery]) { query =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CopyMethodConfigurationFromMethodRepo(query, securityTokenCookie))
+        }
+      }
+    }
+  }
+
 }

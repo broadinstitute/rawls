@@ -142,7 +142,19 @@ case class MethodConfigurationShort(
                                 @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
                                 @(VertexProperty@field)
                                 namespace: String)
-  
+
+@ApiModel(value = "Method repository configuration query")
+case class MethodRepoConfigurationQuery(
+                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Namespace")
+                                         methodRepoNamespace: String,
+                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Name")
+                                         methodRepoName: String,
+                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Snapshot ID")
+                                         methodRepoSnapshotId: String,
+                                         @(ApiModelProperty@field)(required = true, value = "The destination for a copied method configuration")
+                                         destination: MethodConfigurationName
+                                         )
+
 trait Attribute
 trait AttributeValue extends Attribute
 trait AttributeReference extends Attribute
@@ -213,4 +225,18 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
   implicit val MethodConfigurationShortFormat = jsonFormat7(MethodConfigurationShort)
+
+  implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
+
+  implicit object AgoraEntityTypeFormat extends RootJsonFormat[AgoraEntityType.EntityType] {
+    override def write(obj: AgoraEntityType.EntityType): JsValue = JsString(obj.toString)
+
+    override def read(value: JsValue): AgoraEntityType.EntityType = value match {
+      case JsString(name) => AgoraEntityType.withName(name)
+      case _ => throw new DeserializationException("only string supported")
+    }
+  }
+
+  implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
+
 }
