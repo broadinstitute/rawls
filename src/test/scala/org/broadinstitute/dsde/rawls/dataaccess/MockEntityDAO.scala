@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.model.Entity
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.mutable
 
@@ -51,9 +52,11 @@ object MockEntityDAO extends EntityDAO {
   }
 
   override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
-    store.get(newWorkspaceNamespace, newWorkspaceName).getOrElse({
-      store.put((workspaceNamespace, workspaceName), new mutable.HashMap())
-      store(workspaceNamespace, workspaceName)
-    })
+    cloneTheseEntities(listEntitiesAllTypes(workspaceNamespace,workspaceName,txn).toList,newWorkspaceNamespace,newWorkspaceName,txn)
+  }
+
+  override def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ) = {
+    val newName = WorkspaceName(newWorkspaceNamespace,newWorkspaceName)
+    entities.foreach { entity => save(newWorkspaceNamespace,newWorkspaceName,entity.copy(workspaceName=newName),txn) }
   }
 }
