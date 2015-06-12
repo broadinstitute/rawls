@@ -276,7 +276,8 @@ class QueryExecutor2(scope:Scriptable, graph:Graph) extends JavaTokenParsers {
       jsCode
     )
 
-  private def jsCode:Parser[String] =  """[^<>]*""".r
+  //TODO: Does this break on if ( foo > bar ) ? i think so.
+  private def jsCode:Parser[String] =  """.*""".r
 //  private def jsExpression:Parser[String] = (not(jsPath) ~ jsPath ~ not(jsPath) ~ jsExpression) ^^ {
 //    case first ~ path ~ second ~ rest => {
 //      println(first + path + second + rest)
@@ -298,6 +299,7 @@ class QueryExecutor2(scope:Scriptable, graph:Graph) extends JavaTokenParsers {
   // in a more complex expression
   private def path:Parser[PipelineQuery] =
   // TODO: can we have just a root?
+  // TODO: or a specified entity (using name + type)
   // we expect just a root, or root followed by refs to other entities followed by an attribute of the entity
     root ^^ {
       case root  => PipelineQuery(root, None, None)
