@@ -58,8 +58,13 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
+
+    cloneTheseEntities(entities,newWorkspaceNamespace,newWorkspaceName,txn)
+  }
+
+  override def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ) = txn withGraph { db =>
     val newWorkspace = getWorkspaceVertex(db, newWorkspaceNamespace, newWorkspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot clone entity to nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
+      .getOrElse(throw new IllegalArgumentException("Cannot clone entity into nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
 
     //map the entities to ((entity type, entity name), vertex)
     val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> createVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap

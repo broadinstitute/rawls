@@ -598,7 +598,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         //Name, namespace, creation date, and owner might change, so this is all that remains.
         assert(copiedWorkspace.attributes == workspace.attributes)
         assertResult(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).toSeq) {
-          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null).toSeq
+          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {_.copy(workspaceName=WorkspaceName(workspace.namespace, workspace.name))} toSeq
         }
         assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSeq) {
           MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSeq
