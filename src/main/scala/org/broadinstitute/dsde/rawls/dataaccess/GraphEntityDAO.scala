@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.{Edge, Vertex}
+import com.tinkerpop.blueprints.{Graph, Edge, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.PipeFunction
+import com.tinkerpop.pipes.branch.LoopPipe
+import com.tinkerpop.pipes.branch.LoopPipe.LoopBundle
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConversions._
@@ -142,5 +145,29 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       case Some(w) => new GremlinPipeline(w).out(entityTypes:_*).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
       case None => List.empty
     }
+  }
+
+  def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
+    def nameFilter = new PipeFunction[Vertex, java.lang.Boolean] {
+      override def compute(v: Vertex) = entityNames.contains(v.getProperty("_name"))
+    }
+
+    def isLeaf = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+      override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
+    }
+
+    def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+      override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
+    }
+
+    val subtreeEntities = getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
+      case Some(w) => {
+        val topLevelEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
+        val nextLevelEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", isLeaf, emitAll).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
+        (topLevelEntities:::nextLevelEntities).toSet.toSeq
+      }
+      case None => Seq.empty
+    }
+    subtreeEntities
   }
 }

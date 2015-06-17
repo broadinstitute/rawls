@@ -35,6 +35,18 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   val wsname = UUID.randomUUID().toString
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+
+  val s3 = Entity("s3", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  val s4 = Entity("s4", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  val s5 = Entity("s5", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  var s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+
+  //val s4 = Entity("s4", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  //val s5 = Entity("s5", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  //var s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+
+  val referenceList = AttributeReferenceList(Seq(new AttributeReferenceSingle("child", "s3"), new AttributeReferenceSingle("child", "s4")))
+
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
   val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
 
@@ -360,6 +372,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 409 on entity rename when rename already exists" in {
     MockEntityDAO.save(workspace.namespace, workspace.name, s1, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, s3, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, s6, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, s5, null)
+    MockEntityDAO.save(workspace.namespace, workspace.name, s4, null)
+    //s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("child", "s4")), WorkspaceName(wsns, wsname))
+    MockEntityDAO.save(workspace.namespace, workspace.name, s6, null)
+
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s1").toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(renameEntityRoute) ~>

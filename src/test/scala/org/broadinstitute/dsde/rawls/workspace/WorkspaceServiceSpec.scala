@@ -96,6 +96,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       )).attributes.get("newAttribute")
     }
   }
+
+  it should "return conflicts during an entity copy" in {
+    val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), WorkspaceName(wsns, wsname))
+    val s2 = Entity("s3", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), WorkspaceName(wsns, wsname))
+    //println("hello " + workspaceService.getCopyConflicts(wsns, wsname, Seq(s1, s2)).size)
+    //still needs to be implemented fully
+    assertResult(true) {
+      true
+    }
+  }
 }
 
 
