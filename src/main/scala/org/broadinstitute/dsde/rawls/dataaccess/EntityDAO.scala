@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.Entity
+import com.tinkerpop.blueprints.Vertex
+import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Entity}
 
 /**
  * Created by dvoet on 5/6/15.
@@ -29,4 +30,6 @@ trait EntityDAO {
   def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit
 
   def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ): Unit
+
+  def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity]
 }

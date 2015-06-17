@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
@@ -48,6 +49,10 @@ object MockEntityDAO extends EntityDAO {
   }
 
   override def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = {
+    store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
+  }
+
+  override def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity] = {
     store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
 
