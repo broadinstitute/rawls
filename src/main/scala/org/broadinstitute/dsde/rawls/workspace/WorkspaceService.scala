@@ -53,14 +53,17 @@ object WorkspaceService {
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
+  case class SubmitJob(workspaceName: WorkspaceName, jobDescription: JobDescription, authCookie: HttpCookie) extends WorkspaceServiceMessage
+
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoBaseURL: String) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoBaseURL)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO) = () =>
+    new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO)
 }
 
-class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoBaseURL: String) extends Actor {
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO) extends Actor {
 
 
   override def receive = {
@@ -86,6 +89,8 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
+
+    case SubmitJob(workspaceName, jobDescription, authCookie) => context.parent ! submitJob(workspaceName,jobDescription,authCookie)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -376,17 +381,12 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
-      val url = Seq(methodRepoBaseURL, "configurations", methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId) mkString "/"
-
-      import scala.concurrent.ExecutionContext.Implicits.global
-      val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive
-      val response = Await.result(pipeline(Get(url)), atMost = Duration(5, TimeUnit.SECONDS))
-      response.status match {
-        case StatusCodes.OK =>
+      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, authCookie) match {
+        case None => RequestComplete(StatusCodes.NotFound)
+        case Some(entity) =>
           try {
-            // if JSON parsing fails in either case, catch below
-            val methodConfigRepoEntity = JsonParser(response.entity.asString).convertTo[AgoraEntity]
-            val methodConfig = methodConfigRepoEntity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
+            // if JSON parsing fails, catch below
+            val methodConfig = entity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
             methodConfig match {
               case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, txn)
               case None => RequestComplete(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")
@@ -396,8 +396,6 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
             val message = "Error parsing Method Repo response: " + e.getMessage
             RequestComplete(StatusCodes.UnprocessableEntity, message)
           }
-
-        case notOK => RequestComplete(notOK, response.entity)
       }
     }
 
@@ -417,6 +415,46 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
       // to ensure it is evaluated within the transaction
       RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toList)
+    }
+
+  // TODO: replace this stub with the actual expression parser
+  private def resolveInputs( methodConfig: MethodConfiguration, entity: Entity ): String =
+    """{"hello": "world"}"""
+
+  def submitJob(workspaceName: WorkspaceName, jobDesc: JobDescription, authCookie: HttpCookie): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      methodConfigurationDAO.get(workspaceName.namespace, workspaceName.name, jobDesc.methodConfigurationNamespace, jobDesc.methodConfigurationName, txn) match {
+        case None =>
+          RequestComplete(StatusCodes.NotFound,
+            s"No method configuration named ${jobDesc.methodConfigurationNamespace}/${jobDesc.methodConfigurationName} in workspace ${workspaceName.namespace}/${workspaceName.name}")
+        case Some(methodConfig) =>
+          if ( methodConfig.rootEntityType != jobDesc.entityType )
+            RequestComplete(StatusCodes.Conflict,
+                s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${jobDesc.entityType}")
+          else {
+            entityDAO.get(workspaceName.namespace, workspaceName.name, jobDesc.entityType, jobDesc.entityName, txn) match {
+              case None =>
+                RequestComplete(StatusCodes.NotFound,
+                  s"No entity of type ${jobDesc.entityType} named ${jobDesc.entityName} in workspace in workspace ${workspaceName.namespace}/${workspaceName.name}")
+              case Some(entity) =>
+                Try { resolveInputs(methodConfig,entity) } match {
+                  case Failure(error) =>
+                    RequestComplete(StatusCodes.Conflict, "Expression evaluation failed: "+error.getMessage())
+                  case Success(inputs) =>
+                    methodRepoDAO.getMethod(methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) match {
+                      case None => RequestComplete(StatusCodes.NotFound, "Can't get method from Method Repo")
+                      case Some(agoraEntity) =>
+                        agoraEntity.payload match {
+                          case None =>
+                            RequestComplete(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")
+                          case Some(wdl) =>
+                            RequestComplete(StatusCodes.Created,executionServiceDAO.submitJob(wdl, inputs, authCookie))
+                        }
+                    }
+                }
+            }
+          }
+      }
     }
 }
 

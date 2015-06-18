@@ -6,7 +6,7 @@ import java.util.logging.{Logger, LogManager}
 import akka.testkit.TestActorRef
 import akka.util.Timeout
 import com.orientechnologies.orient.client.remote.OServerAdmin
-import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, DataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{ContentTypes, HttpEntity, HttpCookie}
@@ -54,7 +54,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
 
-    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), methodRepoServer)
+    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), new HttpMethodRepoDAO(methodRepoServer), new HttpExecutionServiceDAO(executionServiceServer))
   }
 
 }

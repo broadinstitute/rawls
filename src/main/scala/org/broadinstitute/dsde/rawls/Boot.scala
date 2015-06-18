@@ -32,7 +32,7 @@ object Boot extends App {
       swaggerConfig.getString("baseUrl"),
       swaggerConfig.getString("apiDocs"),
       swaggerConfig.getString("swaggerVersion"),
-      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService]),
+      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService], typeOf[JobApiService]),
       Option(new ApiInfo(
         swaggerConfig.getString("info"),
         swaggerConfig.getString("description"),
@@ -50,8 +50,14 @@ object Boot extends App {
       dataSource.shutdown()
     }
 
-    val methodRepoConfig = conf.getConfig("methodrepo")
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService, WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), methodRepoConfig.getString("server"))), "rawls-service")
+    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService,
+                    WorkspaceService.constructor(dataSource,
+                                                  new GraphWorkspaceDAO(),
+                                                  new GraphEntityDAO(),
+                                                  new GraphMethodConfigurationDAO(),
+                                                  new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("service")),
+                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("service")))),
+                    "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
