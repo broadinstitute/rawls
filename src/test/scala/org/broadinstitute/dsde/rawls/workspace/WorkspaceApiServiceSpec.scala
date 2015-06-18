@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.mock.MethodRepoMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
+import spray.http.HttpHeaders.Cookie
 import spray.http._
 import spray.testkit.ScalatestRouteTest
 import spray.json._
@@ -19,10 +20,13 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers {
+class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers with BeforeAndAfterAll {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+
+  // this token won't work for login to remote services: that requires a password and is therefore limited to the integration test
+  def addMockOpenAmCookie = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", "test_token")))
 
   def actorRefFactory = system
   val dataSource = DataSource("memory:rawls", "admin", "admin")
@@ -48,6 +52,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
   val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
 
+  val uniqueMethodConfigName = UUID.randomUUID.toString
+  val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, methodConfig.workspaceName)
+  val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", newMethodConfigName)
+  val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", "1", methodConfigName)
+  val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
+  val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
+
   val workspace = Workspace(
     wsns,
     wsname,
@@ -56,13 +67,17 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
     Map.empty
   )
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO)
+
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, MethodRepoMockServer.mockServerBaseUrl)
 
   val dao = MockWorkspaceDAO
 
+  override def beforeAll() = MethodRepoMockServer.startServer
+  override def afterAll() = MethodRepoMockServer.stopServer
+
   "WorkspaceApi" should "return 201 for post to workspaces" in {
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(postWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -79,7 +94,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "get a workspace" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -94,7 +109,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 getting a non-existent workspace" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}x") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -106,7 +121,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "list workspaces" in {
     Get("/workspaces") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(listWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -123,7 +138,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 Not Found on copy if the source workspace cannot be found" in {
     Post(s"/workspaces/${workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -131,7 +146,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
       }
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -139,7 +154,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
       }
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -147,7 +162,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
       }
     Delete(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(deleteEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -158,7 +173,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on Entity CRUD when workspace does not exist" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(createEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -170,7 +185,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 201 on create entity" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(createEntityRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -186,7 +201,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 409 conflict on create entity when entity exists" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(createEntityRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -197,7 +212,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on get entity" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -211,7 +226,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on list entity types" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(listEntityTypesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -225,7 +240,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on list all samples" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(listEntitiesPerTypeRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -239,7 +254,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on non-existing entity" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -250,7 +265,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on update workspace attributes" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -262,7 +277,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
 
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -276,7 +291,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on update entity" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -290,7 +305,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on remove attribute from entity" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -304,7 +319,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on update to non-existing entity" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -315,7 +330,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 400 on remove from an attribute that is not a list" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -325,7 +340,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 400 on remove from list attribute that does not exist" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -335,7 +350,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 400 on add to list attribute that is not a list" in {
     Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -347,7 +362,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   it should "return 409 on entity rename when rename already exists" in {
     MockEntityDAO.save(workspace.namespace, workspace.name, s1, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s1").toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -358,7 +373,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 204 on entity rename" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -372,7 +387,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on entity rename, entity does not exist" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -386,7 +401,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 204 entity delete" in {
     Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/s2_changed") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(deleteEntityRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -399,7 +414,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 404 entity delete, entity does not exist" in {
     Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/s2_changed") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(deleteEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -409,7 +424,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 201 on create method configuration" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConfig.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(createMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -428,7 +443,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
     MockMethodConfigurationDAO.save(workspace.namespace, workspace.name, methodConfig2, null)
 
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -439,7 +454,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 204 on method configuration rename" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -456,7 +471,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on method configuration rename, method configuration does not exist" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -470,7 +485,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 204 method configuration delete" in {
     Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/testConfig2_changed") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(deleteMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -483,7 +498,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
   it should "return 404 method configuration delete, method configuration does not exist" in {
     Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}x") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(deleteMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -494,7 +509,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 200 on update method configuration" in {
     Put(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig3.namespace}/${methodConfig3.name}", HttpEntity(ContentTypes.`application/json`, methodConfig3.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -508,7 +523,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on update method configuration" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, methodConfig2.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(updateMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -519,7 +534,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 201 on copy method configuration" in {
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairCreated.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -533,7 +548,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 409 on copy method configuration to existing name" in {
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairConflict.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -544,7 +559,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 404 on copy method configuration from bogus source" in {
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairNotFound.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -553,9 +568,69 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
+  val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
+
+  it should "return 201 on copy method configuration from method repo" in {
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoGood.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult("testConfig") {
+          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.namespace, methodConfig.name).name
+        }
+      }
+  }
+
+  it should "return 409 on copy method configuration from method repo to existing name" in {
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoGood.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 on copy method configuration from bogus source in method repo" in {
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoMissing.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 422 on copy method configuration when method repo payload is missing" in {
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoEmptyPayload.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+      }
+  }
+
+  it should "return 422 on copy method configuration when method repo payload is unparseable" in {
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoBadPayload.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+      }
+  }
+
   it should "return 200 on get method configuration" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(getMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -566,7 +641,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "list method Configuration" in {
     Get(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs") ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(listMethodConfigurationsRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -584,7 +659,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
     //MockEntityDAO.save(workspace.namespace, workspace.name, c2, null)
     //MockEntityDAO.save(workspace.namespace, workspace.name, c3, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -615,7 +690,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   it should "return 409 Conflict on copy if the destination already exists" in {
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addHeader(HttpHeaders.`Cookie`(HttpCookie("iPlanetDirectoryPro", "test_token"))) ~>
+      addMockOpenAmCookie ~>
       sealRoute(copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {

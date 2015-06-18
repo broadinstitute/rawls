@@ -24,6 +24,7 @@ libraryDependencies ++= {
     "org.webjars" % "swagger-ui" % "2.0.24",
     "io.spray" %% "spray-testkit" % sprayV % "it, test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "it, test",
+    "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
     "com.orientechnologies" % "orientdb-core" % "2.0.8",
     "com.orientechnologies" % "orientdb-graphdb" % "2.0.8",
     "com.orientechnologies" % "orientdb-server" % "2.0.8",

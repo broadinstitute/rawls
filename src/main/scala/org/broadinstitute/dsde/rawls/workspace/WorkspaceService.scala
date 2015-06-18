@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{Actor, Props}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -11,10 +13,16 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, R
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
+import spray.client.pipelining._
 import spray.http
-import spray.http.StatusCodes
+import spray.http.HttpHeaders.Cookie
+import spray.http.{StatusCodes, HttpCookie}
 import spray.httpx.SprayJsonSupport._
 import spray.json._
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -42,16 +50,17 @@ object WorkspaceService {
   case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
+  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoBaseURL: String) = () => new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoBaseURL)
 }
 
-class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO) extends Actor {
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoBaseURL: String) extends Actor {
 
 
   override def receive = {
@@ -75,23 +84,26 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case UpdateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
+    case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
     dataSource inTransaction { txn =>
-    workspaceDAO.load(workspace.namespace, workspace.name, txn) match {
-      case Some(_) =>
-        PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspace.namespace}/${workspace.name} already exists")
-      case None =>
-        workspaceDAO.save(workspace, txn)
-        PerRequest.RequestComplete((StatusCodes.Created, workspace))
+      workspaceDAO.load(workspace.namespace, workspace.name, txn) match {
+        case Some(_) =>
+          PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspace.namespace}/${workspace.name} already exists")
+        case None =>
+          workspaceDAO.save(workspace, txn)
+          PerRequest.RequestComplete((StatusCodes.Created, workspace))
+      }
     }
-  }
 
   def getWorkspace(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { RequestComplete(_) }
+      withWorkspace(workspaceNamespace, workspaceName, txn) {
+        RequestComplete(_)
+      }
     }
 
   def updateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
@@ -111,12 +123,12 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       RequestComplete(workspaceDAO.list(txn))
     }
 
-  def cloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String): PerRequestMessage =
+  def cloneWorkspace(sourceNamespace: String, sourceWorkspace: String, destNamespace: String, destWorkspace: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace, txn)
       val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace, txn)
       (originalWorkspace, copyWorkspace) match {
-        case ( Some(ws), None ) => {
+        case (Some(ws), None) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
           workspaceDAO.save(newWorkspace, txn)
           entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
@@ -125,8 +137,8 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
           }
           RequestComplete((StatusCodes.Created, newWorkspace))
         }
-        case ( None, _ ) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
-        case ( _, Some(_) ) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+        case (None, _) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
+        case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
       }
     }
 
@@ -300,11 +312,11 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def createMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-         methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
-           case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn))
-         }
-     }
+        methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
+          case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
+          case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn))
+        }
+      }
     }
 
   def deleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage =
@@ -333,7 +345,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   def updateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName,txn) { workspace =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
         methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) =>
             methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn)
@@ -357,17 +369,46 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       withWorkspace(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, txn) { srcWorkspace =>
         methodConfigurationDAO.get(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, mcnp.source.namespace, mcnp.source.name, txn) match {
           case None => RequestComplete(StatusCodes.NotFound)
-          case Some(methodConfig) =>
-            withWorkspace(mcnp.destination.workspaceName.namespace, mcnp.destination.workspaceName.name, txn) { destWorkspace =>
-              methodConfigurationDAO.get(mcnp.destination.workspaceName.namespace, mcnp.destination.workspaceName.name, mcnp.destination.namespace, mcnp.destination.name, txn) match {
-                case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict,existingMethodConfig)
-                case None =>
-                  val target = methodConfig.copy(name = mcnp.destination.name, namespace = mcnp.destination.namespace, workspaceName = mcnp.destination.workspaceName)
-                  val targetMethodConfig = methodConfigurationDAO.save(target.workspaceName.namespace, target.workspaceName.name, target, txn)
-                  RequestComplete(StatusCodes.Created, targetMethodConfig)
+          case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, txn)
+        }
+      }
+    }
+
+  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery, authCookie: HttpCookie): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      val url = Seq(methodRepoBaseURL, "configurations", methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId) mkString "/"
+
+      import scala.concurrent.ExecutionContext.Implicits.global
+      val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive
+      val response = Await.result(pipeline(Get(url)), atMost = Duration(5, TimeUnit.SECONDS))
+      response.status match {
+        case StatusCodes.OK =>
+          try {
+            // if JSON parsing fails in either case, catch below
+            val methodConfigRepoEntity = JsonParser(response.entity.asString).convertTo[AgoraEntity]
+            val methodConfig = methodConfigRepoEntity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
+            methodConfig match {
+              case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, txn)
+              case None => RequestComplete(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")
             }
           }
-        }
+          catch { case e: Exception =>
+            val message = "Error parsing Method Repo response: " + e.getMessage
+            RequestComplete(StatusCodes.UnprocessableEntity, message)
+          }
+
+        case notOK => RequestComplete(notOK, response.entity)
+      }
+    }
+
+  private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, txn: RawlsTransaction) =
+    withWorkspace(dest.workspaceName.namespace, dest.workspaceName.name, txn) { destWorkspace =>
+      methodConfigurationDAO.get(dest.workspaceName.namespace, dest.workspaceName.name, dest.namespace, dest.name, txn) match {
+        case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
+        case None =>
+          val target = methodConfig.copy(name = dest.name, namespace = dest.namespace, workspaceName = dest.workspaceName)
+          val targetMethodConfig = methodConfigurationDAO.save(target.workspaceName.namespace, target.workspaceName.name, target, txn)
+          RequestComplete(StatusCodes.Created, targetMethodConfig)
       }
     }
 
