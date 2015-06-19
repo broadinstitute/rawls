@@ -59,11 +59,11 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   }
 
   it should "get entity types" in {
-    assertResult(Seq("sample", "pair", "sampleSet")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn) }
+    assertResult(Set("sample", "pair", "sampleSet")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn).toSet }
   }
 
   it should "list all entities of all entity types" in {
-    assertResult(Seq(sample1, sample2, sample3, pair1, sampleSet1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSeq }
+    assertResult(Set(sample1, sample2, sample3, pair1, sampleSet1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSet }
   }
 
   it should "get an entity" in {
@@ -138,8 +138,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
     daoCycles.cloneAllEntities(workspaceOriginal.namespace, workspaceClone.namespace, workspaceOriginal.name, workspaceClone.name, txn)
 
-    assertResult(dao.listEntitiesAllTypes(workspaceOriginal.namespace, workspaceOriginal.name, txn).map(_.copy(workspaceName = WorkspaceName(workspaceClone.namespace, workspaceClone.name))).toList) {
-      dao.listEntitiesAllTypes(workspaceClone.namespace, workspaceClone.name, txn).toList
+    assertResult(dao.listEntitiesAllTypes(workspaceOriginal.namespace, workspaceOriginal.name, txn).map(_.copy(workspaceName = WorkspaceName(workspaceClone.namespace, workspaceClone.name))).toSet) {
+      dao.listEntitiesAllTypes(workspaceClone.namespace, workspaceClone.name, txn).toSet
     }
 
   }

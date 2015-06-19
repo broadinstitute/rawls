@@ -54,8 +54,8 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
   }
 
   it should "list method configs" in {
-    assertResult(List(MethodConfigurationShort("config1", "goober", "ns", "meth1", "1", wsName, "ns"))) {
-      new GraphMethodConfigurationDAO().list(wsName.namespace, wsName.name, txn).toList
+    assertResult(Set(MethodConfigurationShort("config1", "goober", "ns", "meth1", "1", wsName, "ns"))) {
+      new GraphMethodConfigurationDAO().list(wsName.namespace, wsName.name, txn).toSet
     }
   }
 

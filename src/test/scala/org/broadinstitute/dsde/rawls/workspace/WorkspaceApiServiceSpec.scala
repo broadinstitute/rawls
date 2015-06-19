@@ -127,8 +127,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(MockWorkspaceDAO.store.values.toSeq) {
-          responseAs[Array[Workspace]]
+        assertResult(MockWorkspaceDAO.store.values.toSet) {
+          responseAs[Array[Workspace]].toSet
         }
       }
 
@@ -648,16 +648,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
           status
         }
         assertResult(MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).values.map(mc =>
-          MethodConfigurationShort(mc.name, mc.rootEntityType, mc.methodNamespace, mc.methodName, mc.methodVersion, mc.workspaceName, mc.namespace)).toSeq) {
-          responseAs[Array[MethodConfigurationShort]]
+          MethodConfigurationShort(mc.name, mc.rootEntityType, mc.methodNamespace, mc.methodName, mc.methodVersion, mc.workspaceName, mc.namespace)).toSet) {
+          responseAs[Array[MethodConfigurationShort]].toSet
         }
       }
   }
 
   it should "copy a workspace if the source exists" in {
-    //MockEntityDAO.save(workspace.namespace, workspace.name, c1, null)
-    //MockEntityDAO.save(workspace.namespace, workspace.name, c2, null)
-    //MockEntityDAO.save(workspace.namespace, workspace.name, c3, null)
     Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(copyWorkspaceRoute) ~>
@@ -667,18 +664,14 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         }
         val copiedWorkspace = MockWorkspaceDAO.store((workspaceCopy.namespace, workspaceCopy.name))
 
-        println(MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null).mkString + "\n")
-        println(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).mkString)
-
         //Name, namespace, creation date, and owner might change, so this is all that remains.
         assert(copiedWorkspace.attributes == workspace.attributes)
-        assertResult(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).toSeq) {
-          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {_.copy(workspaceName=WorkspaceName(workspace.namespace, workspace.name))} toSeq
+        assertResult(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).toSet) {
+          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {_.copy(workspaceName=WorkspaceName(workspace.namespace, workspace.name))} toSet
         }
-        assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSeq) {
-          MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSeq
+        assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSet) {
+          MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSet
         }
-
         assertResult(StatusCodes.Created) {
           status
         }
