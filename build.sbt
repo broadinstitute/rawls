@@ -48,4 +48,4 @@ Revolver.enableDebugging(port = 5050, suspend = false)
 
 Defaults.itSettings
 
-lazy val root = project.in(file(".")).configs(IntegrationTest)
+lazy val rawls = project.in(file(".")).configs(IntegrationTest)
