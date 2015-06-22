@@ -8,6 +8,12 @@ scalaVersion  := "2.11.2"
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
+val artifactory = "https://artifactory.broadinstitute.org/artifactory/"
+
+resolvers += "artifactory-releases" at artifactory + "libs-release"
+
+resolvers += "artifactory-snapshots" at artifactory + "libs-snapshot"
+
 libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
@@ -30,6 +36,7 @@ libraryDependencies ++= {
     "com.orientechnologies" % "orientdb-server" % "2.0.8",
     "com.orientechnologies" % "orientdb-client" % "2.0.8",
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
+    "org.broadinstitute" %% "cromwell" % "0.1-SNAPSHOT",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
       .exclude("com.google.guava", "guava-jdk5")
   )
@@ -37,6 +44,7 @@ libraryDependencies ++= {
 
 assemblyMergeStrategy in assembly := {
   case PathList("org", "apache", xs @ _*) => MergeStrategy.last
+  case PathList("com", "typesafe", xs @ _*) => MergeStrategy.last
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
