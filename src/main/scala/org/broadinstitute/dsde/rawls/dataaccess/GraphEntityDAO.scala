@@ -7,24 +7,11 @@ import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
+import org.broadinstitute.dsde.rawls.model.AttributeConversions._
+
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 
-  // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
-  private def attributeToProperty(att: AttributeValue): Any = att match {
-    case AttributeBoolean(b) => b
-    case AttributeNumber(n) => n.bigDecimal
-    case AttributeString(s) => s
-    case AttributeValueList(l) => l.map(attributeToProperty(_)).asJava
-    case _ => throw new IllegalArgumentException("Cannot serialize " + att + " as a property")
-  }
-
-  private def propertyToAttribute(prop: Any): AttributeValue = prop match {
-    case b: Boolean => AttributeBoolean(b)
-    case n: java.math.BigDecimal => AttributeNumber(n)
-    case s: String => AttributeString(s)
-    case l: java.util.List[_] => AttributeValueList(l.map(propertyToAttribute(_)))
-    case _ => throw new IllegalArgumentException("Cannot deserialize " + prop + " as an attribute")
-  }
+  //NOTE: attributeToProperty and propertyToAttrbute have now moved to WorkspaceModel.AttributeConversions.
 
   private def loadEntity(entity: Vertex, workspaceNamespace: String, workspaceName: String) = {
     // NB: when starting from an edge, inV() returns the DESTINATION vertices, not the source vertices, and vice versa.

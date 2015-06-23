@@ -36,6 +36,8 @@ libraryDependencies ++= {
     "com.orientechnologies" % "orientdb-server" % "2.0.8",
     "com.orientechnologies" % "orientdb-client" % "2.0.8",
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
+    "org.apache.commons" % "commons-jexl" % "2.1.1",
+    "rhino" % "js" % "1.7R2",
     ("org.broadinstitute" %% "cromwell" % "0.1-SNAPSHOT")
       excludeAll ExclusionRule(organization = "com.gettyimages"),
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
