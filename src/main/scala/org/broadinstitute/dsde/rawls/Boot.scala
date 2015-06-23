@@ -55,8 +55,8 @@ object Boot extends App {
                                                   new GraphWorkspaceDAO(),
                                                   new GraphEntityDAO(),
                                                   new GraphMethodConfigurationDAO(),
-                                                  new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("service")),
-                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("service")))),
+                                                  new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
+                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")))),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
