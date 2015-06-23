@@ -4,7 +4,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.mock.MethodRepoMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService}
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, JobApiService}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -20,7 +20,7 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with ScalatestRouteTest with Matchers with BeforeAndAfterAll {
+class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with JobApiService with ScalatestRouteTest with Matchers with BeforeAndAfterAll {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -68,8 +68,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   )
 
 
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, MethodRepoMockServer.mockServerBaseUrl)
-
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, new HttpMethodRepoDAO(MethodRepoMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(MethodRepoMockServer.mockServerBaseUrl))
   val dao = MockWorkspaceDAO
 
   override def beforeAll() = MethodRepoMockServer.startServer
@@ -600,7 +599,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       addMockOpenAmCookie ~>
       sealRoute(copyMethodRepoConfigurationRoute) ~>
       check {
-        assertResult(StatusCodes.NotFound) {
+        assertResult(StatusCodes.InternalServerError) {
           status
         }
       }
@@ -692,4 +691,42 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
+  it should "return 404 Not Found when submitting a job using a MethodConfiguration that doesn't exist in the workspace" in {
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription("dsde","not there","Pattern","pattern1").toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(submitJobRoute) ~>
+      check { assertResult(StatusCodes.NotFound) {status} }
+  }
+
+  it should "return 404 Not Found when submitting a job using an Entity that doesn't exist in the workspace" in {
+    val mcName = MethodConfigurationName("three_step_1","dsde",WorkspaceName(wsns,wsname))
+    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
+    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(createMethodConfigurationRoute) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(submitJobRoute) ~>
+      check { assertResult(StatusCodes.NotFound) {status} }
+  }
+
+  it should "return 201 Created when submitting a job" in {
+    val wsName = WorkspaceName(wsns,wsname)
+    val mcName = MethodConfigurationName("three_step","dsde",wsName)
+    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
+    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(createMethodConfigurationRoute) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+    val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
+    Post(s"/workspaces/${wsns}/${wsname}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(createEntityRoute)
+      check { assertResult(StatusCodes.Created) {status} }
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(submitJobRoute) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+  }
 }

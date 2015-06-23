@@ -28,11 +28,11 @@ class SwaggerService(override val apiVersion: String,
   extends SwaggerHttpService
 
 class RawlsApiServiceActor(swaggerService: SwaggerService, val workspaceServiceConstructor: () => WorkspaceService) extends Actor
-  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService {
+  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with JobApiService {
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ swaggerService.routes ~
+  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ jobRoutes ~ swaggerService.routes ~
     get {
       pathSingleSlash {
         getFromResource("swagger/index.html")

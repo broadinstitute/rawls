@@ -17,6 +17,8 @@ trait IntegrationTestConfig {
 
   val methodRepoConfig = jenkinsConf.withFallback(etcConf).getConfig("methodrepo")
   val methodRepoServer = methodRepoConfig.getString("server")
+  val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
+  val executionServiceServer = executionServiceConfig.getString("server")
 
   val openAmConfig = jenkinsConf.withFallback(etcConf).getConfig("openam")
   val openAmUrl = openAmConfig.getString("tokenUrl")

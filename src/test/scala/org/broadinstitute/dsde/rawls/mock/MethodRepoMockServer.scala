@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.mock
 import java.io.File
 
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.model.AgoraEntity
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity,AgoraEntityType}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model.Header
@@ -79,6 +79,79 @@ object MethodRepoMockServer {
           .withBody(badPayloadResult.toJson.prettyPrint)
           .withStatusCode(StatusCodes.OK.intValue)
       )
+
+    val methodPath = "/methods"
+    val threeStepWDL =
+"""task ps {
+  command {
+    ps
+  }
+  output {
+    File procs = stdout()
+  }
+}
+task cgrep {
+  command {
+    grep '${pattern}' ${File in_file} | wc -l
+  }
+  output {
+    Int count = read_int(stdout())
+  }
+}
+task wc {
+  command {
+    cat ${File in_file} | wc -l
+  }
+  output {
+    Int count = read_int(stdout())
+  }
+}
+workflow three_step {
+  call ps
+  call cgrep {
+    input: in_file=ps.procs
+  }
+  call wc {
+    input: in_file=ps.procs
+  }
+}
+"""
+    val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(methodPath + "/dsde/three_step/1")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(threeStepMethod.toJson.prettyPrint)
+          .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(methodPath + "/dsde/three_step/2")
+    ).respond(
+        response()
+          .withStatusCode(StatusCodes.NotFound.intValue)
+    )
+
+    val submitJobPath = "/workflows"
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath(submitJobPath)
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+"""{
+    "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
+    "status": "Submitted"
+}""")
+          .withStatusCode(StatusCodes.Created.intValue)
+    )
   }
 
   def stopServer = mockServer.stop()
