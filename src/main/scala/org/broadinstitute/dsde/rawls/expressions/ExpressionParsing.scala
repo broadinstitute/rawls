@@ -12,41 +12,31 @@ import scala.util.parsing.combinator.JavaTokenParsers
 import scala.util.parsing.input.Reader
 
 object ExpressionTypes {
+
   // to make a less verbose type
   type PipeType = GremlinPipeline[Vertex, Vertex]
 
-  // The output of a single step of the Gremlin pipe. pipeAction is the string representation, for debugging
+  case class ExpressionContext(workspaceNamespace: String, workspaceName: String, rootType: String, rootName: String)
+
+  //A fully built query is just a list of functions that can be foldl'd.
+  case class PipelineQuery(steps: List[PipeFunc], finalStep: FinalFunc)
+
+  // The first n steps of a pipe return pipes. pipeAction is the string representation, for debugging
+  type PipeFunc = (ExpressionContext, PipeType) => PipeResult
   case class PipeResult(result: PipeType, pipeAction: String)
 
-  // types to clarify what a RootFunc takes
-  type WorkspaceName = String
-  type WorkspaceNamespace = String
-  type RootType = String
-  type RootName = String
-
-  // The initial step of a Gremlin pipe.
-  type RootFunc = (PipeType, WorkspaceNamespace, WorkspaceName, RootType, RootName) => PipeResult
-
-  // A single step of the Gremlin pipe.
-  type PipeFunc = PipeType => PipeResult
-
-  // The output of a completed Gremlin pipe; may return >1 result, hence Seq[String]. pipeAction is the step's string representation, for debugging
+  // The final step of a pipe may return >1 result, hence Seq[Any]. pipeAction is the step's string representation, for debugging
+  type FinalFunc = (ExpressionContext, PipeType) => FinalResult
   case class FinalResult(result: Seq[Any], pipeAction: String)
 
-  // The terminal step of a Gremlin pipe.
-  type ResultFunc = PipeType => FinalResult
-
-  // a query goes from a root through pipes to the last action, which returns a Seq[String] of processed data from the requested Entities or attributes on entities
-  case class PipelineQuery(rootFunc: RootFunc, pipes: Option[List[PipeFunc]], lastAction: Option[ResultFunc])
-
   // utility functions
-  implicit def name(e:Edge):String = {
+  def name(e:Edge):String = {
     e.getLabel
   }
-  implicit def pretty(e:Edge):String = {
+  def pretty(e:Edge):String = {
     name(e.getVertex(Direction.OUT)) + "---" + name(e) + "-->" + name(e.getVertex(Direction.IN))
   }
-  implicit def name(v:Vertex):String = {
+  def name(v:Vertex):String = {
     v.getProperty("_name").asInstanceOf[String]
   }
   def propString(v:Vertex, property:String):String = {
@@ -56,14 +46,14 @@ object ExpressionTypes {
       case None => null
     }
   }
-  implicit def pretty(v:Vertex):String = {
+  def pretty(v:Vertex):String = {
     val edges = v.getEdges(Direction.OUT)
     "Vertex: " + name(v) + ", keys: " + v.getPropertyKeys + (edges.size match {
       case 0 => ""
       case _ => " -> [edges: " + (edges.map(pretty).mkString(",")) + "]"
     })
   }
-  implicit def short(v:Vertex):String = {
+  def short(v:Vertex):String = {
     "Vertex: " + name(v)
   }
 }
@@ -78,22 +68,23 @@ class ExpressionParser extends JavaTokenParsers {
     /* TODO: For now, only supporting entity expressions that end in attribute.
   // The simplest case: just return the root entity
     root ^^ {
-      case root => PipelineQuery(root, None, None)
+      case root => (List(root), outputEntityResult)
     } |
   */
     // root.ref.(...).attribute
+
     rootDot ~ rep(entityRefName) ~ lastAttribute ^^ {
-      case root ~ Nil ~ last => PipelineQuery(root, None, Option(last))
-      case root ~ ref ~ last => PipelineQuery(root, Option(ref), Option(last))
+      case root ~ Nil ~ last => PipelineQuery(List(root), last)
+      case root ~ ref ~ last => PipelineQuery(List(root) ++ ref, last)
     }
   }
 
   // just root by itself with no refs or attributes
-  private def root: Parser[RootFunc] =
+  private def root: Parser[PipeFunc] =
     "this$".r ^^ { _ => rootFunc}
 
   // root followed by dot meaning it is to be followed by refs or attributes
-  private def rootDot: Parser[RootFunc] =
+  private def rootDot: Parser[PipeFunc] =
     "this." ^^ { _ => rootFunc}
 
   // an entity reference will be followed by a dot for the attribute upon it
@@ -101,11 +92,11 @@ class ExpressionParser extends JavaTokenParsers {
     ident <~ "." ^^ { case name => entityNameAttributePipeFunc(name)}
 
   // the last attribute has no dot after it
-  private def lastAttribute: Parser[ResultFunc] =
+  private def lastAttribute: Parser[FinalFunc] =
     ident ^^ { case name => lastAttributePipeFunc(name)}
 
 
-  def parse(expression: String)(workspaceNamespace: String, workspaceName: String, rootType: String, rootName: String) = {
+  def parse(expression: String) = {
     //Attempt to parse the expression into a pipeline query to hand off to Gremlin
     //TODO: add caching here? Or move the creation of Gremlin pipelines here so we can cache those?
     parseAll(path, expression) match {
@@ -121,10 +112,16 @@ class ExpressionParser extends JavaTokenParsers {
   /** functions against pipes **/
 
   // the root function starts the pipeline at some root entity type in the workspace
-  private def rootFunc(graphPipeline: PipeType, workspaceNamespace: WorkspaceNamespace, workspaceName: WorkspaceName, rootType: String, rootName: String): PipeResult = {
+  private def rootFunc(context: ExpressionContext, graphPipeline: PipeType): PipeResult = {
     def workspaceFunc = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(a: Vertex) = {
-        propString(a, "_namespace") == workspaceNamespace && propString(a, "_name") == workspaceName
+        propString(a, "_namespace") == context.workspaceNamespace && propString(a, "_name") == context.workspaceName
+      }
+    }
+
+    def entityFunc = new PipeFunction[Vertex, java.lang.Boolean] {
+      override def compute(a: Vertex) = {
+        propString(a, "_name") == context.rootName
       }
     }
 
@@ -132,93 +129,73 @@ class ExpressionParser extends JavaTokenParsers {
       // all vertexes of type Workspace filtered for the given namespace and name
       graphPipeline.V("_clazz", classOf[Workspace].getSimpleName).filter(workspaceFunc)
         // then entities from that workspace that match the root entity we are starting at
-        .out(rootType).filter(entityFunc(rootName)),
+        .out(context.rootType).filter(entityFunc),
 
       // text for what the pipeline looks like at this step
-      s"""new GremlinPipeline(graph).V("_entityType", "Workspace").filter(workspaceFunc).out($rootType,$rootName)"""
+      s"""new GremlinPipeline(graph).V("_entityType", "Workspace").filter(workspaceFunc).out(${context.rootType},${context.rootName})"""
     )
   }
 
-  // get a vertex where the name matches the entity we are looking for
-  private def entityFunc(entityName: String) = new PipeFunction[Vertex, java.lang.Boolean] {
-    override def compute(a: Vertex) = {
-      propString(a, "_name") == entityName
-    }
-  }
-
   // add pipe to an entity referenced by the current entity
-  private def entityNameAttributePipeFunc(entityRefName: String)(pipe: PipeType): PipeResult = {
+  private def entityNameAttributePipeFunc(entityRefName: String)(context: ExpressionContext, graphPipeline: PipeType): PipeResult = {
     PipeResult(
       // an entity name is on the outgoing edge label
-      pipe.out(entityRefName),
-      // TODO: is there a way to automate returning this code-string from the code itself? (used for debugging purposes)
+      graphPipeline.out(entityRefName),
       s".out($entityRefName)"
     )
   }
 
-  // TODO: We only support attributes here, not reference types (edges)
-  private def lastAttributePipeFunc(attributeName: String)(pipe: PipeType): FinalResult = {
-    val lastVertices = pipe.toList
+  //TODO: Needs implementation! Return false if reference type.
+  private def isValueType(attributeName: String): Boolean = { true }
 
-    if (lastVertices.size() == 0) {
-      throw new RuntimeException(s"Could not dereference $attributeName because pipe returned no entities")
+  private def lastAttributePipeFunc(attributeName: String)(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
+    //The below will very likely change. My suspicion is that we can't tell whether the attribute is a value
+    //or reference type without evaluating the pipe passed in and then seeing which of .getProperty or .out works.
+    //Particularly perverse graphs might have a mixture of both! (We should handle such cases cleanly, for some value of "clean".)
+    if (isValueType(attributeName)) {
+      val lastVertices = graphPipeline.toList
+
+      if (lastVertices.size() == 0) {
+        throw new RuntimeException(s"Could not dereference $attributeName because pipe returned no entities")
+      }
+
+      // Look up the attributes on the list of vertices returned from the pipe. This will insert nulls into the list if
+      // the attribute doesn't exist.
+      FinalResult(lastVertices.map((v: Vertex) => {
+        v.getProperty(attributeName).asInstanceOf[Object]
+      }), s".getProperty($attributeName)")
+    } else {
+      outputEntityResult( context, graphPipeline.out(attributeName) )
     }
+  }
 
-    // Look up the attributes on the list of vertices returned from the pipe. This will insert nulls into the list if
-    // the attribute doesn't exist.
-    FinalResult(lastVertices.map((v: Vertex) => {
-      v.getProperty(attributeName).asInstanceOf[String]
-    }), s".getProperty($attributeName)")
+
+  //Takes a list of entities at the end of a pipeline and returns them in final format.
+  //TODO: Determine how we want to return these entities. GraphEntityDAO.loadEntity?
+  private def outputEntityResult(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
+    //graphPipeline.toList.map( some_conversion_to_something_else )
+    FinalResult(List(), "")
   }
 }
 
 class ExpressionEvaluator(graph:Graph, parser:ExpressionParser)  {
   def evaluate(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[Any]] = {
-    parser.parse(expression)(workspaceNamespace, workspaceName, rootType, rootName) match {
-      case Success(pipe) => runPipe(workspaceNamespace, workspaceName, rootType, rootName, pipe)
+    parser.parse(expression) match {
+      case Success(pipe) => runPipe( ExpressionContext(workspaceNamespace, workspaceName, rootType, rootName), pipe)
       case Failure(regret) => Failure(regret)
     }
   }
 
-  def runPipe(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, steps:PipelineQuery):Try[Seq[Any]] = {
-    val pipeline = new PipeType(graph)
+  def runPipe(expressionContext: ExpressionContext, pipe:PipelineQuery):Try[Seq[Any]] = {
+    val gremlin = new PipeType(graph)
 
-    // TODO: more idiomatic way to do this?  the GremlinPipeline has side effects, and adds pipes to each .out() and similar calls anyway, so maybe not...
-    var pipelineQueryText = ""
-    var result:PipeResult = null
+    //Build the gremlin pipeline up to the penultimate step.
+    val builtPipe = pipe.steps.foldLeft(PipeResult(gremlin, "")){ ( graph, func ) => func(expressionContext, graph.result) }
 
-    // apply the root function, this will give us the root vertex we will traverse from
-    result = steps.rootFunc(pipeline, workspaceNamespace, workspaceName, rootType, rootName)
-    pipelineQueryText += result.pipeAction
-
-    // then if we have any pipes between root and last, apply each all but last pipes from this root
-    steps.pipes.foreach(pipes => {
-      for (step <- pipes) {
-        result = step(pipeline)
-
-        pipelineQueryText += result.pipeAction
-      }
-    })
-
-    // apply the last action
-    steps.lastAction match {
-      // if there
-      case Some(last) => {
-        try {
-          val finalResult = last(pipeline)
-          pipelineQueryText += finalResult.pipeAction
-          //println("DEBUG: running query: " + pipelineQueryText)
-          Success(finalResult.result)
-        } catch {
-          case rxc : RuntimeException => Failure(rxc)
-        }
-      }
-      // evaluate root-only expression (i.e. an entity. TODO: think about representation?)
-      case None => {
-        pipelineQueryText += ".toList.map(pretty)"
-        //println("DEBUG: running query: " + pipelineQueryText)
-        Success(result.result.toList.map(short)) //pretty
-      }
+    //Run the final step. This executes the pipeline and returns its output.
+    Try( pipe.finalStep( expressionContext, builtPipe.result ) ) match {
+      case Success(finalResult) => Success(finalResult.result)
+      case Failure(regret) => Failure(regret)
     }
   }
 }
