@@ -44,7 +44,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
-  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
+  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction) = txn withGraph { db =>
     val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
@@ -135,6 +135,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
+
     def nameFilter = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(v: Vertex) = entityNames.contains(v.getProperty("_name"))
     }
@@ -156,5 +157,25 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       case None => Seq.empty
     }
     subtreeEntities
+  }
+
+  def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity] = {
+    val copyMap = entitiesToCopy.map { entity => (entity.entityType, entity.name) -> entity }.toMap
+    listEntitiesAllTypes(destNamespace, destWorkspace, txn).toSeq.filter(entity => copyMap.keySet.contains(entity.entityType, entity.name))
+  }
+
+  def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = {
+    val entities = getEntitySubtrees(sourceNamespace, sourceWorkspace, entityType, entityNames, txn).toSeq
+    val conflicts = getCopyConflicts(destNamespace, destWorkspace, entities, txn)
+
+    conflicts.size match {
+      case 0 => {
+        cloneTheseEntities(entities, destNamespace, destWorkspace, txn)
+        Seq.empty
+      }
+      case _ => {
+        conflicts
+      }
+    }
   }
 }

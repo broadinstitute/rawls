@@ -238,4 +238,28 @@ trait EntityApiService extends HttpService with PerRequestCreator {
       }
     }
   }
+
+  @Path("/entities/copy")
+  @ApiOperation(value = "copy entities into a workspace from another workspace",
+    nickname = "copy entities",
+    httpMethod = "Post")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "entityCopyDefinition", required = true, dataType = "org.broadinstitute.dsde.rawls.model.EntityCopyDefinition", paramType = "body", value = "Source and destination for entities")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 201, message = "Successful Request"),
+    new ApiResponse(code = 404, message = "Source Workspace or source entities does not exist"),
+    new ApiResponse(code = 409, message = "One or more entities of that name already exist"),
+    new ApiResponse(code = 500, message = "Rawls Internal Error")
+  ))
+  def copyEntitiesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+    path("entities" / "copy" ) {
+      post {
+        entity(as[EntityCopyDefinition]) { copyDefinition =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+            WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
+        }
+      }
+    }
+  }
 }

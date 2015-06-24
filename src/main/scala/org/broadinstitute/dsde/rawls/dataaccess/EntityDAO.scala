@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.Vertex
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Entity}
+import org.broadinstitute.dsde.rawls.model.{EntityCopyDefinition, WorkspaceName, Entity}
 
 /**
  * Created by dvoet on 5/6/15.
@@ -32,4 +32,9 @@ trait EntityDAO {
   def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ): Unit
 
   def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity]
-}
+
+  def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity]
+
+  def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity]
+
+  }

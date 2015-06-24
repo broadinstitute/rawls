@@ -32,6 +32,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   def actorRefFactory = system
 
   override val testDbName = "WorkspaceApiServiceTest"
+  val dataSource = DataSource("memory:rawls", "admin", "admin")
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
@@ -56,15 +57,15 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(wsns, wsname))
   val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
 
-  val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
+  val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
+  val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
+  val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo", "param2" -> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
   val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
-  val methodConfigName2 = methodConfigName.copy(name="novelName")
-  val methodConfigName3 = methodConfigName.copy(name="noSuchName")
-  val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName,methodConfigName2)
-  val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
-  val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
+  val methodConfigName2 = methodConfigName.copy(name = "novelName")
+  val methodConfigName3 = methodConfigName.copy(name = "noSuchName")
+  val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName, methodConfigName2)
+  val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName, methodConfigName)
+  val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3, methodConfigName2)
 
   val uniqueMethodConfigName = UUID.randomUUID.toString
   val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, methodConfig.workspaceName)
@@ -88,6 +89,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   initializeTestGraph()
 
   override def beforeAll() = MethodRepoMockServer.startServer
+
   override def afterAll() = MethodRepoMockServer.stopServer
 
   "WorkspaceApi" should "return 201 for post to workspaces" in {
@@ -715,7 +717,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
         //Name, namespace, creation date, and owner might change, so this is all that remains.
         assert(copiedWorkspace.attributes == workspace.attributes)
         assertResult(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).toSet) {
-          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {_.copy(workspaceName=WorkspaceName(workspace.namespace, workspace.name))} toSet
+          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {
+            _.copy(workspaceName = WorkspaceName(workspace.namespace, workspace.name))
+          } toSet
         }
         assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSet) {
           MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSet
@@ -741,41 +745,130 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
 
   it should "return 404 Not Found when submitting a job using a MethodConfiguration that doesn't exist in the workspace" in {
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription("dsde","not there","Pattern","pattern1").toJson.toString)) ~>
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`, JobDescription("dsde", "not there", "Pattern", "pattern1").toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
-      check { assertResult(StatusCodes.NotFound) {status} }
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
   it should "return 404 Not Found when submitting a job using an Entity that doesn't exist in the workspace" in {
-    val mcName = MethodConfigurationName("three_step_1","dsde",WorkspaceName(wsns,wsname))
-    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
-    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    val mcName = MethodConfigurationName("three_step_1", "dsde", WorkspaceName(wsns, wsname))
+    val methodConf = MethodConfiguration(mcName.name, "Pattern", "dsde", "three_step", "1", Map.empty, Map("pattern" -> "String"), Map.empty, mcName.workspaceName, mcName.namespace)
+    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(createMethodConfigurationRoute) ~>
-      check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`, JobDescription(mcName.namespace, mcName.name, "Pattern", "pattern1").toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
-      check { assertResult(StatusCodes.NotFound) {status} }
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
   it should "return 201 Created when submitting a job" in {
-    val wsName = WorkspaceName(wsns,wsname)
-    val mcName = MethodConfigurationName("three_step","dsde",wsName)
-    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
-    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    val wsName = WorkspaceName(wsns, wsname)
+    val mcName = MethodConfigurationName("three_step", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.name, "Pattern", "dsde", "three_step", "1", Map.empty, Map("pattern" -> "String"), Map.empty, mcName.workspaceName, mcName.namespace)
+    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(createMethodConfigurationRoute) ~>
-      check { assertResult(StatusCodes.Created) {status} }
-    val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
-    Post(s"/workspaces/${wsns}/${wsname}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+    val entity = Entity("pattern1", "Pattern", Map("pattern" -> AttributeString("hello")), wsName)
+    Post(s"/workspaces/${wsns}/${wsname}/entities", HttpEntity(ContentTypes.`application/json`, entity.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(createEntityRoute)
-      check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+    check {
+      assertResult(StatusCodes.Created) {
+        status
+      }
+    }
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`, JobDescription(mcName.namespace, mcName.name, "Pattern", "pattern1").toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
-      check { assertResult(StatusCodes.Created) {status} }
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+  }
+
+  val z1 = Entity("z1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  val workspace2 = Workspace(
+    wsns + "2",
+    wsname + "2",
+    DateTime.now().withMillis(0),
+    "test",
+    Map.empty
+  )
+
+  it should "return 201 for copying entities into a workspace with no conflicts" in {
+    Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(postWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(workspace2) {
+          MockWorkspaceDAO.store((workspace2.namespace, workspace2.name))
+        }
+
+        Post(s"/workspaces/${workspace2.namespace}/${workspace2.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
+          addMockOpenAmCookie ~>
+          sealRoute(createEntityRoute) ~>
+          check {
+            assertResult(StatusCodes.Created) {
+              status
+            }
+            assertResult(z1) {
+              MockEntityDAO.store(workspace2.namespace, workspace2.name)(z1.entityType, z1.name)
+            }
+
+            val destWorkspace = WorkspaceName(wsns, wsname)
+            val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
+            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, destWorkspace, "samples", Seq("z1"))
+            Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+              addMockOpenAmCookie ~>
+              sealRoute(copyEntitiesRoute) ~>
+              check {
+                assertResult(StatusCodes.Created) {
+                  status
+                }
+                assertResult(z1) {
+                  MockEntityDAO.store(workspace.namespace, workspace.name)(z1.entityType, z1.name)
+                }
+              }
+          }
+      }
+  }
+
+  //TODO: verify that this ACTUALLY works. should return and assert StatusCodes.Conflict once the MockDAOs are changed
+  it should "return 409 for copying entities into a workspace with conflicts" in {
+    val destWorkspace = WorkspaceName(wsns, wsname)
+    val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
+    val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, destWorkspace, "samples", Seq("z1"))
+    Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(copyEntitiesRoute) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
   }
 }

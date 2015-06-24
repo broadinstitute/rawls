@@ -293,5 +293,45 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
+  val x1 = Entity("x1", "sampleSet", Map.empty, wsName)
+
+  val workspace2 = Workspace(
+    namespace = wsName.namespace + "2",
+    name = wsName.name + "2",
+    createdDate = DateTime.now(),
+    createdBy = "Joe Biden",
+    Map.empty
+  )
+
+  it should "copy entities without a conflict" in {
+    new GraphWorkspaceDAO().save(workspace2, txn)
+    dao.save(workspace2.namespace, workspace2.name, x1, txn)
+
+    assertResult(Seq.empty){
+      dao.getCopyConflicts(workspace.namespace, workspace.name, Seq(x1), txn)
+    }
+
+    assertResult(Seq.empty){
+      dao.copyEntities(workspace.namespace, workspace.name, workspace2.namespace, workspace2.name, "sampleSet", Seq("x1"), txn)
+    }
+
+    //verify it was actually copied into the workspace
+    assert(dao.list(workspace.namespace, workspace.name, "sampleSet", txn).toList.contains(x1))
+  }
+
+  it should "copy entities with a conflict" in {
+    assertResult(Seq(x1)){
+      dao.getCopyConflicts(workspace.namespace, workspace.name, Seq(x1), txn)
+    }
+
+    assertResult(Seq(x1)){
+      dao.copyEntities(workspace.namespace, workspace.name, workspace2.namespace, workspace2.name, "sampleSet", Seq("x1"), txn)
+    }
+
+    //verify that it wasn't copied into the workspace again
+    assert(dao.list(workspace.namespace, workspace.name, "sampleSet", txn).toList.filter(entity => entity == x1).size == 1)
+  }
+
+
 
 }
