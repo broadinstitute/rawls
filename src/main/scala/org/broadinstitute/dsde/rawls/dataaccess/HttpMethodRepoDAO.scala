@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.{Success,Failure,Try}
-import spray.client.UnsuccessfulResponseException
+import spray.httpx.UnsuccessfulResponseException
 import spray.client.pipelining._
 import spray.http.{StatusCodes, HttpCookie}
 import spray.http.HttpHeaders.Cookie
@@ -22,10 +22,9 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorS
     val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[AgoraEntity]
     Try(Await.result(pipeline(Get(url)),Duration.Inf)) match {
       case Success(entity) => Option(entity)
-      case Failure(notOK: UnsuccessfulResponseException) =>
-        if ( notOK.responseStatus == StatusCodes.NotFound ) None
-        else throw notOK
-      case Failure(exception) => throw exception }
+      case Failure(notOK: UnsuccessfulResponseException) if StatusCodes.NotFound == notOK.response.status => None
+      case Failure(exception) => throw exception
+    }
   }
 
   override def getMethodConfig( namespace: String, name: String, version: String, authCookie: HttpCookie ): Option[AgoraEntity] = {

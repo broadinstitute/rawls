@@ -629,7 +629,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       addMockOpenAmCookie ~>
       sealRoute(copyMethodRepoConfigurationRoute) ~>
       check {
-        assertResult(StatusCodes.InternalServerError) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
