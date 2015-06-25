@@ -239,7 +239,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     }
   }
 
-  @Path("/entities/copy")
+  @Path("/copy")
   @ApiOperation(value = "copy entities into a workspace from another workspace",
     nickname = "copy entities",
     httpMethod = "Post")

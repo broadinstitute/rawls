@@ -32,7 +32,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   def actorRefFactory = system
 
   override val testDbName = "WorkspaceApiServiceTest"
-  val dataSource = DataSource("memory:rawls", "admin", "admin")
+  //val dataSource = DataSource("memory:rawls", "admin", "admin")
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
