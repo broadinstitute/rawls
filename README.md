@@ -45,4 +45,6 @@ In chrome, navigate to http://localhost:8080 then enter this into the address ba
 ### The workspace model
 
 ### The graph DB backend
+
+### The integration tests and emulating the Jenkins test environment 
  
