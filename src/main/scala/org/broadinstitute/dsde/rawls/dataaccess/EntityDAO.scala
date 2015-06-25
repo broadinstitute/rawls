@@ -1,11 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.Vertex
-<<<<<<< HEAD
 import org.broadinstitute.dsde.rawls.model.{EntityCopyDefinition, WorkspaceName, Entity}
-=======
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Entity}
->>>>>>> 373062b85473695ef7ef7049dfc3f20a83e379c2
 
 /**
  * Created by dvoet on 5/6/15.
