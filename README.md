@@ -40,6 +40,8 @@ you'll need to supply an authorization cookie.  Here are instructions for doing 
 6. Now surf to http://localhost:8080/ to visit the Swagger interface for your local server.
 7. "Try it out!" to your heart's content.  
 
+In chrome, navigate to http://localhost:8080 then enter this into the address bar: javascript:document.cookie="iPlanetDirectoryPro=myCookieValue"
+
 ### The workspace model
 
 ### The graph DB backend
