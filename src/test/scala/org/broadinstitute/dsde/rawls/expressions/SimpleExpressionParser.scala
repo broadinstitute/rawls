@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.model.AttributeString
 import org.scalatest.FunSuite
 
 import scala.collection.immutable.HashMap
@@ -13,16 +14,29 @@ import scala.util.Success
 class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
   override val testDbName = "ExpressionParserTest"
 
-  test("simple expression") {
+  test("simple attribute expression") {
     initializeTestGraph()
     val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
 
-    assertResult( Success(ArrayBuffer("normal", "tumor", "tumor")) ) {
-      evaluator.evaluate("workspaces", "test_workspace", "SampleSet", "sset1", "this.samples.type")
+    assertResult( Success(ArrayBuffer(AttributeString("normal"))) ) {
+      evaluator.evalFinalAttribute("workspaces", "test_workspace", "Sample", "sample1", "this.type")
     }
 
-    assertResult( Success(ArrayBuffer("normal")) ) {
-      evaluator.evaluate("workspaces", "test_workspace", "Sample", "sample1", "this.type")
+    assertResult( Success(ArrayBuffer(AttributeString("normal"), AttributeString("tumor"), AttributeString("tumor"))) ) {
+      evaluator.evalFinalAttribute("workspaces", "test_workspace", "SampleSet", "sset1", "this.samples.type")
+    }
+  }
+
+  test("simple entity expression") {
+    initializeTestGraph()
+    val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
+
+    assertResult( Success( ArrayBuffer(tg_sample2) ) ) {
+      evaluator.evalFinalEntity("workspaces", "test_workspace", "Pair", "pair1", "this.case")
+    }
+
+    assertResult( Success(ArrayBuffer(tg_sample1, tg_sample2, tg_sample3)) ) {
+      evaluator.evalFinalEntity("workspaces", "test_workspace", "Individual", "indiv1", "this.sset.samples")
     }
   }
 }
