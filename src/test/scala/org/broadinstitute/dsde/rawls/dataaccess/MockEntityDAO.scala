@@ -58,7 +58,6 @@ object MockEntityDAO extends EntityDAO {
     //val nextLevelEntities = topLevelEntities.foreach()
     topLevelEntities
     //dao.getEntitySubtrees(workspaceNamespace, workspaceName, entityType, entityNames, txn)
-
   }
 
   override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {

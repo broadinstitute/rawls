@@ -135,7 +135,6 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
-
     def nameFilter = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(v: Vertex) = entityNames.contains(v.getProperty("_name"))
     }

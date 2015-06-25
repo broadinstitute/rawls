@@ -331,7 +331,4 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     //verify that it wasn't copied into the workspace again
     assert(dao.list(workspace.namespace, workspace.name, "sampleSet", txn).toList.filter(entity => entity == x1).size == 1)
   }
-
-
-
 }
