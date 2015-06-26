@@ -226,8 +226,8 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def evaluateExpression(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, expression: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { graph =>
-        new ExpressionEvaluator( graph, new ExpressionParser() ).evaluate(workspaceNamespace, workspaceName, entityType, entityName, expression) match {
-          case Success(result) => RequestComplete(http.StatusCodes.OK, result.map(AttributeConversions.propertyToAttribute))
+        new ExpressionEvaluator( graph, new ExpressionParser() ).evalFinalAttribute(workspaceNamespace, workspaceName, entityType, entityName, expression) match {
+          case Success(result) => RequestComplete(http.StatusCodes.OK, result)
           case Failure(regret) => RequestComplete(http.StatusCodes.BadRequest, regret.getMessage)
         }
       }

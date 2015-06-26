@@ -33,7 +33,7 @@ object MethodConfigResolver {
       val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
       methodConfig.inputs.map {
         case (name, expression) => {
-          val evaluated = evaluator.evaluate(entity.workspaceName.namespace, entity.workspaceName.name, entity.entityType, entity.name, expression)
+          val evaluated = evaluator.evalFinalAttribute(entity.workspaceName.namespace, entity.workspaceName.name, entity.entityType, entity.name, expression)
           // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
           val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
               // TODO: Cromwell doesn't yet have compound types (e.g. Seq)

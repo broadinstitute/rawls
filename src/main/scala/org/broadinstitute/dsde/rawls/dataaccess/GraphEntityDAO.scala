@@ -13,7 +13,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   //NOTE: attributeToProperty and propertyToAttrbute have now moved to WorkspaceModel.AttributeConversions.
 
-  private def loadEntity(entity: Vertex, workspaceNamespace: String, workspaceName: String) = {
+  def loadEntity(entity: Vertex, workspaceNamespace: String, workspaceName: String) = {
     // NB: when starting from an edge, inV() returns the DESTINATION vertices, not the source vertices, and vice versa.
     def edgeOutgoingReferenceFunc(e: Edge) = {
       val kv = e.getLabel -> new GremlinPipeline(e).inV().transform(
