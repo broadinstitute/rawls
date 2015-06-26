@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
+import scala.annotation.meta.field
+import spray.json._
 import com.wordnik.swagger.annotations.{ApiModelProperty, ApiModel}
 import org.joda.time.DateTime
-
-import scala.annotation.meta.field
 
 object AgoraEntityType extends Enumeration {
   type EntityType = Value
@@ -34,3 +34,18 @@ case class AgoraEntity(
                         url: Option[String] = None,
                         @(ApiModelProperty@field)(required = true, value = "Which agora entity type is this: Task, Workflow, or Configuration")
                         entityType: Option[AgoraEntityType.EntityType] = None)
+
+object MethodRepoJsonSupport extends JsonSupport {
+
+  implicit object AgoraEntityTypeFormat extends RootJsonFormat[AgoraEntityType.EntityType] {
+    override def write(obj: AgoraEntityType.EntityType): JsValue = JsString(obj.toString)
+
+    override def read(value: JsValue): AgoraEntityType.EntityType = value match {
+      case JsString(name) => AgoraEntityType.withName(name)
+      case _ => throw new DeserializationException("only string supported")
+    }
+  }
+
+  implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
+
+}

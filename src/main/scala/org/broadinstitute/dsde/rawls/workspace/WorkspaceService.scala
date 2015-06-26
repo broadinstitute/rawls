@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.JobStatusFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -57,7 +58,7 @@ object WorkspaceService {
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
-  case class SubmitJob(workspaceName: WorkspaceName, jobDescription: JobDescription, authCookie: HttpCookie) extends WorkspaceServiceMessage
+  case class SubmitJob(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
@@ -95,7 +96,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
 
-    case SubmitJob(workspaceName, jobDescription, authCookie) => context.parent ! submitJob(workspaceName,jobDescription,authCookie)
+    case SubmitJob(workspaceName, submission, authCookie) => context.parent ! submitJob(workspaceName,submission,authCookie)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -468,16 +469,16 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
-  def submitJob(workspaceName: WorkspaceName, jobDesc: JobDescription, authCookie: HttpCookie): PerRequestMessage =
+  def submitJob(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
-        withMethodConfig(workspace, jobDesc.methodConfigurationNamespace, jobDesc.methodConfigurationName, txn) { methodConfig =>
-          withEntity(workspace, jobDesc.entityType, jobDesc.entityName, txn) { entity =>
+        withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
+          withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
             withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { agoraEntity =>
               withWdl(agoraEntity) { wdl =>
-                if (methodConfig.rootEntityType != jobDesc.entityType)
+                if (methodConfig.rootEntityType != submission.entityType)
                   RequestComplete(StatusCodes.Conflict,
-                    s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${jobDesc.entityType}")
+                    s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${submission.entityType}")
                 else MethodConfigResolver.resolveInputsAndAggregateErrors(methodConfig, entity, wdl, txn) match {
                   case Failure(error) =>
                     RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + error.getMessage())

@@ -4,7 +4,7 @@ import java.util.logging.Logger
 import javax.ws.rs.Path
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.httpx.SprayJsonSupport._
 import spray.routing._
@@ -35,10 +35,10 @@ trait JobApiService extends HttpService with PerRequestCreator {
   def submitJobRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
     path("workspaces" / Segment / Segment / "jobs") { (workspaceNamespace, workspaceName) =>
       post {
-        entity(as[JobDescription]) { jobDesc =>
+        entity(as[Submission]) { submission =>
           requestContext => perRequest(requestContext,
                                        WorkspaceService.props(workspaceServiceConstructor),
-                                       WorkspaceService.SubmitJob(WorkspaceName(workspaceNamespace,workspaceName),jobDesc,securityTokenCookie))
+                                       WorkspaceService.SubmitJob(WorkspaceName(workspaceNamespace,workspaceName),submission,securityTokenCookie))
         }
       }
     }

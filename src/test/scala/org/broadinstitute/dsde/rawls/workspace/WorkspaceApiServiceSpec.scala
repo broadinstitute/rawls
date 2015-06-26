@@ -16,6 +16,7 @@ import spray.json._
 import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
+import ExecutionJsonSupport.SubmissionFormat
 import scala.concurrent.duration._
 
 /**
@@ -722,7 +723,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   }
 
   it should "return 404 Not Found when submitting a job using a MethodConfiguration that doesn't exist in the workspace" in {
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription("dsde","not there","Pattern","pattern1").toJson.toString)) ~>
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,Submission("dsde","not there","Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
@@ -735,7 +736,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       addMockOpenAmCookie ~>
       sealRoute(createMethodConfigurationRoute) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,Submission(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
@@ -754,7 +755,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       addMockOpenAmCookie ~>
       sealRoute(createEntityRoute)
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,JobDescription(mcName.namespace,mcName.name,"Pattern","pattern1").toJson.toString)) ~>
+    Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,Submission(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(submitJobRoute) ~>
       check { assertResult(StatusCodes.Created) {status} }

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.model.JobStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.Try
