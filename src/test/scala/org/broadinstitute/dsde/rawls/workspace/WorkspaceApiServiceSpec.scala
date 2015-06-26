@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.mock.MethodRepoMockServer
+import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, JobApiService}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
@@ -69,14 +69,14 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
     Map.empty
   )
 
-
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, new HttpMethodRepoDAO(MethodRepoMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(MethodRepoMockServer.mockServerBaseUrl))
+  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, new HttpMethodRepoDAO(RemoteServicesMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(RemoteServicesMockServer.mockServerBaseUrl))
   val dao = MockWorkspaceDAO
 
+  // TODO either use the default workspace, or use the custom workspace defined above - not both!
   initializeTestGraph()
 
-  override def beforeAll() = MethodRepoMockServer.startServer
-  override def afterAll() = MethodRepoMockServer.stopServer
+  override def beforeAll() = RemoteServicesMockServer.startServer
+  override def afterAll() = RemoteServicesMockServer.stopServer
 
   "WorkspaceApi" should "return 201 for post to workspaces" in {
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
@@ -744,7 +744,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
   it should "return 201 Created when submitting a job" in {
     val wsName = WorkspaceName(wsns,wsname)
     val mcName = MethodConfigurationName("three_step","dsde",wsName)
-    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
+    val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map.empty,Map.empty,mcName.workspaceName,mcName.namespace)
     Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(createMethodConfigurationRoute) ~>

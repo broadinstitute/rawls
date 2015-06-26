@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.graph
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.{LogManager, Logger}
 
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
-import org.broadinstitute.dsde.rawls.dataaccess.{GraphWorkspaceDAO, GraphEntityDAO, DataSource, RawlsTransaction}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.BeforeAndAfterAll
@@ -20,7 +19,11 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val txn: RawlsTransaction = new RawlsTransaction(graph, dataSource)
   lazy val workspaceDAO: GraphWorkspaceDAO = new GraphWorkspaceDAO()
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
+  lazy val configDAO: GraphMethodConfigurationDAO = new GraphMethodConfigurationDAO()
 
+  /**
+   * Creates a small default graph. Note that these variables will be inaccessible from outside tests, so you need to remember the entity names, etc.
+   */
   def initializeTestGraph(tx:RawlsTransaction = txn): Unit = {
     val workspace = new Workspace("workspaces", "test_workspace", DateTime.now, "testUser", new HashMap[String, Attribute]() )
 
