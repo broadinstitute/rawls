@@ -3,8 +3,10 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, Props}
+import com.tinkerpop.blueprints.Graph
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
@@ -298,7 +300,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
               startingAttributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember)))
             case Some(l: AttributeReferenceList) =>
               startingAttributes + (attributeListName -> AttributeReferenceList(l.list.filterNot(_ == removeMember)))
-            case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.path} does not exists")
+            case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.path} does not exist")
             case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
           }
       }
@@ -314,18 +316,32 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
 
   private def withEntity(workspace: Workspace, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
     entityDAO.get(workspace.namespace, workspace.name, entityType, entityName, txn) match {
-      case None => RequestComplete(http.StatusCodes.NotFound, s"${entityType} ${entityName} does not exists in ${workspace.namespace}/${workspace.name}")
+      case None => RequestComplete(http.StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspace.namespace}/${workspace.name}")
       case Some(entity) => op(entity)
     }
   }
 
   private def withMethodConfig(workspace: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)(op: (MethodConfiguration) => PerRequestMessage): PerRequestMessage = {
     methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfigurationNamespace, methodConfigurationName, txn) match {
-      case None => RequestComplete(http.StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exists in ${workspace.namespace}/${workspace.name}")
+      case None => RequestComplete(http.StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspace.namespace}/${workspace.name}")
       case Some(methodConfiguration) => op(methodConfiguration)
     }
   }
 
+  private def withMethod(workspace: Workspace, methodNamespace: String, methodName: String, methodVersion: String, authCookie: HttpCookie)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
+    // TODO add Method to model instead of exposing AgoraEntity?
+    methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, authCookie) match {
+      case None => RequestComplete(http.StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")
+      case Some(agoraEntity) => op(agoraEntity)
+    }
+  }
+
+  private def withWdl(method: AgoraEntity)(op: (String) => PerRequestMessage): PerRequestMessage = {
+    method.payload match {
+      case None => RequestComplete(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")
+      case Some(wdl) => op(wdl)
+    }
+  }
 
   def createMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
@@ -430,43 +446,48 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toList)
     }
 
-  // TODO: replace this stub with the actual expression parser
-  private def resolveInputs( methodConfig: MethodConfiguration, entity: Entity ): String =
-    """{"hello": "world"}"""
+  /**
+   * This is the function that would get called if we had a validate method config endpoint.
+   */
+  def validateMethodConfig(workspaceNamespace: String, workspaceName: String,
+    methodConfigurationNamespace: String, methodConfigurationName: String,
+    entityType: String, entityName: String, authCookie: HttpCookie): PerRequestMessage = {
+      dataSource inTransaction { txn =>
+        withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+          withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
+            withEntity(workspace, entityType, entityName, txn) { entity =>
+              withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { method =>
+                withWdl(method) { wdl =>
+                  // TODO should we return OK even if there are validation errors?
+                  RequestComplete(StatusCodes.OK, MethodConfigResolver.getValidationErrors(methodConfig, entity, wdl, txn))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
 
   def submitJob(workspaceName: WorkspaceName, jobDesc: JobDescription, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
-      methodConfigurationDAO.get(workspaceName.namespace, workspaceName.name, jobDesc.methodConfigurationNamespace, jobDesc.methodConfigurationName, txn) match {
-        case None =>
-          RequestComplete(StatusCodes.NotFound,
-            s"No method configuration named ${jobDesc.methodConfigurationNamespace}/${jobDesc.methodConfigurationName} in workspace ${workspaceName.namespace}/${workspaceName.name}")
-        case Some(methodConfig) =>
-          if ( methodConfig.rootEntityType != jobDesc.entityType )
-            RequestComplete(StatusCodes.Conflict,
-                s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${jobDesc.entityType}")
-          else {
-            entityDAO.get(workspaceName.namespace, workspaceName.name, jobDesc.entityType, jobDesc.entityName, txn) match {
-              case None =>
-                RequestComplete(StatusCodes.NotFound,
-                  s"No entity of type ${jobDesc.entityType} named ${jobDesc.entityName} in workspace in workspace ${workspaceName.namespace}/${workspaceName.name}")
-              case Some(entity) =>
-                Try { resolveInputs(methodConfig,entity) } match {
+      withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
+        withMethodConfig(workspace, jobDesc.methodConfigurationNamespace, jobDesc.methodConfigurationName, txn) { methodConfig =>
+          withEntity(workspace, jobDesc.entityType, jobDesc.entityName, txn) { entity =>
+            withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { agoraEntity =>
+              withWdl(agoraEntity) { wdl =>
+                if (methodConfig.rootEntityType != jobDesc.entityType)
+                  RequestComplete(StatusCodes.Conflict,
+                    s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${jobDesc.entityType}")
+                else MethodConfigResolver.resolveInputsAndAggregateErrors(methodConfig, entity, wdl, txn) match {
                   case Failure(error) =>
-                    RequestComplete(StatusCodes.Conflict, "Expression evaluation failed: "+error.getMessage())
-                  case Success(inputs) =>
-                    methodRepoDAO.getMethod(methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) match {
-                      case None => RequestComplete(StatusCodes.NotFound, "Can't get method from Method Repo")
-                      case Some(agoraEntity) =>
-                        agoraEntity.payload match {
-                          case None =>
-                            RequestComplete(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")
-                          case Some(wdl) =>
-                            RequestComplete(StatusCodes.Created,executionServiceDAO.submitJob(wdl, inputs, authCookie))
-                        }
-                    }
+                    RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + error.getMessage())
+                  case Success(inputsMap) =>
+                    RequestComplete(StatusCodes.Created, executionServiceDAO.submitJob(wdl, MethodConfigResolver.propertiesToWdlInputs(inputsMap), authCookie))
                 }
+              }
             }
           }
+        }
       }
     }
 }
