@@ -13,8 +13,8 @@ import org.broadinstitute.dsde.rawls.VertexProperty
 // this is what a client sends to have us create a submission
 
 // Request for a submission
-@ApiModel(value = "Submission")
-case class Submission(
+@ApiModel(value = "SubmissionRequest")
+case class SubmissionRequest(
   @(ApiModelProperty@field)(required = true, value = "Namespace of the method configuration to execute.")
   methodConfigurationNamespace: String,
   @(ApiModelProperty@field)(required = true, value = "Name of the method configuration to execute.")
@@ -34,8 +34,8 @@ case class JobStatus(
 )
 
 // Status of a workflow
-@ApiModel(value = "WorkflowStatus")
-case class WorkflowStatus(
+@ApiModel(value = "Workflow")
+case class Workflow(
   @(ApiModelProperty@field)("Workflow unique identifier") @(VertexProperty@field)
   id: String,
   @(ApiModelProperty@field)("Workflow status") @(VertexProperty@field)
@@ -47,11 +47,11 @@ case class WorkflowStatus(
 )
 
 // Status of a submission
-@ApiModel(value = "SubmissionStatus")
-case class SubmissionStatus(
-  @(ApiModelProperty@field)("Submission unique identifier") @(VertexProperty@field)
+@ApiModel(value = "Submission")
+case class Submission(
+  @(ApiModelProperty@field)("SubmissionRequest unique identifier") @(VertexProperty@field)
   id: String,
-  @(ApiModelProperty@field)("Submission date") @(VertexProperty@field)
+  @(ApiModelProperty@field)("SubmissionRequest date") @(VertexProperty@field)
   submissionDate: DateTime,
   @(ApiModelProperty@field)("Workspace namespace")
   workspaceNamespace: String,
@@ -64,16 +64,16 @@ case class SubmissionStatus(
   @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
   entityType: String,
   @(ApiModelProperty@field)("Status of Workflow(s)")
-  workflowStatus: Seq[WorkflowStatus]
+  workflow: Seq[Workflow]
 )
 
 object ExecutionJsonSupport extends JsonSupport {
 
-  implicit val SubmissionFormat = jsonFormat5(Submission)
+  implicit val SubmissionFormat = jsonFormat5(SubmissionRequest)
 
   implicit val JobStatusFormat = jsonFormat2(JobStatus)
 
-  implicit val WorkflowStatusFormat = jsonFormat4(WorkflowStatus)
+  implicit val WorkflowStatusFormat = jsonFormat4(Workflow)
 
-  implicit val SubmissionStatusFormat = jsonFormat8(SubmissionStatus)
+  implicit val SubmissionStatusFormat = jsonFormat8(Submission)
 }

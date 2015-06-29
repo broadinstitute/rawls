@@ -35,10 +35,10 @@ trait JobApiService extends HttpService with PerRequestCreator {
   def submitJobRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
     path("workspaces" / Segment / Segment / "jobs") { (workspaceNamespace, workspaceName) =>
       post {
-        entity(as[Submission]) { submission =>
+        entity(as[SubmissionRequest]) { submission =>
           requestContext => perRequest(requestContext,
                                        WorkspaceService.props(workspaceServiceConstructor),
-                                       WorkspaceService.SubmitJob(WorkspaceName(workspaceNamespace,workspaceName),submission,securityTokenCookie))
+                                       WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace,workspaceName),submission,securityTokenCookie))
         }
       }
     }

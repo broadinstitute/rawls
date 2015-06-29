@@ -58,7 +58,7 @@ object WorkspaceService {
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
-  case class SubmitJob(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie) extends WorkspaceServiceMessage
+  case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
@@ -96,7 +96,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
 
-    case SubmitJob(workspaceName, submission, authCookie) => context.parent ! submitJob(workspaceName,submission,authCookie)
+    case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName,submission,authCookie)
   }
 
   def saveWorkspace(workspace: Workspace): PerRequestMessage =
@@ -469,7 +469,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
-  def submitJob(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie): PerRequestMessage =
+  def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
         withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
