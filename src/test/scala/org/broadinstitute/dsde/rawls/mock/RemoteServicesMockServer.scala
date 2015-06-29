@@ -167,11 +167,11 @@ object RemoteServicesMockServer {
           .withStatusCode(StatusCodes.OK.intValue)
       )
 
-    val submitJobPath = "/workflows"
+    val submissionPath = "/workflows"
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath(submitJobPath)
+        .withPath(submissionPath)
     ).respond(
         response()
           .withHeaders(jsonHeader)

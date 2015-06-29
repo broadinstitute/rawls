@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.JobStatus
+import org.broadinstitute.dsde.rawls.model.ExecutionServiceStatus
 import spray.http.HttpCookie
 
 /**
  * @author tsharpe
  */
 trait ExecutionServiceDAO {
-  def submitJob( wdl: String, inputs: String, authCookie: HttpCookie ): JobStatus
+  def submitWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceStatus
 }

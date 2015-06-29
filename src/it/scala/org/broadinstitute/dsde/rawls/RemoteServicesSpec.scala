@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{WorkspaceApiService, MethodConfigApiService, JobApiService}
+import org.broadinstitute.dsde.rawls.webservice.{WorkspaceApiService, MethodConfigApiService, SubmissionApiService}
 import org.joda.time.DateTime
 import spray.http.StatusCodes
 import scala.concurrent.duration._
 
 import WorkspaceJsonSupport._
 
-class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with JobApiService {
+class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService {
   def actorRefFactory = system
 
   // setup workspace service

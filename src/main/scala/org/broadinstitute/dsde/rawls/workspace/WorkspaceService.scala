@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.JobStatusFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -483,7 +483,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
                   case Failure(error) =>
                     RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + error.getMessage())
                   case Success(inputsMap) =>
-                    RequestComplete(StatusCodes.Created, executionServiceDAO.submitJob(wdl, MethodConfigResolver.propertiesToWdlInputs(inputsMap), authCookie))
+                    RequestComplete(StatusCodes.Created, executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputsMap), authCookie))
                 }
               }
             }
