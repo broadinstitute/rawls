@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.rawls.model
 import com.wordnik.swagger.annotations.{ApiModel, ApiModelProperty}
 import org.broadinstitute.dsde.rawls.VertexProperty
 import org.joda.time.DateTime
-import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
-import spray.json._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -168,24 +166,6 @@ case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeVa
 case class AttributeReferenceList(val list: Seq[AttributeReferenceSingle]) extends AttributeReference // non-recursive
 case class AttributeReferenceSingle(val entityType: String, val entityName: String) extends AttributeReference
 
-@ApiModel(value = "JobDescription")
-case class JobDescription(
-  @(ApiModelProperty@field)(required = true, value = "Namespace of the method configuration to execute.")
-  methodConfigurationNamespace: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of the method configuration to execute.")
-  methodConfigurationName: String,
-  @(ApiModelProperty@field)(required = true, value = "Type of the entity that supplies parameters to the method (must match type specified by method configuration).")
-  entityType: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of the entity that supplies parameters to the method.")
-  entityName: String)
-
-@ApiModel(value = "JobStatus")
-case class JobStatus(
-  @(ApiModelProperty@field)("Job name")
-  id: String,
-  @(ApiModelProperty@field)("Job status")
-  status: String)
-
 object AttributeConversions {
   // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
   def attributeToProperty(att: AttributeValue): Any = att match {
@@ -205,60 +185,7 @@ object AttributeConversions {
   }
 }
 
-object WorkspaceJsonSupport extends DefaultJsonProtocol {
-
-  implicit object AttributeFormat extends RootJsonFormat[Attribute] {
-
-    override def write(obj: Attribute): JsValue = obj match {
-      case AttributeBoolean(b) => JsBoolean(b)
-      case AttributeNumber(n) => JsNumber(n)
-      case AttributeString(s) => JsString(s)
-      case AttributeValueList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeReferenceList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeReferenceSingle(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
-    }
-
-    override def read(json: JsValue): Attribute = json match {
-      case JsString(s) => AttributeString(s)
-      case JsBoolean(b) => AttributeBoolean(b)
-      case JsNumber(n) => AttributeNumber(n)
-      case JsArray(a) => getAttributeList(a.map(read(_)))
-      case JsObject(members) => AttributeReferenceSingle(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
-      case _ => throw new DeserializationException("unexpected json type")
-    }
-
-    def getAttributeList(s: Seq[Attribute]) = s match {
-      case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
-      case r: Seq[AttributeReferenceSingle @unchecked] if (s.map(_.isInstanceOf[AttributeReferenceSingle]).reduce(_&&_)) => AttributeReferenceList(r)
-      case _ => throw new DeserializationException("illegal array type")
-    }
-  }
-
-  implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
-    private val parserISO : DateTimeFormatter = {
-      ISODateTimeFormat.dateTimeNoMillis()
-    }
-
-    override def write(obj: DateTime) = {
-      JsString(parserISO.print(obj))
-    }
-
-    override def read(json: JsValue): DateTime = json match {
-      case JsString(s) => parserISO.parseDateTime(s)
-      case _ => throw new DeserializationException("only string supported")
-    }
-  }
-
-  implicit object SeqAttributeFormat extends RootJsonFormat[Seq[AttributeValue]] {
-    override def write(obj: Seq[AttributeValue]) = {
-      JsArray(obj.map( AttributeFormat.write ).toVector)
-    }
-
-    override def read(json: JsValue): Seq[AttributeValue] = json match {
-      case JsArray(a) if a.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => a.map(AttributeFormat.read(_).asInstanceOf[AttributeValue]).toSeq
-      case _ => throw new DeserializationException("unexpected json type")
-    }
-  }
+object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
@@ -277,20 +204,4 @@ object WorkspaceJsonSupport extends DefaultJsonProtocol {
   implicit val MethodConfigurationShortFormat = jsonFormat7(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
-
-  implicit object AgoraEntityTypeFormat extends RootJsonFormat[AgoraEntityType.EntityType] {
-    override def write(obj: AgoraEntityType.EntityType): JsValue = JsString(obj.toString)
-
-    override def read(value: JsValue): AgoraEntityType.EntityType = value match {
-      case JsString(name) => AgoraEntityType.withName(name)
-      case _ => throw new DeserializationException("only string supported")
-    }
-  }
-
-  implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
-
-  implicit val JobDescriptionFormat = jsonFormat4(JobDescription)
-
-  implicit val JobStatusFormat = jsonFormat2(JobStatus)
-
 }

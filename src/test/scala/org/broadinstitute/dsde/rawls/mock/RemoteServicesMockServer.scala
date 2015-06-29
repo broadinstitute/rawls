@@ -4,7 +4,7 @@ import java.io.File
 
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity,AgoraEntityType}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
 import org.mockserver.model.Header
 import org.mockserver.model.HttpRequest.request
@@ -167,11 +167,11 @@ object RemoteServicesMockServer {
           .withStatusCode(StatusCodes.OK.intValue)
       )
 
-    val submitJobPath = "/workflows"
+    val submissionPath = "/workflows"
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath(submitJobPath)
+        .withPath(submissionPath)
     ).respond(
         response()
           .withHeaders(jsonHeader)
