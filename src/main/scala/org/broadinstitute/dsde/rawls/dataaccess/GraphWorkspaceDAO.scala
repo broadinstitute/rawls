@@ -17,7 +17,8 @@ class GraphWorkspaceDAO() extends WorkspaceDAO with GraphDAO {
 
     // remove all attributes in the vertex that are not in workspace.attributes
     val removeProps = workspaceVertex.getPropertyKeys.filterNot(isReservedProperty(_)) -- workspace.attributes.keys
-    removeProps.foreach(workspaceVertex.removeProperty(_))
+    def removeFunc = (key:String) => {workspaceVertex.removeProperty(key); null}
+    removeProps.foreach(removeFunc)
 
     workspace.attributes.foreach(entry => workspaceVertex.setProperty(entry._1, entry._2))
     workspace

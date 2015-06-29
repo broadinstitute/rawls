@@ -1,9 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{Matchers, FlatSpec}
+import scala.collection.immutable.HashMap
 import scala.util.Try
 
 /**
@@ -11,19 +14,39 @@ import scala.util.Try
  */
 
 class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
-    val testDbName = "ExecutionDAOSpec"
-    val now = DateTime.now
-    val workspace = Workspace("dsde","ws",DateTime.now,"me",Map.empty)
-    new GraphWorkspaceDAO().save(workspace, txn)
+  val now = DateTime.now
+  val workspace = Workspace("dsde","ws",DateTime.now,"me",Map.empty)
+  val dao: SubmissionDAO = new GraphSubmissionDAO
+  val workflowDAO: WorkflowDAO = new GraphWorkflowDAO
 
-    val submissionStatus1 = Submission("submission1",now,workspace.namespace,workspace.name,"std","someMethod","eType",
-        Seq(Workflow("workflow1","Submitted",now,"entity1"),
-            Workflow("workflow2","Submitted",now,"entity2"),
-            Workflow("workflow3","Submitted",now,"entity3")))
+  val submissionStatus1 = Submission("submission1",now,workspace.namespace,workspace.name,"std","someMethod","eType",
+    Seq(Workflow("workflow1","Submitted",now,"entity1"),
+      Workflow("workflow2","Submitted",now,"entity2"),
+      Workflow("workflow3","Submitted",now,"entity3")))
+  val submissionStatus2 = Submission("submission2",now,workspace.namespace,workspace.name,"std","someMethod","eType",
+    Seq(Workflow("workflow4","Submitted",now,"entity1"),
+      Workflow("workflow5","Submitted",now,"entity2"),
+      Workflow("workflow6","Submitted",now,"entity3")))
 
-    val dao: SubmissionDAO = new GraphSubmissionDAO
+  class DefaultTestData() extends TestData {
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+    }
+  }
+  val submissionData = new DefaultTestData()
 
-    "SubmissionDAO" should "save, get, list, and delete a submission status" in {
+  def withSubmissionData(testCode:RawlsTransaction => Any):Unit = {
+    withCustomTestDatabase(submissionData) { dataSource =>
+      dataSource.inTransaction { txn =>
+        testCode(txn)
+      }
+    }
+  }
+
+
+
+
+    "SubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
       dao.save(workspace.namespace,workspace.name,submissionStatus1,txn)
       assertResult(Some(submissionStatus1)) {
         dao.get(workspace.namespace,workspace.name,submissionStatus1.id,txn) }
@@ -36,12 +59,9 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
       }
     }
 
-    val submissionStatus2 = Submission("submission2",now,workspace.namespace,workspace.name,"std","someMethod","eType",
-        Seq(Workflow("workflow4","Submitted",now,"entity1"),
-            Workflow("workflow5","Submitted",now,"entity2"),
-            Workflow("workflow6","Submitted",now,"entity3")))
 
-    "SubmissionDAO" should "save, get, list, and delete two submission statuses" in {
+
+    "SubmissionDAO" should "save, get, list, and delete two submission statuses" in withSubmissionData { txn =>
       dao.save(workspace.namespace,workspace.name,submissionStatus1,txn)
       dao.save(workspace.namespace,workspace.name,submissionStatus2,txn)
       assertResult(Some(submissionStatus1)) {
@@ -61,9 +81,8 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
       }
     }
 
-    val workflowDAO: WorkflowDAO = new GraphWorkflowDAO
 
-    "WorkflowDAO" should "let you dink with Workflows" in {
+    "WorkflowDAO" should "let you dink with Workflows" in withSubmissionData { txn =>
       dao.save(workspace.namespace,workspace.name,submissionStatus1,txn)
       val workflow0 = submissionStatus1.workflow(0)
       assertResult(Some(workflow0)) {
@@ -89,11 +108,11 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
       }
     }
 
-    "SubmissionDAO" should "fail to save into workspaces that don't exist" in {
+    "SubmissionDAO" should "fail to save into workspaces that don't exist" in withSubmissionData { txn =>
       assert(Try(dao.save(workspace.namespace,"noSuchThing",submissionStatus1,txn)).isFailure)
     }
 
-    "SubmissionDAO" should "fail to delete submissions that don't exist" in {
+    "SubmissionDAO" should "fail to delete submissions that don't exist" in withSubmissionData { txn =>
       assert(!dao.delete(workspace.namespace,workspace.name,"doesn't exist",txn))
     }
 

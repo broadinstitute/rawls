@@ -38,7 +38,7 @@ trait JsonSupport extends DefaultJsonProtocol {
 
   implicit object DateJsonFormat extends RootJsonFormat[DateTime] {
     private val parserISO : DateTimeFormatter = {
-      ISODateTimeFormat.dateTimeNoMillis()
+      ISODateTimeFormat.dateTime
     }
 
     override def write(obj: DateTime) = {

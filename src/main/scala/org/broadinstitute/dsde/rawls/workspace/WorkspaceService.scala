@@ -204,7 +204,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
   def listEntities(workspaceNamespace: String, workspaceName: String, entityType: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-        RequestComplete(entityDAO.list(workspaceNamespace, workspaceName, entityType, txn).toIterable)
+        RequestComplete(entityDAO.list(workspaceNamespace, workspaceName, entityType, txn).toList)
       }
     }
 

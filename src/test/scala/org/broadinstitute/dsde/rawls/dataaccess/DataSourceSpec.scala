@@ -7,6 +7,7 @@ import scala.collection.JavaConversions._
  * Created by dvoet on 5/19/15.
  */
 class DataSourceSpec extends FlatSpec with Matchers {
+
   "DataSource" should "commit txn" in {
     val ds = DataSource("memory:DataSource", "admin", "admin")
     ds inTransaction { txn =>
