@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.{Graph, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.joda.time.DateTime
 import org.broadinstitute.dsde.rawls.model.{Submission,Workflow}
 import scala.collection.JavaConversions._
@@ -21,15 +22,19 @@ class GraphWorkflowDAO extends WorkflowDAO with GraphDAO {
   /** get a workflow by workspace and workflowId */
   override def get(workspaceNamespace: String, workspaceName: String, workflowId: String, txn: RawlsTransaction): Option[Workflow] =
     txn withGraph { db =>
-      getVertexProperties(getPipeline(db,workspaceNamespace,workspaceName,workflowId)) map { fromPropertyMap[Workflow](_) }
+      val workspaceProperties = Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName)
+      getSinglePipelineResult(getPipeline(db,workspaceNamespace,workspaceName,workflowId)).map { vertex =>
+        fromVertex[Workflow](vertex, workspaceProperties)
+      }
     }
 
   /** update a workflow */
-  override def update(workspaceNamespace: String, workspaceName: String, workflow: Workflow, txn: RawlsTransaction): Boolean =
+  override def update(workspaceNamespace: String, workspaceName: String, workflow: Workflow, txn: RawlsTransaction): Workflow =
     txn withGraph { db =>
       val vertex = getSinglePipelineResult(getPipeline(db,workspaceNamespace,workspaceName,workflow.id))
       if ( vertex.isDefined ) setVertexProperties(workflow, vertex.get)
-      vertex.isDefined
+      else throw new RawlsException(s"workflow does not exist: ${workflow}")
+      workflow
     }
 
   /** delete a workflow */
@@ -71,6 +76,15 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
       }
     }
 
+  override def update(submission: Submission, txn: RawlsTransaction): Unit = {
+    txn withGraph { db =>
+      getSinglePipelineResult[Vertex](getPipeline(db,submission.workspaceNamespace,submission.workspaceName,submission.id)) match {
+        case Some(vertex) => setVertexProperties(submission, vertex)
+        case None => throw new RawlsException("submission does not exist to be updated: " + submission)
+      }
+    }
+  }
+
   /** delete a submission (and its workflows) */
   override def delete(workspaceNamespace: String, workspaceName: String, submissionId: String, txn: RawlsTransaction): Boolean =
     txn withGraph { db =>
@@ -88,7 +102,8 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
 
   private def fromVertex(workspaceNamespace: String, workspaceName: String, vertex: Vertex): Submission = {
     val propertiesMap = getVertexProperties[Any](new GremlinPipeline(vertex)).get
-    val workflows = getPropertiesOfVertices[Any](new GremlinPipeline(vertex).out(ExecutionEdgeTypes.workflowEdgeType)) map { fromPropertyMap[Workflow](_) }
+    val workspaceProperties = Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName)
+    val workflows = getPropertiesOfVertices[Any](new GremlinPipeline(vertex).out(ExecutionEdgeTypes.workflowEdgeType)) map { m => fromPropertyMap[Workflow](m ++ workspaceProperties) }
     val fullMap = propertiesMap ++ Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName,"workflow"->workflows.toSeq)
     fromPropertyMap[Submission](fullMap)
   }

@@ -23,4 +23,11 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     val formData = FormData(Seq("wdl" -> wdl, "inputs" -> inputs))
     Await.result(pipeline(Post(url,formData)),Duration.Inf)
   }
+
+  override def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus = {
+    val url = executionServiceURL + s"/workflow/${id}/status"
+    import system.dispatcher
+    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
+    Await.result(pipeline(Get(url)),Duration.Inf)
+  }
 }
