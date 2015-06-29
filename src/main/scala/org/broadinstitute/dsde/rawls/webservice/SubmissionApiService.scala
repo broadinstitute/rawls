@@ -22,7 +22,7 @@ trait SubmissionApiService extends HttpService with PerRequestCreator {
     nickname = "createSubmission",
     httpMethod = "POST",
     produces = "application/json",
-    response = classOf[ExecutionServiceStatus])
+    response = classOf[Submission])
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "submission", required = true, dataType = "org.broadinstitute.dsde.rawls.model.SubmissionRequest", paramType = "body", value = "Description of a submission.")
   ))
