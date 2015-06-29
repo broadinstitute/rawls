@@ -753,7 +753,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
     val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
     Post(s"/workspaces/${wsns}/${wsname}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createEntityRoute)
+      sealRoute(createEntityRoute) ~>
       check { assertResult(StatusCodes.Created) {status} }
     Post(s"/workspaces/${wsns}/${wsname}/jobs", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
