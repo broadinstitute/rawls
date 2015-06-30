@@ -844,7 +844,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  //TODO: verify that this ACTUALLY works. should return and assert StatusCodes.Conflict once the MockDAOs are changed
   it should "return 409 for copying entities into a workspace with conflicts" in {
     val destWorkspace = WorkspaceName(wsns, wsname)
     val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
@@ -853,7 +852,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       addMockOpenAmCookie ~>
       sealRoute(copyEntitiesRoute) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Conflict) {
           status
         }
       }

@@ -90,11 +90,17 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   }
 
   it should "get entity types" in {
-    assertResult(Seq("sample", "sampleSet", "aliquot", "pair")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn) }
+    assertResult(Set("sample", "sampleSet", "aliquot", "pair")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn).toSet }
   }
 
   it should "list all entities of all entity types" in {
-    assertResult(Seq(sample5, sample6, sample1, sample2, sample3, sample4, sample7, sampleSet3, sampleSet1, sampleSet2, sampleSet4, aliquot1, aliquot2, pair1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSeq }
+    assertResult(Set(sample5, sample6, sample1, sample2, sample3, sample4, sample7, sampleSet3, sampleSet1, sampleSet2, sampleSet4, aliquot1, aliquot2, pair1)) {
+      dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSet
+    }
+  }
+
+  it should "list all entities of all entity types" in {
+    assertResult(Set(sample5, sample6, sample1, sample2, sample3, sample4, sample7, sampleSet3, sampleSet1, sampleSet2, sampleSet4, aliquot1, aliquot2, pair1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSet }
   }
 
   it should "get an entity" in {
@@ -288,8 +294,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
    * entity names being supplied, and multiple disjoint subtrees
    */
   it should "get entity subtrees from a list of entities" in {
-    assertResult(Seq(sample6, sample5, sampleSet2, sample1, sampleSet3, sampleSet4, sample7, sample4, aliquot2, sample2, aliquot1, sampleSet1)){
-      dao.getEntitySubtrees(workspace.namespace, workspace.name, "sampleSet", List("sampleSet1", "sampleSet2", "sampleSet4", "sampleSetDOESNTEXIST"), txn)
+    assertResult(Set(sample6, sample5, sampleSet2, sample1, sampleSet3, sampleSet4, sample7, sample4, aliquot2, sample2, aliquot1, sampleSet1)){
+      dao.getEntitySubtrees(workspace.namespace, workspace.name, "sampleSet", List("sampleSet1", "sampleSet2", "sampleSet4", "sampleSetDOESNTEXIST"), txn).toSet
     }
   }
 
