@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
@@ -51,6 +52,10 @@ object MockEntityDAO extends EntityDAO {
     store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
 
+  override def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity] = {
+    store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
+  }
+
   override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
     cloneTheseEntities(listEntitiesAllTypes(workspaceNamespace,workspaceName,txn).toList,newWorkspaceNamespace,newWorkspaceName,txn)
   }
@@ -59,4 +64,16 @@ object MockEntityDAO extends EntityDAO {
     val newName = WorkspaceName(newWorkspaceNamespace,newWorkspaceName)
     entities.foreach { entity => save(newWorkspaceNamespace,newWorkspaceName,entity.copy(workspaceName=newName),txn) }
   }
+
+  //TODO: do this really
+  override def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction) = {
+    Seq.empty
+  }
+
+  //TODO: do this really
+  override def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity] = {
+    //getCopyConflicts(destNamespace, destWorkspace, entitiesToCopy, txn)
+    Seq.empty
+  }
+
 }

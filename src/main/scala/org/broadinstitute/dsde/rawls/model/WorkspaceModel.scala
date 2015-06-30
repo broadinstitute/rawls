@@ -89,6 +89,18 @@ case class MethodConfigurationNamePair(
                    destination: MethodConfigurationName
                    )
 
+@ApiModel(value = "Entity copy definition")
+case class EntityCopyDefinition(
+                   @(ApiModelProperty@field)(required = true, value = "The source workspace of the entities")
+                   sourceWorkspace: WorkspaceName,
+                   @(ApiModelProperty@field)(required = true, value = "The destination workspace for the entities")
+                   destinationWorkspace: WorkspaceName,
+                   @(ApiModelProperty@field)(required = true, value = "Type of top level entities to copy")
+                   entityType: String,
+                   @(ApiModelProperty@field)(required = true, value = "Names of entities to copy")
+                   entityNames: Seq[String]
+                   )
+
 @ApiModel(value = "Method Configuration")
 case class MethodConfiguration(
                    @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
@@ -155,6 +167,8 @@ case class MethodRepoConfigurationQuery(
                                          destination: MethodConfigurationName
                                          )
 
+case class ConflictingEntities(conflicts: Seq[String])
+
 trait Attribute
 trait AttributeValue extends Attribute
 trait AttributeReference extends Attribute
@@ -199,9 +213,13 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodConfigurationNamePairFormat = jsonFormat2(MethodConfigurationNamePair)
 
+  implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
+
   implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
 
   implicit val MethodConfigurationShortFormat = jsonFormat7(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
+
+  implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 }

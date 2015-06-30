@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, Props}
+import org.broadinstitute.dsde.rawls._
 import com.tinkerpop.blueprints.Graph
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -20,10 +21,9 @@ import org.joda.time.DateTime
 import spray.client.pipelining._
 import spray.http
 import spray.http.HttpHeaders.Cookie
-import spray.http.{StatusCodes, HttpCookie}
+import spray.http.{Uri, StatusCodes, HttpCookie}
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
@@ -55,6 +55,7 @@ object WorkspaceService {
   case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
+  case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
@@ -95,6 +96,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
+    case CopyEntities(entityCopyDefinition, uri:Uri) => context.parent ! copyEntities(entityCopyDefinition, uri)
 
     case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName,submission,authCookie)
   }
@@ -138,6 +140,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     dataSource inTransaction { txn =>
       val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace, txn)
       val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace, txn)
+
       (originalWorkspace, copyWorkspace) match {
         case (Some(ws), None) => {
           val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
@@ -150,6 +153,34 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         }
         case (None, _) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
         case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+      }
+    }
+
+  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      val destNamespace = entityCopyDef.destinationWorkspace.namespace
+      val destWorkspace = entityCopyDef.destinationWorkspace.name
+
+      val sourceNamespace = entityCopyDef.sourceWorkspace.namespace
+      val sourceWorkspace = entityCopyDef.sourceWorkspace.name
+
+      val entityNames = entityCopyDef.entityNames
+      val entityType = entityCopyDef.entityType
+
+      val conflicts = entityDAO.copyEntities(destNamespace, destWorkspace, sourceNamespace, sourceWorkspace, entityType, entityNames, txn)
+
+      conflicts.size match {
+        case 0 => {
+          // get the entities that were copied into the destination workspace
+          val entityCopies = entityDAO.list(destNamespace, destWorkspace, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
+          RequestComplete(StatusCodes.Created, entityCopies)
+        }
+        case _ => {
+          val basePath = "/" + destNamespace + "/" + destWorkspace + "/entities/"
+          val conflictUris = conflicts.map(conflict => uri.copy(path = Uri.Path(basePath + conflict.entityType + "/" + conflict.name)).toString())
+          val conflictingEntities = ConflictingEntities(conflictUris)
+          RequestComplete(StatusCodes.Conflict, conflictingEntities)
+        }
       }
     }
 

@@ -2,9 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.Date
 
+import com.orientechnologies.orient.core.record.impl.ODocument
+import com.orientechnologies.orient.core.sql.query.OSQLSynchQuery
 import com.tinkerpop.blueprints.{Graph, Vertex}
-import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.PipeFunction
+import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.branch.LoopPipe.LoopBundle
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.broadinstitute.dsde.rawls.{RawlsException, VertexProperty}
 import org.joda.time.DateTime

@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.{Edge, Vertex}
+import com.tinkerpop.blueprints.{Graph, Edge, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.PipeFunction
+import com.tinkerpop.pipes.branch.LoopPipe
+import com.tinkerpop.pipes.branch.LoopPipe.LoopBundle
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConversions._
@@ -41,7 +44,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     sourceEntity.addEdge(label, targetVertex)
   }
 
-  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = txn withGraph { db =>
+  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction) = txn withGraph { db =>
     val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
@@ -128,6 +131,46 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
       case Some(w) => new GremlinPipeline(w).out(entityTypes:_*).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
       case None => List.empty
+    }
+  }
+
+  def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
+    def nameFilter = new PipeFunction[Vertex, java.lang.Boolean] {
+      override def compute(v: Vertex) = entityNames.contains(v.getProperty("_name"))
+    }
+
+    def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+      override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
+    }
+
+    val subtreeEntities = getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
+      case Some(w) => {
+        val topLevelEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
+        val remainingEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
+        (topLevelEntities:::remainingEntities).distinct
+      }
+      case None => Seq.empty
+    }
+    subtreeEntities
+  }
+
+  def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity] = {
+    val copyMap = entitiesToCopy.map { entity => (entity.entityType, entity.name) -> entity }.toMap
+    listEntitiesAllTypes(destNamespace, destWorkspace, txn).toSeq.filter(entity => copyMap.contains(entity.entityType, entity.name))
+  }
+
+  def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = {
+    val entities = getEntitySubtrees(sourceNamespace, sourceWorkspace, entityType, entityNames, txn).toSeq
+    val conflicts = getCopyConflicts(destNamespace, destWorkspace, entities, txn)
+
+    conflicts.size match {
+      case 0 => {
+        cloneTheseEntities(entities, destNamespace, destWorkspace, txn)
+        Seq.empty
+      }
+      case _ => {
+        conflicts
+      }
     }
   }
 }
