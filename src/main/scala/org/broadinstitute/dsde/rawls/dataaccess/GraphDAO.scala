@@ -71,7 +71,7 @@ trait GraphDAO {
   // named PipeFunctions
 
   def hasProperty[T](key: String, value: T) = new PipeFunction[Vertex, java.lang.Boolean] {
-    override def compute(v: Vertex) = v.getProperty[T](key).equals(value)
+    override def compute(v: Vertex) = v.getProperty[T](key) == value
   }
 
   // TODO be able to understand different types?

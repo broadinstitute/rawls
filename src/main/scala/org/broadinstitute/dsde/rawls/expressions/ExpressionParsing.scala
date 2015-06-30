@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.expressions
 import com.tinkerpop.blueprints._
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.PipeFunction
+import org.broadinstitute.dsde.rawls.dataaccess.GraphEntityDAO
 import org.broadinstitute.dsde.rawls.expressions
-import org.broadinstitute.dsde.rawls.model.Workspace
+import org.broadinstitute.dsde.rawls.model.{Entity, AttributeConversions, AttributeValue, Workspace}
 import scala.collection.JavaConversions._
 import scala.util.{Try, Failure, Success}
 import scala.util.parsing.combinator
@@ -61,21 +62,26 @@ object ExpressionTypes {
 import ExpressionTypes._
 
 class ExpressionParser extends JavaTokenParsers {
-  /** Parser definition **/
+  /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
   // For now, we expect the initial entity to be the special token "this", which is bound at evaluation time to a root entity.
-  private def path: Parser[PipelineQuery] = {
-    /* TODO: For now, only supporting entity expressions that end in attribute.
-  // The simplest case: just return the root entity
-    root ^^ {
-      case root => (List(root), outputEntityResult)
-    } |
-  */
-    // root.ref.(...).attribute
 
-    rootDot ~ rep(entityRefName) ~ lastAttribute ^^ {
+  //Parser for expressions ending in a value (literal) attribute
+  private def attributeExpression: Parser[PipelineQuery] = {
+    rootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
       case root ~ Nil ~ last => PipelineQuery(List(root), last)
       case root ~ ref ~ last => PipelineQuery(List(root) ++ ref, last)
+    }
+  }
+
+  //Parser for expressions ending in an attribute that's a reference to another entity
+  private def entityExpression: Parser[PipelineQuery] = {
+    root ^^ {
+      case root => PipelineQuery(List(root), outputEntityResult)
+    } |
+    rootDot ~ rep(entityRefDot) ~ entityRef ^^ {
+      case root ~ Nil ~ last => PipelineQuery(List(root) :+ last, outputEntityResult)
+      case root ~ ref ~ last => PipelineQuery(List(root) ++ ref :+ last, outputEntityResult)
     }
   }
 
@@ -87,19 +93,31 @@ class ExpressionParser extends JavaTokenParsers {
   private def rootDot: Parser[PipeFunc] =
     "this." ^^ { _ => rootFunc}
 
-  // an entity reference will be followed by a dot for the attribute upon it
-  private def entityRefName: Parser[PipeFunc] =
+  // an entity reference as the final attribute in an expression
+  private def entityRef: Parser[PipeFunc] =
+    ident ^^ { case entity => entityNameAttributePipeFunc(entity)}
+
+  // an entity reference in the middle of an expression
+  private def entityRefDot: Parser[PipeFunc] =
     ident <~ "." ^^ { case name => entityNameAttributePipeFunc(name)}
 
   // the last attribute has no dot after it
-  private def lastAttribute: Parser[FinalFunc] =
+  private def valueAttribute: Parser[FinalFunc] =
     ident ^^ { case name => lastAttributePipeFunc(name)}
 
 
-  def parse(expression: String) = {
+  def parseAttributeExpr(expression: String) = {
+    parse(expression, attributeExpression)
+  }
+
+  def parseEntityExpr(expression: String) = {
+    parse(expression, entityExpression)
+  }
+
+  private def parse(expression: String, parser: Parser[PipelineQuery] ) = {
     //Attempt to parse the expression into a pipeline query to hand off to Gremlin
     //TODO: add caching here? Or move the creation of Gremlin pipelines here so we can cache those?
-    parseAll(path, expression) match {
+    parseAll(parser, expression) match {
       case Success(result, _) => {
         scala.util.Success(result)
       }
@@ -145,45 +163,38 @@ class ExpressionParser extends JavaTokenParsers {
     )
   }
 
-  //TODO: Needs implementation! Return false if reference type.
-  private def isValueType(attributeName: String): Boolean = { true }
-
   private def lastAttributePipeFunc(attributeName: String)(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
-    //The below will very likely change. My suspicion is that we can't tell whether the attribute is a value
-    //or reference type without evaluating the pipe passed in and then seeing which of .getProperty or .out works.
-    //Particularly perverse graphs might have a mixture of both! (We should handle such cases cleanly, for some value of "clean".)
-    if (isValueType(attributeName)) {
-      val lastVertices = graphPipeline.toList
+    val lastVertices = graphPipeline.toList
 
-      if (lastVertices.size() == 0) {
-        throw new RuntimeException(s"Could not dereference $attributeName because pipe returned no entities")
-      }
-
-      // Look up the attributes on the list of vertices returned from the pipe. This will insert nulls into the list if
-      // the attribute doesn't exist.
-      FinalResult(lastVertices.map((v: Vertex) => {
-        v.getProperty(attributeName).asInstanceOf[Object]
-      }), s".getProperty($attributeName)")
-    } else {
-      outputEntityResult( context, graphPipeline.out(attributeName) )
+    if (lastVertices.isEmpty) {
+      throw new RuntimeException(s"Could not dereference $attributeName because pipe returned no entities")
     }
+
+    // Look up the attributes on the list of vertices returned from the pipe. This will insert nulls into the list if
+    // the attribute doesn't exist.
+    FinalResult(lastVertices.map((v: Vertex) => {
+      v.getProperty(attributeName).asInstanceOf[Object]
+    }), s".getProperty($attributeName)")
   }
 
-
   //Takes a list of entities at the end of a pipeline and returns them in final format.
-  //TODO: Determine how we want to return these entities. GraphEntityDAO.loadEntity?
   private def outputEntityResult(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
-    //graphPipeline.toList.map( some_conversion_to_something_else )
-    FinalResult(List(), "")
+    val dao = new GraphEntityDAO()
+    FinalResult( graphPipeline.toList.map( dao.loadEntity(_, context.workspaceNamespace, context.workspaceName) ), "" )
   }
 }
 
 class ExpressionEvaluator(graph:Graph, parser:ExpressionParser)  {
-  def evaluate(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[Any]] = {
-    parser.parse(expression) match {
-      case Success(pipe) => runPipe( ExpressionContext(workspaceNamespace, workspaceName, rootType, rootName), pipe)
-      case Failure(regret) => Failure(regret)
-    }
+  def evalFinalAttribute(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[AttributeValue]] = {
+    parser.parseAttributeExpr(expression)
+      .flatMap( runPipe(ExpressionContext(workspaceNamespace, workspaceName, rootType, rootName), _) )
+      .flatMap( ls => Success(ls.map(AttributeConversions.propertyToAttribute)) )
+  }
+
+  def evalFinalEntity(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[Entity]] = {
+    parser.parseEntityExpr(expression)
+      .flatMap( runPipe(ExpressionContext(workspaceNamespace, workspaceName, rootType, rootName), _) )
+      .flatMap( ls => Success(ls.map(_.asInstanceOf[Entity])) )
   }
 
   def runPipe(expressionContext: ExpressionContext, pipe:PipelineQuery):Try[Seq[Any]] = {
