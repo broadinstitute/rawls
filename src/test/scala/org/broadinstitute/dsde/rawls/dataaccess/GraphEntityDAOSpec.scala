@@ -99,10 +99,6 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
-  it should "list all entities of all entity types" in {
-    assertResult(Set(sample5, sample6, sample1, sample2, sample3, sample4, sample7, sampleSet3, sampleSet1, sampleSet2, sampleSet4, aliquot1, aliquot2, pair1)) { dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSet }
-  }
-
   it should "get an entity" in {
     assertResult(Some(pair1)) { dao.get(workspace.namespace, workspace.name, "pair", "pair1", txn) }
     assertResult(Some(sample1)) { dao.get(workspace.namespace, workspace.name, "sample", "sample1", txn) }

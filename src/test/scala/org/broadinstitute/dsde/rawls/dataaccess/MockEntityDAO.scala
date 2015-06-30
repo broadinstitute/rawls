@@ -57,11 +57,12 @@ object MockEntityDAO extends EntityDAO {
   }
 
   override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
-    cloneTheseEntities(listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList, newWorkspaceNamespace, newWorkspaceName, txn)
+    cloneTheseEntities(listEntitiesAllTypes(workspaceNamespace,workspaceName,txn).toList,newWorkspaceNamespace,newWorkspaceName,txn)
   }
 
-    val newName = WorkspaceName(newWorkspaceNamespace, newWorkspaceName)
-    entities.foreach { entity => save(newWorkspaceNamespace, newWorkspaceName, entity.copy(workspaceName = newName), txn) }
+  override def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ) = {
+    val newName = WorkspaceName(newWorkspaceNamespace,newWorkspaceName)
+    entities.foreach { entity => save(newWorkspaceNamespace,newWorkspaceName,entity.copy(workspaceName=newName),txn) }
   }
 
   //TODO: do this really
