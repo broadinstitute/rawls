@@ -52,37 +52,21 @@ object MockEntityDAO extends EntityDAO {
     store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
 
-  override def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = {
-    //store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty).toSeq
-    val topLevelEntities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).filter(entity => entity.entityType == entityType).filter(entity => entityNames.contains(entity.name)).toSeq
-    //val nextLevelEntities = topLevelEntities.foreach()
-    topLevelEntities
-    //dao.getEntitySubtrees(workspaceNamespace, workspaceName, entityType, entityNames, txn)
+  override def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity] = {
+    store.get((workspaceNamespace, workspaceName)).map(workspace => workspace.values).getOrElse(Seq.empty)
   }
 
   override def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit = {
     cloneTheseEntities(listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList, newWorkspaceNamespace, newWorkspaceName, txn)
   }
 
-  override def cloneTheseEntities(entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction) = {
     val newName = WorkspaceName(newWorkspaceNamespace, newWorkspaceName)
     entities.foreach { entity => save(newWorkspaceNamespace, newWorkspaceName, entity.copy(workspaceName = newName), txn) }
   }
 
   //TODO: do this really
   override def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction) = {
-    val entitiesToCopy = getEntitySubtrees(sourceNamespace, sourceWorkspace, entityType, entityNames, txn)
-    val conflicts = getCopyConflicts(destNamespace, destWorkspace, entitiesToCopy, txn)
-
-    conflicts.size match {
-      case 0 => {
-        cloneTheseEntities(entitiesToCopy, destNamespace, destWorkspace, txn)
-        Seq.empty
-      }
-      case _ =>
-        conflicts
-    }
-
+    Seq.empty
   }
 
   //TODO: do this really

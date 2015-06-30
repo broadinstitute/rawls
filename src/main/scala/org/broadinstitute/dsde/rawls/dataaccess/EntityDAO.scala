@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.model.{EntityCopyDefinition, WorkspaceName, Entity}
+import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Entity}
 
 /**
@@ -36,5 +37,4 @@ trait EntityDAO {
   def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity]
 
   def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity]
-
 }

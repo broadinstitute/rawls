@@ -168,7 +168,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       conflicts.size match {
         case 0 => {
           // get the entities that were copied into the destination workspace
-          val entityCopies = entityDAO.list(destNamespace, destWorkspace, entityType, txn).filter((e:Entity) => entityNames.contains(e.name)).toList
+          val entityCopies = entityDAO.list(destNamespace, destWorkspace, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
           RequestComplete(StatusCodes.Created, entityCopies)
         }
         case _ => {
