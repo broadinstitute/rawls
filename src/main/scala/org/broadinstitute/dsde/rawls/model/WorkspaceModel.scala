@@ -182,24 +182,6 @@ case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeVa
 case class AttributeReferenceList(val list: Seq[AttributeReferenceSingle]) extends AttributeReference // non-recursive
 case class AttributeReferenceSingle(val entityType: String, val entityName: String) extends AttributeReference
 
-@ApiModel(value = "JobDescription")
-case class JobDescription(
-  @(ApiModelProperty@field)(required = true, value = "Namespace of the method configuration to execute.")
-  methodConfigurationNamespace: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of the method configuration to execute.")
-  methodConfigurationName: String,
-  @(ApiModelProperty@field)(required = true, value = "Type of the entity that supplies parameters to the method (must match type specified by method configuration).")
-  entityType: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of the entity that supplies parameters to the method.")
-  entityName: String)
-
-@ApiModel(value = "JobStatus")
-case class JobStatus(
-  @(ApiModelProperty@field)("Job name")
-  id: String,
-  @(ApiModelProperty@field)("Job status")
-  status: String)
-
 object AttributeConversions {
   // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
   def attributeToProperty(att: AttributeValue): Any = att match {
