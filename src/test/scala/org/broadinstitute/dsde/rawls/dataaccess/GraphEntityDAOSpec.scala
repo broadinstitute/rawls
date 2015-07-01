@@ -7,281 +7,287 @@ import org.joda.time.DateTime
 import org.scalatest.{Matchers, FlatSpec}
 
 import scala.collection.JavaConversions._
+import scala.collection.immutable.HashMap
 
 class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
-  override val testDbName = "GraphEntityDAOSpec"
   lazy val dao: GraphEntityDAO = new GraphEntityDAO()
 
-  // setup workspace objects
-  val wsName = WorkspaceName("myNamespace", "myWorkspace")
 
-  val aliquot1 = Entity("aliquot1", "aliquot", Map("sampleSet" -> AttributeReferenceSingle("sampleSet", "sampleSet3")), wsName)
-  val aliquot2 = Entity("aliquot2", "aliquot", Map.empty, wsName)
-
-  var sample1 = Entity("sample1", "sample",
-    Map(
-      "type" -> AttributeString("normal"),
-      "whatsit" -> AttributeNumber(100),
-      "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-      "aliquot" -> AttributeReferenceSingle("aliquot", "aliquot1")),
-    wsName)
-
-  val sample2 = Entity("sample2", "sample", Map("type" -> AttributeString("tumor"), "aliquot2" -> AttributeReferenceSingle("aliquot", "aliquot2")), wsName)
-  val sample3 = Entity("sample3", "sample", Map("type" -> AttributeString("tumor")), wsName)
-  val sample4 = Entity("sample4", "sample", Map("type" -> AttributeString("tumor")), wsName)
-  var sample5 = Entity("sample5", "sample", Map("type" -> AttributeString("tumor")), wsName)
-  var sample6 = Entity("sample6", "sample", Map("type" -> AttributeString("tumor")), wsName)
-  var sample7 = Entity("sample7", "sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeReferenceSingle("sample", "sample6")), wsName)
-
-  val pair1 = Entity("pair1", "pair",
-    Map(
-      "case" -> AttributeReferenceSingle("sample", "sample1"),
-      "control" -> AttributeReferenceSingle("sample", "sample2")),
-    wsName)
-
-  val sampleSet1 = Entity("sampleSet1", "sampleSet",
-    Map("hasSamples" -> AttributeReferenceList(Seq(
-      AttributeReferenceSingle("sample", "sample1"),
-      AttributeReferenceSingle("sample", "sample2")))),
-    wsName)
-
-  val sampleSet2 = Entity("sampleSet2", "sampleSet",
-    Map("hasSamples" -> AttributeReferenceList(Seq(
-      AttributeReferenceSingle("sample", "sample4")))),
-    wsName)
-
-  val sampleSet3 = Entity("sampleSet3", "sampleSet",
-    Map("hasSamples" -> AttributeReferenceList(Seq(
-      AttributeReferenceSingle("sample", "sample5"),
-      AttributeReferenceSingle("sample", "sample6")))),
-    wsName)
-
-  val sampleSet4 = Entity("sampleSet4", "sampleSet",
-    Map("hasSamples" -> AttributeReferenceList(Seq(
-      AttributeReferenceSingle("sample", "sample7")))),
-    wsName)
-
-  val workspace = Workspace(
-    namespace = wsName.namespace,
-    name = wsName.name,
-    createdDate = DateTime.now(),
-    createdBy = "Joe Biden",
-    Map.empty
-  )
-
-  // for the initial upload, we need the workspace DAO
-  // unfortunately because of how BeforeAndAfterAll works, this has to be inside a test...
-  "GraphEntityDAO" should "setup a workspace" in {
-    new GraphWorkspaceDAO().save(workspace, txn)
-    dao.save(workspace.namespace, workspace.name, sample5, txn)
-    dao.save(workspace.namespace, workspace.name, sample6, txn)
-    dao.save(workspace.namespace, workspace.name, sampleSet3, txn)
-    dao.save(workspace.namespace, workspace.name, aliquot1, txn)
-    dao.save(workspace.namespace, workspace.name, aliquot2, txn)
-    dao.save(workspace.namespace, workspace.name, sample1, txn)
-    dao.save(workspace.namespace, workspace.name, sample2, txn)
-    dao.save(workspace.namespace, workspace.name, sample3, txn)
-    dao.save(workspace.namespace, workspace.name, sample4, txn)
-    dao.save(workspace.namespace, workspace.name, sample7, txn)
-    dao.save(workspace.namespace, workspace.name, pair1, txn)
-    dao.save(workspace.namespace, workspace.name, sampleSet1, txn)
-    dao.save(workspace.namespace, workspace.name, sampleSet2, txn)
-    dao.save(workspace.namespace, workspace.name, sampleSet4, txn)
-  }
-
-  it should "get entity types" in {
-    assertResult(Set("sample", "sampleSet", "aliquot", "pair")) { dao.getEntityTypes(workspace.namespace, workspace.name, txn).toSet }
-  }
-
-  it should "list all entities of all entity types" in {
-    assertResult(Set(sample5, sample6, sample1, sample2, sample3, sample4, sample7, sampleSet3, sampleSet1, sampleSet2, sampleSet4, aliquot1, aliquot2, pair1)) {
-      dao.listEntitiesAllTypes(workspace.namespace, workspace.name, txn).toSet
-    }
-  }
-
-  it should "get an entity" in {
-    assertResult(Some(pair1)) { dao.get(workspace.namespace, workspace.name, "pair", "pair1", txn) }
-    assertResult(Some(sample1)) { dao.get(workspace.namespace, workspace.name, "sample", "sample1", txn) }
-    assertResult(Some(sampleSet1)) { dao.get(workspace.namespace, workspace.name, "sampleSet", "sampleSet1", txn) }
-  }
-
-  it should "return None when an entity does not exist" in {
-    assertResult(None) { dao.get(workspace.namespace, workspace.name, "pair", "fnord", txn) }
-    assertResult(None) { dao.get(workspace.namespace, workspace.name, "fnord", "pair1", txn) }
-  }
-
-  it should "return None when a parent workspace does not exist" in {
-    assertResult(None) { dao.get(workspace.namespace, "fnord", "pair", "pair1", txn) }
-  }
-
-  it should "save a new entity" in {
-    val pair2 = Entity("pair2", "pair",
-      Map(
-        "case" -> AttributeReferenceSingle("sample", "sample3"),
-        "control" -> AttributeReferenceSingle("sample", "sample1")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, pair2, txn)
-    assert {
-      txn.withGraph { graph =>
-        graph.getVertices("_entityType", "pair")
-          .filter(v => v.getProperty[String]("_name") == "pair2")
-          .headOption.isDefined
+  "GraphEntityDAO" should "get entity types" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Set("PairSet", "Individual", "Sample", "Aliquot", "SampleSet", "Pair")) {
+        dao.getEntityTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet
       }
     }
   }
 
-  it should "clone all entities from a workspace containing cycles" in {
-    lazy val daoCycles: GraphEntityDAO = new GraphEntityDAO()
-    lazy val workspaceDaoOriginal: GraphWorkspaceDAO = new GraphWorkspaceDAO()
-    lazy val workspaceDaoClone: GraphWorkspaceDAO = new GraphWorkspaceDAO()
-
-    val workspaceOriginal = Workspace(
-      namespace = wsName.namespace + "Original",
-      name = wsName.name + "Original",
-      createdDate = DateTime.now(),
-      createdBy = "Joe Biden",
-      Map.empty
-    )
-
-    val workspaceClone = Workspace(
-      namespace = wsName.namespace + "Clone",
-      name = wsName.name + "Clone",
-      createdDate = DateTime.now(),
-      createdBy = "Joe Biden",
-      Map.empty
-    )
-
-    val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(workspace.namespace, workspace.name))
-    val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(workspace.namespace, workspace.name))
-    var c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), WorkspaceName(workspace.namespace, workspace.name))
-
-    workspaceDaoOriginal.save(workspaceOriginal, txn)
-    workspaceDaoClone.save(workspaceClone, txn)
-
-    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
-    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c2, txn)
-    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c1, txn)
-
-    c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(workspace.namespace, workspace.name))
-
-    daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
-    daoCycles.cloneAllEntities(workspaceOriginal.namespace, workspaceClone.namespace, workspaceOriginal.name, workspaceClone.name, txn)
-
-    assertResult(dao.listEntitiesAllTypes(workspaceOriginal.namespace, workspaceOriginal.name, txn).map(_.copy(workspaceName = WorkspaceName(workspaceClone.namespace, workspaceClone.name))).toSet) {
-      dao.listEntitiesAllTypes(workspaceClone.namespace, workspaceClone.name, txn).toSet
-    }
-  }
-
-  it should "save updates to an existing entity" in {
-    // flip case / control and add property, remove a property
-    val pair1Updated = Entity("pair1", "pair",
-      Map(
-        "isItAPair" -> AttributeBoolean(true),
-        "case" -> AttributeReferenceSingle("sample", "sample2"),
-        "control" -> AttributeReferenceSingle("sample", "sample1")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, pair1Updated, txn)
-    txn.withGraph { graph =>
-      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty[String]("_name") == "pair1").head
-      assert { fetched.getPropertyKeys.contains("isItAPair") }
-      // TODO check edges?
-    }
-
-    val pair1UpdatedAgain = Entity("pair1", "pair",
-      Map(
-        "case" -> AttributeReferenceSingle("sample", "sample2"),
-        "control" -> AttributeReferenceSingle("sample", "sample1")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, pair1UpdatedAgain, txn)
-    txn.withGraph { graph =>
-      val fetched = graph.getVertices("_entityType", "pair").filter(v => v.getProperty[String]("_name") == "pair1").head
-      assert { !fetched.getPropertyKeys.contains("isItAPair") }
-    }
-  }
-
-  it should "throw an exception when trying to save an entity to a nonexistent workspace" in {
-    val foo = Entity("foo", "bar", Map.empty, wsName)
-    intercept[IllegalArgumentException] { dao.save("fnord", "dronf", foo, txn) }
-  }
-
-  it should "throw an exception if trying to save reserved-keyword attributes" in {
-    val bar = Entity("boo", "far", Map("_entityType" -> AttributeString("myAmazingClazzzz")), wsName)
-    intercept[IllegalArgumentException] { dao.save(workspace.namespace, workspace.name, bar, txn) }
-  }
-
-  it should "throw an exception if trying to save invalid references" in {
-    val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeReferenceSingle("sample", "notTheSampleYoureLookingFor")), wsName)
-    intercept[IllegalArgumentException] { dao.save(workspace.namespace, workspace.name, baz, txn) }
-  }
-
-  it should "delete an entity" in {
-    dao.delete(workspace.namespace, workspace.name, "pair", "pair2", txn)
-    assert {
-      txn.withGraph { graph =>
-        graph.getVertices("_entityType", "pair")
-          .filter(v => v.getProperty[String]("_name") == "pair2")
-          .headOption.isEmpty
+  it should "list all entities of all entity types" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
+        dao.listEntitiesAllTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet
       }
     }
   }
 
-  it should "list entities" in {
-    assert {
-      val samples = dao.list(workspace.namespace, workspace.name, "sample", txn).toList
-      List(sample1, sample2, sample3).map(samples.contains(_)).reduce(_&&_)
+  class BugTestData() extends TestData {
+    val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
+    val workspace = new Workspace(wsName.namespace, wsName.name, DateTime.now, "testUser", Map.empty )
+
+    val sample1 = new Entity("sample1", "Sample",
+      Map(
+        "aliquot" -> AttributeReferenceSingle("Aliquot", "aliquot1")),
+      wsName )
+
+    val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty, wsName)
+
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+      entityDAO.save(workspace.namespace, workspace.name, aliquot1, txn)
+      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
+    }
+  }
+  val bugData = new BugTestData
+
+  it should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabase(new BugTestData) { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Some(bugData.sample1)) {
+        dao.get(bugData.workspace.namespace, bugData.workspace.name, "Sample", "sample1", txn)
+      }
     }
   }
 
-  it should "add cycles to entity graph" in {
-    sample1 = Entity("sample1", "sample",
-      Map(
-        "type" -> AttributeString("normal"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-        "aliquot" -> AttributeReferenceSingle("aliquot", "aliquot1"),
-        "cycle" -> AttributeReferenceSingle("sampleSet", "sampleSet1")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, sample1, txn)
-    sample5 = Entity("sample5", "sample",
-      Map(
-        "type" -> AttributeString("tumor"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-        "cycle" -> AttributeReferenceSingle("sampleSet", "sampleSet4")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, sample5, txn)
-    sample7 = Entity("sample7", "sample",
-      Map(
-        "type" -> AttributeString("tumor"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-        "cycle" -> AttributeReferenceSingle("sample", "sample6")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, sample7, txn)
-    sample6 = Entity("sample6", "sample",
-      Map(
-        "type" -> AttributeString("tumor"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-        "cycle" -> AttributeReferenceSingle("sampleSet", "sampleSet3")),
-      wsName)
-    dao.save(workspace.namespace, workspace.name, sample6, txn)
-    val entitiesWithCycles = List("sample1", "sample5", "sample7", "sample6")
-    txn.withGraph { graph =>
-      val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("_name"))).head.getEdges(Direction.OUT, "cycle")
-      assert { fetched.size == 1 }
+  it should "get an entity" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Some(testData.pair1)) {
+        dao.get(testData.workspace.namespace, testData.workspace.name, "Pair", "pair1", txn)
+      }
+      assertResult(Some(testData.sample1)) {
+        dao.get(testData.workspace.namespace, testData.workspace.name, "Sample", "sample1", txn)
+      }
+      assertResult(Some(testData.sset1)) {
+        dao.get(testData.workspace.namespace, testData.workspace.name, "SampleSet", "sset1", txn)
+      }
     }
   }
 
-  it should "rename an entity" in {
-    dao.rename(workspace.namespace, workspace.name, "pair", "pair1", "amazingPair", txn)
-    txn.withGraph { graph =>
-      val pairNames = graph.getVertices("_entityType", "pair").map(_.getProperty[String]("_name")).toList
+  it should "return None when an entity does not exist" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(None) {
+        dao.get(testData.workspace.namespace, testData.workspace.name, "pair", "fnord", txn)
+      }
+      assertResult(None) {
+        dao.get(testData.workspace.namespace, testData.workspace.name, "fnord", "pair1", txn)
+      }
+    }
+  }
+
+  it should "return None when a parent workspace does not exist" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(None) {
+        dao.get(testData.workspace.namespace, "fnord", "pair", "pair1", txn)
+      }
+    }
+  }
+
+  it should "save a new entity" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val pair2 = Entity("pair2", "Pair",
+        Map(
+          "case" -> AttributeReferenceSingle("Sample", "sample3"),
+          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, pair2, txn)
       assert {
-        pairNames.contains("amazingPair")
+        txn.withGraph { graph =>
+          graph.getVertices("_entityType", "Pair")
+            .filter(v => v.getProperty[String]("_name") == "pair2")
+            .headOption.isDefined
+        }
       }
+    }
+  }
+
+  it should "clone all entities from a workspace containing cycles" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      lazy val daoCycles: GraphEntityDAO = new GraphEntityDAO()
+      lazy val workspaceDaoOriginal: GraphWorkspaceDAO = new GraphWorkspaceDAO()
+      lazy val workspaceDaoClone: GraphWorkspaceDAO = new GraphWorkspaceDAO()
+
+      val workspaceOriginal = Workspace(
+        namespace = testData.wsName.namespace + "Original",
+        name = testData.wsName.name + "Original",
+        createdDate = DateTime.now(),
+        createdBy = "Joe Biden",
+        Map.empty
+      )
+
+      val workspaceClone = Workspace(
+        namespace = testData.wsName.namespace + "Clone",
+        name = testData.wsName.name + "Clone",
+        createdDate = DateTime.now(),
+        createdBy = "Joe Biden",
+        Map.empty
+      )
+
+      val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+      val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+      var c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+
+      workspaceDaoOriginal.save(workspaceOriginal, txn)
+      workspaceDaoClone.save(workspaceClone, txn)
+
+      daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
+      daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c2, txn)
+      daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c1, txn)
+
+      c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+
+      daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
+      daoCycles.cloneAllEntities(workspaceOriginal.namespace, workspaceClone.namespace, workspaceOriginal.name, workspaceClone.name, txn)
+
+      assertResult(dao.listEntitiesAllTypes(workspaceOriginal.namespace, workspaceOriginal.name, txn).map(_.copy(workspaceName = WorkspaceName(workspaceClone.namespace, workspaceClone.name))).toSet) {
+        dao.listEntitiesAllTypes(workspaceClone.namespace, workspaceClone.name, txn).toSet
+      }
+    }
+  }
+
+  it should "save updates to an existing entity" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      // flip case / control and add property, remove a property
+      val pair1Updated = Entity("pair1", "Pair",
+        Map(
+          "isItAPair" -> AttributeBoolean(true),
+          "case" -> AttributeReferenceSingle("Sample", "sample2"),
+          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, pair1Updated, txn)
+      txn.withGraph { graph =>
+        val fetched = graph.getVertices("_entityType", "Pair").filter(v => v.getProperty[String]("_name") == "pair1").head
+        assert {
+          fetched.getPropertyKeys.contains("isItAPair")
+        }
+        // TODO check edges?
+      }
+
+      val pair1UpdatedAgain = Entity("pair1", "Pair",
+        Map(
+          "case" -> AttributeReferenceSingle("Sample", "sample2"),
+          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, pair1UpdatedAgain, txn)
+      txn.withGraph { graph =>
+        val fetched = graph.getVertices("_entityType", "Pair").filter(v => v.getProperty[String]("_name") == "pair1").head
+        assert {
+          !fetched.getPropertyKeys.contains("isItAPair")
+        }
+      }
+    }
+  }
+
+  it should "throw an exception when trying to save an entity to a nonexistent workspace" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val foo = Entity("foo", "bar", Map.empty, testData.wsName)
+      intercept[IllegalArgumentException] {
+        dao.save("fnord", "dronf", foo, txn)
+      }
+    }
+  }
+
+  it should "throw an exception if trying to save reserved-keyword attributes" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val bar = Entity("boo", "far", Map("_entityType" -> AttributeString("myAmazingClazzzz")), testData.wsName)
+      intercept[IllegalArgumentException] {
+        dao.save(testData.workspace.namespace, testData.workspace.name, bar, txn)
+      }
+    }
+  }
+
+  it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeReferenceSingle("sample", "notTheSampleYoureLookingFor")), testData.wsName)
+      intercept[IllegalArgumentException] {
+        dao.save(testData.workspace.namespace, testData.workspace.name, baz, txn)
+      }
+    }
+  }
+
+  it should "delete an entity" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      dao.delete(testData.workspace.namespace, testData.workspace.name, "Pair", "pair2", txn)
       assert {
-        !pairNames.contains("pair1")
+        txn.withGraph { graph =>
+          graph.getVertices("_entityType", "Pair")
+            .filter(v => v.getProperty[String]("_name") == "pair2")
+            .headOption.isEmpty
+        }
+      }
+    }
+  }
+
+  it should "list entities" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7)) {
+        dao.list(testData.workspace.namespace, testData.workspace.name, "Sample", txn).toSet
+      }
+    }
+  }
+
+  it should "add cycles to entity graph" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val sample1Copy = Entity("sample1", "Sample",
+        Map(
+          "type" -> AttributeString("normal"),
+          "whatsit" -> AttributeNumber(100),
+          "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
+          "aliquot" -> AttributeReferenceSingle("Aliquot", "aliquot1"),
+          "cycle" -> AttributeReferenceSingle("SampleSet", "sset1")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, sample1Copy, txn)
+      val sample5Copy = Entity("sample5", "Sample",
+        Map(
+          "type" -> AttributeString("tumor"),
+          "whatsit" -> AttributeNumber(100),
+          "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
+          "cycle" -> AttributeReferenceSingle("SampleSet", "sset4")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, sample5Copy, txn)
+      val sample7Copy = Entity("sample7", "Sample",
+        Map(
+          "type" -> AttributeString("tumor"),
+          "whatsit" -> AttributeNumber(100),
+          "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
+          "cycle" -> AttributeReferenceSingle("Sample", "sample6")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, sample7Copy, txn)
+      val sample6Copy = Entity("sample6", "Sample",
+        Map(
+          "type" -> AttributeString("tumor"),
+          "whatsit" -> AttributeNumber(100),
+          "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
+          "cycle" -> AttributeReferenceSingle("SampleSet", "sset3")),
+        testData.wsName)
+      dao.save(testData.workspace.namespace, testData.workspace.name, sample6Copy, txn)
+      val entitiesWithCycles = List("sample1", "sample5", "sample7", "sample6")
+      txn.withGraph { graph =>
+        val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("_name"))).head.getEdges(Direction.OUT, "cycle")
+        assert {
+          fetched.size == 1
+        }
+      }
+    }
+  }
+
+  it should "rename an entity" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      dao.rename(testData.workspace.namespace, testData.workspace.name, "Pair", "pair1", "amazingPair", txn)
+      txn.withGraph { graph =>
+        val pairNames = graph.getVertices("_entityType", "Pair").map(_.getProperty[String]("_name")).toList
+        assert {
+          pairNames.contains("amazingPair")
+        }
+        assert {
+          !pairNames.contains("pair1")
+        }
       }
     }
   }
@@ -289,48 +295,54 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   /* Test case tests for cycles, cycles contained within cycles, cycles existing below other cycles, invalid
    * entity names being supplied, and multiple disjoint subtrees
    */
-  it should "get entity subtrees from a list of entities" in {
-    assertResult(Set(sample6, sample5, sampleSet2, sample1, sampleSet3, sampleSet4, sample7, sample4, aliquot2, sample2, aliquot1, sampleSet1)){
-      dao.getEntitySubtrees(workspace.namespace, workspace.name, "sampleSet", List("sampleSet1", "sampleSet2", "sampleSet4", "sampleSetDOESNTEXIST"), txn).toSet
+  it should "get entity subtrees from a list of entities" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Set(testData.sset3, testData.sample1, testData.sset2, testData.aliquot1, testData.sample6, testData.sset1, testData.sample2, testData.sample3, testData.sample5)) {
+        dao.getEntitySubtrees(testData.workspace.namespace, testData.workspace.name, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"), txn).toSet
+      }
     }
   }
 
-  val x1 = Entity("x1", "sampleSet", Map.empty, wsName)
+  val x1 = Entity("x1", "SampleSet", Map.empty, testData.wsName)
 
   val workspace2 = Workspace(
-    namespace = wsName.namespace + "2",
-    name = wsName.name + "2",
+    namespace = testData.wsName.namespace + "2",
+    name = testData.wsName.name + "2",
     createdDate = DateTime.now(),
     createdBy = "Joe Biden",
     Map.empty
   )
 
-  it should "copy entities without a conflict" in {
-    new GraphWorkspaceDAO().save(workspace2, txn)
-    dao.save(workspace2.namespace, workspace2.name, x1, txn)
+  it should "copy entities without a conflict" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      new GraphWorkspaceDAO().save(workspace2, txn)
+      dao.save(workspace2.namespace, workspace2.name, x1, txn)
 
-    assertResult(Seq.empty){
-      dao.getCopyConflicts(workspace.namespace, workspace.name, Seq(x1), txn)
+      assertResult(Seq.empty) {
+        dao.getCopyConflicts(testData.workspace.namespace, testData.workspace.name, Seq(x1), txn)
+      }
+
+      assertResult(Seq.empty) {
+        dao.copyEntities(testData.workspace.namespace, testData.workspace.name, workspace2.namespace, workspace2.name, "SampleSet", Seq("x1"), txn)
+      }
+
+      //verify it was actually copied into the workspace
+      assert(dao.list(testData.workspace.namespace, testData.workspace.name, "SampleSet", txn).toList.contains(x1))
     }
-
-    assertResult(Seq.empty){
-      dao.copyEntities(workspace.namespace, workspace.name, workspace2.namespace, workspace2.name, "sampleSet", Seq("x1"), txn)
-    }
-
-    //verify it was actually copied into the workspace
-    assert(dao.list(workspace.namespace, workspace.name, "sampleSet", txn).toList.contains(x1))
   }
 
-  it should "copy entities with a conflict" in {
-    assertResult(Seq(x1)){
-      dao.getCopyConflicts(workspace.namespace, workspace.name, Seq(x1), txn)
-    }
+  it should "copy entities with a conflict" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      assertResult(Set(testData.sample1)) {
+        dao.getCopyConflicts(testData.workspace.namespace, testData.workspace.name, Seq(testData.sample1), txn).toSet
+      }
 
-    assertResult(Seq(x1)){
-      dao.copyEntities(workspace.namespace, workspace.name, workspace2.namespace, workspace2.name, "sampleSet", Seq("x1"), txn)
-    }
+      assertResult(Set(testData.sample1, testData.aliquot1)) {
+        dao.copyEntities(testData.workspace.namespace, testData.workspace.name, testData.workspace.namespace, testData.workspace.name, "Sample", Seq("sample1"), txn).toSet
+      }
 
-    //verify that it wasn't copied into the workspace again
-    assert(dao.list(workspace.namespace, workspace.name, "sampleSet", txn).toList.filter(entity => entity == x1).size == 1)
+      //verify that it wasn't copied into the workspace again
+      assert(dao.list(testData.workspace.namespace, testData.workspace.name, "Sample", txn).toList.filter(entity => entity == testData.sample1).size == 1)
+    }
   }
 }

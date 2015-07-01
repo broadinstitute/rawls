@@ -6,11 +6,14 @@ import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService}
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
 import spray.http._
+import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
 import spray.json._
 import spray.httpx.SprayJsonSupport
@@ -22,7 +25,7 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
+class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -32,195 +35,184 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   def actorRefFactory = system
 
-  override val testDbName = "WorkspaceApiServiceTest"
-  //val dataSource = DataSource("memory:rawls", "admin", "admin")
+  override def beforeAll() = {
+    super.beforeAll
+    RemoteServicesMockServer.startServer
+  }
 
-  val wsns = "namespace"
-  val wsname = UUID.randomUUID().toString
+  override def afterAll() = {
+    super.afterAll
+    RemoteServicesMockServer.stopServer
+  }
 
-  val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
+    def actorRefFactory = system
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(RemoteServicesMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(RemoteServicesMockServer.mockServerBaseUrl))
+  }
 
-  val s3 = Entity("s3", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  val s4 = Entity("s4", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  val s5 = Entity("s5", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  var s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
+    testCode(new TestApiService(dataSource))
+  }
 
-  //val s4 = Entity("s4", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  //val s5 = Entity("s5", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  //var s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
+    withDefaultTestDatabase { dataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
 
-  val referenceList = AttributeReferenceList(Seq(new AttributeReferenceSingle("child", "s3"), new AttributeReferenceSingle("child", "s4")))
+  "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
+    val newWorkspace = Workspace(
+      namespace = "newNamespace",
+      name = "newWorkspace",
+      createdDate = DateTime.now(),
+      createdBy = "Joe Biden",
+      Map.empty
+    )
 
-  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-  val s2 = Entity("s2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
-
-  val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(wsns, wsname))
-  val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(wsns, wsname))
-  val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(wsns, wsname))
-
-  val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfig2 = MethodConfiguration("testConfig2", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfig3 = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo", "param2" -> "foo2"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
-  val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
-  val methodConfigName2 = methodConfigName.copy(name = "novelName")
-  val methodConfigName3 = methodConfigName.copy(name = "noSuchName")
-  val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName, methodConfigName2)
-  val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName, methodConfigName)
-  val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3, methodConfigName2)
-
-  val uniqueMethodConfigName = UUID.randomUUID.toString
-  val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, methodConfig.workspaceName)
-  val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", newMethodConfigName)
-  val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", "1", methodConfigName)
-  val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
-  val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
-
-  val workspace = Workspace(
-    wsns,
-    wsname,
-    DateTime.now().withMillis(0),
-    "test",
-    Map.empty
-  )
-
-  val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, MockWorkspaceDAO, MockEntityDAO, MockMethodConfigurationDAO, new HttpMethodRepoDAO(RemoteServicesMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(RemoteServicesMockServer.mockServerBaseUrl))
-  val dao = MockWorkspaceDAO
-
-  // TODO either use the default workspace, or use the custom workspace defined above - not both!
-  initializeTestGraph()
-
-  override def beforeAll() = RemoteServicesMockServer.startServer
-
-  override def afterAll() = RemoteServicesMockServer.stopServer
-
-  "WorkspaceApi" should "return 201 for post to workspaces" in {
-    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, workspace.toJson.toString())) ~>
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(postWorkspaceRoute) ~>
+      sealRoute(services.postWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspace) {
-          MockWorkspaceDAO.store((workspace.namespace, workspace.name))
+        services.dataSource.inTransaction { txn =>
+          assertResult(newWorkspace) {
+            workspaceDAO.load(newWorkspace.namespace, newWorkspace.name, txn).get
+          }
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspace.namespace}/${workspace.name}"))))) {
+        assertResult(newWorkspace) {
+          responseAs[Workspace]
+        }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
         }
       }
   }
 
-  it should "get a workspace" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}") ~>
+  it should "get a workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(getWorkspacesRoute) ~>
+      sealRoute(services.getWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(MockWorkspaceDAO.load(workspace.namespace, workspace.name, null).get) {
+
+        services.dataSource.inTransaction { txn =>
+          assertResult(testData.workspace) {
+            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get
+          }
+        }
+        assertResult(testData.workspace) {
           responseAs[Workspace]
         }
       }
-
   }
 
-  it should "return 404 getting a non-existent workspace" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}x") ~>
+  it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(getWorkspacesRoute) ~>
+      sealRoute(services.getWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
       }
-
   }
 
-  it should "list workspaces" in {
+  it should "list workspaces" in withTestDataApiServices { services =>
     Get("/workspaces") ~>
       addMockOpenAmCookie ~>
-      sealRoute(listWorkspacesRoute) ~>
+      sealRoute(services.listWorkspacesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(MockWorkspaceDAO.store.values.toSet) {
-          responseAs[Array[Workspace]].toSet
-        }
-      }
-
-  }
-
-  val workspaceCopy = WorkspaceName(namespace = workspace.namespace, name = "test_copy")
-
-  it should "return 404 Not Found on copy if the source workspace cannot be found" in {
-    Post(s"/workspaces/${workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
-      sealRoute(copyWorkspaceRoute) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}") ~>
-      addMockOpenAmCookie ~>
-      sealRoute(getEntityRoute) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities/${s2.entityType}/${s2.name}") ~>
-      addMockOpenAmCookie ~>
-      sealRoute(deleteEntityRoute) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
+        services.dataSource.inTransaction { txn =>
+          assertResult(workspaceDAO.list(txn).toSet) {
+            responseAs[Array[Workspace]].toSet
+          }
         }
       }
   }
 
-  it should "return 404 on Entity CRUD when workspace does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
+  it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createEntityRoute) ~>
+      sealRoute(services.copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
       }
-
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.getEntityRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.updateEntityRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.deleteEntityRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
   }
 
-  it should "return 201 on create entity" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
+  it should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createEntityRoute) ~>
+      sealRoute(services.createEntityRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 201 on create entity" in withTestDataApiServices { services =>
+    val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")), testData.wsName)
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, newSample.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.createEntityRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(s2) {
-          MockEntityDAO.store(workspace.namespace, workspace.name)(s2.entityType, s2.name)
+
+        services.dataSource.inTransaction { txn =>
+          assertResult(newSample) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, newSample.entityType, newSample.name, txn).get
+          }
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${s2.path}"))))) {
+        assertResult(newSample) {
+          responseAs[Entity]
+        }
+
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${newSample.path}"))))) {
           header("Location")
         }
       }
   }
-  it should "return 409 conflict on create entity when entity exists" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, s2.toJson.toString())) ~>
+
+  it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createEntityRoute) ~>
+      sealRoute(services.createEntityRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -228,52 +220,68 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 200 on get entity" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}") ~>
+  it should "return 200 on get entity" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(getEntityRoute) ~>
+      sealRoute(services.getEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(s2) {
+
+        services.dataSource.inTransaction { txn =>
+          assertResult(testData.sample2) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get
+          }
+        }
+        assertResult(testData.sample2) {
           responseAs[Entity]
         }
       }
   }
 
-  it should "return 200 on list entity types" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities") ~>
+  it should "return 200 on list entity types" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities") ~>
       addMockOpenAmCookie ~>
-      sealRoute(listEntityTypesRoute) ~>
+      sealRoute(services.listEntityTypesRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Array("samples")) {
-          responseAs[Array[String]]
+
+        services.dataSource.inTransaction { txn =>
+          val entityTypes = entityDAO.getEntityTypes(testData.workspace.namespace, testData.workspace.name, txn)
+
+          assertResult(entityTypes) {
+            responseAs[Array[String]]
+          }
         }
       }
   }
 
-  it should "return 200 on list all samples" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}") ~>
+  it should "return 200 on list all samples" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(listEntitiesPerTypeRoute) ~>
+      sealRoute(services.listEntitiesPerTypeRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Array(s2)) {
-          responseAs[Array[Entity]]
+
+        services.dataSource.inTransaction { txn =>
+          val samples = entityDAO.list(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, txn).toSet
+
+          assertResult(samples) {
+            responseAs[Array[Entity]].toSet
+          }
         }
       }
   }
 
-  it should "return 404 on non-existing entity" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x") ~>
+  it should "return 404 on non-existing entity" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(getEntityRoute) ~>
+      sealRoute(services.getEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -281,64 +289,73 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 200 on update workspace attributes" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateWorkspaceRoute) ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          MockWorkspaceDAO.store(workspace.namespace, workspace.name).attributes.get("boo")
+          services.dataSource.inTransaction { txn =>
+            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get.attributes.get("boo")
+          }
         }
       }
 
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateWorkspaceRoute) ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
       check {
-        assertResult(StatusCodes.OK, responseAs[String]) {
+        assertResult(StatusCodes.OK) {
           status
         }
+
         assertResult(None) {
-          MockWorkspaceDAO.store(workspace.namespace, workspace.name).attributes.get("boo")
+          services.dataSource.inTransaction { txn =>
+            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get.attributes.get("boo")
+          }
         }
       }
   }
 
-  it should "return 200 on update entity" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 200 on update entity" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          MockEntityDAO.store(workspace.namespace, workspace.name)(s2.entityType, s2.name).attributes.get("boo")
+          services.dataSource.inTransaction { txn =>
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("boo")
+          }
         }
       }
   }
 
-  it should "return 200 on remove attribute from entity" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 200 on remove attribute from entity" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
         assertResult(None) {
-          MockEntityDAO.store(workspace.namespace, workspace.name)(s2.entityType, s2.name).attributes.get("bar")
+          services.dataSource.inTransaction { txn =>
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("bar")
+          }
         }
       }
   }
 
-  it should "return 404 on update to non-existing entity" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 404 on update to non-existing entity" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -346,30 +363,30 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 400 on remove from an attribute that is not a list" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
         }
       }
   }
-  it should "return 400 on remove from list attribute that does not exist" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
         }
       }
   }
-  it should "return 400 on add to list attribute that is not a list" in {
-    Patch(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample1.entityType}/${testData.sample1.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("somefoo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateEntityRoute) ~>
+      sealRoute(services.updateEntityRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -377,18 +394,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 409 on entity rename when rename already exists" in {
-    MockEntityDAO.save(workspace.namespace, workspace.name, s1, null)
-    MockEntityDAO.save(workspace.namespace, workspace.name, s3, null)
-    MockEntityDAO.save(workspace.namespace, workspace.name, s6, null)
-    MockEntityDAO.save(workspace.namespace, workspace.name, s5, null)
-    MockEntityDAO.save(workspace.namespace, workspace.name, s4, null)
-    //s6 = Entity("s6", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList, "cycle3" -> AttributeReferenceSingle("child", "s4")), WorkspaceName(wsns, wsname))
-    MockEntityDAO.save(workspace.namespace, workspace.name, s6, null)
-
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s1").toJson.toString())) ~>
+  it should "return 409 on entity rename when rename already exists" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("sample1").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameEntityRoute) ~>
+      sealRoute(services.renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -396,51 +405,57 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 204 on entity rename" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
+  it should "return 204 on entity rename" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameEntityRoute) ~>
+      sealRoute(services.renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        assertResult(true) {
-          MockEntityDAO.store(workspace.namespace, workspace.name).get(s2.entityType, "s2_changed").isDefined
+        services.dataSource.inTransaction { txn =>
+          assertResult(true) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, "s2_changed", txn).isDefined
+          }
         }
       }
   }
 
-  it should "return 404 on entity rename, entity does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/${s2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
+  it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/foox/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameEntityRoute) ~>
+      sealRoute(services.renameEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
-        assertResult(true) {
-          MockEntityDAO.store(workspace.namespace, workspace.name).get(s2.entityType, "s2_changed").isDefined
+        services.dataSource.inTransaction { txn =>
+          assertResult(None) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, "s2_changed", txn)
+          }
         }
       }
   }
 
-  it should "return 204 entity delete" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/s2_changed") ~>
+  it should "return 204 entity delete" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(deleteEntityRoute) ~>
+      sealRoute(services.deleteEntityRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        assertResult(None) {
-          MockEntityDAO.store(workspace.namespace, workspace.name).get(s2.entityType, s2.name)
+        services.dataSource.inTransaction { txn =>
+          assertResult(None) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn)
+          }
         }
       }
   }
-  it should "return 404 entity delete, entity does not exist" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/entities/${s2.entityType}/s2_changed") ~>
+  it should "return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/s2_changed") ~>
       addMockOpenAmCookie ~>
-      sealRoute(deleteEntityRoute) ~>
+      sealRoute(services.deleteEntityRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -448,10 +463,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 200 on successfully parsing an expression" in {
-    Post(s"/workspaces/workspaces/test_workspace/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
+  it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(evaluateExpressionRoute) ~>
+      sealRoute(services.evaluateExpressionRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -462,10 +477,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 400 on failing to parse an expression" in {
-    Post(s"/workspaces/workspaces/test_workspace/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
+  it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(evaluateExpressionRoute) ~>
+      sealRoute(services.evaluateExpressionRoute) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -473,29 +488,31 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 201 on create method configuration" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConfig.toJson.toString())) ~>
+  it should "return 201 on create method configuration" in withTestDataApiServices { services =>
+    val newMethodConfig = MethodConfiguration("testConfig2", "samples", testData.wsName.namespace, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), testData.wsName, "dsde")
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createMethodConfigurationRoute) ~>
+      sealRoute(services.createMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(methodConfig) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.namespace, methodConfig.name)
+        services.dataSource.inTransaction { txn =>
+          assertResult(newMethodConfig) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, newMethodConfig.namespace, newMethodConfig.name, txn).get
+          }
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${methodConfig.path}"))))) {
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${newMethodConfig.path}"))))) {
           header("Location")
         }
       }
   }
 
-  it should "return 409 on method configuration rename when rename already exists" in {
-    MockMethodConfigurationDAO.save(workspace.namespace, workspace.name, methodConfig2, null)
-
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(methodConfig2.name, methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+  it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameMethodConfigurationRoute) ~>
+      sealRoute(services.renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -503,79 +520,100 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 204 on method configuration rename" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig2.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+  it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameMethodConfigurationRoute) ~>
+      sealRoute(services.renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        assertResult(true) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed").isDefined
-        }
-        assertResult(None) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, methodConfig2.name)
+        services.dataSource.inTransaction { txn =>
+          assertResult(true) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "testConfig2_changed", txn).isDefined
+          }
+          assertResult(None) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+          }
         }
       }
   }
 
-  it should "return 404 on method configuration rename, method configuration does not exist" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig2.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", methodConfig.namespace, WorkspaceName(workspace.namespace, workspace.name)).toJson.toString())) ~>
+  it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(renameMethodConfigurationRoute) ~>
+      sealRoute(services.renameMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
-        assertResult(true) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed").isDefined
+        services.dataSource.inTransaction { txn =>
+          assertResult(true) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
+          }
+          assertResult(None) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "foox", txn)
+          }
         }
       }
   }
 
-  it should "return 204 method configuration delete" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig2.namespace}/testConfig2_changed") ~>
+  it should "return 204 method configuration delete" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(deleteMethodConfigurationRoute) ~>
+      sealRoute(services.deleteMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        assertResult(None) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).get(methodConfig2.namespace, "testConfig2_changed")
+        services.dataSource.inTransaction { txn =>
+          assertResult(None) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+          }
         }
       }
   }
-  it should "return 404 method configuration delete, method configuration does not exist" in {
-    Delete(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}x") ~>
+  it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(deleteMethodConfigurationRoute) ~>
+      sealRoute(services.deleteMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
+
+        services.dataSource.inTransaction { txn =>
+          assertResult(true) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
+          }
+          assertResult(None) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "foox", txn)
+          }
+        }
       }
   }
 
-  it should "return 200 on update method configuration" in {
-    Put(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig3.namespace}/${methodConfig3.name}", HttpEntity(ContentTypes.`application/json`, methodConfig3.toJson.toString())) ~>
+  it should "return 200 on update method configuration" in withTestDataApiServices { services =>
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> "foo2"))
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateMethodConfigurationRoute) ~>
+      sealRoute(services.updateMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Option("foo2")) {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig3.namespace, methodConfig3.name).inputs.get("param2")
+        services.dataSource.inTransaction { txn =>
+          assertResult(Option("foo2")) {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
+          }
         }
       }
   }
 
-  it should "return 404 on update method configuration" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, methodConfig2.toJson.toString())) ~>
+  it should "return 404 on update method configuration" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, testData.methodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(updateMethodConfigurationRoute) ~>
+      sealRoute(services.updateMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -583,24 +621,26 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 201 on copy method configuration" in {
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairCreated.toJson.toString())) ~>
+  it should "return 201 on copy method configuration" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairCreated.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodConfigurationRoute) ~>
+      sealRoute(services.copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult("testConfig") {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.namespace, methodConfig.name).name
+        services.dataSource.inTransaction { txn =>
+          assertResult("testConfig1") {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+          }
         }
       }
   }
 
-  it should "return 409 on copy method configuration to existing name" in {
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairConflict.toJson.toString())) ~>
+  it should "return 409 on copy method configuration to existing name" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairConflict.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodConfigurationRoute) ~>
+      sealRoute(services.copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -608,10 +648,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 404 on copy method configuration from bogus source" in {
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, methodConfigNamePairNotFound.toJson.toString())) ~>
+  it should "return 404 on copy method configuration from bogus source" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairNotFound.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodConfigurationRoute) ~>
+      sealRoute(services.copyMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -621,24 +661,27 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
 
   val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
 
-  it should "return 201 on copy method configuration from method repo" in {
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoGood.toJson.toString())) ~>
+  it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoGood.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult("testConfig") {
-          MockMethodConfigurationDAO.store(workspace.namespace, workspace.name)(methodConfig.namespace, methodConfig.name).name
+        services.dataSource.inTransaction { txn =>
+          assertResult("testConfig1") {
+            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+          }
         }
       }
   }
 
-  it should "return 409 on copy method configuration from method repo to existing name" in {
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoGood.toJson.toString())) ~>
+  it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
+    val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", testData.methodConfigName)
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -646,10 +689,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 404 on copy method configuration from bogus source in method repo" in {
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoMissing.toJson.toString())) ~>
+  it should "return 404 on copy method configuration from bogus source in method repo" in withTestDataApiServices { services =>
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoMissing.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -657,10 +700,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 422 on copy method configuration when method repo payload is missing" in {
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoEmptyPayload.toJson.toString())) ~>
+  it should "return 422 on copy method configuration when method repo payload is missing" in withTestDataApiServices { services =>
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoEmptyPayload.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
@@ -668,10 +711,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 422 on copy method configuration when method repo payload is unparseable" in {
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, methodRepoBadPayload.toJson.toString())) ~>
+  it should "return 422 on copy method configuration when method repo payload is unparseable" in withTestDataApiServices { services =>
+    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoBadPayload.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
@@ -679,10 +722,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 200 on get method configuration" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs/${methodConfig.namespace}/${methodConfig.name}") ~>
+  it should "return 200 on get method configuration" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(getMethodConfigurationRoute) ~>
+      sealRoute(services.getMethodConfigurationRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -690,54 +733,60 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "list method Configuration" in {
-    Get(s"/workspaces/${workspace.namespace}/${workspace.name}/methodconfigs") ~>
+  it should "list method Configuration" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
       addMockOpenAmCookie ~>
-      sealRoute(listMethodConfigurationsRoute) ~>
+      sealRoute(services.listMethodConfigurationsRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(MockMethodConfigurationDAO.store(workspace.namespace, workspace.name).values.map(mc =>
-          MethodConfigurationShort(mc.name, mc.rootEntityType, mc.methodNamespace, mc.methodName, mc.methodVersion, mc.workspaceName, mc.namespace)).toSet) {
-          responseAs[Array[MethodConfigurationShort]].toSet
+        services.dataSource.inTransaction { txn =>
+          val configs = methodConfigDAO.list(testData.workspace.namespace, testData.workspace.name, txn).toSet
+          assertResult(configs) {
+            responseAs[Array[MethodConfigurationShort]].toSet
+          }
         }
       }
   }
 
-  it should "copy a workspace if the source exists" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
+
+  it should "copy a workspace if the source exists" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceName(namespace = testData.workspace.namespace, name = "test_copy")
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyWorkspaceRoute) ~>
+      sealRoute(services.copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        val copiedWorkspace = MockWorkspaceDAO.store((workspaceCopy.namespace, workspaceCopy.name))
+        services.dataSource.inTransaction { txn =>
+          val copiedWorkspace = workspaceDAO.load(workspaceCopy.namespace, workspaceCopy.name, txn).get
 
-        //Name, namespace, creation date, and owner might change, so this is all that remains.
-        assert(copiedWorkspace.attributes == workspace.attributes)
-        assertResult(MockEntityDAO.listEntitiesAllTypes(workspace.namespace, workspace.name, null).toSet) {
-          MockEntityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, null) map {
-            _.copy(workspaceName = WorkspaceName(workspace.namespace, workspace.name))
-          } toSet
+          //Name, namespace, creation date, and owner might change, so this is all that remains.
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
+          assertResult(entityDAO.listEntitiesAllTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet) {
+            entityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, txn) map {
+              _.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+            } toSet
+          }
+          assertResult(methodConfigDAO.list(testData.workspace.namespace, testData.workspace.name, txn).toSet) {
+            methodConfigDAO.list(workspaceCopy.namespace, workspaceCopy.name, txn) map {
+              _.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+            } toSet
+          }
         }
-        assertResult(MockMethodConfigurationDAO.list(workspace.namespace, workspace.name, null).toSet) {
-          MockMethodConfigurationDAO.list(workspaceCopy.namespace, workspaceCopy.name, null).toSet
-        }
-        assertResult(StatusCodes.Created) {
-          status
-        }
+
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
           header("Location")
         }
       }
   }
 
-  it should "return 409 Conflict on copy if the destination already exists" in {
-    Post(s"/workspaces/${workspace.namespace}/${workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
+  it should "return 409 Conflict on copy if the destination already exists" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyWorkspaceRoute) ~>
+      sealRoute(services.copyWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -745,112 +794,109 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 
-  it should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in {
-    Post(s"/workspaces/${wsns}/${wsname}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest("dsde","not there","Pattern","pattern1",None).toJson.toString)) ~>
+  it should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest("dsde","not there","Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(submissionRoute) ~>
+      sealRoute(services.submissionRoute) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in {
-    val mcName = MethodConfigurationName("three_step_1","dsde",WorkspaceName(wsns,wsname))
+  it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
+    val mcName = MethodConfigurationName("three_step_1","dsde",testData.wsName)
     val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName,mcName.namespace)
-    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createMethodConfigurationRoute) ~>
+      sealRoute(services.createMethodConfigurationRoute) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${wsns}/${wsname}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(submissionRoute) ~>
+      sealRoute(services.submissionRoute) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "return 201 Created when creating a submission" in {
-    val wsName = WorkspaceName(wsns,wsname)
+  it should "return 201 Created when creating a submission" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
     val mcName = MethodConfigurationName("three_step","dsde",wsName)
     val methodConf = MethodConfiguration(mcName.name,"Pattern","dsde","three_step","1",Map.empty,Map.empty,Map.empty,mcName.workspaceName,mcName.namespace)
-    Post(s"/workspaces/${wsns}/${wsname}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createMethodConfigurationRoute) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
-    val entity = Entity("pattern1", "Pattern", Map("pattern" -> AttributeString("hello")), wsName)
-    Post(s"/workspaces/${wsns}/${wsname}/entities", HttpEntity(ContentTypes.`application/json`, entity.toJson.toString)) ~>
+      sealRoute(services.createMethodConfigurationRoute) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+    val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(createEntityRoute)
-    check {
-      assertResult(StatusCodes.Created) {
-        status
-      }
-    }
-
-    Post(s"/workspaces/${wsns}/${wsname}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
+      sealRoute(services.createEntityRoute) ~>
+      check { assertResult(StatusCodes.Created) {status} }
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(submissionRoute) ~>
+      sealRoute(services.submissionRoute) ~>
       check { assertResult(StatusCodes.Created) {status} }
   }
 
-
-  val z1 = Entity("z1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(wsns, wsname))
+  val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
+  val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), testData.wsName)
+  val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")
   val workspace2 = Workspace(
-    wsns + "2",
-    wsname + "2",
+    workspace2Name.namespace,
+    workspace2Name.name,
     DateTime.now().withMillis(0),
     "test",
     Map.empty
   )
 
-  it should "return 201 for copying entities into a workspace with no conflicts" in {
+  it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
     Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(postWorkspaceRoute) ~>
+      sealRoute(services.postWorkspaceRoute) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
-        assertResult(workspace2) {
-          MockWorkspaceDAO.store((workspace2.namespace, workspace2.name))
+        services.dataSource.inTransaction { txn =>
+          assertResult(workspace2) {
+            workspaceDAO.load(workspace2.namespace, workspace2.name, txn).get
+          }
         }
+
 
         Post(s"/workspaces/${workspace2.namespace}/${workspace2.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
           addMockOpenAmCookie ~>
-          sealRoute(createEntityRoute) ~>
+          sealRoute(services.createEntityRoute) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
             }
-            assertResult(z1) {
-              MockEntityDAO.store(workspace2.namespace, workspace2.name)(z1.entityType, z1.name)
+            services.dataSource.inTransaction { txn =>
+              assertResult(z1.copy(workspaceName = workspace2Name)) {
+                entityDAO.get(workspace2.namespace, workspace2.name, z1.entityType, z1.name, txn).get
+              }
             }
 
-            val destWorkspace = WorkspaceName(wsns, wsname)
             val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
-            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, destWorkspace, "samples", Seq("z1"))
+            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
             Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
               addMockOpenAmCookie ~>
-              sealRoute(copyEntitiesRoute) ~>
+              sealRoute(services.copyEntitiesRoute) ~>
               check {
                 assertResult(StatusCodes.Created) {
                   status
                 }
-                assertResult(z1) {
-                  MockEntityDAO.store(workspace.namespace, workspace.name)(z1.entityType, z1.name)
+                services.dataSource.inTransaction { txn =>
+                  assertResult(z1.copy(workspaceName = testData.wsName)) {
+                    entityDAO.get(testData.workspace.namespace, testData.workspace.name, z1.entityType, z1.name, txn).get.copy(workspaceName = testData.wsName)
+                  }
                 }
               }
           }
       }
   }
 
-  it should "return 409 for copying entities into a workspace with conflicts" in {
-    val destWorkspace = WorkspaceName(wsns, wsname)
-    val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
-    val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, destWorkspace, "samples", Seq("z1"))
+  it should "return 409 for copying entities into a workspace with conflicts" in withTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
     Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(copyEntitiesRoute) ~>
+      sealRoute(services.copyEntitiesRoute) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -858,3 +904,5 @@ class WorkspaceApiServiceSpec extends FlatSpec with WorkspaceApiService with Ent
       }
   }
 }
+
+

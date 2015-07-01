@@ -134,7 +134,6 @@ trait GraphDAO {
 
     getProperties(obj, "_").foreach(_ match {
       case (key, None) => vertex.removeProperty(key)
-      case (key, Some(value: DateTime)) => vertex.setProperty(key, value.toDate)
       case (key, Some(value)) => vertex.setProperty(key, value)
     })
 
@@ -172,11 +171,7 @@ trait GraphDAO {
     val parameters = ctor.asMethod.paramLists.head.map { paramSymbol =>
       val paramName = paramSymbol.name.decodedName.toString.trim
       val prop = vertexProperties.get("_" + paramName).orElse(vertexProperties.get(paramName)) map { value =>
-        if (paramSymbol.typeSignature =:= typeOf[DateTime]) value match {
-          case date: Date => new DateTime(date)
-          case _ => throw new RawlsException(s"org.joda.time.DateTime property [${paramName}] of class [${classT.fullName}] does not have a java.util.Date value in ${vertexProperties}")
-        }
-        else value
+        value
       }
 
       if (paramSymbol.typeSignature <:< typeOf[Option[_]]) {

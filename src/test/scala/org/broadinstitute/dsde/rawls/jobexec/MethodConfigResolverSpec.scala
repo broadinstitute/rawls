@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{WordSpecLike, Matchers, FlatSpec}
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbTestFixture {
-  override val testDbName: String = "MethodConfigResolverSpec"
-
   val littleWdl =
     """
       |task t1 {
@@ -34,17 +33,30 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   val configMissingExpr = new MethodConfiguration("configMissingExpr", "Sample", "method_namespace", "test_method", "1",
     Map.empty, Map.empty, Map.empty, WorkspaceName("workspaces", "test_workspace"), "config_namespace")
 
-  workspaceDAO.save(workspace, txn)
-  entityDAO.save("workspaces", "test_workspace", sampleGood, txn)
-  entityDAO.save("workspaces", "test_workspace", sampleMissingValue, txn)
-  configDAO.save("workspaces", "test_workspace", configGood, txn)
-  configDAO.save("workspaces", "test_workspace", configMissingExpr, txn)
+  class ConfigData extends TestData {
+    override def save(txn: RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+      entityDAO.save("workspaces", "test_workspace", sampleGood, txn)
+      entityDAO.save("workspaces", "test_workspace", sampleMissingValue, txn)
+      methodConfigDAO.save("workspaces", "test_workspace", configGood, txn)
+      methodConfigDAO.save("workspaces", "test_workspace", configMissingExpr, txn)
+    }
+  }
+  val configData = new ConfigData()
+
+  def withConfigData(testCode:DataSource => Any): Unit = {
+    withCustomTestDatabase(configData) { dataSource =>
+      testCode(dataSource)
+    }
+  }
 
   "MethodConfigResolver" should {
-    "get validation errors" in {
-      MethodConfigResolver.getValidationErrors(configGood, sampleGood, littleWdl, txn).get(intArgName) should be (None) // Valid input
-      MethodConfigResolver.getValidationErrors(configGood, sampleMissingValue, littleWdl, txn).get(intArgName) shouldNot be (None) // Entity missing value
-      MethodConfigResolver.getValidationErrors(configMissingExpr, sampleGood, littleWdl, txn).get(intArgName) shouldNot be (None) // Config missing expr
+    "get validation errors" in withConfigData { dataSource =>
+      dataSource.inTransaction { txn =>
+        MethodConfigResolver.getValidationErrors(configGood, sampleGood, littleWdl, txn).get(intArgName) should be(None) // Valid input
+        MethodConfigResolver.getValidationErrors(configGood, sampleMissingValue, littleWdl, txn).get(intArgName) shouldNot be(None) // Entity missing value
+        MethodConfigResolver.getValidationErrors(configMissingExpr, sampleGood, littleWdl, txn).get(intArgName) shouldNot be(None) // Config missing expr
+      }
     }
   }
 }

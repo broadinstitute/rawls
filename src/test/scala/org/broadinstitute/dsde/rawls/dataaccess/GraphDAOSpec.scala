@@ -8,7 +8,6 @@ import scala.annotation.meta.field
 import scala.collection.JavaConversions._
 
 class GraphDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
-  override val testDbName = "GraphDAOSpec"
   lazy val dao: GraphDAO = new GraphDAO() {}
 
   val test = Test("a", Option("hi"), "b", 4, true, 3.3)
@@ -22,42 +21,48 @@ class GraphDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   "_clazz" -> test.getClass.getSimpleName
   )
 
-  "GraphDAO" should "update a vertex" in {
-    txn.withGraph { graph =>
-      val vertex = dao.setVertexProperties(test, graph.addVertex(null))
+  "GraphDAO" should "update a vertex" in withEmptyTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      txn.withGraph { graph =>
+        val vertex = dao.setVertexProperties(test, graph.addVertex(null))
 
-      assertResult(expected) { vertex.getPropertyKeys.map(key => key -> vertex.getProperty(key)).toMap }
+        assertResult(expected) {
+          vertex.getPropertyKeys.map(key => key -> vertex.getProperty(key)).toMap
+        }
+      }
     }
   }
 
-  it should "create case class from vertex" in {
-    txn.withGraph { graph =>
-      val vertex = graph.addVertex(null)
-      vertex.setProperty("_s", "a")
-      vertex.setProperty("_op", "hi")
-      vertex.setProperty("_i", 4)
-      vertex.setProperty("_b", true)
-      vertex.setProperty("_d", 3.3)
-      vertex.setProperty("_clazz", test.getClass.getSimpleName)
+  it should "create case class from vertex" in withEmptyTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      txn.withGraph { graph =>
+        val vertex = graph.addVertex(null)
+        vertex.setProperty("_s", "a")
+        vertex.setProperty("_op", "hi")
+        vertex.setProperty("_i", 4)
+        vertex.setProperty("_b", true)
+        vertex.setProperty("_d", 3.3)
+        vertex.setProperty("_clazz", test.getClass.getSimpleName)
 
-      assertResult(test) {
-        dao.fromVertex[Test](vertex, Map("x" -> "b"))
+        assertResult(test) {
+          dao.fromVertex[Test](vertex, Map("x" -> "b"))
+        }
+
+        vertex.removeProperty("_op")
+        assertResult(test.copy(op = None)) {
+          dao.fromVertex[Test](vertex, Map("x" -> "b"))
+        }
+
+        intercept[RawlsException] {
+          dao.fromVertex[Test](vertex, Map())
+        }
+
+        vertex.removeProperty("_s")
+        intercept[RawlsException] {
+          dao.fromVertex[Test](vertex, Map("x" -> "b"))
+        }
+
       }
-
-      vertex.removeProperty("_op")
-      assertResult(test.copy(op = None)) {
-        dao.fromVertex[Test](vertex, Map("x" -> "b"))
-      }
-
-      intercept[RawlsException] {
-        dao.fromVertex[Test](vertex, Map())
-      }
-
-      vertex.removeProperty("_s")
-      intercept[RawlsException] {
-        dao.fromVertex[Test](vertex, Map("x" -> "b"))
-      }
-
     }
   }
 }
