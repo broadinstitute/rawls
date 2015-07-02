@@ -22,7 +22,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
 
   val intArgName = "w1.t1.int_arg"
 
-  val workspace = new Workspace("workspaces", "test_workspace", DateTime.now, "testUser", Map.empty)
+  val workspace = new Workspace("workspaces", "test_workspace", "aBucket", DateTime.now, "testUser", Map.empty)
 
   val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)), WorkspaceName("workspaces", "test_workspace"))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty, WorkspaceName("workspaces", "test_workspace"))

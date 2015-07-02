@@ -30,6 +30,20 @@ case class WorkspaceName(
   def path : String = "workspaces/" + namespace + "/" + name
 }
 
+@ApiModel(value = "WorkspaceRequest")
+case class WorkspaceRequest (
+                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
+                      @(VertexProperty@field)
+                      namespace: String,
+                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
+                      @(VertexProperty@field)
+                      name: String,
+                      @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
+                      attributes: Map[String, Attribute]
+                      ) extends Identifiable with Attributable {
+  def path = WorkspaceName(namespace,name).path
+}
+
 @ApiModel(value = "Workspace")
 case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
@@ -38,6 +52,9 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
                       @(VertexProperty@field)
                       name: String,
+                      @(ApiModelProperty@field)(required = true, value = "The bucket associated with the workspace")
+                      @(VertexProperty@field)
+                      bucketName: String,
                       @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ss.SSSZZ format")
                       @(VertexProperty@field)
                       createdDate: DateTime,
@@ -47,7 +64,7 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
-  def path : String = "workspaces/" + namespace + "/" + name
+  def path = WorkspaceName(namespace,name).path
 }
 
 @ApiModel(value = "Entity name")
@@ -208,7 +225,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat5(Entity)
 
-  implicit val WorkspaceFormat = jsonFormat5(Workspace)
+  implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
+
+  implicit val WorkspaceFormat = jsonFormat6(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 

@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 
 class GraphWorkspaceDAO() extends WorkspaceDAO with GraphDAO {
 
-  def save(workspace: Workspace, txn: RawlsTransaction) = txn withGraph { db =>
+  override def save(workspace: Workspace, txn: RawlsTransaction) = txn withGraph { db =>
     val workspaceVertex = getWorkspaceVertex(db, workspace.namespace, workspace.name).getOrElse({
       setVertexProperties(workspace, addVertex(db, null))
     })

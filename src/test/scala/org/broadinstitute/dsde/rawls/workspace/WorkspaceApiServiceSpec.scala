@@ -5,7 +5,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService}
+import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
+import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
@@ -47,9 +48,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
+  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl))
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO)
   }
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
@@ -63,11 +64,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
-    val newWorkspace = Workspace(
+    val newWorkspace = WorkspaceRequest(
       namespace = "newNamespace",
       name = "newWorkspace",
-      createdDate = DateTime.now(),
-      createdBy = "Joe Biden",
       Map.empty
     )
 
@@ -80,11 +79,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(newWorkspace) {
-            workspaceDAO.load(newWorkspace.namespace, newWorkspace.name, txn).get
+            val ws = workspaceDAO.load(newWorkspace.namespace, newWorkspace.name, txn).get
+            WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
           }
         }
         assertResult(newWorkspace) {
-          responseAs[Workspace]
+          val ws = responseAs[Workspace]
+          WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
@@ -838,11 +839,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), testData.wsName)
   val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")
-  val workspace2 = Workspace(
+  val workspace2 = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
-    DateTime.now().withMillis(0),
-    "test",
     Map.empty
   )
 
@@ -856,7 +855,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(workspace2) {
-            workspaceDAO.load(workspace2.namespace, workspace2.name, txn).get
+            val ws = workspaceDAO.load(workspace2.namespace, workspace2.name, txn).get
+            WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
           }
         }
 
@@ -905,6 +905,40 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
       }
   }
+
+  it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.getACLRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 404 when requesting an ACL from a non-existent workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/xyzzy/plugh/acl") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.getACLRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
+    Put(s"/workspaces/xyzzy/plugh/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
 }
-
-

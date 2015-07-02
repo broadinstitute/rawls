@@ -1,13 +1,17 @@
 package org.broadinstitute.dsde.rawls
 
+import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.logging.{Logger, LogManager}
 
-import akka.testkit.TestActorRef
 import akka.util.Timeout
+import com.google.api.client.util.store.FileDataStoreFactory
 import com.orientechnologies.orient.client.remote.OServerAdmin
-import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmConfig, RawlsOpenAmClient, StandardOpenAmDirectives}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.vault.common.openam.OpenAMResponse.AuthenticateResponse
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{ContentTypes, HttpEntity, HttpCookie}
 import spray.http.HttpHeaders.Cookie
@@ -16,23 +20,20 @@ import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
-import scala.org.broadinstitute.dsde.rawls.openam.OpenAmClientService
-import scala.org.broadinstitute.dsde.rawls.openam.OpenAmClientService.{OpenAmAuthRequest, OpenAmResponse}
-import akka.pattern.ask
 
 import spray.json._
 
-trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers with IntegrationTestConfig {
-
+trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers with IntegrationTestConfig with StandardOpenAmDirectives {
   val timeoutDuration = new FiniteDuration(5, TimeUnit.SECONDS)
   implicit val timeout = Timeout(timeoutDuration)
-  def getOpenAmToken: Option[OpenAmResponse] = {
-    val actor = TestActorRef[OpenAmClientService]
-    val future = actor ? OpenAmAuthRequest(openAmTestUser, openAmTestUserPassword)
-    Some(Await.result(future, timeoutDuration).asInstanceOf[OpenAmResponse])
+  val rawlsOpenAmClient = new RawlsOpenAmClient(new RawlsOpenAmConfig(ConfigFactory.parseFile(new File("/etc/rawls.conf")).getConfig("openam")))
+
+  def getOpenAmToken: Option[AuthenticateResponse] = {
+    Some(Await.result(rawlsOpenAmClient.authenticate, timeoutDuration))
   }
 
   lazy val openAmResponse = getOpenAmToken.get
+
   def addOpenAmCookie: RequestTransformer = {
     Cookie(HttpCookie("iPlanetDirectoryPro", openAmResponse.tokenId))
   }
@@ -53,8 +54,10 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     if (admin.existsDatabase()) admin.dropDatabase(dbName)
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
-
-    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), new HttpMethodRepoDAO(methodRepoServer), new HttpExecutionServiceDAO(executionServiceServer))
+    val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsFile,
+                    new FileDataStoreFactory(new File(gcsDataStoreRoot)),
+                    gcsRedirectUrl)
+    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), new HttpMethodRepoDAO(methodRepoServer), new HttpExecutionServiceDAO(executionServiceServer), gcsDAO)
   }
 
 }

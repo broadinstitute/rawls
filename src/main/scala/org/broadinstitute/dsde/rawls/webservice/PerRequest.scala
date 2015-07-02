@@ -5,6 +5,7 @@ import akka.actor.SupervisorStrategy.Stop
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.ToResponseMarshaller
+import spray.json.{DefaultJsonProtocol, JsonFormat, RootJsonFormat}
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
@@ -62,14 +63,27 @@ trait PerRequest extends Actor {
     stop(self)
   }
 
+  object MyJsonProtocol extends DefaultJsonProtocol {
+    implicit val jsonParentWithChildren: RootJsonFormat[RawlsServerError] =
+      rootFormat(lazyFormat(jsonFormat(RawlsServerError, "exception", "message", "stack", "cause")))
+  }
+  import MyJsonProtocol._
+
   override val supervisorStrategy =
     OneForOneStrategy() {
       case e => {
         system.log.error(e, "error processing request: " + r.request.uri)
-        r.complete(InternalServerError, e.getMessage)
+        import spray.httpx.SprayJsonSupport._
+        r.complete(InternalServerError, new RawlsServerError(e))
         Stop
       }
     }
+
+  case class RawlsServerError(exception: String, message: String, stack: Array[String], cause: Option[RawlsServerError]) {
+    def this(t: Throwable) = {
+      this(t.getClass.getName, Option(t.getMessage).getOrElse("null"), t.getStackTrace.map(_.toString), Option(t.getCause).map(new RawlsServerError(_)))
+    }
+  }
 }
 
 object PerRequest {
