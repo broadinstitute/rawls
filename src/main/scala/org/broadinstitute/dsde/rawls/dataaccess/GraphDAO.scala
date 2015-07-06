@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.Date
 
-import com.orientechnologies.orient.core.record.impl.ODocument
 import com.orientechnologies.orient.core.sql.query.OSQLSynchQuery
+import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.blueprints.{Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
@@ -25,6 +25,12 @@ trait GraphDAO {
   }
 
   def isReservedProperty(key: String) = key.startsWith("_")
+
+  def addVertex(graph: Graph, o: java.lang.Object ) : Vertex = {
+    val v = graph.addVertex(o)
+    v.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+    v
+  }
 
   /**
    * Gets a single value result of a pipeline.

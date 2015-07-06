@@ -62,10 +62,10 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
   override def save(workspaceNamespace: String, workspaceName: String, submission: Submission, txn: RawlsTransaction) =
     txn withGraph { db =>
       val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName).getOrElse(throw new IllegalArgumentException(s"workspace ${workspaceNamespace}/${workspaceName} does not exist"))
-      val submissionVertex = setVertexProperties(submission, db.addVertex(null))
+      val submissionVertex = setVertexProperties(submission, addVertex(db, null))
       workspace.addEdge(ExecutionEdgeTypes.submissionEdgeType, submissionVertex)
       submission.workflow.foreach { workflow =>
-        val workflowVertex = setVertexProperties(workflow, db.addVertex(null))
+        val workflowVertex = setVertexProperties(workflow, addVertex(db, null))
         workspace.addEdge(ExecutionEdgeTypes.workflowEdgeType, workflowVertex)
         submissionVertex.addEdge(ExecutionEdgeTypes.workflowEdgeType, workflowVertex)
       }

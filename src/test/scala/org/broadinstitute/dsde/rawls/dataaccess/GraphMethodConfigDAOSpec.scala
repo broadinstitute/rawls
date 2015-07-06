@@ -18,9 +18,9 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
         "ns",
         "meth2",
         "2",
-        Map("i2" -> "input expr"),
-        Map("o2" -> "output expr"),
-        Map("p2" -> "prereq expr"),
+        Map("input.expression" -> "input expr"),
+        Map("output.expression" -> "output expr"),
+        Map("prereq.expression" -> "prereq expr"),
         testData.wsName,
         "ns"
       )
