@@ -67,7 +67,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   private def createVertex(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
     // get the entity, creating if it doesn't already exist
     val entityVertex = getEntityVertex(db, workspaceNamespace, workspaceName, entity.entityType, entity.name).getOrElse({
-      val newVertex = setVertexProperties(entity, db.addVertex(null))
+      val newVertex = setVertexProperties(entity, addVertex(db, null))
       workspace.addEdge(entity.entityType, newVertex)
       newVertex
     })
