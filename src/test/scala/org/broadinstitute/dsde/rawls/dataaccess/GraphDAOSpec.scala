@@ -24,7 +24,7 @@ class GraphDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   "GraphDAO" should "update a vertex" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       txn.withGraph { graph =>
-        val vertex = dao.setVertexProperties(test, graph.addVertex(null))
+        val vertex = dao.setVertexProperties(test, dao.addVertex(graph, null))
 
         assertResult(expected) {
           vertex.getPropertyKeys.map(key => key -> vertex.getProperty(key)).toMap

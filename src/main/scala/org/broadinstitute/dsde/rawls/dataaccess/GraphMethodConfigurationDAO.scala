@@ -66,7 +66,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
     val (configVertex, inputsVertex, outputsVertex, prerequisitesVertex) =
       getSinglePipelineResult(methodConfigPipe) match {
         case None => {
-          val configVertex = graph.addVertex(null)
+          val configVertex = addVertex(graph, null)
           workspace.addEdge(MethodConfigEdgeType, configVertex)
 
           val (inputsVertex, outputsVertex, prerequisitesVertex) = createSubVertices(graph, configVertex)
@@ -91,11 +91,11 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   }
 
   private def createSubVertices(graph: Graph, configVertex: Vertex): (Vertex, Vertex, Vertex) = {
-    val inputsVertex = graph.addVertex(null)
+    val inputsVertex = addVertex(graph, null)
     configVertex.addEdge(InputsEdge, inputsVertex)
-    val outputsVertex = graph.addVertex(null)
+    val outputsVertex = addVertex(graph, null)
     configVertex.addEdge(OutputsEdge, outputsVertex)
-    val prerequisitesVertex = graph.addVertex(null)
+    val prerequisitesVertex = addVertex(graph, null)
     configVertex.addEdge(PrerequisitesEdge, prerequisitesVertex)
     (inputsVertex, outputsVertex, prerequisitesVertex)
   }
