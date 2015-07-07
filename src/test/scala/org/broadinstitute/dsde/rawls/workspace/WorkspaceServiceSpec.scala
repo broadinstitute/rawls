@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.util.UUID
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._

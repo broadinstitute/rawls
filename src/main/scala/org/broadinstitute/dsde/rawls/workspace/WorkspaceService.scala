@@ -2,16 +2,14 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import com.google.api.client.auth.oauth2.Credential
 import akka.actor.{ActorRef, Actor, Props}
-import org.broadinstitute.dsde.rawls._
-import com.tinkerpop.blueprints.Graph
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionRequestFormat,ExecutionServiceStatusFormat,WorkflowFormat,WorkflowFailureFormat,SubmissionFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
+import org.broadinstitute.dsde.rawls.model.GoogleBucketACLJsonSupport.BucketAccessControlsFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -21,7 +19,7 @@ import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http
-import spray.http.{Uri, StatusCodes, HttpCookie}
+import spray.http.Uri
 import spray.http.HttpHeaders.Location
 import spray.http.{StatusCodes, HttpCookie}
 import spray.httpx.SprayJsonSupport._
@@ -186,6 +184,18 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         }
         case (None, _) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
         case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+      }
+    }
+
+  // TODO: should I stay or should I go (move to a different class)?
+  //
+  // STAY: needs dataSource, workspaceDAO, and gcsDAO which are available here
+  // GO: does not directly support an endpoint or fit the PerRequestMessage paradigm
+
+  def getACLObject(userId: String, workspaceNamespace: String, workspaceName: String): Option[BucketAccessControls] =
+    dataSource inTransaction { txn =>
+      workspaceDAO.load(workspaceNamespace, workspaceName, txn) map { ws =>
+        JsonParser(gcsDAO.getACL(userId, ws.bucketName)).convertTo[BucketAccessControls]
       }
     }
 

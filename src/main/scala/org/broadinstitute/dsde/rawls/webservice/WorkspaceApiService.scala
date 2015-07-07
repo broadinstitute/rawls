@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.json.JsonParser
 import spray.routing.Directive.pimpApply
 import spray.routing._
 

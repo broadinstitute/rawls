@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.graph
 
-import java.util.UUID
 import java.util.logging.{LogManager, Logger}
 
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
@@ -8,8 +7,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
 import scala.collection.immutable.HashMap
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-import java.util.UUID.randomUUID
+import org.scalatest.BeforeAndAfterAll
 import java.util.UUID
 
 
