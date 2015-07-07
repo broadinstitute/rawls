@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.google.api.client.auth.oauth2.Credential
-
 trait GoogleCloudStorageDAO {
   def getOurRedirectURI(callbackPath: String): String
 
@@ -10,6 +8,8 @@ trait GoogleCloudStorageDAO {
   def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit
 
   def createBucket(userId: String, projectId: String, bucketName: String): Unit
+
+  // TODO: acls should be BucketAccessControls
 
   def getACL(userId: String, bucketName: String): String
 

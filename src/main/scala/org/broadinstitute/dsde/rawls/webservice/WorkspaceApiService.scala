@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.json.JsonParser
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -70,12 +69,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 404, message = "Workspace does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def updateWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def updateWorkspaceRoute = usernameFromCookie() { userId =>
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.UpdateWorkspace(workspaceNamespace, workspaceName, operations))
+            WorkspaceService.UpdateWorkspace(userId, workspaceNamespace, workspaceName, operations))
         }
       }
     }
@@ -96,10 +95,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 404, message = "Workspace does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getWorkspacesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def getWorkspacesRoute = usernameFromCookie() { userId =>
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.GetWorkspace(workspaceNamespace, workspaceName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.GetWorkspace(userId, workspaceNamespace, workspaceName))
       }
     }
   }
