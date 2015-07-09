@@ -20,6 +20,8 @@ import java.util.UUID
 trait OrientDbTestFixture extends BeforeAndAfterAll {
   this : org.scalatest.BeforeAndAfterAll with org.scalatest.Suite =>
 
+  val testDate = new DateTime()
+
   override def beforeAll: Unit = {
     // TODO find a better way to set the log level. Nothing else seems to work.
     LogManager.getLogManager().reset()
@@ -31,6 +33,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
   lazy val methodConfigDAO = new GraphMethodConfigurationDAO()
+  lazy val submissionDAO: SubmissionDAO = new GraphSubmissionDAO
 
   abstract class TestData {
     def save(txn:RawlsTransaction)
@@ -125,6 +128,11 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
+    val submission = Submission("submission1",testDate,workspace.namespace,workspace.name,methodConfig.namespace,methodConfig.name,sset1.entityType,
+      Seq(Workflow(workspace.namespace,workspace.name,"workflow1",WorkflowStatuses.Submitted,testDate,sample1.name),
+        Workflow(workspace.namespace,workspace.name,"workflow2",WorkflowStatuses.Submitted,testDate,sample2.name),
+        Workflow(workspace.namespace,workspace.name,"workflow3",WorkflowStatuses.Submitted,testDate,sample3.name)), SubmissionStatuses.Submitted)
+
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig, txn)
@@ -145,6 +153,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       entityDAO.save(workspace.namespace, workspace.name, sset3, txn)
       entityDAO.save(workspace.namespace, workspace.name, sset4, txn)
       entityDAO.save(workspace.namespace, workspace.name, indiv1, txn)
+
+      submissionDAO.save(workspace.namespace, workspace.name, submission, txn)
     }
   }
   val testData = new DefaultTestData()

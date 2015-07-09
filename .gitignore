@@ -12,3 +12,4 @@ test-output/
 .project
 /.settings/
 /bin/
+test.log

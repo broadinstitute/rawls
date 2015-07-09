@@ -8,4 +8,5 @@ import spray.http.HttpCookie
  */
 trait ExecutionServiceDAO {
   def submitWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceStatus
+  def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus
 }

@@ -10,6 +10,7 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -58,6 +59,13 @@ object Boot extends App {
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")))),
                     "rawls-service")
+
+    system.actorOf(SubmissionSupervisor.props(
+      new GraphSubmissionDAO(),
+      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
+      new GraphWorkflowDAO(),
+      dataSource
+    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler

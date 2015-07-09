@@ -17,6 +17,8 @@ trait SubmissionDAO {
 
   /** delete a submission (and its workflows) */
   def delete(workspaceNamespace: String, workspaceName: String, submissionId: String, txn: RawlsTransaction): Boolean
+
+  def update(submission: Submission, txn: RawlsTransaction): Unit
 }
 
 trait WorkflowDAO {
@@ -24,7 +26,7 @@ trait WorkflowDAO {
   def get(workspaceNamespace: String, workspaceName: String, workflowId: String, txn: RawlsTransaction): Option[Workflow]
 
   /** update a workflow */
-  def update(workspaceNamespace: String, workspaceName: String, workflow: Workflow, txn: RawlsTransaction): Boolean
+  def update(workspaceNamespace: String, workspaceName: String, workflow: Workflow, txn: RawlsTransaction): Workflow
 
   /** delete a workflow */
   def delete(workspaceNamespace: String, workspaceName: String, workflowId: String, txn: RawlsTransaction): Boolean

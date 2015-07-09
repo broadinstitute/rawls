@@ -123,7 +123,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String] = txn withGraph { graph =>
-    workspacePipeline(graph, workspaceNamespace, workspaceName).outE().label().dedup().toList.filterNot(_ == MethodConfigEdgeType)
+    workspacePipeline(graph, workspaceNamespace, workspaceName).outE().label().dedup().toList.filterNot(isReservedProperty(_))
   }
 
   def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
