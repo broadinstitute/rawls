@@ -38,7 +38,7 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
                       @(VertexProperty@field)
                       name: String,
-                      @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ssZZ format")
+                      @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ss.SSSZZ format")
                       @(VertexProperty@field)
                       createdDate: DateTime,
                       @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
