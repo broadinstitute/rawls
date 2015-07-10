@@ -18,9 +18,9 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
         "ns",
         "meth2",
         "2",
-        Map("input.expression" -> "input expr"),
-        Map("output.expression" -> "output expr"),
-        Map("prereq.expression" -> "prereq expr"),
+        Map("input.expression" -> "this..wont.parse"),
+        Map("output.expression" -> "output.expr"),
+        Map("prereq.expression" -> "prereq.expr"),
         testData.wsName,
         "ns"
       )
@@ -48,7 +48,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   it should "list method configs" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      assertResult(List(MethodConfigurationShort("testConfig1","Sample","ns","meth1","1",testData.wsName,"ns"))) {
+      assertResult(List(testData.methodConfig, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort)) {
         new GraphMethodConfigurationDAO().list(testData.wsName.namespace, testData.wsName.name, txn).toList
       }
     }

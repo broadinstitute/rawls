@@ -23,7 +23,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "list all entities of all entity types" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
+      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, /*testData.sset_empty,*/ testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
         dao.listEntitiesAllTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet
       }
     }

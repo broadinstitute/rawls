@@ -27,7 +27,7 @@ object MethodConfigResolver {
    * Evaluate expressions in a method config against a root entity.
    * @return map from input name to a Try containing a resolved value or failure
    */
-  def resolveInputs(methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Any]] = {
+  def resolveInputs(methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
     val wdlInputs = WdlNamespace.load(wdl).workflows.head.inputs
     txn withGraph { graph =>
       val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
@@ -78,8 +78,8 @@ object MethodConfigResolver {
     }
   }
 
-  def propertiesToWdlInputs(inputs: Map[String, Any]): String = JsObject(
-    inputs map { case (name, value) => (name, AttributeConversions.propertyToAttribute(value).asInstanceOf[Attribute].toJson) }
+  def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
+    inputs map { case (name, value) => (name, value.toJson) }
   ) toString
 
 }

@@ -132,6 +132,7 @@ case class MethodConfiguration(
                    @(VertexProperty@field)
                    namespace: String) extends Identifiable {
   def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
+  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodNamespace, methodName, methodVersion, workspaceName, namespace)
 }
 @ApiModel(value = "Method Configuration without inputs, outputs, or prerequisites")
 case class MethodConfigurationShort(
