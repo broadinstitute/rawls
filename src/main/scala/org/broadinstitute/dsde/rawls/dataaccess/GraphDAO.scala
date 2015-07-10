@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.Date
 
-import com.orientechnologies.orient.core.sql.query.OSQLSynchQuery
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.blueprints.{Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
@@ -57,9 +56,13 @@ trait GraphDAO {
    */
   def getVertexProperties[T](pipeline: GremlinPipeline[_, Vertex]): Option[Map[String, T]] = {
     // Calling count() is destructive, so we first pop off the head, then check for more
-    val first = pipeline.map().headOption
+    val first = pipeline.headOption
     if (pipeline.count() > 0) throw new IllegalStateException("Expected at most one result, but got multiple")
-    first.map(_.asInstanceOf[java.util.Map[String, T]].toMap)
+
+    first.map( vert => {
+      vert.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+      vert.getPropertyKeys map { key => (key, vert.getProperty[T](key)) } toMap
+    } )
   }
 
   /**

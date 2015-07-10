@@ -35,19 +35,21 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   def actorRefFactory = system
 
+  val mockServer = RemoteServicesMockServer()
+
   override def beforeAll() = {
     super.beforeAll
-    RemoteServicesMockServer.startServer
+    mockServer.startServer
   }
 
   override def afterAll() = {
     super.afterAll
-    RemoteServicesMockServer.stopServer
+    mockServer.stopServer
   }
 
   case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
     def actorRefFactory = system
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(RemoteServicesMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(RemoteServicesMockServer.mockServerBaseUrl))
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl))
   }
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {

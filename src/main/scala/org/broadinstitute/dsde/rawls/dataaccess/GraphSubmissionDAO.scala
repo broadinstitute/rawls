@@ -4,7 +4,7 @@ import com.tinkerpop.blueprints.{Graph, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.model.{Submission,Workflow}
+import org.broadinstitute.dsde.rawls.model.{WorkflowFailure, Submission, Workflow}
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
@@ -15,6 +15,7 @@ import scala.language.implicitConversions
 object ExecutionEdgeTypes {
   val submissionEdgeType = "_SubmissionStatus"
   val workflowEdgeType = "_Workflow"
+  val workflowFailureEdgeType = "_WorkflowFailure"
 }
 
 class GraphWorkflowDAO extends WorkflowDAO with GraphDAO {
@@ -69,10 +70,14 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
       val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName).getOrElse(throw new IllegalArgumentException(s"workspace ${workspaceNamespace}/${workspaceName} does not exist"))
       val submissionVertex = setVertexProperties(submission, addVertex(db, null))
       workspace.addEdge(ExecutionEdgeTypes.submissionEdgeType, submissionVertex)
-      submission.workflow.foreach { workflow =>
+      submission.workflows.foreach { workflow =>
         val workflowVertex = setVertexProperties(workflow, addVertex(db, null))
         workspace.addEdge(ExecutionEdgeTypes.workflowEdgeType, workflowVertex)
         submissionVertex.addEdge(ExecutionEdgeTypes.workflowEdgeType, workflowVertex)
+      }
+      submission.notstarted.foreach { failure =>
+        val failureVertex = setVertexProperties(failure, db.addVertex(null))
+        submissionVertex.addEdge(ExecutionEdgeTypes.workflowFailureEdgeType, failureVertex)
       }
     }
 
@@ -103,8 +108,13 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
   private def fromVertex(workspaceNamespace: String, workspaceName: String, vertex: Vertex): Submission = {
     val propertiesMap = getVertexProperties[Any](new GremlinPipeline(vertex)).get
     val workspaceProperties = Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName)
-    val workflows = getPropertiesOfVertices[Any](new GremlinPipeline(vertex).out(ExecutionEdgeTypes.workflowEdgeType)) map { m => fromPropertyMap[Workflow](m ++ workspaceProperties) }
-    val fullMap = propertiesMap ++ Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName,"workflow"->workflows.toSeq)
+    val workflows = getPropertiesOfVertices[Any](new GremlinPipeline(vertex).out(ExecutionEdgeTypes.workflowEdgeType)) map { wf =>
+      fromPropertyMap[Workflow](wf ++ Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName))
+    }
+    val workflowFails = getPropertiesOfVertices[Any](new GremlinPipeline(vertex).out(ExecutionEdgeTypes.workflowFailureEdgeType)) map { fail =>
+      fromPropertyMap[WorkflowFailure](fail ++ Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName))
+    }
+    val fullMap = propertiesMap ++ Map("workspaceNamespace"->workspaceNamespace,"workspaceName"->workspaceName,"workflows"->workflows.toSeq,"notstarted"->workflowFails.toSeq)
     fromPropertyMap[Submission](fullMap)
   }
 }

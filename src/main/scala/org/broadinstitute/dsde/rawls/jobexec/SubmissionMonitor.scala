@@ -82,7 +82,7 @@ class SubmissionMonitor(submission: Submission,
   }
 
   private def startWorkflowMonitorActors(): Unit = {
-    submission.workflow.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
+    submission.workflows.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
@@ -105,7 +105,7 @@ class SubmissionMonitor(submission: Submission,
         throw new RawlsException(s"submissions ${submission} does not exist")
       )
 
-      if (refreshedSubmission.workflow.forall(workflow => workflow.status.isDone)) {
+      if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
         submissionDAO.update(refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
         stop(self)
       }

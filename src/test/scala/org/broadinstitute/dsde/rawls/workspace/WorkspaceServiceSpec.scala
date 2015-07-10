@@ -27,7 +27,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
     def actorRefFactory = system
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(RemoteServicesMockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(RemoteServicesMockServer.mockServerBaseUrl))
+    val mockServer = RemoteServicesMockServer()
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl))
   }
 
   def withTestDataServices(testCode: TestApiService => Any): Unit = {

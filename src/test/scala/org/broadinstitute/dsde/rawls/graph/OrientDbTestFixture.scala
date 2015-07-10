@@ -4,13 +4,9 @@ import java.util.UUID
 import java.util.logging.{LogManager, Logger}
 
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
-import org.broadinstitute.dsde.rawls.dataaccess.{GraphWorkspaceDAO, GraphEntityDAO, DataSource, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{BeforeAndAfterAll}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
-import java.util.UUID.randomUUID
 import scala.collection.immutable.HashMap
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import java.util.UUID.randomUUID
@@ -42,9 +38,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = new Workspace(wsName.namespace, wsName.name, DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, DateTime.now, "testUser", new HashMap[String, Attribute]() )
 
-    val sample1 = new Entity("sample1", "Sample",
+    val sample1 = Entity("sample1", "Sample",
       Map(
         "type" -> AttributeString("normal"),
         "whatsit" -> AttributeNumber(100),
@@ -52,8 +48,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         "quot" -> AttributeReferenceSingle("Aliquot", "aliquot1"),
         "somefoo" -> AttributeString("itsfoo")),
       WorkspaceName(wsName.namespace, wsName.name) )
-    val sample2 = new Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor") ), WorkspaceName(wsName.namespace, wsName.name) )
-    val sample3 = new Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor") ), WorkspaceName(wsName.namespace, wsName.name) )
+    val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ), WorkspaceName(wsName.namespace, wsName.name) )
+    val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeReferenceSingle("Sample", "sample1") ), WorkspaceName(wsName.namespace, wsName.name) )
     val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")), wsName)
     var sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")), wsName)
     var sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")), wsName)
@@ -62,16 +58,16 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty, wsName)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty, wsName)
 
-    val pair1 = new Entity("pair1", "Pair",
+    val pair1 = Entity("pair1", "Pair",
       Map( "case" -> AttributeReferenceSingle("Sample", "sample2"),
         "control" -> AttributeReferenceSingle("Sample", "sample1") ),
       WorkspaceName(wsName.namespace, wsName.name) )
-    val pair2 = new Entity("pair2", "Pair",
+    val pair2 = Entity("pair2", "Pair",
       Map( "case" -> AttributeReferenceSingle("Sample", "sample3"),
         "control" -> AttributeReferenceSingle("Sample", "sample1") ),
       WorkspaceName(wsName.namespace, wsName.name) )
 
-    val sset1 = new Entity("sset1", "SampleSet",
+    val sset1 = Entity("sset1", "SampleSet",
       Map( "samples" -> AttributeReferenceList( List(AttributeReferenceSingle("Sample", "sample1"),
         AttributeReferenceSingle("Sample", "sample2"),
         AttributeReferenceSingle("Sample", "sample3"))) ),
@@ -91,12 +87,16 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         AttributeReferenceSingle("Sample", "sample7")))),
       wsName)
 
-    val ps1 = new Entity("ps1", "PairSet",
+    val sset_empty = Entity("sset_empty", "SampleSet",
+      Map( "samples" -> AttributeReferenceList(List())),
+      WorkspaceName("workspaces", "test_workspace") )
+
+    val ps1 = Entity("ps1", "PairSet",
       Map( "pairs" -> AttributeReferenceList( List(AttributeReferenceSingle("Pair", "pair1"),
         AttributeReferenceSingle("Pair", "pair2"))) ),
       WorkspaceName(wsName.namespace, wsName.name) )
 
-    val indiv1 = new Entity("indiv1", "Individual",
+    val indiv1 = Entity("indiv1", "Individual",
       Map( "sset" -> AttributeReferenceSingle("SampleSet", "sset1") ),
       WorkspaceName(wsName.namespace, wsName.name) )
 
@@ -115,6 +115,12 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
     val methodConfig2 = MethodConfiguration("testConfig2", "Sample", wsName.namespace, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), wsName, "dsde")
     val methodConfig3 = MethodConfiguration("testConfig", "Sample", wsName.namespace, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), wsName, "dsde")
+
+    val methodConfigValid = MethodConfiguration("GoodMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.type"), outputs=Map.empty, wsName, "dsde")
+    val methodConfigUnparseable = MethodConfiguration("UnparseableMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this..wont.parse"), outputs=Map.empty, wsName, "dsde")
+    val methodConfigNotAllSamples = MethodConfiguration("NotAllSamplesMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.tumortype"), outputs=Map.empty, wsName, "dsde")
+    val methodConfigAttrTypeMixup = MethodConfiguration("AttrTypeMixupMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.confused"), outputs=Map.empty, wsName, "dsde")
+
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
     val methodConfigName3 = methodConfigName.copy(name="noSuchName")
@@ -128,14 +134,16 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
+    val testDate = DateTime.now
+
     val submission = Submission("submission1",testDate,workspace.namespace,workspace.name,methodConfig.namespace,methodConfig.name,sset1.entityType,
-      Seq(Workflow(workspace.namespace,workspace.name,"workflow1",WorkflowStatuses.Submitted,testDate,sample1.name),
-        Workflow(workspace.namespace,workspace.name,"workflow2",WorkflowStatuses.Submitted,testDate,sample2.name),
-        Workflow(workspace.namespace,workspace.name,"workflow3",WorkflowStatuses.Submitted,testDate,sample3.name)), SubmissionStatuses.Submitted)
+      Seq(Workflow(workspace.namespace,workspace.name,"workflow1",WorkflowStatuses.Submitted,testDate,sample1.name, sample1.entityType),
+        Workflow(workspace.namespace,workspace.name,"workflow2",WorkflowStatuses.Submitted,testDate,sample2.name, sample1.entityType),
+        Workflow(workspace.namespace,workspace.name,"workflow3",WorkflowStatuses.Submitted,testDate,sample3.name, sample1.entityType)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig, txn)
+
       entityDAO.save(workspace.namespace, workspace.name, aliquot1, txn)
       entityDAO.save(workspace.namespace, workspace.name, aliquot2, txn)
       entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
@@ -152,7 +160,14 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       entityDAO.save(workspace.namespace, workspace.name, sset2, txn)
       entityDAO.save(workspace.namespace, workspace.name, sset3, txn)
       entityDAO.save(workspace.namespace, workspace.name, sset4, txn)
+      //entityDAO.save(workspace.namespace, workspace.name, sset_empty, txn)
       entityDAO.save(workspace.namespace, workspace.name, indiv1, txn)
+
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig, txn)
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigValid, txn)
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigUnparseable, txn)
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigNotAllSamples, txn)
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigAttrTypeMixup, txn)
 
       submissionDAO.save(workspace.namespace, workspace.name, submission, txn)
     }

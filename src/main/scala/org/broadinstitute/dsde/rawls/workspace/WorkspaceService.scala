@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, Props}
@@ -9,7 +10,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceStatusFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionRequestFormat,ExecutionServiceStatusFormat,WorkflowFormat,WorkflowFailureFormat,SubmissionFormat}
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -500,21 +501,56 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
+  private def submitWorkflow(workspace: WorkspaceName, methodConfig: MethodConfiguration, entity: Entity, wdl: String, authCookie: HttpCookie, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
+    val inputs = MethodConfigResolver.resolveInputs(methodConfig, entity, wdl, txn)
+    if ( inputs.forall(  _._2.isSuccess ) ) {
+      val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
+      Right(Workflow( workspaceNamespace = workspace.namespace, workspaceName = workspace.name, id = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, entityName = entity.name, entityType = entity.entityType ))
+    } else {
+      Left(WorkflowFailure( workspaceNamespace = workspace.namespace, workspaceName = workspace.name, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => regret.getMessage }).toSeq ))
+    }
+  }
+
   def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
+      txn withGraph { graph =>
       withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
         withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
           withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
             withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { agoraEntity =>
               withWdl(agoraEntity) { wdl =>
-                if (methodConfig.rootEntityType != submission.entityType)
-                  RequestComplete(StatusCodes.Conflict,
-                    s"The method configuration expects an entity of type ${methodConfig.rootEntityType}, but the request describes an entity of type ${submission.entityType}")
-                else MethodConfigResolver.resolveInputsAndAggregateErrors(methodConfig, entity, wdl, txn) match {
-                  case Failure(error) =>
-                    RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + error.getMessage())
-                  case Success(inputsMap) =>
-                    RequestComplete(StatusCodes.Created, executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputsMap), authCookie))
+
+                //If there's an expression, evaluate it to get the list of entities to run this job on.
+                //Otherwise, use the entity given in the submission.
+                val jobEntities: Seq[Entity] = submission.expression match {
+                  case Some(expr) =>
+                    new ExpressionEvaluator(graph, new ExpressionParser()).evalFinalEntity(workspaceName.namespace, workspaceName.name, submission.entityType, submission.entityName, expr) match {
+                      case Success(ents) => ents
+                      case Failure(regret) => return RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + regret.getMessage())
+                    }
+                  case None => List(entity)
+                }
+
+                //Verify the type of all job entities matches the type of the method configuration.
+                if (!jobEntities.forall(_.entityType == methodConfig.rootEntityType)) {
+                  return RequestComplete(StatusCodes.BadRequest, "Entities " + jobEntities.filter(_.entityType != methodConfig.rootEntityType).map(e => e.entityType + ":" + e.name) +
+                    "are not the same type as the method configuration requires")
+                }
+
+                //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
+                val submittedWorkflows = jobEntities.map( e => submitWorkflow(workspaceName, methodConfig, e, wdl, authCookie, txn))
+                val newSubmission = Submission(id = UUID.randomUUID().toString,
+                  submissionDate = DateTime.now(),
+                  workspaceNamespace = workspaceName.namespace,
+                  workspaceName = workspaceName.name,
+                  methodConfigurationNamespace = methodConfig.namespace,
+                  methodConfigurationName = methodConfig.name,
+                  entityType = submission.entityType,
+                  workflows = submittedWorkflows collect { case Right(e) => e },
+                  notstarted = submittedWorkflows collect { case Left(e) => e },
+                  status = if (submittedWorkflows.forall( _.isLeft )) SubmissionStatuses.Done else SubmissionStatuses.Submitted )
+
+                RequestComplete(StatusCodes.Created, newSubmission)
                 }
               }
             }

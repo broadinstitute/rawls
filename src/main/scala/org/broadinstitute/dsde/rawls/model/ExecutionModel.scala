@@ -36,7 +36,7 @@ case class ExecutionServiceStatus(
   status: String
 )
 
-// Status of a workflow
+// Status of a successfully started workflow
 @ApiModel(value = "Workflow")
 case class Workflow(
   @(ApiModelProperty@field)("Workspace namespace")
@@ -50,7 +50,24 @@ case class Workflow(
   @(ApiModelProperty@field)("Status last-changed date") @(VertexProperty@field)
   statusLastChangedDate: DateTime,
   @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
-  entityName: String
+  entityName: String,
+  @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
+  entityType: String
+)
+
+// Encapsulating errors for workflows that failed to start
+@ApiModel(value = "WorkflowFailure")
+case class WorkflowFailure(
+  @(ApiModelProperty@field)("Workspace namespace")
+  workspaceNamespace: String,
+  @(ApiModelProperty@field)("Workspace name")
+  workspaceName: String,
+  @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
+  entityName: String,
+  @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
+  entityType: String,
+  @(ApiModelProperty@field)("List of errors starting this workflow") @(VertexProperty@field)
+  errors: Seq[String]
 )
 
 // Status of a submission
@@ -71,7 +88,9 @@ case class Submission(
   @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
   entityType: String,
   @(ApiModelProperty@field)("Status of Workflow(s)")
-  workflow: Seq[Workflow],
+  workflows: Seq[Workflow],
+  @(ApiModelProperty@field)("Workflows that failed to start")
+  notstarted: Seq[WorkflowFailure],
   @(ApiModelProperty@field)("Status") @(VertexProperty@field)
   status: SubmissionStatuses.SubmissionStatus
 )
@@ -82,9 +101,11 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
 
-  implicit val WorkflowFormat = jsonFormat6(Workflow)
+  implicit val WorkflowFormat = jsonFormat7(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat9(Submission)
+  implicit val WorkflowFailureFormat = jsonFormat5(WorkflowFailure)
+
+  implicit val SubmissionFormat = jsonFormat10(Submission)
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatuses.WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)

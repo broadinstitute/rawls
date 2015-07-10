@@ -16,7 +16,14 @@ import spray.json._
  * Mock server interface for the methods repo and execution service.
  */
 object RemoteServicesMockServer {
-  val port = 8987
+  var currentPort = 30000
+  def apply() = {
+    currentPort += 1
+    new RemoteServicesMockServer(currentPort)
+  }
+}
+
+class RemoteServicesMockServer(port:Int) {
   val mockServerBaseUrl = "http://localhost:" + port
 
   val jsonHeader = new Header("Content-Type", "application/json")
@@ -129,7 +136,7 @@ object RemoteServicesMockServer {
           .withHeaders(jsonHeader)
           .withBody(threeStepMethod.toJson.prettyPrint)
           .withStatusCode(StatusCodes.OK.intValue)
-    )
+      )
 
     mockServer.when(
       request()
@@ -138,7 +145,7 @@ object RemoteServicesMockServer {
     ).respond(
         response()
           .withStatusCode(StatusCodes.NotFound.intValue)
-    )
+      )
 
     val singleInputWdl =
       """
@@ -176,12 +183,12 @@ object RemoteServicesMockServer {
         response()
           .withHeaders(jsonHeader)
           .withBody(
-"""{
+            """{
     "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
     "status": "Submitted"
 }""")
           .withStatusCode(StatusCodes.Created.intValue)
-    )
+      )
   }
 
   def stopServer = mockServer.stop()
