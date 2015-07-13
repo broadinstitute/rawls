@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.actor.PoisonPill
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.openam._
@@ -35,11 +37,23 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   case class TestApiService(dataSource: DataSource) extends GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO)
+    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      new GraphWorkflowDAO(),
+      dataSource
+    ).withDispatcher("submission-monitor-dispatcher"), "test-gauth-submission-supervisor")
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)
+
+    def cleanupSupervisor = {
+      submissionSupervisor ! PoisonPill
+    }
   }
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
-    testCode(new TestApiService(dataSource))
+    val apiService = new TestApiService(dataSource)
+    testCode(apiService)
+    apiService.cleanupSupervisor
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {

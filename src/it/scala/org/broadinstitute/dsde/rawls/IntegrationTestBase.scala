@@ -10,6 +10,7 @@ import com.orientechnologies.orient.client.remote.OServerAdmin
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmConfig, RawlsOpenAmClient, StandardOpenAmDirectives}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.openam.OpenAMResponse.AuthenticateResponse
 import org.scalatest.{FlatSpec, Matchers}
@@ -57,7 +58,15 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsFile,
                     new FileDataStoreFactory(new File(gcsDataStoreRoot)),
                     gcsRedirectUrl)
-    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), new HttpMethodRepoDAO(methodRepoServer), new HttpExecutionServiceDAO(executionServiceServer), gcsDAO)
+
+    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      new HttpExecutionServiceDAO(executionServiceServer),
+      new GraphWorkflowDAO(),
+      dataSource
+    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+
+    WorkspaceService.constructor(dataSource, new GraphWorkspaceDAO(), new GraphEntityDAO(), new GraphMethodConfigurationDAO(), new HttpMethodRepoDAO(methodRepoServer), new HttpExecutionServiceDAO(executionServiceServer), gcsDAO, submissionSupervisor)
   }
 
 }

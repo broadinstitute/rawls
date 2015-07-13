@@ -52,7 +52,7 @@ class SubmissionSupervisor(submissionDAO: SubmissionDAO,
   }
 
   private def startSubmissionMonitor(submission: Submission, authCookie: HttpCookie): Unit = {
-    system.actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval,
+    actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval,
       WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, datasource, authCookie)), submission.id)
   }
 

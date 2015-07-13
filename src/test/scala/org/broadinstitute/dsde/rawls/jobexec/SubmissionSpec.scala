@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import akka.actor.ActorSystem
+import akka.actor.{PoisonPill, ActorSystem}
 import akka.testkit.{TestKit, TestActorRef}
+import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -10,7 +11,10 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes, HttpCookie}
+import scala.concurrent.duration._
 import spray.http.HttpHeaders.Cookie
+
+import scala.concurrent.Await
 
 /**
  * Created with IntelliJ IDEA.
@@ -23,6 +27,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   val testDbName = "SubmissionSpec"
   val cookie = HttpCookie("iPlanetDirectoryPro", "test_token")
+  val submissionSupervisorActorName = "test-subspec-submission-supervisor"
 
   val mockServer = RemoteServicesMockServer()
   override def beforeAll() = {
@@ -38,9 +43,16 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   def withWorkspaceService(testCode: WorkspaceService => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
-      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO)
+      val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+        new GraphSubmissionDAO(new GraphWorkflowDAO()),
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+        new GraphWorkflowDAO(),
+        dataSource
+      ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
+      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
       testCode(workspaceService)
+      submissionSupervisor ! PoisonPill
     }
   }
 
@@ -71,7 +83,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "return a successful Submission when given an entity expression that evaluates to a single entity" in withWorkspaceService { workspaceService =>
+  it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"))
     val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq, cookie ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
     val (status, data) = rqComplete.response
@@ -80,6 +92,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     val newSubmission = data.asInstanceOf[Submission]
+    val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.id).resolveOne(5.seconds), Timeout(5.seconds).duration )
+    assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
+
     assert( newSubmission.notstarted.size == 0 )
     assert( newSubmission.workflows.size == 1 )
   }

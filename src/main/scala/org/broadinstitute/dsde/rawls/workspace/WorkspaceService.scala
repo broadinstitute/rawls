@@ -2,11 +2,14 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
 
-import akka.actor.{Actor, Props}
 import com.google.api.client.auth.oauth2.Credential
+import akka.actor.{ActorRef, Actor, Props}
+import org.broadinstitute.dsde.rawls._
+import com.tinkerpop.blueprints.Graph
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionRequestFormat,ExecutionServiceStatusFormat,WorkflowFormat,WorkflowFailureFormat,SubmissionFormat}
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
@@ -67,11 +70,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO) = () =>
-    new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO, gcsDAO)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef) = () =>
+    new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
 }
 
-class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO) extends Actor {
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef) extends Actor {
 
   override def receive = {
     case RegisterUser(userId, callbackPath) => context.parent ! registerUser(userId, callbackPath)
@@ -597,6 +600,10 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
                   workflows = submittedWorkflows collect { case Right(e) => e },
                   notstarted = submittedWorkflows collect { case Left(e) => e },
                   status = if (submittedWorkflows.forall( _.isLeft )) SubmissionStatuses.Done else SubmissionStatuses.Submitted )
+
+                if( newSubmission.status == SubmissionStatuses.Submitted ) {
+                  submissionSupervisor ! SubmissionStarted(newSubmission, authCookie)
+                }
 
                 RequestComplete(StatusCodes.Created, newSubmission)
                 }

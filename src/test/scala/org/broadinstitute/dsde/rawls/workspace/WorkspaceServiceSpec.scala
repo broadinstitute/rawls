@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
+import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
@@ -30,12 +32,26 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
     val mockServer = RemoteServicesMockServer()
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO)
+
+    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      new GraphWorkflowDAO(),
+      dataSource
+    ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
+
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)
+
+    def cleanupSupervisor = {
+      submissionSupervisor ! PoisonPill
+    }
   }
 
   def withTestDataServices(testCode: TestApiService => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
-      testCode(new TestApiService(dataSource))
+      val apiService = new TestApiService(dataSource)
+      testCode(apiService)
+      apiService.cleanupSupervisor
     }
   }
 

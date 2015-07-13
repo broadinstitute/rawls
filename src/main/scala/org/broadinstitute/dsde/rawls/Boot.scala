@@ -60,6 +60,13 @@ object Boot extends App {
       dataSource.shutdown()
     }
 
+    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
+      new GraphWorkflowDAO(),
+      dataSource
+    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+
     val service = system.actorOf(RawlsApiServiceActor.props(swaggerService,
                     WorkspaceService.constructor(dataSource,
                                                   new GraphWorkspaceDAO(),
@@ -67,16 +74,9 @@ object Boot extends App {
                                                   new GraphMethodConfigurationDAO(),
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO),
+                                                  gcsDAO, submissionSupervisor),
                     new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")
-
-    system.actorOf(SubmissionSupervisor.props(
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
-      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      new GraphWorkflowDAO(),
-      dataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
