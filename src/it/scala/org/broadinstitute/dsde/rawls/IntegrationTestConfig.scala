@@ -20,8 +20,10 @@ trait IntegrationTestConfig {
   val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
   val executionServiceServer = executionServiceConfig.getString("server")
 
-  val openAmConfig = jenkinsConf.withFallback(etcConf).getConfig("openam")
-  val openAmUrl = openAmConfig.getString("tokenUrl")
-  val openAmTestUser = openAmConfig.getString("testUser")
-  val openAmTestUserPassword = openAmConfig.getString("testPassword")
+  // TODO specify OpenAM config here instead of RawlsOpenAmConfig?
+
+  val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
+  val gcsSecretsFile = gcsConfig.getString("secretsFile")
+  val gcsDataStoreRoot = gcsConfig.getString("dataStoreRoot")
+  val gcsRedirectUrl = gcsConfig.getString("redirectBaseURL")
 }

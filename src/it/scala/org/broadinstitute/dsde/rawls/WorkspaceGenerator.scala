@@ -61,7 +61,7 @@ object WorkspaceGenerator {
 }
 
 class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
-  val workspace = Workspace(workspaceNamespace, workspaceName, DateTime.now, "WorkspaceGenerator", Map.empty)
+  val workspace = WorkspaceRequest(workspaceNamespace, workspaceName, Map.empty)
   val wn = WorkspaceName(workspaceNamespace, workspaceName)
 
   // need to keep track of objects in the workspace, so that we can:

@@ -7,10 +7,12 @@ import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
+import com.google.api.client.util.store.FileDataStoreFactory
 import com.typesafe.config.ConfigFactory
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmConfig, RawlsOpenAmClient}
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -33,7 +35,7 @@ object Boot extends App {
       swaggerConfig.getString("baseUrl"),
       swaggerConfig.getString("apiDocs"),
       swaggerConfig.getString("swaggerVersion"),
-      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService], typeOf[SubmissionApiService]),
+      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService], typeOf[SubmissionApiService], typeOf[GoogleAuthApiService]),
       Option(new ApiInfo(
         swaggerConfig.getString("info"),
         swaggerConfig.getString("description"),
@@ -47,6 +49,13 @@ object Boot extends App {
     val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
     val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
 
+    val gcsConfig = conf.getConfig("gcs")
+    val gcsDAO = new HttpGoogleCloudStorageDAO(
+      gcsConfig.getString("secretsFile"),
+      new FileDataStoreFactory(new File(gcsConfig.getString("dataStoreRoot"))),
+      gcsConfig.getString("redirectBaseURL")
+    )
+
     system.registerOnTermination {
       dataSource.shutdown()
     }
@@ -57,7 +66,9 @@ object Boot extends App {
                                                   new GraphEntityDAO(),
                                                   new GraphMethodConfigurationDAO(),
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
-                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")))),
+                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
+                                                  gcsDAO),
+                    new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")
 
     system.actorOf(SubmissionSupervisor.props(

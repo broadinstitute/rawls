@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{WorkspaceApiService, MethodConfigApiService, SubmissionApiService}
+import org.broadinstitute.dsde.rawls.webservice.{WorkspaceApiService, MethodConfigApiService, SubmissionApiService, GoogleAuthApiService}
 import org.joda.time.DateTime
 import spray.http.StatusCodes
 import scala.concurrent.duration._
 
 import WorkspaceJsonSupport._
 
-class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService {
+class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService {
   def actorRefFactory = system
 
   // setup workspace service
@@ -26,11 +26,9 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
     val methodConfig = MethodConfiguration("testConfig", "samples", wsns, "method-a", "1", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), "dsde")
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
 
-    val workspace = Workspace(
+    val workspace = WorkspaceRequest(
       wsns,
       wsname,
-      DateTime.now().withMillis(0),
-      "test",
       Map.empty
     )
 

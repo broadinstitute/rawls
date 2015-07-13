@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, Props}
-import org.broadinstitute.dsde.rawls._
-import com.tinkerpop.blueprints.Graph
+import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -15,18 +13,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityD
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.client.pipelining._
 import spray.http
-import spray.http.HttpHeaders.Cookie
 import spray.http.{Uri, StatusCodes, HttpCookie}
+import spray.http.HttpHeaders.Location
+import spray.http.{StatusCodes, HttpCookie}
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -35,12 +32,16 @@ import scala.util.{Failure, Success, Try}
 
 object WorkspaceService {
   sealed trait WorkspaceServiceMessage
-  case class SaveWorkspace(workspace: Workspace) extends WorkspaceServiceMessage
+  case class RegisterUser(userId: String, callbackPath: String) extends WorkspaceServiceMessage
+  case class CompleteUserRegistration( userId: String, authCode: String, state: String, callbackPath: String) extends WorkspaceServiceMessage
+
+  case class CreateWorkspace(userId: String, workspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetWorkspace(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
-  case class CloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String) extends WorkspaceServiceMessage
-
+  case class CloneWorkspace(userId: String, sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String) extends WorkspaceServiceMessage
+  case class GetACL(userId: String, workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
+  case class PutACL(userId: String, workspaceNamespace: String, workspaceName: String, acl: String) extends WorkspaceServiceMessage
   case class CreateEntity(workspaceNamespace: String, workspaceName: String, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class UpdateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
@@ -66,19 +67,23 @@ object WorkspaceService {
     Props(workspaceServiceConstructor())
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO) = () =>
-    new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO)
+  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO) = () =>
+    new WorkspaceService(dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO, gcsDAO)
 }
 
-class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO) extends Actor {
-
+class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO) extends Actor {
 
   override def receive = {
-    case SaveWorkspace(workspace) => context.parent ! saveWorkspace(workspace)
+    case RegisterUser(userId, callbackPath) => context.parent ! registerUser(userId, callbackPath)
+    case CompleteUserRegistration(userId, authCode, state, callbackPath) => context.parent ! completeUserRegistration(userId,authCode,state,callbackPath)
+
+    case CreateWorkspace(userId,workspace) => context.parent ! createWorkspace(userId,workspace)
     case GetWorkspace(workspaceNamespace, workspaceName) => context.parent ! getWorkspace(workspaceNamespace, workspaceName)
     case UpdateWorkspace(workspaceNamespace, workspaceName, operations) => context.parent ! updateWorkspace(workspaceNamespace, workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
-    case CloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
+    case CloneWorkspace(userId, sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(userId, sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
+    case GetACL(userId, workspaceNamespace, workspaceName) => context.parent ! getACL(userId,workspaceNamespace,workspaceName)
+    case PutACL(userId, workspaceNamespace, workspaceName, acl) => context.parent ! putACL(userId,workspaceNamespace,workspaceName,acl)
 
     case CreateEntity(workspaceNamespace, workspaceName, entity) => context.parent ! createEntity(workspaceNamespace, workspaceName, entity)
     case GetEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceNamespace, workspaceName, entityType, entityName)
@@ -99,17 +104,34 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
     case CopyEntities(entityCopyDefinition, uri:Uri) => context.parent ! copyEntities(entityCopyDefinition, uri)
 
-    case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName,submission,authCookie)
+    case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName, submission, authCookie)
   }
 
-  def saveWorkspace(workspace: Workspace): PerRequestMessage =
+  def registerUser(userId: String, callbackPath: String): PerRequestMessage = {
+    RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userId,callbackPath)))
+  }
+
+  def completeUserRegistration(userId: String, authCode: String, state: String, callbackPath: String): PerRequestMessage = {
+    gcsDAO.storeUser(userId,authCode,state,callbackPath)
+    RequestComplete(StatusCodes.Created)
+  }
+
+  private def createBucketName(workspaceName: String) = s"${workspaceName}-${UUID.randomUUID}"
+
+  def createWorkspace(userId: String, workspaceRequest: WorkspaceRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
-      workspaceDAO.load(workspace.namespace, workspace.name, txn) match {
+      workspaceDAO.load(workspaceRequest.namespace, workspaceRequest.name, txn) match {
         case Some(_) =>
-          PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspace.namespace}/${workspace.name} already exists")
+          PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
-          workspaceDAO.save(workspace, txn)
-          PerRequest.RequestComplete((StatusCodes.Created, workspace))
+          val bucketName = createBucketName(workspaceRequest.name)
+          Try( gcsDAO.createBucket(userId,workspaceRequest.namespace, bucketName) ) match {
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+            case Success(_) =>
+              val workspace = Workspace(workspaceRequest.namespace,workspaceRequest.name,bucketName,DateTime.now,userId,workspaceRequest.attributes)
+              workspaceDAO.save(workspace, txn)
+              PerRequest.RequestComplete((StatusCodes.Created, workspace))
+          }
       }
     }
 
@@ -137,23 +159,48 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       RequestComplete(workspaceDAO.list(txn))
     }
 
-  def cloneWorkspace(sourceNamespace: String, sourceWorkspace: String, destNamespace: String, destWorkspace: String): PerRequestMessage =
+  def cloneWorkspace(userId: String, sourceNamespace: String, sourceWorkspace: String, destNamespace: String, destWorkspace: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace, txn)
       val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace, txn)
 
       (originalWorkspace, copyWorkspace) match {
         case (Some(ws), None) => {
-          val newWorkspace = ws.copy(namespace = destNamespace, name = destWorkspace, createdDate = DateTime.now)
-          workspaceDAO.save(newWorkspace, txn)
-          entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
-          methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
-            methodConfigurationDAO.save(newWorkspace.namespace, newWorkspace.name, methodConfigurationDAO.get(ws.namespace, ws.name, methodConfig.namespace, methodConfig.name, txn).get, txn)
+          val bucketName = createBucketName(destWorkspace)
+          Try( gcsDAO.createBucket(userId,destNamespace, bucketName) ) match {
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destNamespace}/${destWorkspace}: "+err.getMessage)
+            case Success(_) =>
+              val newWorkspace = Workspace(destNamespace,destWorkspace,bucketName,DateTime.now,userId,ws.attributes)
+              workspaceDAO.save(newWorkspace, txn)
+              entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
+              methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
+                methodConfigurationDAO.save(newWorkspace.namespace, newWorkspace.name, methodConfigurationDAO.get(ws.namespace, ws.name, methodConfig.namespace, methodConfig.name, txn).get, txn)
+              }
+              RequestComplete((StatusCodes.Created, newWorkspace))
           }
-          RequestComplete((StatusCodes.Created, newWorkspace))
         }
         case (None, _) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
         case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+      }
+    }
+
+  def getACL(userId: String, workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace,workspaceName,txn) { workspace =>
+        Try( gcsDAO.getACL(userId,workspace.bucketName) ) match {
+          case Success(acl) => RequestComplete(StatusCodes.OK,acl)
+          case Failure(err) => RequestComplete(StatusCodes.Forbidden,"Can't retrieve ACL for workspace ${workspaceNamespace}/${workspaceName}: "+err.getMessage())
+        }
+      }
+    }
+
+  def putACL(userId: String, workspaceNamespace: String, workspaceName: String, acl: String): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace,workspaceName,txn) { workspace =>
+        Try( gcsDAO.putACL(userId,workspace.bucketName,acl) ) match {
+          case Failure(err) =>  RequestComplete(StatusCodes.Forbidden,"Can't set ACL for workspace ${workspaceNamespace}/${workspaceName}: "+err.getMessage())
+          case _ => RequestComplete(StatusCodes.OK)
+        }
       }
     }
 

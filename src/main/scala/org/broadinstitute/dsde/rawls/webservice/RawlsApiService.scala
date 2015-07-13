@@ -6,6 +6,7 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.annotations._
 import com.wordnik.swagger.model.ApiInfo
+import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmClient, StandardOpenAmDirectives}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -13,8 +14,8 @@ import spray.routing._
 import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
-  def props(swaggerService: SwaggerService, workspaceServiceConstructor: () => WorkspaceService): Props = {
-    Props(new RawlsApiServiceActor(swaggerService, workspaceServiceConstructor))
+  def props(swaggerService: SwaggerService, workspaceServiceConstructor: () => WorkspaceService, rawlsOpenAmClient: RawlsOpenAmClient): Props = {
+    Props(new RawlsApiServiceActor(swaggerService, workspaceServiceConstructor, rawlsOpenAmClient))
   }
 }
 
@@ -27,12 +28,13 @@ class SwaggerService(override val apiVersion: String,
   (implicit val actorRefFactory: ActorRefFactory)
   extends SwaggerHttpService
 
-class RawlsApiServiceActor(swaggerService: SwaggerService, val workspaceServiceConstructor: () => WorkspaceService) extends Actor
-  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
+class RawlsApiServiceActor(swaggerService: SwaggerService, val workspaceServiceConstructor: () => WorkspaceService, val rawlsOpenAmClient: RawlsOpenAmClient) extends Actor
+  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService
+  with StandardOpenAmDirectives {
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerService.routes ~
+  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ authRoutes ~ swaggerService.routes ~
     get {
       pathSingleSlash {
         getFromResource("swagger/index.html")

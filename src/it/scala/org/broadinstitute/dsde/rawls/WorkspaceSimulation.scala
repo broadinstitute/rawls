@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService}
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService, GoogleAuthApiService}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.WorkspaceSimulation._
 import spray.http._
@@ -28,7 +28,7 @@ object WorkspaceSimulation {
   val numAnnotationUpdatesLarge = 2000
 }
 
-class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
+class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService {
   implicit val routeTestTimeout = RouteTestTimeout(600.seconds) // this is a load test, so response times may be slow
   def actorRefFactory = system
 

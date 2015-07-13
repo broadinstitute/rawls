@@ -14,6 +14,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val workspace2 = Workspace(
         namespace = testData.wsName.namespace,
         name = testData.wsName.name,
+        bucketName = "aBucket",
         createdDate = DateTime.now(),
         createdBy = "Barack Obama",
         attributes = Map("workspace_attrib" -> AttributeString("foo"))
