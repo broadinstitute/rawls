@@ -51,7 +51,7 @@ object Boot extends App {
 
     val gcsConfig = conf.getConfig("gcs")
     val gcsDAO = new HttpGoogleCloudStorageDAO(
-      gcsConfig.getString("secretsFile"),
+      gcsConfig.getString("secrets"),
       new FileDataStoreFactory(new File(gcsConfig.getString("dataStoreRoot"))),
       gcsConfig.getString("redirectBaseURL")
     )

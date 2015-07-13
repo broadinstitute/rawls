@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.FileReader
+import java.io.StringReader
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -17,7 +17,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import spray.client.pipelining._
 
-class HttpGoogleCloudStorageDAO(clientSecretsFile: String, dataStoreFactory: DataStoreFactory, ourBaseURL: String)(implicit system: ActorSystem) extends GoogleCloudStorageDAO {
+class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: DataStoreFactory, ourBaseURL: String)(implicit system: ActorSystem) extends GoogleCloudStorageDAO {
   // modify these if we need more granular access in the future
   val gcsFullControl = "https://www.googleapis.com/auth/devstorage.full_control"
   val computeFullControl = "https://www.googleapis.com/auth/compute"
@@ -25,7 +25,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsFile: String, dataStoreFactory: Dat
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
-  val clientSecrets = GoogleClientSecrets.load(jsonFactory, new FileReader(clientSecretsFile))
+  val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
 
   val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, scopes).setDataStoreFactory(dataStoreFactory).build()
 
