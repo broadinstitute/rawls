@@ -65,15 +65,15 @@ trait PerRequest extends Actor {
       case _ => None
     }
 
+    //if the body of the response is a string, we need to wrap it in a RawlsMessage that can be marshaled to and from json
     response match {
       case (statusCode: StatusCode, message: String) => {
         val newResponse = (statusCode, RawlsMessage(message))
+        //we need to explicitly set the implicit marshaller here, otherwise it uses the implicit marshaller above
         r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
         stop(self)
       }
       case _ => {
-
-
         r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(response)
         stop(self)
       }
