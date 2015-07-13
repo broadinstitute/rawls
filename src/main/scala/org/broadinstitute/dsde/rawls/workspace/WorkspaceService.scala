@@ -546,6 +546,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
                   methodConfigurationNamespace = methodConfig.namespace,
                   methodConfigurationName = methodConfig.name,
                   entityType = submission.entityType,
+                  entityName = submission.entityName,
                   workflows = submittedWorkflows collect { case Right(e) => e },
                   notstarted = submittedWorkflows collect { case Left(e) => e },
                   status = if (submittedWorkflows.forall( _.isLeft )) SubmissionStatuses.Done else SubmissionStatuses.Submitted )

@@ -61,7 +61,7 @@ object Boot extends App {
                     "rawls-service")
 
     system.actorOf(SubmissionSupervisor.props(
-      new GraphSubmissionDAO(),
+      new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
       new GraphWorkflowDAO(),
       dataSource

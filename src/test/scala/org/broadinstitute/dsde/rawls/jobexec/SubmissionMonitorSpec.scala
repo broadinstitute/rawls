@@ -24,50 +24,50 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
     expectMsgClass(10 seconds, classOf[Terminated])
     assertResult(true) { dataSource inTransaction { txn =>
-      submissionDAO.get(testData.submission.workspaceNamespace, testData.submission.workspaceName, testData.submission.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
+      submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
     }}
   }
 
   it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
-    testData.submission.workflows.foreach { workflow =>
+    testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running)), testActor)
     }
 
     awaitCond({
       dataSource inTransaction { txn =>
-        submissionDAO.get(testData.submission.workspaceNamespace, testData.submission.workspaceName, testData.submission.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
+        submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
       }
     }, 10 seconds)
 
-    testData.submission.workflows.foreach { workflow =>
+    testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded)), testActor)
     }
 
     expectMsgClass(10 seconds, classOf[Terminated])
 
     assertResult(true) { dataSource inTransaction { txn =>
-      submissionDAO.get(testData.submission.workspaceNamespace, testData.submission.workspaceName, testData.submission.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
+      submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
     }}
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     // set each workflow to one of the terminal statuses, there should be 3 of each
     assertResult(WorkflowStatuses.terminalStatuses.size) {
-      testData.submission.workflows.size
+      testData.submission1.workflows.size
     }
 
-    testData.submission.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
+    testData.submission1.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
       system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status)), testActor)
     }
   }
