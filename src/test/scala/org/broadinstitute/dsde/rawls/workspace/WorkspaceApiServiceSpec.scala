@@ -23,6 +23,7 @@ import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
 import ExecutionJsonSupport.SubmissionRequestFormat
+import ExecutionJsonSupport.SubmissionFormat
 import scala.concurrent.duration._
 
 /**
@@ -59,7 +60,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       new GraphWorkflowDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -918,6 +919,25 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.Conflict) {
           status
         }
+      }
+  }
+
+  it should "return 200 on getting a submission" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.id}") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.getStatusRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        assertResult(testData.submission1) {responseAs[Submission]}
+      }
+  }
+
+  it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.getStatusRoute) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {status}
       }
   }
 

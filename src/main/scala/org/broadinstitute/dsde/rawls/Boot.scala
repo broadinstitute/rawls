@@ -74,7 +74,8 @@ object Boot extends App {
                                                   new GraphMethodConfigurationDAO(),
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor),
+                                                  gcsDAO, submissionSupervisor,
+                                                  new GraphSubmissionDAO(new GraphWorkflowDAO)),
                     new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")
 
