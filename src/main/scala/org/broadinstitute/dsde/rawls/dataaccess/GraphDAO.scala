@@ -66,6 +66,16 @@ trait GraphDAO {
   }
 
   /**
+   * Gets the properties of a vertex.
+   *
+   * @param vertex
+   * @return properties of the vertex as a Map
+   */
+  def getVertexProperties(vertex: Vertex): Map[String, Any] = {
+    vertex.getPropertyKeys map { key => (key, vertex.getProperty[Any](key)) } toMap
+  }
+
+  /**
    * Gets the properties of all vertices that are results of the pipeline.
    *
    * @param pipeline ending in a vertex
@@ -160,8 +170,7 @@ trait GraphDAO {
    * @return an instance of T populated from the vertex and otherProperties
    */
   def fromVertex[T: TypeTag](vertex: Vertex, otherProperties: Map[String, Any]): T = {
-    val vertexProperties: Map[String, Any] = vertex.getPropertyKeys.map { key => key -> vertex.getProperty(key) }.toMap
-    fromPropertyMap(otherProperties ++ vertexProperties)
+    fromPropertyMap(otherProperties ++ getVertexProperties(vertex))
   }
 
   /**

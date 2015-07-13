@@ -26,7 +26,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   "WorkflowMonitor" should "throw exception for non-existent workflow" in withDefaultTestDatabase { dataSource =>
-    val workflow = Workflow("wns", "wn", "id-string", WorkflowStatuses.Running, new DateTime(0), "entity", "entityType")
+    val workflow = Workflow("wns", "wn", "id-string", WorkflowStatuses.Running, new DateTime(0), "entityType", "entity")
     val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, workflow))
     intercept[RawlsException] {
       monitorRef.underlyingActor.checkWorkflowStatus()
@@ -35,22 +35,22 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   it should "do nothing for unchanged state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(testData.submission.workflows.head.status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(testData.submission1.workflows.head.status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
     expectNoMsg(1 seconds)
     system.stop(monitorRef)
   }
 
   it should "emit update message for changed state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission.workflows.head))
-    expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission.workflows.head.copy(status = WorkflowStatuses.Running)))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
+    expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Running)))
     system.stop(monitorRef)
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"terminate when ${status}" in withDefaultTestDatabase { dataSource =>
-      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission.workflows.head))
+      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
       watch(monitorRef)
-      expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission.workflows.head.copy(status = status)))
+      expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status)))
       fishForMessage(1 second) {
         case m: Terminated => true
         case x => println(x); false

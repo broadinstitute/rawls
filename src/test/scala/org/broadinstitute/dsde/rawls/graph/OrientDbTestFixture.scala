@@ -29,7 +29,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
   lazy val methodConfigDAO = new GraphMethodConfigurationDAO()
-  lazy val submissionDAO: SubmissionDAO = new GraphSubmissionDAO
+  lazy val submissionDAO: SubmissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
 
   abstract class TestData {
     def save(txn:RawlsTransaction)
@@ -134,12 +134,14 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
-    val testDate = DateTime.now
-
-    val submission = Submission("submission1",testDate,workspace.namespace,workspace.name,methodConfig.namespace,methodConfig.name,sset1.entityType,
-      Seq(Workflow(workspace.namespace,workspace.name,"workflow1",WorkflowStatuses.Submitted,testDate,sample1.name, sample1.entityType),
-        Workflow(workspace.namespace,workspace.name,"workflow2",WorkflowStatuses.Submitted,testDate,sample2.name, sample1.entityType),
-        Workflow(workspace.namespace,workspace.name,"workflow3",WorkflowStatuses.Submitted,testDate,sample3.name, sample1.entityType)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+    val submission1 = Submission("submission1",testDate,workspace.namespace,workspace.name,"std","someMethod",indiv1.entityType, indiv1.name,
+      Seq(Workflow(workspace.namespace,workspace.name,"workflow1",WorkflowStatuses.Submitted,testDate,sample1.entityType, sample1.name),
+        Workflow(workspace.namespace,workspace.name,"workflow2",WorkflowStatuses.Submitted,testDate,sample2.entityType, sample2.name),
+        Workflow(workspace.namespace,workspace.name,"workflow3",WorkflowStatuses.Submitted,testDate,sample3.entityType, sample3.name)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+    val submission2 = Submission("submission2",testDate,workspace.namespace,workspace.name,"std","someMethod",indiv1.entityType, indiv1.name,
+      Seq(Workflow(workspace.namespace,workspace.name,"workflow4",WorkflowStatuses.Submitted,testDate,sample1.entityType, sample1.name),
+        Workflow(workspace.namespace,workspace.name,"workflow5",WorkflowStatuses.Submitted,testDate,sample2.entityType, sample2.name),
+        Workflow(workspace.namespace,workspace.name,"workflow6",WorkflowStatuses.Submitted,testDate,sample3.entityType, sample3.name)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -169,7 +171,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigNotAllSamples, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigAttrTypeMixup, txn)
 
-      submissionDAO.save(workspace.namespace, workspace.name, submission, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submission1, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submission2, txn)
     }
   }
   val testData = new DefaultTestData()

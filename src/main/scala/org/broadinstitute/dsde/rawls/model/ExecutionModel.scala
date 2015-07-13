@@ -49,10 +49,10 @@ case class Workflow(
   status: WorkflowStatuses.WorkflowStatus,
   @(ApiModelProperty@field)("Status last-changed date") @(VertexProperty@field)
   statusLastChangedDate: DateTime,
-  @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
-  entityName: String,
   @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
-  entityType: String
+  entityType: String,
+  @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
+  entityName: String
 )
 
 // Encapsulating errors for workflows that failed to start
@@ -85,8 +85,10 @@ case class Submission(
   methodConfigurationNamespace: String,
   @(ApiModelProperty@field)("Method configuration name") @(VertexProperty@field)
   methodConfigurationName: String,
-  @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
+  @(ApiModelProperty@field)("Entity type")
   entityType: String,
+  @(ApiModelProperty@field)("Entity name")
+  entityName: String,
   @(ApiModelProperty@field)("Status of Workflow(s)")
   workflows: Seq[Workflow],
   @(ApiModelProperty@field)("Workflows that failed to start")
@@ -105,7 +107,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFailureFormat = jsonFormat5(WorkflowFailure)
 
-  implicit val SubmissionFormat = jsonFormat10(Submission)
+  implicit val SubmissionFormat = jsonFormat11(Submission)
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatuses.WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
