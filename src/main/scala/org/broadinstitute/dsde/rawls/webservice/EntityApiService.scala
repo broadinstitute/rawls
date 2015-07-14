@@ -12,7 +12,7 @@ import spray.routing._
 /**
  * Created by dvoet on 6/4/15.
  */
-@Api(value = "/{workspaceNamespace}/{workspaceName}/entities", description = "Entity manipulation API", position = 2)
+@Api(value = "/workspaces/{workspaceNamespace}/{workspaceName}/entities", description = "Entity manipulation API", position = 2)
 trait EntityApiService extends HttpService with PerRequestCreator {
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
   import spray.httpx.SprayJsonSupport._
@@ -193,7 +193,7 @@ trait EntityApiService extends HttpService with PerRequestCreator {
   @Path("")
   @ApiOperation(value = "list all entity types in a workspace",
     nickname = "list entity types",
-    httpMethod = "Get",
+    httpMethod = "GET",
     produces = "application/json",
     response = classOf[Array[String]])
   @ApiImplicitParams(Array(

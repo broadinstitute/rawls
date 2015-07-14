@@ -2,15 +2,19 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
+import org.broadinstitute.dsde.rawls.model.JsonSupport
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
-import spray.httpx.marshalling.ToResponseMarshaller
 import spray.json.{DefaultJsonProtocol, JsonFormat, RootJsonFormat}
+import spray.httpx.marshalling.{BasicToResponseMarshallers, ToResponseMarshaller}
+import spray.json.DefaultJsonProtocol
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
 import spray.http._
 import scala.language.postfixOps
+
 
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
@@ -26,6 +30,8 @@ trait PerRequest extends Actor {
   import context._
   import spray.json.DefaultJsonProtocol._
   import org.broadinstitute.dsde.rawls.model.Identifiable
+  import spray.httpx.SprayJsonSupport._
+  import RawlsMessageJsonSupport._
 
   def r: RequestContext
   def target: ActorRef
@@ -51,16 +57,27 @@ trait PerRequest extends Actor {
    * @tparam T the type of the response
    * @return
    */
-  private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]) = {
+  private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]): Unit = {
     val additionalHeaders = response match {
       case ( StatusCodes.Created, entity : Identifiable ) => {
         Option( HttpHeaders.Location(r.request.uri.copy(path = Uri.Path("/"+entity.path))) )
-    }
+      }
       case _ => None
     }
 
-    r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(response)
-    stop(self)
+    //if the body of the response is a string, we need to wrap it in a RawlsMessage that can be marshaled to and from json
+    response match {
+      case (statusCode: StatusCode, message: String) => {
+        val newResponse = (statusCode, RawlsMessage(message))
+        //we need to explicitly set the implicit marshaller here, otherwise it uses the implicit marshaller above
+        r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
+        stop(self)
+      }
+      case _ => {
+        r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(response)
+        stop(self)
+      }
+    }
   }
 
   object MyJsonProtocol extends DefaultJsonProtocol {
@@ -125,4 +142,12 @@ trait PerRequestCreator {
 
   def perRequest(r: RequestContext, props: Props, message: AnyRef, timeout: Duration = 1 minutes) =
     actorRefFactory.actorOf(Props(new WithProps(r, props, message, timeout)))
+}
+
+case class RawlsMessage(message: String)
+
+object RawlsMessageJsonSupport extends DefaultJsonProtocol with BasicToResponseMarshallers {
+
+  implicit val RawlsMessageFormat = jsonFormat1(RawlsMessage)
+
 }
