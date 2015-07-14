@@ -35,7 +35,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     nickname = "create",
     httpMethod = "POST")
   @ApiImplicitParams(Array(
-    new ApiImplicitParam(name = "workspaceJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.Workspace", paramType = "body", value = "Workspace contents")
+    new ApiImplicitParam(name = "workspaceJson", required = true, dataType = "org.broadinstitute.dsde.rawls.model.WorkspaceRequest", paramType = "body", value = "Workspace contents")
   ))
   @ApiResponses(Array(
     new ApiResponse(code = 201, message = "Successful Request"),
