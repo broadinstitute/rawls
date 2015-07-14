@@ -23,7 +23,7 @@ trait IntegrationTestConfig {
   // TODO specify OpenAM config here instead of RawlsOpenAmConfig?
 
   val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
-  val gcsSecretsFile = gcsConfig.getString("secretsFile")
+  val gcsSecretsJSON = gcsConfig.getString("secrets")
   val gcsDataStoreRoot = gcsConfig.getString("dataStoreRoot")
   val gcsRedirectUrl = gcsConfig.getString("redirectBaseURL")
 }

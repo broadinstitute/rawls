@@ -55,7 +55,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     if (admin.existsDatabase()) admin.dropDatabase(dbName)
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
-    val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsFile,
+    val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsJSON,
                     new FileDataStoreFactory(new File(gcsDataStoreRoot)),
                     gcsRedirectUrl)
 
