@@ -52,8 +52,11 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource)
-    testCode(apiService)
-    apiService.cleanupSupervisor
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
+    }
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
