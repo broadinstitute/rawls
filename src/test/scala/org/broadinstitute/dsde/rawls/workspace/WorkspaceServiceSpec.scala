@@ -50,8 +50,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   def withTestDataServices(testCode: TestApiService => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
       val apiService = new TestApiService(dataSource)
-      testCode(apiService)
-      apiService.cleanupSupervisor
+      try {
+        testCode(apiService)
+      } finally {
+        apiService.cleanupSupervisor
+      }
     }
   }
 
