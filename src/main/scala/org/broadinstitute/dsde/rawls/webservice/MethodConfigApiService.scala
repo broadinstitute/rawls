@@ -11,7 +11,7 @@ import spray.routing._
 /**
  * Created by dvoet on 6/4/15.
  */
-@Api(value = "/{workspaceNamespace}/{workspaceName}/methodconfigs", description = "Method Configuration manipulation API", position = 3)
+@Api(value = "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs", description = "Method Configuration manipulation API", position = 3)
 trait MethodConfigApiService extends HttpService with PerRequestCreator {
 
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
