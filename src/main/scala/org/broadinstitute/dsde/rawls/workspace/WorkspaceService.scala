@@ -64,8 +64,8 @@ object WorkspaceService {
   case class CopyMethodConfigurationFromMethodRepo(userId: String, query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(userId: String, workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
-  case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie) extends WorkspaceServiceMessage
-  case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
+  case class CreateSubmission(userId: String, workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie) extends WorkspaceServiceMessage
+  case class GetSubmissionStatus(userId: String, workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: () => WorkspaceService): Props = {
     Props(workspaceServiceConstructor())
@@ -108,8 +108,8 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     case CopyMethodConfigurationFromMethodRepo(userId, query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(userId, query, authCookie)
     case ListMethodConfigurations(userId, workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(userId, workspaceNamespace, workspaceName)
 
-    case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName, submission, authCookie)
-    case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
+    case CreateSubmission(userId, workspaceName, submission, authCookie) => context.parent ! createSubmission(userId, workspaceName, submission, authCookie)
+    case GetSubmissionStatus(userId, workspaceName, submissionId) => context.parent ! getSubmissionStatus(userId, workspaceName, submissionId)
   }
 
   def registerUser(userId: String, callbackPath: String): PerRequestMessage = {
@@ -614,51 +614,53 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
     }
   }
 
-  def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie): PerRequestMessage =
+  def createSubmission(userId: String, workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { graph =>
-      withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
-        withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
-          withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
-            withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { agoraEntity =>
-              withWdl(agoraEntity) { wdl =>
+        withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
+          requireAccess(GCSAccessLevel.Write, userId, workspace, txn) {
+            withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
+              withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
+                withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { agoraEntity =>
+                  withWdl(agoraEntity) { wdl =>
 
-                //If there's an expression, evaluate it to get the list of entities to run this job on.
-                //Otherwise, use the entity given in the submission.
-                val jobEntities: Seq[Entity] = submission.expression match {
-                  case Some(expr) =>
-                    new ExpressionEvaluator(graph, new ExpressionParser()).evalFinalEntity(workspaceName.namespace, workspaceName.name, submission.entityType, submission.entityName, expr) match {
-                      case Success(ents) => ents
-                      case Failure(regret) => return RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + regret.getMessage())
+                    //If there's an expression, evaluate it to get the list of entities to run this job on.
+                    //Otherwise, use the entity given in the submission.
+                    val jobEntities: Seq[Entity] = submission.expression match {
+                      case Some(expr) =>
+                        new ExpressionEvaluator(graph, new ExpressionParser()).evalFinalEntity(workspaceName.namespace, workspaceName.name, submission.entityType, submission.entityName, expr) match {
+                          case Success(ents) => ents
+                          case Failure(regret) => return RequestComplete(StatusCodes.BadRequest, "Expression evaluation failed: " + regret.getMessage())
+                        }
+                      case None => List(entity)
                     }
-                  case None => List(entity)
-                }
 
-                //Verify the type of all job entities matches the type of the method configuration.
-                if (!jobEntities.forall(_.entityType == methodConfig.rootEntityType)) {
-                  return RequestComplete(StatusCodes.BadRequest, "Entities " + jobEntities.filter(_.entityType != methodConfig.rootEntityType).map(e => e.entityType + ":" + e.name) +
-                    "are not the same type as the method configuration requires")
-                }
+                    //Verify the type of all job entities matches the type of the method configuration.
+                    if (!jobEntities.forall(_.entityType == methodConfig.rootEntityType)) {
+                      return RequestComplete(StatusCodes.BadRequest, "Entities " + jobEntities.filter(_.entityType != methodConfig.rootEntityType).map(e => e.entityType + ":" + e.name) +
+                        "are not the same type as the method configuration requires")
+                    }
 
-                //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
-                val submittedWorkflows = jobEntities.map( e => submitWorkflow(workspaceName, methodConfig, e, wdl, authCookie, txn))
-                val newSubmission = Submission(id = UUID.randomUUID().toString,
-                  submissionDate = DateTime.now(),
-                  workspaceNamespace = workspaceName.namespace,
-                  workspaceName = workspaceName.name,
-                  methodConfigurationNamespace = methodConfig.namespace,
-                  methodConfigurationName = methodConfig.name,
-                  entityType = submission.entityType,
-                  entityName = submission.entityName,
-                  workflows = submittedWorkflows collect { case Right(e) => e },
-                  notstarted = submittedWorkflows collect { case Left(e) => e },
-                  status = if (submittedWorkflows.forall( _.isLeft )) SubmissionStatuses.Done else SubmissionStatuses.Submitted )
+                    //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
+                    val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceName, methodConfig, e, wdl, authCookie, txn))
+                    val newSubmission = Submission(id = UUID.randomUUID().toString,
+                      submissionDate = DateTime.now(),
+                      workspaceNamespace = workspaceName.namespace,
+                      workspaceName = workspaceName.name,
+                      methodConfigurationNamespace = methodConfig.namespace,
+                      methodConfigurationName = methodConfig.name,
+                      entityType = submission.entityType,
+                      entityName = submission.entityName,
+                      workflows = submittedWorkflows collect { case Right(e) => e },
+                      notstarted = submittedWorkflows collect { case Left(e) => e },
+                      status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
 
-                if( newSubmission.status == SubmissionStatuses.Submitted ) {
-                  submissionSupervisor ! SubmissionStarted(newSubmission, authCookie)
-                }
+                    if (newSubmission.status == SubmissionStatuses.Submitted) {
+                      submissionSupervisor ! SubmissionStarted(newSubmission, authCookie)
+                    }
 
-                RequestComplete(StatusCodes.Created, newSubmission)
+                    RequestComplete(StatusCodes.Created, newSubmission)
+                  }
                 }
               }
             }
@@ -667,11 +669,13 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       }
     }
 
-  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
+  def getSubmissionStatus(userId: String, workspaceName: WorkspaceName, submissionId: String) = {
     dataSource inTransaction { txn =>
       withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
-        withSubmission(workspace, submissionId, txn) { submission =>
-          RequestComplete(submission)
+        requireAccess(GCSAccessLevel.Read, userId, workspace, txn) {
+          withSubmission(workspace, submissionId, txn) { submission =>
+            RequestComplete(submission)
+          }
         }
       }
     }

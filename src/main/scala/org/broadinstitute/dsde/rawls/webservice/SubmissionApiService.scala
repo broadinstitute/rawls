@@ -5,6 +5,7 @@ import javax.ws.rs.Path
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.httpx.SprayJsonSupport._
 import spray.routing._
@@ -13,7 +14,8 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 @Api(value = "/workspaces/{workspaceNamespace}/{workspaceName}/submissions", description = "Submissions API")
-trait SubmissionApiService extends HttpService with PerRequestCreator {
+trait SubmissionApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+  lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   val workspaceServiceConstructor: () => WorkspaceService
   val submissionRoutes = submissionRoute ~ getStatusRoute
@@ -32,13 +34,16 @@ trait SubmissionApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "Method Configuration failed to resolve input expressions with the supplied Entity"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def submissionRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
-      post {
-        entity(as[SubmissionRequest]) { submission =>
-          requestContext => perRequest(requestContext,
-                                       WorkspaceService.props(workspaceServiceConstructor),
-                                       WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace,workspaceName),submission,securityTokenCookie))
+  def submissionRoute = usernameFromCookie() { userId =>
+    // TODO: reads the cookie twice!
+    cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+      path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
+        post {
+          entity(as[SubmissionRequest]) { submission =>
+            requestContext => perRequest(requestContext,
+              WorkspaceService.props(workspaceServiceConstructor),
+              WorkspaceService.CreateSubmission(userId, WorkspaceName(workspaceNamespace, workspaceName), submission, securityTokenCookie))
+          }
         }
       }
     }
@@ -60,11 +65,11 @@ trait SubmissionApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Submission Not Found"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getStatusRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def getStatusRoute = usernameFromCookie() { userId =>
     path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+          WorkspaceService.GetSubmissionStatus(userId, WorkspaceName(workspaceNamespace, workspaceName), submissionId))
       }
     }
   }
