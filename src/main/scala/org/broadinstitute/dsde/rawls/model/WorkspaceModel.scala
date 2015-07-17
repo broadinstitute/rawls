@@ -120,14 +120,8 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-@ApiModel(value = "Method Configuration")
-case class MethodConfiguration(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
-                   @(VertexProperty@field)
-                   name: String,
-                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
-                   @(VertexProperty@field)
-                   rootEntityType: String,
+@ApiModel(value = "Method Store Method")
+case class MethodStoreMethod(
                    @(ApiModelProperty@field)(required = true, value = "The namespace of method from method store")
                    @(VertexProperty@field)
                    methodNamespace: String,
@@ -136,7 +130,31 @@ case class MethodConfiguration(
                    methodName: String,
                    @(ApiModelProperty@field)(required = true, value = "The version of method from method store")
                    @(VertexProperty@field)
-                   methodVersion: String,
+                   methodVersion: String
+                   )
+@ApiModel(value = "Method Store Configuration")
+case class MethodStoreConfiguration(
+                   @(ApiModelProperty@field)(required = true, value = "The namespace of method config from method store")
+                   @(VertexProperty@field)
+                   methodConfigNamespace: String,
+                   @(ApiModelProperty@field)(required = true, value = "The name of method config from method store")
+                   @(VertexProperty@field)
+                   methodConfigName: String,
+                   @(ApiModelProperty@field)(required = true, value = "The version of method config from method store")
+                   @(VertexProperty@field)
+                   methodConfigVersion: String
+                   )
+@ApiModel(value = "Method Configuration")
+case class MethodConfiguration(
+                   @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
+                   @(VertexProperty@field)
+                   namespace: String,
+                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
+                   @(VertexProperty@field)
+                   name: String,
+                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
+                   @(VertexProperty@field)
+                   rootEntityType: String,
                    @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
                    prerequisites: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
@@ -145,11 +163,13 @@ case class MethodConfiguration(
                    outputs: Map[String, String],
                    @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName:WorkspaceName,
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
-                   @(VertexProperty@field)
-                   namespace: String) extends Identifiable {
+                   @(ApiModelProperty@field)(required = false, value = "The properties of the method configuration from the method store that this derived from")
+                   methodStoreConfig:MethodStoreConfiguration,
+                   @(ApiModelProperty@field)(required = true, value = "The properties of the method from the method store that this config is associated with")
+                   methodStoreMethod:MethodStoreMethod
+                   ) extends Identifiable {
   def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
-  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodNamespace, methodName, methodVersion, workspaceName, namespace)
+  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodStoreConfig, methodStoreMethod, workspaceName, namespace)
 }
 @ApiModel(value = "Method Configuration without inputs, outputs, or prerequisites")
 case class MethodConfigurationShort(
@@ -159,15 +179,10 @@ case class MethodConfigurationShort(
                                 @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
                                 @(VertexProperty@field)
                                 rootEntityType: String,
-                                @(ApiModelProperty@field)(required = true, value = "The namespace of method from method store")
-                                @(VertexProperty@field)
-                                methodNamespace: String,
-                                @(ApiModelProperty@field)(required = true, value = "The name of method from method store")
-                                @(VertexProperty@field)
-                                methodName: String,
-                                @(ApiModelProperty@field)(required = true, value = "The version of method from method store")
-                                @(VertexProperty@field)
-                                methodVersion: String,
+                                @(ApiModelProperty@field)(required = false, value = "The properties of the method configuration from the method store that this derived from")
+                                methodStoreConfig:MethodStoreConfiguration,
+                                @(ApiModelProperty@field)(required = true, value = "The properties of the method from the method store that this config is associated with")
+                                methodStoreMethod:MethodStoreMethod,
                                 @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                                 @(VertexProperty@field)
                                 workspaceName:WorkspaceName,
@@ -237,9 +252,13 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
-  implicit val MethodConfigurationFormat = jsonFormat10(MethodConfiguration)
+  implicit val MethodStoreMethodFormat = jsonFormat3(MethodStoreMethod)
 
-  implicit val MethodConfigurationShortFormat = jsonFormat7(MethodConfigurationShort)
+  implicit val MethodStoreConfigurationFormat = jsonFormat3(MethodStoreConfiguration)
+
+  implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
+
+  implicit val MethodConfigurationShortFormat = jsonFormat6(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
 

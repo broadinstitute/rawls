@@ -13,16 +13,16 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
   "GraphMethodConfigDAO" should "save and get a method config" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       val methodConfig2 = MethodConfiguration(
+        "ns",
         "config2",
         "sample",
-        "ns",
-        "meth2",
-        "2",
+
         Map("input.expression" -> "this..wont.parse"),
         Map("output.expression" -> "output.expr"),
         Map("prereq.expression" -> "prereq.expr"),
         testData.wsName,
-        "ns"
+        MethodStoreConfiguration("ns", "meth2", "2"),
+        MethodStoreMethod("ns-config", "meth2", "2")
       )
 
       new GraphWorkspaceDAO().save(testData.workspace, txn)
