@@ -10,6 +10,6 @@ import scala.concurrent.{Future, ExecutionContext}
 trait MockOpenAmDirectives extends OpenAmDirectives {
   def userInfoFromCookie(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
     // just return the cookie text as the common name
-    cookie("iPlanetDirectoryPro") map { c => UserInfo(c.content, c.content) }
+    cookie("iPlanetDirectoryPro") map { c => UserInfo(c.content, c) }
   }
 }

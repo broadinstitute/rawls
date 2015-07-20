@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.GCSAccessLevel.GCSAccessLevel
 import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
 
 // based on https://cloud.google.com/storage/docs/json_api/v1/bucketAccessControls
-// TODO: use com.google.api.services.storage.model.BucketAccessControl
 
 object GCSAccessLevel extends Enumeration {
   type GCSAccessLevel = Value
@@ -58,8 +57,8 @@ case class BucketAccessControls(
 )
 {
   def maximumAccessLevel: GCSAccessLevel = {
-    val levels = items map { _.role }
-    levels.max
+    if (items.isEmpty) GCSAccessLevel.NoAccess
+    else (items map { _.role }).max
   }
 }
 

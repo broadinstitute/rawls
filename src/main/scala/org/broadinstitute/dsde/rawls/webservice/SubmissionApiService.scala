@@ -35,15 +35,12 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with OpenA
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def submissionRoute = userInfoFromCookie() { userInfo =>
-    // TODO: reads the cookie twice!
-    cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-      path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
-        post {
-          entity(as[SubmissionRequest]) { submission =>
-            requestContext => perRequest(requestContext,
-              WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission, securityTokenCookie))
-          }
+    path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[SubmissionRequest]) { submission =>
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
         }
       }
     }

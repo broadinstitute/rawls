@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.openam
 
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
+import spray.http.HttpCookie
 import spray.routing.Directive1
 import spray.routing.Directives._
 
@@ -12,16 +13,17 @@ trait StandardOpenAmDirectives extends OpenAmDirectives {
 
   def userInfoFromCookie(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
     implicit val ec = magnet.value
-    tokenFromCookie flatMap userInfoFromToken
+    authCookie flatMap userInfoFromCookie
   }
 
-  private def tokenFromCookie: Directive1[String] = cookie("iPlanetDirectoryPro") map { _.content }
+  private def authCookie: Directive1[HttpCookie] = cookie("iPlanetDirectoryPro")
 
-  private def userInfoFromToken(token: String)(implicit ec: ExecutionContext): Directive1[UserInfo] = {
+  private def userInfoFromCookie(authCookie: HttpCookie)(implicit ec: ExecutionContext): Directive1[UserInfo] = {
+    val token = authCookie.content
     val userInfoFuture = for {
       id <- rawlsOpenAmClient.lookupIdFromSession(token)
       userInfo <- rawlsOpenAmClient.lookupUserInfo(token, id.id, id.realm)
-    } yield UserInfo(userInfo.mail.head, token)
+    } yield UserInfo(userInfo.mail.head, authCookie)
     onSuccess(userInfoFuture)
   }
 }

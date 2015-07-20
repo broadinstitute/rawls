@@ -9,8 +9,6 @@ trait GoogleCloudStorageDAO {
 
   def createBucket(userId: String, projectId: String, bucketName: String): Unit
 
-  // TODO: acls should be BucketAccessControls
-
   def getACL(userId: String, bucketName: String): String
 
   def putACL(userId: String, bucketName: String, acl: String): Unit

@@ -61,10 +61,10 @@ object WorkspaceService {
   case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
-  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery, authCookie: HttpCookie) extends WorkspaceServiceMessage
+  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
 
-  case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie) extends WorkspaceServiceMessage
+  case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
@@ -105,10 +105,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
     case UpdateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
-    case CopyMethodConfigurationFromMethodRepo(query, authCookie) => context.parent ! copyMethodConfigurationFromMethodRepo(query, authCookie)
+    case CopyMethodConfigurationFromMethodRepo(query) => context.parent ! copyMethodConfigurationFromMethodRepo(query)
     case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
 
-    case CreateSubmission(workspaceName, submission, authCookie) => context.parent ! createSubmission(workspaceName, submission, authCookie)
+    case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
   }
 
@@ -540,9 +540,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery, authCookie: HttpCookie): PerRequestMessage =
+  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery): PerRequestMessage =
     dataSource inTransaction { txn =>
-      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, authCookie) match {
+      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo.authCookie) match {
         case None => RequestComplete(StatusCodes.NotFound)
         case Some(entity) =>
           try {
@@ -614,14 +614,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
-  def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest, authCookie: HttpCookie): PerRequestMessage =
+  def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { graph =>
         withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
           requireAccess(GCSAccessLevel.Write, workspace, txn) {
             withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
               withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
-                withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { agoraEntity =>
+                withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, userInfo.authCookie) { agoraEntity =>
                   withWdl(agoraEntity) { wdl =>
 
                     //If there's an expression, evaluate it to get the list of entities to run this job on.
@@ -642,7 +642,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                     }
 
                     //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
-                    val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceName, methodConfig, e, wdl, authCookie, txn))
+                    val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceName, methodConfig, e, wdl, userInfo.authCookie, txn))
                     val newSubmission = Submission(id = UUID.randomUUID().toString,
                       submissionDate = DateTime.now(),
                       workspaceNamespace = workspaceName.namespace,
@@ -656,7 +656,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                       status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
 
                     if (newSubmission.status == SubmissionStatuses.Submitted) {
-                      submissionSupervisor ! SubmissionStarted(newSubmission, authCookie)
+                      submissionSupervisor ! SubmissionStarted(newSubmission, userInfo.authCookie)
                     }
 
                     RequestComplete(StatusCodes.Created, newSubmission)

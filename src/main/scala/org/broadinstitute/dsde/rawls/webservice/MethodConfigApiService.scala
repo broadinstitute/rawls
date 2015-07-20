@@ -204,7 +204,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Ope
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def copyMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
-    path("methodconfigs" / "copy" ) {
+    path("methodconfigs" / "copy") {
       post {
         entity(as[MethodConfigurationNamePair]) { confNames =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
@@ -231,14 +231,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Ope
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
   def copyMethodRepoConfigurationRoute = userInfoFromCookie() { userInfo =>
-    // TODO: reads the cookie twice!
-    cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-      path("methodconfigs" / "copyFromMethodRepo") {
-        post {
-          entity(as[MethodRepoConfigurationQuery]) { query =>
-            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.CopyMethodConfigurationFromMethodRepo(query, securityTokenCookie))
-          }
+    path("methodconfigs" / "copyFromMethodRepo") {
+      post {
+        entity(as[MethodRepoConfigurationQuery]) { query =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CopyMethodConfigurationFromMethodRepo(query))
         }
       }
     }

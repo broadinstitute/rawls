@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
+import spray.http.HttpCookie
 import spray.testkit.ScalatestRouteTest
 
 
@@ -29,7 +30,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
-    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, UserInfo("test_user", "test_token"))).underlyingActor
+    val cookie = HttpCookie("iPlanetDirectoryPro", "test_token")
+    val userInfo = UserInfo("test_token", cookie)
+    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
