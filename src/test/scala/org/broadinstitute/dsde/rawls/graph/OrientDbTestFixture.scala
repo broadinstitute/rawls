@@ -11,6 +11,10 @@ import scala.collection.immutable.HashMap
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import java.util.UUID.randomUUID
 import java.util.UUID
+import spray.json._
+import spray.httpx.SprayJsonSupport
+import SprayJsonSupport._
+import WorkspaceJsonSupport._
 
 
 trait OrientDbTestFixture extends BeforeAndAfterAll {
@@ -101,25 +105,24 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       WorkspaceName(wsName.namespace, wsName.name) )
 
     val methodConfig = MethodConfiguration(
+      "ns",
       "testConfig1",
       "Sample",
-      "ns",
-      "meth1",
-      "1",
       Map("i1" -> "input expr"),
       Map("o1" -> "output expr"),
       Map("p1" -> "prereq expr"),
       wsName,
-      "ns"
+      MethodStoreConfiguration("ns", "meth1", "1"),
+      MethodStoreMethod("ns-config", "meth1", "1")
     )
 
-    val methodConfig2 = MethodConfiguration("testConfig2", "Sample", wsName.namespace, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), wsName, "dsde")
-    val methodConfig3 = MethodConfiguration("testConfig", "Sample", wsName.namespace, "method-a", "1", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), wsName, "dsde")
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> "true"), Map("param1"-> "foo"), Map("out" -> "bar"), wsName, MethodStoreConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodStoreMethod(wsName.namespace, "method-a", "1"))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> "true"), Map("param1"-> "foo", "param2"-> "foo2"), Map("out" -> "bar"), wsName, MethodStoreConfiguration("ns", "meth1", "1"), MethodStoreMethod("ns-config", "meth1", "1"))
 
-    val methodConfigValid = MethodConfiguration("GoodMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.type"), outputs=Map.empty, wsName, "dsde")
-    val methodConfigUnparseable = MethodConfiguration("UnparseableMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this..wont.parse"), outputs=Map.empty, wsName, "dsde")
-    val methodConfigNotAllSamples = MethodConfiguration("NotAllSamplesMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.tumortype"), outputs=Map.empty, wsName, "dsde")
-    val methodConfigAttrTypeMixup = MethodConfiguration("AttrTypeMixupMethodConfig", "Sample", "dsde", "three_step", "1", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.confused"), outputs=Map.empty, wsName, "dsde")
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.type"), outputs=Map.empty, wsName, MethodStoreConfiguration("dsde-config", "three_step", "1"), MethodStoreMethod("dsde", "three_step", "1"))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this..wont.parse"), outputs=Map.empty, wsName, MethodStoreConfiguration("dsde-config", "three_step", "1"), MethodStoreMethod("dsde", "three_step", "1"))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.tumortype"), outputs=Map.empty, wsName, MethodStoreConfiguration("dsde-config", "three_step", "1"), MethodStoreMethod("dsde", "three_step", "1"))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> "this.confused"), outputs=Map.empty, wsName, MethodStoreConfiguration("dsde-config", "three_step", "1"), MethodStoreMethod("dsde", "three_step", "1"))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")

@@ -143,12 +143,15 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
   }
 
   def createMethodConfig(nParamsEachType: Int) = {
-    MethodConfiguration(makeMethodConfigName,
-      "foo", "bar", "baz", "1", // don't care about entity type or method details
+
+    MethodConfiguration(methodConfigNamespace, makeMethodConfigName,
+      "foo", // don't care about entity type
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
-      wn, methodConfigNamespace)
+      wn,
+      MethodStoreConfiguration("bar", "baz", "1"), // don't care about method details
+      MethodStoreMethod("bar-config", "baz", "1")) // don't care about method config details
   }
 
   def updateParameterSet(params: Map[String, String], nDelete: Int, nModify: Int, nCreate: Int) = {
@@ -165,12 +168,13 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
    * For now we apply the same operations to prereqs, inputs and outputs, for simplicity.
    */
   def createUpdatedMethodConfig(config: MethodConfiguration, nDelete: Int, nModify: Int, nCreate: Int) = {
-    MethodConfiguration(config.name, config.rootEntityType,
-      config.methodNamespace, config.methodName, config.methodVersion,
+    MethodConfiguration(config.namespace, config.name, config.rootEntityType,
       updateParameterSet(config.prerequisites, nDelete, nModify, nCreate),
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),
-      config.workspaceName, config.namespace
+      config.workspaceName,
+      config.methodStoreConfig,
+      config.methodStoreMethod
     )
   }
 

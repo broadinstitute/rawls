@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.{Graph, Vertex, Direction}
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, WorkspaceName, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 
 /**
@@ -15,6 +15,18 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   private val OutputsEdge: String = "outputs"
   private val PrerequisitesEdge: String = "prerequisites"
 
+  private def getMethodStoreConfig(props: Map[String, String]): MethodStoreConfiguration = {
+    props.get("methodConfigNamespace") match {
+      case Some(ns) => MethodStoreConfiguration(ns, props.get("methodConfigName").get, props.get("methodConfigVersion").get)
+      case None => null
+    }
+  }
+  private def getMethodStoreMethod(props: Map[String, String]): MethodStoreMethod = {
+    props.get("methodNamespace") match {
+      case Some(ns) => MethodStoreMethod(ns, props.get("methodName").get, props.get("methodVersion").get)
+      case None => null
+    }
+  }
   /** gets by method config name */
   override def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Option[MethodConfiguration] = txn withGraph { graph =>
     // notice that methodConfigPipe is a def, not a val so we get a new pipeline every time
@@ -25,12 +37,17 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
       val outputs = getVertexProperties[String](methodConfigPipe.out(OutputsEdge))
       val prerequisites = getVertexProperties[String](methodConfigPipe.out(PrerequisitesEdge))
 
+
+
       fromPropertyMap[MethodConfiguration](methodConfigProps ++
         Map(
           "inputs" -> inputs.getOrElse(Map.empty),
           "outputs" -> outputs.getOrElse(Map.empty),
           "prerequisites" -> prerequisites.getOrElse(Map.empty),
-          "workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName)))
+          "workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName),
+          "methodStoreConfig" -> getMethodStoreConfig(methodConfigProps),
+          "methodStoreMethod" -> getMethodStoreMethod(methodConfigProps)
+        ))
     }
   }
 
@@ -51,7 +68,10 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   /** list all method configurations in the workspace */
   override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = txn withGraph { graph =>
     getPropertiesOfVertices[String](workspacePipeline(graph, workspaceNamespace, workspaceName).out(MethodConfigEdgeType)) map { methodConfigProps =>
-      fromPropertyMap[MethodConfigurationShort](methodConfigProps ++ Map("workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName)))
+      fromPropertyMap[MethodConfigurationShort](methodConfigProps ++
+        Map("workspaceName" -> WorkspaceName(workspaceNamespace, workspaceName),
+            "methodStoreConfig" -> getMethodStoreConfig(methodConfigProps),
+            "methodStoreMethod" -> getMethodStoreMethod(methodConfigProps)))
     }
   }
 
@@ -82,6 +102,16 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
       }
 
     setVertexProperties(methodConfiguration, configVertex)
+
+
+    Option(methodConfiguration.methodStoreConfig).map(_ => {
+        configVertex.setProperty("methodConfigNamespace", methodConfiguration.methodStoreConfig.methodConfigNamespace)
+        configVertex.setProperty("methodConfigName", methodConfiguration.methodStoreConfig.methodConfigName)
+        configVertex.setProperty("methodConfigVersion", methodConfiguration.methodStoreConfig.methodConfigVersion)
+      })
+    configVertex.setProperty("methodNamespace", methodConfiguration.methodStoreMethod.methodNamespace)
+    configVertex.setProperty("methodName", methodConfiguration.methodStoreMethod.methodName)
+    configVertex.setProperty("methodVersion", methodConfiguration.methodStoreMethod.methodVersion)
 
     methodConfiguration.inputs.foreach { entry => inputsVertex.setProperty(entry._1, entry._2) }
     methodConfiguration.outputs.foreach { entry => outputsVertex.setProperty(entry._1, entry._2) }

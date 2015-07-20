@@ -36,7 +36,7 @@ class RemoteServicesMockServer(port:Int) {
     val copyMethodConfigPath = "/configurations"
 
     val goodResult = AgoraEntity(Some("workspace_test"), Some("rawls_test_good"), Some(1), None, None, None, None,
-      Some("{\n  \"name\": \"rawls_test_1\",\n  \"rootEntityType\": \"rawls_test_type_1\",\n  \"methodNamespace\": \"rawls_test_m_namespace_1\",\n  \"methodName\": \"rawls_test_m_name_1\",\n  \"methodVersion\": \"rawls_test_m_version_1\",\n  \"prerequisites\": { },\n  \"inputs\": { },\n  \"outputs\": { },\n  \"workspaceName\": {\n    \"namespace\": \"rawls_test_w_namespace_1\",\n    \"name\": \"rawls_test_w_name_1\"\n  },\n  \"namespace\": \"rawls_test_namespace_1\"\n}"),
+      Some("{\"name\":\"testConfig1\",\"workspaceName\":{\"namespace\":\"myNamespace\",\"name\":\"myWorkspace\"},\"methodStoreMethod\":{\"methodNamespace\":\"ns-config\",\"methodName\":\"meth1\",\"methodVersion\":\"1\"},\"methodStoreConfig\":{\"methodConfigNamespace\":\"ns\",\"methodConfigName\":\"meth1\",\"methodConfigVersion\":\"1\"},\"outputs\":{\"p1\":\"prereq expr\"},\"inputs\":{\"o1\":\"output expr\"},\"rootEntityType\":\"Sample\",\"prerequisites\":{\"i1\":\"input expr\"},\"namespace\":\"ns\"}"),
       None, None)
 
     val emptyPayloadResult = AgoraEntity(Some("workspace_test"), Some("rawls_test_empty_payload"), Some(1), None, None, None, None,

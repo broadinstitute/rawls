@@ -548,7 +548,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
         withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
           withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             withEntity(workspace, entityType, entityName, txn) { entity =>
-              withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { method =>
+              withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { method =>
                 withWdl(method) { wdl =>
                   // TODO should we return OK even if there are validation errors?
                   RequestComplete(StatusCodes.OK, MethodConfigResolver.getValidationErrors(methodConfig, entity, wdl, txn))
@@ -576,7 +576,7 @@ class WorkspaceService(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entit
       withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
         withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
           withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
-            withMethod(workspace, methodConfig.methodNamespace, methodConfig.methodName, methodConfig.methodVersion, authCookie) { agoraEntity =>
+            withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { agoraEntity =>
               withWdl(agoraEntity) { wdl =>
 
                 //If there's an expression, evaluate it to get the list of entities to run this job on.
