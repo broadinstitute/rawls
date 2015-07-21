@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.google.api.client.auth.oauth2.Credential
-
 trait GoogleCloudStorageDAO {
   def getOurRedirectURI(callbackPath: String): String
 

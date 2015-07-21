@@ -75,7 +75,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       new HttpExecutionServiceDAO(executionServiceServer),
       gcsDAO, submissionSupervisor,
       new GraphSubmissionDAO(new GraphWorkflowDAO)
-    )
+    )_
   }
 
 }

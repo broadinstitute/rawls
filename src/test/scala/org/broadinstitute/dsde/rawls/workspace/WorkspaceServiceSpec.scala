@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.util.UUID
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -13,6 +12,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
+import spray.http.HttpCookie
 import spray.testkit.ScalatestRouteTest
 
 
@@ -30,7 +30,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
-    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor)).underlyingActor
+    val cookie = HttpCookie("iPlanetDirectoryPro", "test_token")
+    val userInfo = UserInfo("test_token", cookie)
+    lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -40,7 +42,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
 
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

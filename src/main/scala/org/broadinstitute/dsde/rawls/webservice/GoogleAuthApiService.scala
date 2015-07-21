@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import javax.ws.rs.Path
 
 import com.wordnik.swagger.annotations._
+import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaType
@@ -12,7 +13,7 @@ import spray.routing.HttpService
 trait GoogleAuthApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val authRoutes =
     registerPostRoute ~
     registerCallbackRoute
@@ -25,12 +26,12 @@ trait GoogleAuthApiService extends HttpService with PerRequestCreator with OpenA
     new ApiResponse(code = 303, message = "Successful Request -- Go Visit Google"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def registerPostRoute = usernameFromCookie() { userId =>
+  def registerPostRoute = userInfoFromCookie() { userInfo =>
     path("authentication" / "register") {
       get {
         requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.RegisterUser(userId,callbackPath)
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.RegisterUser(callbackPath)
         )
       }
     }
@@ -46,13 +47,13 @@ trait GoogleAuthApiService extends HttpService with PerRequestCreator with OpenA
     new ApiResponse(code = 201, message = "Successful Request -- Registered New User"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def registerCallbackRoute = usernameFromCookie() { userId =>
+  def registerCallbackRoute = userInfoFromCookie() { userInfo =>
     path("authentication" / "register_callback") {
       get {
         parameters("code", "state") { (authCode, state) =>
           requestContext => perRequest(requestContext,
-            WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CompleteUserRegistration(userId, authCode, state, callbackPath)
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CompleteUserRegistration(authCode, state, callbackPath)
           )
         }
       }

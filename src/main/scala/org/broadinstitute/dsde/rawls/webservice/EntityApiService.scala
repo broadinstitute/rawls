@@ -4,6 +4,7 @@ import javax.ws.rs.Path
 
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
@@ -13,11 +14,13 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 @Api(value = "/workspaces/{workspaceNamespace}/{workspaceName}/entities", description = "Entity manipulation API", position = 2)
-trait EntityApiService extends HttpService with PerRequestCreator {
+trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+  lazy private implicit val executionContext = actorRefFactory.dispatcher
+
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
   import spray.httpx.SprayJsonSupport._
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val entityRoutes =
     createEntityRoute ~
     getEntityRoute ~
@@ -45,11 +48,11 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "Entity already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def createEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def createEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[Entity]) { entity =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CreateEntity(workspaceNamespace, workspaceName, entity))
         }
       }
@@ -73,10 +76,10 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def getEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.GetEntity(workspaceNamespace, workspaceName, entityType, entityName))
       }
     }
@@ -101,11 +104,11 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def updateEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def updateEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
         }
       }
@@ -127,10 +130,10 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def deleteEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def deleteEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       delete {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName))
       }
     }
@@ -152,11 +155,11 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def renameEntityRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def renameEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[EntityName]) { newEntityName =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
         }
       }
@@ -179,11 +182,11 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def evaluateExpressionRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def evaluateExpressionRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[String]) { expression =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.EvaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression))
         }
       }
@@ -205,10 +208,10 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listEntityTypesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def listEntityTypesRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.ListEntityTypes(workspaceNamespace, workspaceName))
       }
     }
@@ -230,10 +233,10 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or entityType does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listEntitiesPerTypeRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def listEntitiesPerTypeRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.ListEntities(workspaceNamespace, workspaceName, entityType))
       }
     }
@@ -252,11 +255,11 @@ trait EntityApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "One or more entities of that name already exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def copyEntitiesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def copyEntitiesRoute = userInfoFromCookie() { userInfo =>
     path("entities" / "copy" ) {
       post {
         entity(as[EntityCopyDefinition]) { copyDefinition =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
         }
       }

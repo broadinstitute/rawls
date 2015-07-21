@@ -34,8 +34,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
 
-  // this token won't work for login to remote services: that requires a password and is therefore limited to the integration test
-  def addMockOpenAmCookie = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", "test_token")))
+  // these tokens won't work for login to remote services: that requires a password and is therefore limited to the integration test
+  def addOpenAmCookie(token: String) = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", token)))
+  def addMockOpenAmCookie = addOpenAmCookie("test_token")
 
   def actorRefFactory = system
 
@@ -60,7 +61,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       new GraphWorkflowDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -980,4 +981,140 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.NotFound) { status }
       }
   }
+
+  // Begin tests where routes are restricted by ACLs
+
+  // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
+
+  it should "allow an owner-access user to get a workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      addOpenAmCookie("owner-access") ~>
+      sealRoute(services.getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "allow a write-access user to get a workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      addOpenAmCookie("write-access") ~>
+      sealRoute(services.getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "allow a read-access user to get a workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      addOpenAmCookie("read-access") ~>
+      sealRoute(services.getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a no-access user to get a workspace" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      addOpenAmCookie("no-access") ~>
+      sealRoute(services.getWorkspacesRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
+
+  it should "allow an owner-access user to update a workspace" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+      addOpenAmCookie("owner-access") ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "allow a write-access user to update a workspace" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+      addOpenAmCookie("write-access") ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a read-access user to update a workspace" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+      addOpenAmCookie("read-access") ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a no-access user to update a workspace" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+      addOpenAmCookie("no-access") ~>
+      sealRoute(services.updateWorkspaceRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
+
+  it should "allow an owner-access user to update an ACL" in withTestDataApiServices { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addOpenAmCookie("owner-access") ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "not allow a write-access user to update an ACL" in withTestDataApiServices { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addOpenAmCookie("write-access") ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "not allow a read-access user to update an ACL" in withTestDataApiServices { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addOpenAmCookie("read-access") ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "not allow a no-access user to update an ACL" in withTestDataApiServices { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+      addOpenAmCookie("no-access") ~>
+      sealRoute(services.putACLRoute) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  // End ACL-restriction Tests
+
+
 }

@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.json.JsonParser
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -21,7 +20,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
   import spray.httpx.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val workspaceRoutes =
     postWorkspaceRoute ~
     getWorkspacesRoute ~
@@ -41,13 +40,13 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 201, message = "Successful Request"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def postWorkspaceRoute = usernameFromCookie() { userId =>
+  def postWorkspaceRoute = userInfoFromCookie() { userInfo =>
     path("workspaces") {
       post {
         entity(as[WorkspaceRequest]) { workspace =>
           requestContext => perRequest(requestContext,
-            WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CreateWorkspace(userId,workspace))
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CreateWorkspace(workspace))
         }
       }
     }
@@ -70,11 +69,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 404, message = "Workspace does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def updateWorkspaceRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def updateWorkspaceRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.UpdateWorkspace(workspaceNamespace, workspaceName, operations))
         }
       }
@@ -96,10 +95,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 404, message = "Workspace does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getWorkspacesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def getWorkspacesRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.GetWorkspace(workspaceNamespace, workspaceName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetWorkspace(workspaceNamespace, workspaceName))
       }
     }
   }
@@ -113,10 +112,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listWorkspacesRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def listWorkspacesRoute = userInfoFromCookie() { userInfo =>
     path("workspaces") {
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor), WorkspaceService.ListWorkspaces)
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaces)
       }
     }
   }
@@ -136,12 +135,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 409, message = "Destination workspace already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def copyWorkspaceRoute = usernameFromCookie() { userId =>
+  def copyWorkspaceRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "clone" ) { (sourceNamespace, sourceWorkspace) =>
       post {
         entity(as[WorkspaceName]) { destWorkspace =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CloneWorkspace(userId, sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name))
         }
       }
     }
@@ -162,11 +161,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     new ApiResponse(code = 404, message = "Workspace not found"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getACLRoute = usernameFromCookie() { userId =>
+  def getACLRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-                                WorkspaceService.GetACL(userId, workspaceNamespace, workspaceName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                                WorkspaceService.GetACL(workspaceNamespace, workspaceName))
       }
     }
   }
@@ -188,10 +187,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
   def putACLRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
       put {
-        usernameFromCookie() { userId =>
+        userInfoFromCookie() { userInfo =>
           entity(as[String]) { acl =>
-            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-                                      WorkspaceService.PutACL(userId, workspaceNamespace, workspaceName, acl))
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                                      WorkspaceService.PutACL(workspaceNamespace, workspaceName, acl))
           }
         }
       }

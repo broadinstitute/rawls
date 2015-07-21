@@ -4,6 +4,7 @@ import javax.ws.rs.Path
 
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -12,12 +13,13 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 @Api(value = "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs", description = "Method Configuration manipulation API", position = 3)
-trait MethodConfigApiService extends HttpService with PerRequestCreator {
+trait MethodConfigApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+  lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
   import spray.httpx.SprayJsonSupport._
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val methodConfigRoutes =
     createMethodConfigurationRoute ~
     getMethodConfigurationRoute ~
@@ -45,11 +47,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "MethodConfiguration already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def createMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def createMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[MethodConfiguration]) { methodConfiguration =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CreateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration))
         }
       }
@@ -73,10 +75,10 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def getMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName))
       }
     }
@@ -97,10 +99,10 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listMethodConfigurationsRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def listMethodConfigurationsRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.ListMethodConfigurations(workspaceNamespace, workspaceName))
       }
     }
@@ -121,10 +123,10 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def deleteMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def deleteMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       delete {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName))
       }
     }
@@ -146,11 +148,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def renameMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def renameMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
       post {
         entity(as[MethodConfigurationName]) { newEntityName =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newEntityName.name))
         }
       }
@@ -175,11 +177,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 404, message = "Workspace or method configuration does not exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def updateMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def updateMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       put {
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.UpdateMethodConfiguration(workspaceNamespace, workspaceName, newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)))
         }
       }
@@ -201,11 +203,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "Destination method configuration by that name already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def copyMethodConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
-    path("methodconfigs" / "copy" ) {
+  def copyMethodConfigurationRoute = userInfoFromCookie() { userInfo =>
+    path("methodconfigs" / "copy") {
       post {
         entity(as[MethodConfigurationNamePair]) { confNames =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CopyMethodConfiguration(confNames))
         }
       }
@@ -228,12 +230,12 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiResponse(code = 409, message = "Destination method configuration by that name already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def copyMethodRepoConfigurationRoute = cookie("iPlanetDirectoryPro") { securityTokenCookie =>
+  def copyMethodRepoConfigurationRoute = userInfoFromCookie() { userInfo =>
     path("methodconfigs" / "copyFromMethodRepo") {
       post {
         entity(as[MethodRepoConfigurationQuery]) { query =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CopyMethodConfigurationFromMethodRepo(query, securityTokenCookie))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CopyMethodConfigurationFromMethodRepo(query))
         }
       }
     }
