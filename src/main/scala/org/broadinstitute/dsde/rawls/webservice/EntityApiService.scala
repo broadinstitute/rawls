@@ -20,7 +20,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
   import spray.httpx.SprayJsonSupport._
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val entityRoutes =
     createEntityRoute ~
     getEntityRoute ~
@@ -48,12 +48,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 409, message = "Entity already exists"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def createEntityRoute = usernameFromCookie() { userId =>
+  def createEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[Entity]) { entity =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CreateEntity(userId, workspaceNamespace, workspaceName, entity))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CreateEntity(workspaceNamespace, workspaceName, entity))
         }
       }
     }
@@ -76,11 +76,11 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getEntityRoute = usernameFromCookie() { userId =>
+  def getEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.GetEntity(userId, workspaceNamespace, workspaceName, entityType, entityName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GetEntity(workspaceNamespace, workspaceName, entityType, entityName))
       }
     }
   }
@@ -104,12 +104,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def updateEntityRoute = usernameFromCookie() { userId =>
+  def updateEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.UpdateEntity(userId, workspaceNamespace, workspaceName, entityType, entityName, operations))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
         }
       }
     }
@@ -130,11 +130,11 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def deleteEntityRoute = usernameFromCookie() { userId =>
+  def deleteEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       delete {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.DeleteEntity(userId, workspaceNamespace, workspaceName, entityType, entityName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName))
       }
     }
   }
@@ -155,12 +155,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def renameEntityRoute = usernameFromCookie() { userId =>
+  def renameEntityRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[EntityName]) { newEntityName =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.RenameEntity(userId, workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
         }
       }
     }
@@ -182,12 +182,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or Entity does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def evaluateExpressionRoute = usernameFromCookie() { userId =>
+  def evaluateExpressionRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[String]) { expression =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.EvaluateExpression(userId, workspaceNamespace, workspaceName, entityType, entityName, expression))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.EvaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression))
         }
       }
     }
@@ -208,11 +208,11 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listEntityTypesRoute = usernameFromCookie() { userId =>
+  def listEntityTypesRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.ListEntityTypes(userId, workspaceNamespace, workspaceName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.ListEntityTypes(workspaceNamespace, workspaceName))
       }
     }
   }
@@ -233,11 +233,11 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 404, message = "Workspace or entityType does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def listEntitiesPerTypeRoute = usernameFromCookie() { userId =>
+  def listEntitiesPerTypeRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.ListEntities(userId, workspaceNamespace, workspaceName, entityType))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.ListEntities(workspaceNamespace, workspaceName, entityType))
       }
     }
   }
@@ -255,12 +255,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     new ApiResponse(code = 409, message = "One or more entities of that name already exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def copyEntitiesRoute = usernameFromCookie() { userId =>
+  def copyEntitiesRoute = userInfoFromCookie() { userInfo =>
     path("entities" / "copy" ) {
       post {
         entity(as[EntityCopyDefinition]) { copyDefinition =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-            WorkspaceService.CopyEntities(userId, copyDefinition, requestContext.request.uri))
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
         }
       }
     }

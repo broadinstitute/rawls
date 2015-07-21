@@ -17,7 +17,7 @@ import spray.routing._
 trait SubmissionApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
-  val workspaceServiceConstructor: () => WorkspaceService
+  val workspaceServiceConstructor: UserInfo => WorkspaceService
   val submissionRoutes = submissionRoute ~ getStatusRoute
 
   @ApiOperation(value = "Create Submission.",
@@ -34,15 +34,15 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with OpenA
     new ApiResponse(code = 409, message = "Method Configuration failed to resolve input expressions with the supplied Entity"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def submissionRoute = usernameFromCookie() { userId =>
+  def submissionRoute = userInfoFromCookie() { userInfo =>
     // TODO: reads the cookie twice!
     cookie("iPlanetDirectoryPro") { securityTokenCookie =>
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>
             requestContext => perRequest(requestContext,
-              WorkspaceService.props(workspaceServiceConstructor),
-              WorkspaceService.CreateSubmission(userId, WorkspaceName(workspaceNamespace, workspaceName), submission, securityTokenCookie))
+              WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission, securityTokenCookie))
           }
         }
       }
@@ -65,11 +65,11 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with OpenA
     new ApiResponse(code = 404, message = "Submission Not Found"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
-  def getStatusRoute = usernameFromCookie() { userId =>
+  def getStatusRoute = userInfoFromCookie() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions" / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor),
-          WorkspaceService.GetSubmissionStatus(userId, WorkspaceName(workspaceNamespace, workspaceName), submissionId))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GetSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
       }
     }
   }
