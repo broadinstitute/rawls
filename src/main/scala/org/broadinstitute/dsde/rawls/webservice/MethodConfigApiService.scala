@@ -69,7 +69,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiImplicitParam(name = "methodConfigurationName", required = true, dataType = "string", paramType = "path", value = "Method Configuration Name")
   ))
   @ApiResponses(Array(
-    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace or Method Configuration does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
@@ -93,7 +93,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator {
     new ApiImplicitParam(name = "workspaceName", required = true, dataType = "string", paramType = "path", value = "Workspace Name")
   ))
   @ApiResponses(Array(
-    new ApiResponse(code = 204, message = "Successful Request"),
+    new ApiResponse(code = 200, message = "Successful Request"),
     new ApiResponse(code = 404, message = "Workspace does not exist"),
     new ApiResponse(code = 500, message = "Rawls Internal Error")
   ))
