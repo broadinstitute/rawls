@@ -16,8 +16,8 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
 
   val acls = Map(
     // the default test user should have access to everything
+    "test@broadinstitute.org" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
     "test_token" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
-
     "owner-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
     "write-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Write),
     "read-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Read),

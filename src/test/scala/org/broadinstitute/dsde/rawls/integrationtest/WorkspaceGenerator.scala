@@ -1,12 +1,10 @@
-package org.broadinstitute.dsde.rawls
+package org.broadinstitute.dsde.rawls.integrationtest
 
+import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceGenerator._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.{AttributeUpdateOperation, RemoveAttribute, AddUpdateAttribute}
-import org.joda.time.DateTime
+import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, RemoveAttribute}
 
 import scala.util.Random
-
-import WorkspaceGenerator._
 
 object WorkspaceGenerator {
   val rand = new Random
