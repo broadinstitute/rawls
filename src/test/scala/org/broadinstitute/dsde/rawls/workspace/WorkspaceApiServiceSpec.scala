@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, GraphEntityDAO, GraphWorkspaceDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
 import AttributeUpdateOperations._
 import org.joda.time.DateTime
@@ -565,8 +564,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 201 on create method configuration" in withTestDataApiServices { services =>
-    val newMethodConfig = MethodConfiguration("dsde", "testConfig2", "samples", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"),
-      testData.wsName, MethodStoreConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodStoreMethod(testData.wsName.namespace, "method-a", "1"))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfig2", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
+      testData.wsName, MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodRepoMethod(testData.wsName.namespace, "method-a", "1"))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
@@ -671,7 +670,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 200 on update method configuration" in withTestDataApiServices { services =>
-    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> "foo2"))
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -680,7 +679,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Option("foo2")) {
+          assertResult(Option(AttributeString("foo2"))) {
             methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
           }
         }
@@ -880,7 +879,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step_1","dsde",testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName, MethodStoreConfiguration("dsde_config","three_step","1"), MethodStoreMethod("dsde","three_step","1"))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map("pattern"->AttributeString("String")),Map.empty,mcName.workspaceName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -894,7 +893,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 Created when creating a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("three_step","dsde",wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map.empty,Map.empty, wsName, MethodStoreConfiguration("dsde_config","three_step","1"), MethodStoreMethod("dsde","three_step","1"))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map.empty,Map.empty, wsName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -981,7 +980,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.id}") ~>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.submissionId}") ~>
       addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check {

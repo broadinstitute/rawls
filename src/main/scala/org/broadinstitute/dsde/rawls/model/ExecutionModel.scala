@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 
-import scala.annotation.meta.field
 import spray.json._
 import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.{RawlsException, VertexProperty}
+import org.broadinstitute.dsde.rawls.RawlsException
 
 /**
  * @author tsharpe
@@ -31,65 +30,39 @@ case class ExecutionServiceStatus(
 
 // Status of a successfully started workflow
 case class Workflow(
-  workspaceNamespace: String,
-  workspaceName: String,
-  @(VertexProperty@field)
-  id: String,
-  @(VertexProperty@field)
-  status: WorkflowStatuses.WorkflowStatus,
-  @(VertexProperty@field)
+  workspaceName: WorkspaceName,
+  workflowId: String,
+  status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  @(VertexProperty@field)
-  entityType: String,
-  @(VertexProperty@field)
-  entityName: String
+  workflowEntity: AttributeEntityReference
 )
 
 // Encapsulating errors for workflows that failed to start
 case class WorkflowFailure(
-  workspaceNamespace: String,
-  workspaceName: String,
-  @(VertexProperty@field)
+  workspaceName: WorkspaceName,
   entityName: String,
-  @(VertexProperty@field)
   entityType: String,
-  @(VertexProperty@field)
   errors: Seq[String]
 )
 
 // Status of a submission
 case class Submission(
-  @(VertexProperty@field)
-  id: String,
-  @(VertexProperty@field)
+  submissionId: String,
   submissionDate: DateTime,
-  workspaceNamespace: String,
-  workspaceName: String,
-  @(VertexProperty@field)
+  workspaceName: WorkspaceName,
   methodConfigurationNamespace: String,
-  @(VertexProperty@field)
   methodConfigurationName: String,
-  entityType: String,
-  entityName: String,
+  submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
-  @(VertexProperty@field)
-  status: SubmissionStatuses.SubmissionStatus
+  status: SubmissionStatus
 )
 
 object ExecutionJsonSupport extends JsonSupport {
 
-  implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
+  import WorkspaceJsonSupport.WorkspaceNameFormat
 
-  implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
-
-  implicit val WorkflowFormat = jsonFormat7(Workflow)
-
-  implicit val WorkflowFailureFormat = jsonFormat5(WorkflowFailure)
-
-  implicit val SubmissionFormat = jsonFormat11(Submission)
-
-  implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatuses.WorkflowStatus] {
+  implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
     override def read(json: JsValue): WorkflowStatus = json match {
       case JsString(name) => WorkflowStatuses.withName(name)
@@ -97,13 +70,23 @@ object ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object SubmissionStatusFormat extends RootJsonFormat[SubmissionStatuses.SubmissionStatus] {
+  implicit object SubmissionStatusFormat extends RootJsonFormat[SubmissionStatus] {
     override def write(obj: SubmissionStatus): JsValue = JsString(obj.toString)
     override def read(json: JsValue): SubmissionStatus = json match {
       case JsString(name) => SubmissionStatuses.withName(name)
       case x => throw new DeserializationException("invalid value: " + x)
     }
   }
+
+  implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
+
+  implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
+
+  implicit val WorkflowFormat = jsonFormat5(Workflow)
+
+  implicit val WorkflowFailureFormat = jsonFormat4(WorkflowFailure)
+
+  implicit val SubmissionFormat = jsonFormat9(Submission)
 }
 
 object WorkflowStatuses {

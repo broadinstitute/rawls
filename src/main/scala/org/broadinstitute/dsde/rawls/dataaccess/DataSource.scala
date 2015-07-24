@@ -25,6 +25,8 @@ object DataSource {
     val factory = new OrientGraphFactory(url, user, password)
     factory.setThreadMode(THREAD_MODE.MANUAL)
     factory.setAutoStartTx(false)
+    factory.setUseClassForEdgeLabel(false)
+    factory.setUseLightweightEdges(true)
     factory
   }
 }

@@ -5,7 +5,7 @@ import akka.testkit.{ImplicitSender, TestActors, TestKit, TestActorRef}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, GraphWorkflowDAO}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.model.{WorkflowStatuses, ExecutionServiceStatus, Workflow}
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.HttpCookie
@@ -26,7 +26,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   "WorkflowMonitor" should "throw exception for non-existent workflow" in withDefaultTestDatabase { dataSource =>
-    val workflow = Workflow("wns", "wn", "id-string", WorkflowStatuses.Running, new DateTime(0), "entityType", "entity")
+    val workflow = Workflow(WorkspaceName("wns", "wn"), "id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"))
     val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, workflow))
     intercept[RawlsException] {
       monitorRef.underlyingActor.checkWorkflowStatus()

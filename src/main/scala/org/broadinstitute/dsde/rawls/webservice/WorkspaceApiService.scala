@@ -33,13 +33,13 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.UpdateWorkspace(workspaceNamespace, workspaceName, operations))
+            WorkspaceService.UpdateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations))
         }
       }
     } ~
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetWorkspace(workspaceNamespace, workspaceName))
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces") {
@@ -51,14 +51,14 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
       post {
         entity(as[WorkspaceName]) { destWorkspace =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CloneWorkspace(sourceNamespace, sourceWorkspace, destWorkspace.namespace, destWorkspace.name))
+            WorkspaceService.CloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace))
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                                WorkspaceService.GetACL(workspaceNamespace, workspaceName))
+                                WorkspaceService.GetACL(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
@@ -66,7 +66,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
         userInfoFromCookie() { userInfo =>
           entity(as[String]) { acl =>
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                                      WorkspaceService.PutACL(workspaceNamespace, workspaceName, acl))
+                                      WorkspaceService.PutACL(WorkspaceName(workspaceNamespace, workspaceName), acl))
           }
         }
       }

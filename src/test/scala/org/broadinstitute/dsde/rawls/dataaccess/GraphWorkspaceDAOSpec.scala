@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -24,9 +25,10 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       // now check explicitly that the vertex exists. note that this will fail if our reserved keywords change.
       assert {
         txn.withGraph { graph =>
-          graph.getVertices("_clazz", classOf[Workspace].getSimpleName)
-            .filter(v => v.getProperty[String]("_name") == workspace2.name && v.getProperty[String]("_namespace") == workspace2.namespace)
-            .headOption.isDefined
+          graph.getVertices.exists(v => {
+            v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Workspace) &&
+            v.getProperty[String]("name") == workspace2.name && v.getProperty[String]("namespace") == workspace2.namespace
+          })
         }
       }
     }

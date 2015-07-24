@@ -1,9 +1,13 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import java.lang
+
 import com.tinkerpop.blueprints._
+import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import com.tinkerpop.pipes.PipeFunction
-import org.broadinstitute.dsde.rawls.dataaccess.GraphEntityDAO
+import com.tinkerpop.pipes.{Pipe, PipeFunction}
+import com.tinkerpop.pipes.branch.LoopPipe
+import org.broadinstitute.dsde.rawls.dataaccess.{VertexSchema, GraphEntityDAO}
 import org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.model.{Entity, AttributeConversions, AttributeValue, Workspace}
 import scala.collection.JavaConversions._
@@ -38,7 +42,7 @@ object ExpressionTypes {
     name(e.getVertex(Direction.OUT)) + "---" + name(e) + "-->" + name(e.getVertex(Direction.IN))
   }
   def name(v:Vertex):String = {
-    v.getProperty("_name").asInstanceOf[String]
+    v.getProperty("name").asInstanceOf[String]
   }
   def propString(v:Vertex, property:String):String = {
     // TODO: why do we need the [Any] here?  If we don't have it we get casting exceptions from Scala...
@@ -105,7 +109,6 @@ class ExpressionParser extends JavaTokenParsers {
   private def valueAttribute: Parser[FinalFunc] =
     ident ^^ { case name => lastAttributePipeFunc(name)}
 
-
   def parseAttributeExpr(expression: String) = {
     parse(expression, attributeExpression)
   }
@@ -133,33 +136,52 @@ class ExpressionParser extends JavaTokenParsers {
   private def rootFunc(context: ExpressionContext, graphPipeline: PipeType): PipeResult = {
     def workspaceFunc = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(a: Vertex) = {
-        propString(a, "_namespace") == context.workspaceNamespace && propString(a, "_name") == context.workspaceName
+        a.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Workspace) &&
+          propString(a, "namespace") == context.workspaceNamespace && propString(a, "name") == context.workspaceName
       }
     }
 
     def entityFunc = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(a: Vertex) = {
-        propString(a, "_name") == context.rootName
+        a.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Entity) &&
+        propString(a, "name") == context.rootName
       }
     }
 
     PipeResult(
       // all vertexes of type Workspace filtered for the given namespace and name
-      graphPipeline.V("_clazz", classOf[Workspace].getSimpleName).filter(workspaceFunc)
+      graphPipeline.V().filter(workspaceFunc)
         // then entities from that workspace that match the root entity we are starting at
         .out(context.rootType).filter(entityFunc),
 
       // text for what the pipeline looks like at this step
-      s"""new GremlinPipeline(graph).V("_entityType", "Workspace").filter(workspaceFunc).out(${context.rootType},${context.rootName})"""
+      // TODO make this less prone to breaking when our graph structure changes
+      s"""new GremlinPipeline(graph).V().filter(workspaceFunc).out(${context.rootType}).filter(entityFunc)"""
     )
   }
 
   // add pipe to an entity referenced by the current entity
   private def entityNameAttributePipeFunc(entityRefName: String)(context: ExpressionContext, graphPipeline: PipeType): PipeResult = {
+    def whileNotEntityFunc = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+      override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = {
+        bundle.getObject.asInstanceOf[OrientVertex].getRecord.getClassName != VertexSchema.Entity
+      }
+    }
+
+    def isVertexOfClass(clazz: String) = new PipeFunction[Vertex, java.lang.Boolean] {
+      override def compute(v: Vertex) = v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(clazz)
+    }
+
+    def entityRefPipe(entityRefName: String) = new GremlinPipeline[Vertex, Vertex]().out(entityRefName)
+    def entityRefListPipe(entityRefName: String) = entityRefPipe(entityRefName).as("listOut").out().loop("listOut", whileNotEntityFunc)
+
     PipeResult(
-      // an entity name is on the outgoing edge label
-      graphPipeline.out(entityRefName),
-      s".out($entityRefName)"
+      // an reference name is on the outgoing edge label
+      // if it is a single reference, the vertex is on the other end
+      // if it's a List-type reference, there are some vertices in the middle so loop until you find entity classes
+      // then merge both steps together
+      graphPipeline.out("attributes").copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().asInstanceOf[GremlinPipeline[Vertex, Vertex]].filter(isVertexOfClass(VertexSchema.Entity)),
+      s""".out("attributes").copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().filter(isVertexOfClass(VertexSchema.Entity))"""
     )
   }
 
@@ -172,9 +194,16 @@ class ExpressionParser extends JavaTokenParsers {
 
     // Look up the attributes on the list of vertices returned from the pipe. This will insert nulls into the list if
     // the attribute doesn't exist.
-    FinalResult(lastVertices.map((v: Vertex) => {
-      v.getProperty(attributeName).asInstanceOf[Object]
-    }), s".getProperty($attributeName)")
+    // Note that this requires traversing one additional time, from the "last" vertices to their subordinate attribute map vertices.
+    FinalResult(
+      lastVertices.map((v: Vertex) => {
+        v.getVertices(Direction.OUT, "attributes").headOption match {
+          case Some(mapVertex) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
+          case None => throw new RuntimeException("Boo hoo, what should I do")
+        }
+      }),
+      s""".out("attributes").getProperty($attributeName)"""
+    )
   }
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
@@ -188,7 +217,7 @@ class ExpressionEvaluator(graph:Graph, parser:ExpressionParser)  {
   def evalFinalAttribute(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[AttributeValue]] = {
     parser.parseAttributeExpr(expression)
       .flatMap( runPipe(ExpressionContext(workspaceNamespace, workspaceName, rootType, rootName), _) )
-      .flatMap( ls => Success(ls.map(AttributeConversions.propertyToAttribute)) )
+      .flatMap( ls => Success(ls.map(AttributeConversions.propertyToAttribute(_))) )
   }
 
   def evalFinalEntity(workspaceNamespace:String, workspaceName:String, rootType:String, rootName:String, expression:String):Try[Seq[Entity]] = {
@@ -204,7 +233,9 @@ class ExpressionEvaluator(graph:Graph, parser:ExpressionParser)  {
     val builtPipe = pipe.steps.foldLeft(PipeResult(gremlin, "")){ ( graph, func ) => func(expressionContext, graph.result) }
 
     //Run the final step. This executes the pipeline and returns its output.
-    Try( pipe.finalStep( expressionContext, builtPipe.result ) ) match {
+    Try {
+      pipe.finalStep( expressionContext, builtPipe.result )
+    } match {
       case Success(finalResult) => Success(finalResult.result)
       case Failure(regret) => Failure(regret)
     }

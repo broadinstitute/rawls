@@ -58,20 +58,20 @@ class SubmissionMonitor(submission: Submission,
 
   override def receive = {
     case WorkflowStatusChange(workflow) =>
-      system.log.debug("workflow state change, submission {}, workflow {} {}", submission.id, workflow.id, workflow.status)
+      system.log.debug("workflow state change, submission {}, workflow {} {}", submission.submissionId, workflow.workflowId, workflow.status)
       handleStatusChange(workflow)
     case ReceiveTimeout =>
-      system.log.debug("submission monitor timeout, submission {}", submission.id)
+      system.log.debug("submission monitor timeout, submission {}", submission.submissionId)
       checkSubmissionStatus()
     case Terminated(monitor) =>
-      system.log.debug("workflow monitor terminated, submission {}, actor ", submission.id, monitor)
+      system.log.debug("workflow monitor terminated, submission {}, actor ", submission.submissionId, monitor)
       handleTerminatedMonitor(monitor.path.name)
   }
 
   private def handleTerminatedMonitor(workflowId: String): Unit = {
     val workflow = datasource inTransaction { txn =>
-      workflowDAO.get(submission.workspaceNamespace, submission.workspaceName, workflowId, txn).getOrElse(
-        throw new RawlsException(s"Could not find workflow in workspace ${submission.workspaceNamespace}/${submission.workspaceName} with id ${workflowId}")
+      workflowDAO.get(submission.workspaceName, workflowId, txn).getOrElse(
+        throw new RawlsException(s"Could not find workflow in workspace ${submission.workspaceName} with id ${workflowId}")
       )
     }
 
@@ -86,12 +86,12 @@ class SubmissionMonitor(submission: Submission,
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
-    watch(actorOf(workflowMonitorProps(self, workflow), workflow.id))
+    watch(actorOf(workflowMonitorProps(self, workflow), workflow.workflowId))
   }
 
   private def handleStatusChange(workflow: Workflow): Unit = {
     datasource inTransaction { txn =>
-      workflowDAO.update(workflow.workspaceNamespace, workflow.workspaceName, workflow, txn)
+      workflowDAO.update(workflow.workspaceName, workflow, txn)
     }
     if (workflow.status.isDone) {
       checkSubmissionStatus()
@@ -99,9 +99,9 @@ class SubmissionMonitor(submission: Submission,
   }
 
   private def checkSubmissionStatus(): Unit = {
-    system.log.debug("polling workflow status, submission {}", submission.id)
+    system.log.debug("polling workflow status, submission {}", submission.submissionId)
     datasource inTransaction { txn =>
-      val refreshedSubmission = submissionDAO.get(submission.workspaceNamespace, submission.workspaceName, submission.id, txn).getOrElse(
+      val refreshedSubmission = submissionDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, submission.submissionId, txn).getOrElse(
         throw new RawlsException(s"submissions ${submission} does not exist")
       )
 

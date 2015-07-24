@@ -39,32 +39,32 @@ object WorkspaceService {
   case class CompleteUserRegistration( authCode: String, state: String, callbackPath: String) extends WorkspaceServiceMessage
 
   case class CreateWorkspace(workspace: WorkspaceRequest) extends WorkspaceServiceMessage
-  case class GetWorkspace(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
-  case class UpdateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
+  case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
-  case class CloneWorkspace(sourceNamespace:String, sourceWorkspace:String, destNamespace:String, destWorkspace:String) extends WorkspaceServiceMessage
-  case class GetACL(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
-  case class PutACL(workspaceNamespace: String, workspaceName: String, acl: String) extends WorkspaceServiceMessage
+  case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
+  case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class PutACL(workspaceName: WorkspaceName, acl: String) extends WorkspaceServiceMessage
 
-  case class CreateEntity(workspaceNamespace: String, workspaceName: String, entity: Entity) extends WorkspaceServiceMessage
-  case class GetEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
-  case class UpdateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
-  case class DeleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) extends WorkspaceServiceMessage
-  case class RenameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
-  case class EvaluateExpression(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
-  case class ListEntityTypes(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
-  case class ListEntities(workspaceNamespace: String, workspaceName: String, entityType: String) extends WorkspaceServiceMessage
+  case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
+  case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
+  case class UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
+  case class DeleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
+  case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
+  case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
+  case class ListEntityTypes(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
-  case class BatchUpsertEntities(workspaceNamespace: String, workspaceName: String, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
+  case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
 
-  case class CreateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
-  case class GetMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class UpdateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
-  case class DeleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
-  case class RenameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
+  case class CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
+  case class GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
+  case class UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
+  case class DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
+  case class RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery) extends WorkspaceServiceMessage
-  case class ListMethodConfigurations(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
+  case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
 
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
@@ -84,32 +84,32 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CompleteUserRegistration(authCode, state, callbackPath) => context.parent ! completeUserRegistration(authCode,state,callbackPath)
 
     case CreateWorkspace(workspace) => context.parent ! createWorkspace(workspace)
-    case GetWorkspace(workspaceNamespace, workspaceName) => context.parent ! getWorkspace(workspaceNamespace, workspaceName)
-    case UpdateWorkspace(workspaceNamespace, workspaceName, operations) => context.parent ! updateWorkspace(workspaceNamespace, workspaceName, operations)
+    case GetWorkspace(workspaceName) => context.parent ! getWorkspace(workspaceName)
+    case UpdateWorkspace(workspaceName, operations) => context.parent ! updateWorkspace(workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
-    case CloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace) => context.parent ! cloneWorkspace(sourceNamespace, sourceWorkspace, destNamespace, destWorkspace)
-    case GetACL(workspaceNamespace, workspaceName) => context.parent ! getACL(workspaceNamespace,workspaceName)
-    case PutACL(workspaceNamespace, workspaceName, acl) => context.parent ! putACL(workspaceNamespace,workspaceName,acl)
+    case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
+    case GetACL(workspaceName) => context.parent ! getACL(workspaceName)
+    case PutACL(workspaceName, acl) => context.parent ! putACL(workspaceName, acl)
 
-    case CreateEntity(workspaceNamespace, workspaceName, entity) => context.parent ! createEntity(workspaceNamespace, workspaceName, entity)
-    case GetEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceNamespace, workspaceName, entityType, entityName)
-    case UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations) => context.parent ! updateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations)
-    case DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName) => context.parent ! deleteEntity(workspaceNamespace, workspaceName, entityType, entityName)
-    case RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName) => context.parent ! renameEntity(workspaceNamespace, workspaceName, entityType, entityName, newName)
-    case EvaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression) => context.parent ! evaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression)
-    case ListEntityTypes(workspaceNamespace, workspaceName) => context.parent ! listEntityTypes(workspaceNamespace, workspaceName)
-    case ListEntities(workspaceNamespace, workspaceName, entityType) => context.parent ! listEntities(workspaceNamespace, workspaceName, entityType)
+    case CreateEntity(workspaceName, entity) => context.parent ! createEntity(workspaceName, entity)
+    case GetEntity(workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceName, entityType, entityName)
+    case UpdateEntity(workspaceName, entityType, entityName, operations) => context.parent ! updateEntity(workspaceName, entityType, entityName, operations)
+    case DeleteEntity(workspaceName, entityType, entityName) => context.parent ! deleteEntity(workspaceName, entityType, entityName)
+    case RenameEntity(workspaceName, entityType, entityName, newName) => context.parent ! renameEntity(workspaceName, entityType, entityName, newName)
+    case EvaluateExpression(workspaceName, entityType, entityName, expression) => context.parent ! evaluateExpression(workspaceName, entityType, entityName, expression)
+    case ListEntityTypes(workspaceName) => context.parent ! listEntityTypes(workspaceName)
+    case ListEntities(workspaceName, entityType) => context.parent ! listEntities(workspaceName, entityType)
     case CopyEntities(entityCopyDefinition, uri:Uri) => context.parent ! copyEntities(entityCopyDefinition, uri)
-    case BatchUpsertEntities(workspaceNamespace, workspaceName, entityUpdates) => context.parent ! batchUpsertEntities(workspaceNamespace, workspaceName, entityUpdates)
+    case BatchUpsertEntities(workspaceName, entityUpdates) => context.parent ! batchUpsertEntities(workspaceName, entityUpdates)
 
-    case CreateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
-    case RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
-    case DeleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! deleteMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
-    case GetMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName)
-    case UpdateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
+    case CreateMethodConfiguration(workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceName, methodConfiguration)
+    case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
+    case DeleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+    case GetMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
+    case UpdateMethodConfiguration(workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceName, methodConfiguration)
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case CopyMethodConfigurationFromMethodRepo(query) => context.parent ! copyMethodConfigurationFromMethodRepo(query)
-    case ListMethodConfigurations(workspaceNamespace, workspaceName) => context.parent ! listMethodConfigurations(workspaceNamespace, workspaceName)
+    case ListMethodConfigurations(workspaceName) => context.parent ! listMethodConfigurations(workspaceName)
 
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
@@ -143,24 +143,24 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def getWorkspace(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+  def getWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
           RequestComplete(workspace)
         }
       }
     }
 
-  def updateWorkspace(workspaceNamespace: String, workspaceName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
+  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           try {
             val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
             RequestComplete(workspaceDAO.save(updatedWorkspace, txn))
           } catch {
-            case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in $workspaceNamespace/$workspaceName, ${e.getMessage}")
+            case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
           }
         }
       }
@@ -171,18 +171,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       RequestComplete(workspaceDAO.list(txn))
     }
 
-  def cloneWorkspace(sourceNamespace: String, sourceWorkspace: String, destNamespace: String, destWorkspace: String): PerRequestMessage =
+  def cloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      val originalWorkspace = workspaceDAO.load(sourceNamespace, sourceWorkspace, txn)
-      val copyWorkspace = workspaceDAO.load(destNamespace, destWorkspace, txn)
+      val originalWorkspace = workspaceDAO.load(sourceWorkspace.namespace, sourceWorkspace.name, txn)
+      val copyWorkspace = workspaceDAO.load(destWorkspace.namespace, destWorkspace.name, txn)
 
       (originalWorkspace, copyWorkspace) match {
         case (Some(ws), None) => {
-          val bucketName = createBucketName(destWorkspace)
-          Try( gcsDAO.createBucket(userInfo.userId,destNamespace, bucketName) ) match {
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destNamespace}/${destWorkspace}: "+err.getMessage)
+          val bucketName = createBucketName(destWorkspace.namespace)
+          Try( gcsDAO.createBucket(userInfo.userId, destWorkspace.namespace, bucketName) ) match {
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspace}: "+err.getMessage)
             case Success(_) =>
-              val newWorkspace = Workspace(destNamespace,destWorkspace,bucketName,DateTime.now,userInfo.userId,ws.attributes)
+              val newWorkspace = Workspace(destWorkspace.namespace, destWorkspace.name, bucketName, DateTime.now, userInfo. userId, ws.attributes)
               workspaceDAO.save(newWorkspace, txn)
               entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
               methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
@@ -191,29 +191,29 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
               RequestComplete((StatusCodes.Created, newWorkspace))
           }
         }
-        case (None, _) => RequestComplete(StatusCodes.NotFound, "Source workspace " + sourceNamespace + "/" + sourceWorkspace + " not found")
-        case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, "Destination workspace " + destNamespace + "/" + destWorkspace + " already exists")
+        case (None, _) => RequestComplete(StatusCodes.NotFound, s"Source workspace ${sourceWorkspace} not found")
+        case (_, Some(_)) => RequestComplete(StatusCodes.Conflict, s"Destination workspace ${destWorkspace} already exists")
       }
     }
 
-  def getACL(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+  def getACL(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Owner, workspace, txn) {
           Try(gcsDAO.getACL(userInfo.userId,workspace.bucketName)) match {
             case Success(acl) => RequestComplete(StatusCodes.OK, acl)
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden, "Can't retrieve ACL for workspace ${workspaceNamespace}/${workspaceName}: " + err.getMessage())
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Can't retrieve ACL for workspace ${workspaceName}: " + err.getMessage())
           }
         }
       }
     }
 
-  def putACL(workspaceNamespace: String, workspaceName: String, acl: String): PerRequestMessage =
+  def putACL(workspaceName: WorkspaceName, acl: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Owner, workspace, txn) {
           Try(gcsDAO.putACL(userInfo.userId,workspace.bucketName, acl)) match {
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden, "Can't set ACL for workspace ${workspaceNamespace}/${workspaceName}: " + err.getMessage())
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Can't set ACL for workspace ${workspaceName}: " + err.getMessage())
             case _ => RequestComplete(StatusCodes.OK)
           }
         }
@@ -222,28 +222,26 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): PerRequestMessage =
     dataSource inTransaction { txn =>
-      val sourceNamespace = entityCopyDef.sourceWorkspace.namespace
-      val sourceWorkspace = entityCopyDef.sourceWorkspace.name
+      val sourceWorkspace = entityCopyDef.sourceWorkspace
 
-      requireAccess(GCSAccessLevel.Read, sourceNamespace, sourceWorkspace, txn) {
-        val destNamespace = entityCopyDef.destinationWorkspace.namespace
-        val destWorkspace = entityCopyDef.destinationWorkspace.name
+      requireAccess(GCSAccessLevel.Read, sourceWorkspace, txn) {
+        val destWorkspace = entityCopyDef.destinationWorkspace
 
-        requireAccess(GCSAccessLevel.Write, destNamespace, destWorkspace, txn) {
+        requireAccess(GCSAccessLevel.Write, destWorkspace, txn) {
           val entityNames = entityCopyDef.entityNames
           val entityType = entityCopyDef.entityType
 
-          val conflicts = entityDAO.copyEntities(destNamespace, destWorkspace, sourceNamespace, sourceWorkspace, entityType, entityNames, txn)
+          val conflicts = entityDAO.copyEntities(destWorkspace.namespace, destWorkspace.name, sourceWorkspace.namespace, sourceWorkspace.name, entityType, entityNames, txn)
 
           conflicts.size match {
             case 0 => {
               // get the entities that were copied into the destination workspace
-              val entityCopies = entityDAO.list(destNamespace, destWorkspace, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
+              val entityCopies = entityDAO.list(destWorkspace.namespace, destWorkspace.name, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
               RequestComplete(StatusCodes.Created, entityCopies)
             }
             case _ => {
-              val basePath = "/" + destNamespace + "/" + destWorkspace + "/entities/"
-              val conflictUris = conflicts.map(conflict => uri.copy(path = Uri.Path(basePath + conflict.entityType + "/" + conflict.name)).toString())
+              val basePath = s"/${destWorkspace.namespace}/${destWorkspace.name}/entities/"
+              val conflictUris = conflicts.map(conflict => uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString())
               val conflictingEntities = ConflictingEntities(conflictUris)
               RequestComplete(StatusCodes.Conflict, conflictingEntities)
             }
@@ -252,30 +250,30 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def createEntity(workspaceNamespace: String, workspaceName: String, entity: Entity): PerRequestMessage =
+  def createEntity(workspaceName: WorkspaceName, entity: Entity): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
-          entityDAO.get(workspaceNamespace, workspaceName, entity.entityType, entity.name, txn) match {
-            case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in $workspaceNamespace/$workspaceName")
-            case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceNamespace, workspaceName, entity, txn))
+          entityDAO.get(workspaceName.namespace, workspaceName.name, entity.entityType, entity.name, txn) match {
+            case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")
+            case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceName.namespace, workspaceName.name, entity, txn))
           }
         }
       }
     }
 
-  def batchUpsertEntities(workspaceNamespace: String, workspaceName: String, entityUpdates: Seq[EntityUpdateDefinition]): PerRequestMessage =
+  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           val results = entityUpdates.map { entityUpdate =>
-            val entity = entityDAO.get(workspaceNamespace, workspaceName, entityUpdate.entityType, entityUpdate.name, txn) match {
+            val entity = entityDAO.get(workspaceName.namespace, workspaceName.name, entityUpdate.entityType, entityUpdate.name, txn) match {
               case Some(e) => e
-              case None => entityDAO.save(workspaceNamespace, workspaceName, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspace.toWorkspaceName), txn)
+              case None => entityDAO.save(workspaceName.namespace, workspaceName.name, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspace.toWorkspaceName), txn)
             }
             val trial = Try {
               val updatedEntity = applyOperationsToEntity(entity, entityUpdate.operations)
-              entityDAO.save(workspaceNamespace, workspaceName, updatedEntity, txn)
+              entityDAO.save(workspaceName.namespace, workspaceName.name, updatedEntity, txn)
             }
             (entityUpdate, trial)
           }
@@ -292,27 +290,27 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def listEntityTypes(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+  def listEntityTypes(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
-          RequestComplete(entityDAO.getEntityTypes(workspaceNamespace, workspaceName, txn))
+          RequestComplete(entityDAO.getEntityTypes(workspaceName.namespace, workspaceName.name, txn))
         }
       }
     }
 
-  def listEntities(workspaceNamespace: String, workspaceName: String, entityType: String): PerRequestMessage =
+  def listEntities(workspaceName: WorkspaceName, entityType: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
-          RequestComplete(entityDAO.list(workspaceNamespace, workspaceName, entityType, txn).toList)
+          RequestComplete(entityDAO.list(workspaceName.namespace, workspaceName.name, entityType, txn).toList)
         }
       }
     }
 
-  def getEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): PerRequestMessage =
+  def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
           withEntity(workspace, entityType, entityName, txn) { entity =>
             PerRequest.RequestComplete(entity)
@@ -321,25 +319,25 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def updateEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
+  def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           withEntity(workspace, entityType, entityName, txn) { entity =>
             try {
               val updatedEntity = applyOperationsToEntity(entity, operations)
-              RequestComplete(entityDAO.save(workspaceNamespace, workspaceName, updatedEntity, txn))
+              RequestComplete(entityDAO.save(workspaceName.namespace, workspaceName.name, updatedEntity, txn))
             } catch {
-              case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in $workspaceNamespace/$workspaceName, ${e.getMessage}")
+              case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
             }
           }
         }
       }
     }
 
-  def deleteEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String): PerRequestMessage =
+  def deleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           withEntity(workspace, entityType, entityName, txn) { entity =>
             entityDAO.delete(workspace.namespace, workspace.name, entity.entityType, entity.name, txn)
@@ -349,9 +347,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def renameEntity(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String): PerRequestMessage =
+  def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           withEntity(workspace, entityType, entityName, txn) { entity =>
             entityDAO.get(workspace.namespace, workspace.name, entity.entityType, newName, txn) match {
@@ -365,13 +363,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def evaluateExpression(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, expression: String): PerRequestMessage =
+  def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      requireAccess(GCSAccessLevel.Read, workspaceNamespace, workspaceName, txn) {
+      requireAccess(GCSAccessLevel.Read, workspaceName, txn) {
         txn withGraph { graph =>
-          new ExpressionEvaluator(graph, new ExpressionParser()).evalFinalAttribute(workspaceNamespace, workspaceName, entityType, entityName, expression) match {
-            case Success(result) => RequestComplete(http.StatusCodes.OK, result)
-            case Failure(regret) => RequestComplete(http.StatusCodes.BadRequest, regret.getMessage)
+          new ExpressionEvaluator(graph, new ExpressionParser())
+            .evalFinalAttribute(workspaceName.namespace, workspaceName.name, entityType, entityName, expression) match {
+              case Success(result) => RequestComplete(http.StatusCodes.OK, result)
+              case Failure(regret) => RequestComplete(http.StatusCodes.BadRequest, regret.getMessage)
           }
         }
       }
@@ -412,6 +411,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
         case AddListMember(attributeListName, newMember) =>
           startingAttributes.get(attributeListName) match {
+            case Some(AttributeEmptyList) =>
+              newMember match {
+                case newMember: AttributeValue =>
+                  startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
+                case newMember: AttributeEntityReference =>
+                  startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
+              }
+
             case Some(l: AttributeValueList) =>
               newMember match {
                 case newMember: AttributeValue =>
@@ -419,10 +426,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
               }
 
-            case Some(l: AttributeReferenceList) =>
+            case Some(l: AttributeEntityReferenceList) =>
               newMember match {
-                case newMember: AttributeReferenceSingle =>
-                  startingAttributes + (attributeListName -> AttributeReferenceList(l.list :+ newMember))
+                case newMember: AttributeEntityReference =>
+                  startingAttributes + (attributeListName -> AttributeEntityReferenceList(l.list :+ newMember))
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
               }
 
@@ -430,8 +437,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
               newMember match {
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
-                case newMember: AttributeReferenceSingle =>
-                  startingAttributes + (attributeListName -> AttributeReferenceList(Seq(newMember)))
+                case newMember: AttributeEntityReference =>
+                  startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
@@ -442,8 +449,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           startingAttributes.get(attributeListName) match {
             case Some(l: AttributeValueList) =>
               startingAttributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember)))
-            case Some(l: AttributeReferenceList) =>
-              startingAttributes + (attributeListName -> AttributeReferenceList(l.list.filterNot(_ == removeMember)))
+            case Some(l: AttributeEntityReferenceList) =>
+              startingAttributes + (attributeListName -> AttributeEntityReferenceList(l.list.filterNot(_ == removeMember)))
             case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.path} does not exist")
             case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
           }
@@ -451,11 +458,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
-  private def noSuchWorkspaceMessage( namespace: String, name: String ) = s"${namespace}/${name} does not exist"
+  private def noSuchWorkspaceMessage( workspaceName: WorkspaceName ) = s"${workspaceName} does not exist"
 
-  private def withWorkspace(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage): PerRequestMessage = {
-    workspaceDAO.load(workspaceNamespace, workspaceName, txn) match {
-      case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceNamespace,workspaceName))
+  private def withWorkspace(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage): PerRequestMessage = {
+    workspaceDAO.load(workspaceName.namespace, workspaceName.name, txn) match {
+      case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
       case Some(workspace) => op(workspace)
     }
   }
@@ -496,21 +503,21 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
-  def createMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
+  def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-            case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in $workspaceNamespace/$workspaceName")
-            case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn))
+            case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")
+            case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceName.namespace, workspaceName.name, methodConfiguration, txn))
           }
         }
       }
     }
 
-  def deleteMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage =
+  def deleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             methodConfigurationDAO.delete(workspace.namespace, workspace.name, methodConfigurationNamespace, methodConfigurationName, txn)
@@ -520,9 +527,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def renameMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): PerRequestMessage =
+  def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Write, workspace, txn) {
           withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfiguration =>
             methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfigurationNamespace, newName, txn) match {
@@ -536,13 +543,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def updateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration): PerRequestMessage =
+  def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
-        requireAccess(GCSAccessLevel.Write, workspaceNamespace, workspaceName, txn) {
+      withWorkspace(workspaceName, txn) { workspace =>
+        requireAccess(GCSAccessLevel.Write, workspaceName, txn) {
           methodConfigurationDAO.get(workspace.namespace, workspace.name, methodConfiguration.namespace, methodConfiguration.name, txn) match {
             case Some(_) =>
-              methodConfigurationDAO.save(workspaceNamespace, workspaceName, methodConfiguration, txn)
+              methodConfigurationDAO.save(workspaceName.namespace, workspaceName.name, methodConfiguration, txn)
               RequestComplete(StatusCodes.OK)
             case None => RequestComplete(StatusCodes.NotFound)
           }
@@ -550,9 +557,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def getMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage =
+  def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
           withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             PerRequest.RequestComplete(methodConfig)
@@ -563,7 +570,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspace(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, txn) { srcWorkspace =>
+      withWorkspace(mcnp.source.workspaceName, txn) { srcWorkspace =>
         requireAccess(GCSAccessLevel.Read, srcWorkspace, txn) {
           methodConfigurationDAO.get(mcnp.source.workspaceName.namespace, mcnp.source.workspaceName.name, mcnp.source.namespace, mcnp.source.name, txn) match {
             case None => RequestComplete(StatusCodes.NotFound)
@@ -594,7 +601,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
 
   private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, txn: RawlsTransaction) =
-    withWorkspace(dest.workspaceName.namespace, dest.workspaceName.name, txn) { destWorkspace =>
+    withWorkspace(dest.workspaceName, txn) { destWorkspace =>
       requireAccess(GCSAccessLevel.Write, destWorkspace, txn) {
         methodConfigurationDAO.get(dest.workspaceName.namespace, dest.workspaceName.name, dest.namespace, dest.name, txn) match {
           case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
@@ -606,26 +613,26 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def listMethodConfigurations(workspaceNamespace: String, workspaceName: String): PerRequestMessage =
+  def listMethodConfigurations(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      requireAccess(GCSAccessLevel.Read, workspaceNamespace, workspaceName, txn) {
+      requireAccess(GCSAccessLevel.Read, workspaceName, txn) {
         // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
         // to ensure it is evaluated within the transaction
-        RequestComplete(methodConfigurationDAO.list(workspaceNamespace, workspaceName, txn).toList)
+        RequestComplete(methodConfigurationDAO.list(workspaceName.namespace, workspaceName.name, txn).toList)
       }
     }
 
   /**
    * This is the function that would get called if we had a validate method config endpoint.
    */
-  def validateMethodConfig(workspaceNamespace: String, workspaceName: String,
+  def validateMethodConfig(workspaceName: WorkspaceName,
     methodConfigurationNamespace: String, methodConfigurationName: String,
     entityType: String, entityName: String, authCookie: HttpCookie): PerRequestMessage = {
       dataSource inTransaction { txn =>
-        withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        withWorkspace(workspaceName, txn) { workspace =>
           withMethodConfig(workspace, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             withEntity(workspace, entityType, entityName, txn) { entity =>
-              withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, authCookie) { method =>
+              withMethod(workspace, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, authCookie) { method =>
                 withWdl(method) { wdl =>
                   // TODO should we return OK even if there are validation errors?
                   RequestComplete(StatusCodes.OK, MethodConfigResolver.getValidationErrors(methodConfig, entity, wdl, txn))
@@ -641,20 +648,20 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     val inputs = MethodConfigResolver.resolveInputs(methodConfig, entity, wdl, txn)
     if ( inputs.forall(  _._2.isSuccess ) ) {
       val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
-      Right(Workflow( workspaceNamespace = workspace.namespace, workspaceName = workspace.name, id = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, entityName = entity.name, entityType = entity.entityType ))
+      Right(Workflow(workspaceName = workspace, workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType) ))
     } else {
-      Left(WorkflowFailure( workspaceNamespace = workspace.namespace, workspaceName = workspace.name, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => regret.getMessage }).toSeq ))
+      Left(WorkflowFailure( workspaceName = workspace, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => regret.getMessage }).toSeq ))
     }
   }
 
   def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { graph =>
-        withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
+        withWorkspace(workspaceName, txn) { workspace =>
           requireAccess(GCSAccessLevel.Write, workspace, txn) {
             withMethodConfig(workspace, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) { methodConfig =>
               withEntity(workspace, submission.entityType, submission.entityName, txn) { entity =>
-                withMethod(workspace, methodConfig.methodStoreMethod.methodNamespace, methodConfig.methodStoreMethod.methodName, methodConfig.methodStoreMethod.methodVersion, userInfo.authCookie) { agoraEntity =>
+                withMethod(workspace, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo.authCookie) { agoraEntity =>
                   withWdl(agoraEntity) { wdl =>
 
                     //If there's an expression, evaluate it to get the list of entities to run this job on.
@@ -676,14 +683,12 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
                     //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
                     val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceName, methodConfig, e, wdl, userInfo.authCookie, txn))
-                    val newSubmission = Submission(id = UUID.randomUUID().toString,
+                    val newSubmission = Submission(submissionId = UUID.randomUUID().toString,
                       submissionDate = DateTime.now(),
-                      workspaceNamespace = workspaceName.namespace,
-                      workspaceName = workspaceName.name,
+                      workspaceName = workspaceName,
                       methodConfigurationNamespace = methodConfig.namespace,
                       methodConfigurationName = methodConfig.name,
-                      entityType = submission.entityType,
-                      entityName = submission.entityName,
+                      submissionEntity = AttributeEntityReference( entityType = submission.entityType, entityName = submission.entityName ),
                       workflows = submittedWorkflows collect { case Right(e) => e },
                       notstarted = submittedWorkflows collect { case Left(e) => e },
                       status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
@@ -704,7 +709,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
     dataSource inTransaction { txn =>
-      withWorkspace(workspaceName.namespace, workspaceName.name, txn) { workspace =>
+      withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
           withSubmission(workspace, submissionId, txn) { submission =>
             RequestComplete(submission)
@@ -719,11 +724,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     if (acls.maximumAccessLevel >= requiredLevel)
       codeBlock
     else
-      RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.namespace,workspace.name))
+      RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))
   }
 
-  def requireAccess(requiredLevel: GCSAccessLevel, workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
-    withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+  def requireAccess(requiredLevel: GCSAccessLevel, workspaceName: WorkspaceName, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
+    withWorkspace(workspaceName, txn) { workspace =>
       requireAccess(requiredLevel, workspace, txn)(codeBlock)
     }
   }

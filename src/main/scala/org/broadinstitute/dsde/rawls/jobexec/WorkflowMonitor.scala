@@ -38,11 +38,11 @@ class WorkflowMonitor(parent: ActorRef, pollInterval: Duration, workflow: Workfl
   }
 
   def checkWorkflowStatus(): Unit = datasource inTransaction { txn =>
-    system.log.debug("polling execution service for workflow {}", workflow.id)
-    val refreshedWorkflow = workflowDAO.get(workflow.workspaceNamespace, workflow.workspaceName, workflow.id, txn).getOrElse(
+    system.log.debug("polling execution service for workflow {}", workflow.workflowId)
+    val refreshedWorkflow = workflowDAO.get(workflow.workspaceName, workflow.workflowId, txn).getOrElse(
       throw new RawlsException(s"workflow ${workflow} could not be found")
     )
-    val statusResponse = executionServiceDAO.status(workflow.id, authCookie)
+    val statusResponse = executionServiceDAO.status(workflow.workflowId, authCookie)
     val status = WorkflowStatuses.withName(statusResponse.status)
 
     if (refreshedWorkflow.status != status) {

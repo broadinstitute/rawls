@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.Direction
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -23,7 +24,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "list all entities of all entity types" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, /*testData.sset_empty,*/ testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
+      assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
         dao.listEntitiesAllTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet
       }
     }
@@ -35,7 +36,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
     val sample1 = new Entity("sample1", "Sample",
       Map(
-        "aliquot" -> AttributeReferenceSingle("Aliquot", "aliquot1")),
+        "aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")),
       wsName )
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty, wsName)
@@ -94,15 +95,13 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     dataSource.inTransaction { txn =>
       val pair2 = Entity("pair2", "Pair",
         Map(
-          "case" -> AttributeReferenceSingle("Sample", "sample3"),
-          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+          "case" -> AttributeEntityReference("Sample", "sample3"),
+          "control" -> AttributeEntityReference("Sample", "sample1")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, pair2, txn)
       assert {
         txn.withGraph { graph =>
-          graph.getVertices("_entityType", "Pair")
-            .filter(v => v.getProperty[String]("_name") == "pair2")
-            .headOption.isDefined
+          graph.getVertices("entityType", "Pair").exists(v => v.getProperty[String]("name") == "pair2")
         }
       }
     }
@@ -132,8 +131,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
         Map.empty
       )
 
-      val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle1" -> AttributeReferenceSingle("samples", "c2")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
-      val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle2" -> AttributeReferenceSingle("samples", "c3")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+      val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle1" -> AttributeEntityReference("samples", "c2")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+      val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle2" -> AttributeEntityReference("samples", "c3")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
       var c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
 
       workspaceDaoOriginal.save(workspaceOriginal, txn)
@@ -143,7 +142,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c2, txn)
       daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c1, txn)
 
-      c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle3" -> AttributeReferenceSingle("samples", "c1")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+      c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle3" -> AttributeEntityReference("samples", "c1")), WorkspaceName(testData.workspace.namespace, testData.workspace.name))
 
       daoCycles.save(workspaceOriginal.namespace, workspaceOriginal.name, c3, txn)
       daoCycles.cloneAllEntities(workspaceOriginal.namespace, workspaceClone.namespace, workspaceOriginal.name, workspaceClone.name, txn)
@@ -160,26 +159,26 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       val pair1Updated = Entity("pair1", "Pair",
         Map(
           "isItAPair" -> AttributeBoolean(true),
-          "case" -> AttributeReferenceSingle("Sample", "sample2"),
-          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+          "case" -> AttributeEntityReference("Sample", "sample2"),
+          "control" -> AttributeEntityReference("Sample", "sample1")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, pair1Updated, txn)
       txn.withGraph { graph =>
-        val fetched = graph.getVertices("_entityType", "Pair").filter(v => v.getProperty[String]("_name") == "pair1").head
+        val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
         assert {
-          fetched.getPropertyKeys.contains("isItAPair")
+          fetched.getVertices(Direction.OUT).head.getPropertyKeys.contains("isItAPair")
         }
         // TODO check edges?
       }
 
       val pair1UpdatedAgain = Entity("pair1", "Pair",
         Map(
-          "case" -> AttributeReferenceSingle("Sample", "sample2"),
-          "control" -> AttributeReferenceSingle("Sample", "sample1")),
+          "case" -> AttributeEntityReference("Sample", "sample2"),
+          "control" -> AttributeEntityReference("Sample", "sample1")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, pair1UpdatedAgain, txn)
       txn.withGraph { graph =>
-        val fetched = graph.getVertices("_entityType", "Pair").filter(v => v.getProperty[String]("_name") == "pair1").head
+        val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
         assert {
           !fetched.getPropertyKeys.contains("isItAPair")
         }
@@ -196,19 +195,10 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
-  it should "throw an exception if trying to save reserved-keyword attributes" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
-      val bar = Entity("boo", "far", Map("_entityType" -> AttributeString("myAmazingClazzzz")), testData.wsName)
-      intercept[IllegalArgumentException] {
-        dao.save(testData.workspace.namespace, testData.workspace.name, bar, txn)
-      }
-    }
-  }
-
   it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeReferenceSingle("sample", "notTheSampleYoureLookingFor")), testData.wsName)
-      intercept[IllegalArgumentException] {
+      val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeEntityReference("sample", "notTheSampleYoureLookingFor")), testData.wsName)
+      intercept[RawlsException] {
         dao.save(testData.workspace.namespace, testData.workspace.name, baz, txn)
       }
     }
@@ -219,9 +209,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       dao.delete(testData.workspace.namespace, testData.workspace.name, "Pair", "pair2", txn)
       assert {
         txn.withGraph { graph =>
-          graph.getVertices("_entityType", "Pair")
-            .filter(v => v.getProperty[String]("_name") == "pair2")
-            .headOption.isEmpty
+          !graph.getVertices("entityType", "Pair").exists(v => v.getProperty[String]("name") == "pair2")
         }
       }
     }
@@ -242,8 +230,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           "type" -> AttributeString("normal"),
           "whatsit" -> AttributeNumber(100),
           "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-          "aliquot" -> AttributeReferenceSingle("Aliquot", "aliquot1"),
-          "cycle" -> AttributeReferenceSingle("SampleSet", "sset1")),
+          "aliquot" -> AttributeEntityReference("Aliquot", "aliquot1"),
+          "cycle" -> AttributeEntityReference("SampleSet", "sset1")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, sample1Copy, txn)
       val sample5Copy = Entity("sample5", "Sample",
@@ -251,7 +239,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           "type" -> AttributeString("tumor"),
           "whatsit" -> AttributeNumber(100),
           "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-          "cycle" -> AttributeReferenceSingle("SampleSet", "sset4")),
+          "cycle" -> AttributeEntityReference("SampleSet", "sset4")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, sample5Copy, txn)
       val sample7Copy = Entity("sample7", "Sample",
@@ -259,7 +247,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           "type" -> AttributeString("tumor"),
           "whatsit" -> AttributeNumber(100),
           "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-          "cycle" -> AttributeReferenceSingle("Sample", "sample6")),
+          "cycle" -> AttributeEntityReference("Sample", "sample6")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, sample7Copy, txn)
       val sample6Copy = Entity("sample6", "Sample",
@@ -267,12 +255,12 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           "type" -> AttributeString("tumor"),
           "whatsit" -> AttributeNumber(100),
           "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
-          "cycle" -> AttributeReferenceSingle("SampleSet", "sset3")),
+          "cycle" -> AttributeEntityReference("SampleSet", "sset3")),
         testData.wsName)
       dao.save(testData.workspace.namespace, testData.workspace.name, sample6Copy, txn)
       val entitiesWithCycles = List("sample1", "sample5", "sample7", "sample6")
       txn.withGraph { graph =>
-        val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("_name"))).head.getEdges(Direction.OUT, "cycle")
+        val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("name"))).head.getVertices(Direction.OUT).head.getEdges(Direction.OUT, "cycle")
         assert {
           fetched.size == 1
         }
@@ -284,7 +272,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     dataSource.inTransaction { txn =>
       dao.rename(testData.workspace.namespace, testData.workspace.name, "Pair", "pair1", "amazingPair", txn)
       txn.withGraph { graph =>
-        val pairNames = graph.getVertices("_entityType", "Pair").map(_.getProperty[String]("_name")).toList
+        val pairNames = graph.getVertices("entityType", "Pair").map(_.getProperty[String]("name")).toList
         assert {
           pairNames.contains("amazingPair")
         }

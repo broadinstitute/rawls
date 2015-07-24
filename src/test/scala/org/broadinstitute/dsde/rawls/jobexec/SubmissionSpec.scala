@@ -93,7 +93,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     val newSubmission = data.asInstanceOf[Submission]
-    val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.id).resolveOne(5.seconds), Timeout(5.seconds).duration )
+    val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
     assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
 
     assert( newSubmission.notstarted.size == 0 )
