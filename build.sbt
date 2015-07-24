@@ -20,7 +20,7 @@ libraryDependencies ++= {
   Seq(
     "com.gettyimages" %% "spray-swagger" % "0.5.0",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
-    "com.typesafe.akka" %% "akka-testkit" % akkaV % "it, test",
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing" % sprayV,
@@ -28,8 +28,8 @@ libraryDependencies ++= {
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
     "org.webjars" % "swagger-ui" % "2.0.24",
-    "io.spray" %% "spray-testkit" % sprayV % "it, test",
-    "org.scalatest" %% "scalatest" % "2.2.4" % "it, test",
+    "io.spray" %% "spray-testkit" % sprayV % "test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
     "com.orientechnologies" % "orientdb-core" % "2.0.8",
     "com.orientechnologies" % "orientdb-graphdb" % "2.0.8",
@@ -60,6 +60,14 @@ Revolver.settings
 
 Revolver.enableDebugging(port = 5050, suspend = false)
 
-Defaults.itSettings
+def isIntegrationTest(name: String) = name contains "integrationtest"
 
-lazy val rawls = project.in(file(".")).configs(IntegrationTest)
+lazy val IntegrationTest = config ("it") extend (Test)
+
+lazy val rawls = project.in(file("."))
+  .configs(IntegrationTest)
+  .settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
+  .settings(
+    testOptions in Test := Seq(Tests.Filter(s => !isIntegrationTest(s))),
+    testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s)))
+  )

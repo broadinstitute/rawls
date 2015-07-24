@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.joda.time.format.{ISODateTimeFormat, DateTimeFormatter}
+
 import scala.annotation.meta.field
 import spray.json._
 import com.wordnik.swagger.annotations.{ApiModelProperty, ApiModel}
@@ -36,6 +38,22 @@ case class AgoraEntity(
                         entityType: Option[AgoraEntityType.EntityType] = None)
 
 object MethodRepoJsonSupport extends JsonSupport {
+
+  // need to override the default date time format, because Agora uses dateTimeNoMillis instead of dateTime
+  implicit object AgoraDateJsonFormat extends RootJsonFormat[DateTime] {
+    private val parserISO : DateTimeFormatter = {
+      ISODateTimeFormat.dateTimeNoMillis
+    }
+
+    override def write(obj: DateTime) = {
+      JsString(parserISO.print(obj))
+    }
+
+    override def read(json: JsValue): DateTime = json match {
+      case JsString(s) => parserISO.parseDateTime(s)
+      case _ => throw new DeserializationException("only string supported")
+    }
+  }
 
   implicit object AgoraEntityTypeFormat extends RootJsonFormat[AgoraEntityType.EntityType] {
     override def write(obj: AgoraEntityType.EntityType): JsValue = JsString(obj.toString)

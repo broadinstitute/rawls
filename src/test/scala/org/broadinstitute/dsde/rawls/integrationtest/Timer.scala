@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls
+package org.broadinstitute.dsde.rawls.integrationtest
 
 /**
  * Generic timing class. Keeps track of the number of operations, so it makes the most sense

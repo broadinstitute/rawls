@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import com.google.api.client.util.Value
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.GCSAccessLevel.GCSAccessLevel
 import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
