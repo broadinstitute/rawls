@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{EntityCopyDefinition, WorkspaceName, Entity}
+import org.broadinstitute.dsde.rawls.model._
 import com.tinkerpop.blueprints.Vertex
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Entity}
+import AttributeUpdateOperations.AttributeUpdateOperation
 
 /**
  * Created by dvoet on 5/6/15.

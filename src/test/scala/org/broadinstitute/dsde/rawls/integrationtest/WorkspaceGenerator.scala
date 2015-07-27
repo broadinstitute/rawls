@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceGenerator._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, RemoveAttribute}
+import AttributeUpdateOperations._
+import org.joda.time.DateTime
 
 import scala.util.Random
 

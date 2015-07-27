@@ -9,10 +9,10 @@ import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
+import AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpCookie
+import spray.http.{StatusCodes, ContentTypes, HttpEntity, HttpCookie}
 import spray.testkit.ScalatestRouteTest
 
 

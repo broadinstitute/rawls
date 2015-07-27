@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.integrationtest
 import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceSimulation._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{EntityApiService, GoogleAuthApiService, MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
+import AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService, GoogleAuthApiService}
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 
