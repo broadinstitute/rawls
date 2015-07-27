@@ -64,7 +64,8 @@ case class Workspace (
                       @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
-  def path = WorkspaceName(namespace,name).path
+  def path = toWorkspaceName.path
+  def toWorkspaceName = WorkspaceName(namespace,name)
 }
 
 @ApiModel(value = "Entity name")

@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations._
+import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http
@@ -54,6 +54,7 @@ object WorkspaceService {
   case class ListEntityTypes(workspaceNamespace: String, workspaceName: String) extends WorkspaceServiceMessage
   case class ListEntities(workspaceNamespace: String, workspaceName: String, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
+  case class BatchUpsertEntities(workspaceNamespace: String, workspaceName: String, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
 
   case class CreateMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class GetMethodConfiguration(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
@@ -98,6 +99,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case ListEntityTypes(workspaceNamespace, workspaceName) => context.parent ! listEntityTypes(workspaceNamespace, workspaceName)
     case ListEntities(workspaceNamespace, workspaceName, entityType) => context.parent ! listEntities(workspaceNamespace, workspaceName, entityType)
     case CopyEntities(entityCopyDefinition, uri:Uri) => context.parent ! copyEntities(entityCopyDefinition, uri)
+    case BatchUpsertEntities(workspaceNamespace, workspaceName, entityUpdates) => context.parent ! batchUpsertEntities(workspaceNamespace, workspaceName, entityUpdates)
 
     case CreateMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceNamespace, workspaceName, methodConfiguration)
     case RenameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
@@ -256,6 +258,33 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           entityDAO.get(workspaceNamespace, workspaceName, entity.entityType, entity.name, txn) match {
             case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in $workspaceNamespace/$workspaceName")
             case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceNamespace, workspaceName, entity, txn))
+          }
+        }
+      }
+    }
+
+  def batchUpsertEntities(workspaceNamespace: String, workspaceName: String, entityUpdates: Seq[EntityUpdateDefinition]): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceNamespace, workspaceName, txn) { workspace =>
+        requireAccess(GCSAccessLevel.Write, workspace, txn) {
+          val results = entityUpdates.map { entityUpdate =>
+            val entity = entityDAO.get(workspaceNamespace, workspaceName, entityUpdate.entityType, entityUpdate.name, txn) match {
+              case Some(e) => e
+              case None => entityDAO.save(workspaceNamespace, workspaceName, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspace.toWorkspaceName), txn)
+            }
+            val trial = Try {
+              val updatedEntity = applyOperationsToEntity(entity, entityUpdate.operations)
+              entityDAO.save(workspaceNamespace, workspaceName, updatedEntity, txn)
+            }
+            (entityUpdate, trial)
+          }
+          val errorMessages = results.collect{
+            case (entityUpdate, Failure(regrets)) => s"Could not update ${entityUpdate.entityType} ${entityUpdate.name} : ${regrets.getMessage}"
+          }
+          if(errorMessages.isEmpty) {
+            RequestComplete(StatusCodes.NoContent)
+          } else {
+            RequestComplete(StatusCodes.BadRequest, errorMessages)
           }
         }
       }
@@ -695,47 +724,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
-}
-
-object AttributeUpdateOperations {
-  sealed trait AttributeUpdateOperation
-  case class AddUpdateAttribute(attributeName: String, addUpdateAttribute: Attribute) extends AttributeUpdateOperation
-  case class RemoveAttribute(attributeName: String) extends AttributeUpdateOperation
-  case class AddListMember(attributeListName: String, newMember: Attribute) extends AttributeUpdateOperation
-  case class RemoveListMember(attributeListName: String, removeMember: Attribute) extends AttributeUpdateOperation
-
-  private val AddUpdateAttributeFormat = jsonFormat2(AddUpdateAttribute)
-  private val RemoveAttributeFormat = jsonFormat1(RemoveAttribute)
-  private val AddListMemberFormat = jsonFormat2(AddListMember)
-  private val RemoveListMemberFormat = jsonFormat2(RemoveListMember)
-
-  implicit object AttributeUpdateOperationFormat extends RootJsonFormat[AttributeUpdateOperation] {
-
-    override def write(obj: AttributeUpdateOperation): JsValue = {
-      val json = obj match {
-        case x: AddUpdateAttribute => AddUpdateAttributeFormat.write(x)
-        case x: RemoveAttribute => RemoveAttributeFormat.write(x)
-        case x: AddListMember => AddListMemberFormat.write(x)
-        case x: RemoveListMember => RemoveListMemberFormat.write(x)
-      }
-
-      JsObject(json.asJsObject.fields + ("op" -> JsString(obj.getClass.getSimpleName)))
-    }
-
-    override def read(json: JsValue) : AttributeUpdateOperation = json match {
-      case JsObject(fields) =>
-        val op = fields.getOrElse("op", throw new DeserializationException("missing op property"))
-        op match {
-          case JsString("AddUpdateAttribute") => AddUpdateAttributeFormat.read(json)
-          case JsString("RemoveAttribute") => RemoveAttributeFormat.read(json)
-          case JsString("AddListMember") => AddListMemberFormat.read(json)
-          case JsString("RemoveListMember") => RemoveListMemberFormat.read(json)
-          case x => throw new DeserializationException("unrecognized op: " + x)
-        }
-
-      case _ => throw new DeserializationException("unexpected json type")
-    }
-  }
 }
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)

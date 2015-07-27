@@ -5,7 +5,7 @@ import javax.ws.rs.Path
 import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
-import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperations.AttributeUpdateOperation
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -29,7 +29,8 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
     renameEntityRoute ~
     evaluateExpressionRoute ~
     listEntityTypesRoute ~
-    listEntitiesPerTypeRoute
+    listEntitiesPerTypeRoute ~
+    batchUpsertEntitiesRoute
 
   @Path("")
   @ApiOperation(value = "Create entity in a workspace",
@@ -110,6 +111,17 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
+        }
+      }
+    }
+  }
+
+  def batchUpsertEntitiesRoute = userInfoFromCookie() { userInfo =>
+    path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[Array[EntityUpdateDefinition]]) { operations =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.BatchUpsertEntities(workspaceNamespace, workspaceName, operations))
         }
       }
     }
