@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 
 import scala.annotation.meta.field
 import spray.json._
-import com.wordnik.swagger.annotations.{ApiModel, ApiModelProperty}
 import org.joda.time.DateTime
 import org.broadinstitute.dsde.rawls.{RawlsException, VertexProperty}
 
@@ -16,17 +15,11 @@ import org.broadinstitute.dsde.rawls.{RawlsException, VertexProperty}
 // this is what a client sends to have us create a submission
 
 // Request for a submission
-@ApiModel(value = "SubmissionRequest")
 case class SubmissionRequest(
-  @(ApiModelProperty@field)(required = true, value = "Namespace of the method configuration to execute.")
   methodConfigurationNamespace: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of the method configuration to execute.")
   methodConfigurationName: String,
-  @(ApiModelProperty@field)(required = true, value = "Type of root entity for expression.")
   entityType: String,
-  @(ApiModelProperty@field)(required = true, value = "Name of root entity for expression.")
   entityName: String,
-  @(ApiModelProperty@field)(required = false, value = "Expression that resolves to one or more entities matching the entity type in the method configuration.")
   expression: Option[String]
 )
 
@@ -37,63 +30,50 @@ case class ExecutionServiceStatus(
 )
 
 // Status of a successfully started workflow
-@ApiModel(value = "Workflow")
 case class Workflow(
-  @(ApiModelProperty@field)("Workspace namespace")
   workspaceNamespace: String,
-  @(ApiModelProperty@field)("Workspace name")
   workspaceName: String,
-  @(ApiModelProperty@field)("Workflow unique identifier") @(VertexProperty@field)
+  @(VertexProperty@field)
   id: String,
-  @(ApiModelProperty@field)("Workflow status") @(VertexProperty@field)
+  @(VertexProperty@field)
   status: WorkflowStatuses.WorkflowStatus,
-  @(ApiModelProperty@field)("Status last-changed date") @(VertexProperty@field)
+  @(VertexProperty@field)
   statusLastChangedDate: DateTime,
-  @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
+  @(VertexProperty@field)
   entityType: String,
-  @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
+  @(VertexProperty@field)
   entityName: String
 )
 
 // Encapsulating errors for workflows that failed to start
-@ApiModel(value = "WorkflowFailure")
 case class WorkflowFailure(
-  @(ApiModelProperty@field)("Workspace namespace")
   workspaceNamespace: String,
-  @(ApiModelProperty@field)("Workspace name")
   workspaceName: String,
-  @(ApiModelProperty@field)("Entity name") @(VertexProperty@field)
+  @(VertexProperty@field)
   entityName: String,
-  @(ApiModelProperty@field)("Entity type") @(VertexProperty@field)
+  @(VertexProperty@field)
   entityType: String,
-  @(ApiModelProperty@field)("List of errors starting this workflow") @(VertexProperty@field)
+  @(VertexProperty@field)
   errors: Seq[String]
 )
 
 // Status of a submission
-@ApiModel(value = "Submission")
 case class Submission(
-  @(ApiModelProperty@field)("SubmissionRequest unique identifier") @(VertexProperty@field)
+  @(VertexProperty@field)
   id: String,
-  @(ApiModelProperty@field)("SubmissionRequest date") @(VertexProperty@field)
+  @(VertexProperty@field)
   submissionDate: DateTime,
-  @(ApiModelProperty@field)("Workspace namespace")
   workspaceNamespace: String,
-  @(ApiModelProperty@field)("Workspace name")
   workspaceName: String,
-  @(ApiModelProperty@field)("Method configuration namespace") @(VertexProperty@field)
+  @(VertexProperty@field)
   methodConfigurationNamespace: String,
-  @(ApiModelProperty@field)("Method configuration name") @(VertexProperty@field)
+  @(VertexProperty@field)
   methodConfigurationName: String,
-  @(ApiModelProperty@field)("Entity type")
   entityType: String,
-  @(ApiModelProperty@field)("Entity name")
   entityName: String,
-  @(ApiModelProperty@field)("Status of Workflow(s)")
   workflows: Seq[Workflow],
-  @(ApiModelProperty@field)("Workflows that failed to start")
   notstarted: Seq[WorkflowFailure],
-  @(ApiModelProperty@field)("Status") @(VertexProperty@field)
+  @(VertexProperty@field)
   status: SubmissionStatuses.SubmissionStatus
 )
 

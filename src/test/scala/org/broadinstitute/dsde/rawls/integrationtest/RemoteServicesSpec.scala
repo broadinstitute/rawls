@@ -37,7 +37,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
     // need to init workspace
     Post(s"/workspaces", httpJson(workspace)) ~>
       addOpenAmCookie ~>
-      sealRoute(postWorkspaceRoute) ~>
+      sealRoute(workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -46,7 +46,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoGood)) ~>
       addOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -55,7 +55,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoGood)) ~>
       addOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -64,7 +64,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoMissing)) ~>
       addOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -73,7 +73,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoEmptyPayload)) ~>
       addOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
@@ -82,7 +82,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoBadPayload)) ~>
       addOpenAmCookie ~>
-      sealRoute(copyMethodRepoConfigurationRoute) ~>
+      sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status

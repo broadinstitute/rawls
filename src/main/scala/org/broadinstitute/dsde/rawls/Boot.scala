@@ -9,7 +9,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.google.api.client.util.store.FileDataStoreFactory
 import com.typesafe.config.ConfigFactory
-import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmConfig, RawlsOpenAmClient}
@@ -28,22 +27,6 @@ object Boot extends App {
 
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
-
-    val swaggerConfig = conf.getConfig("swagger")
-    val swaggerService = new SwaggerService(
-      swaggerConfig.getString("apiVersion"),
-      swaggerConfig.getString("baseUrl"),
-      swaggerConfig.getString("apiDocs"),
-      swaggerConfig.getString("swaggerVersion"),
-      Seq(typeOf[WorkspaceApiService], typeOf[EntityApiService], typeOf[MethodConfigApiService], typeOf[SubmissionApiService], typeOf[GoogleAuthApiService]),
-      Option(new ApiInfo(
-        swaggerConfig.getString("info"),
-        swaggerConfig.getString("description"),
-        swaggerConfig.getString("termsOfServiceUrl"),
-        swaggerConfig.getString("contact"),
-        swaggerConfig.getString("license"),
-        swaggerConfig.getString("licenseUrl"))
-      ))
 
     val orientConfig = conf.getConfig("orientdb")
     val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
@@ -67,7 +50,7 @@ object Boot extends App {
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
-    val service = system.actorOf(RawlsApiServiceActor.props(swaggerService,
+    val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
                                                   new GraphWorkspaceDAO(),
                                                   new GraphEntityDAO(),

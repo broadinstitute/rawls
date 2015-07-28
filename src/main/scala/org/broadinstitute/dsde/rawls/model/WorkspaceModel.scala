@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import com.wordnik.swagger.annotations.{ApiModel, ApiModelProperty}
 import org.broadinstitute.dsde.rawls.VertexProperty
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
@@ -21,185 +20,122 @@ trait Attributable extends Identifiable {
 /**
  * Created by dvoet on 4/24/15.
  */
-@ApiModel(value = "WorkspaceName")
 case class WorkspaceName(
-                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
                       namespace: String,
-                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
                       name: String) extends Identifiable {
   def path : String = "workspaces/" + namespace + "/" + name
 }
 
-@ApiModel(value = "WorkspaceRequest")
 case class WorkspaceRequest (
-                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
                       @(VertexProperty@field)
                       namespace: String,
-                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
                       @(VertexProperty@field)
                       name: String,
-                      @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
   def path = WorkspaceName(namespace,name).path
 }
 
-@ApiModel(value = "Workspace")
 case class Workspace (
-                      @(ApiModelProperty@field)(required = true, value = "The namespace the workspace belongs to")
                       @(VertexProperty@field)
                       namespace: String,
-                      @(ApiModelProperty@field)(required = true, value = "The name of the workspace")
                       @(VertexProperty@field)
                       name: String,
-                      @(ApiModelProperty@field)(required = true, value = "The bucket associated with the workspace")
                       @(VertexProperty@field)
                       bucketName: String,
-                      @(ApiModelProperty@field)(required = true, value = "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ss.SSSZZ format")
                       @(VertexProperty@field)
                       createdDate: DateTime,
-                      @(ApiModelProperty@field)(required = true, value = "The user who created the workspace")
                       @(VertexProperty@field)
                       createdBy: String,
-                      @(ApiModelProperty@field)(required = true, value = "The attributes of the workspace")
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
   def path = toWorkspaceName.path
   def toWorkspaceName = WorkspaceName(namespace,name)
 }
 
-@ApiModel(value = "Entity name")
 case class EntityName(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the entity")
                    name: String)
 
-@ApiModel(value = "Entity")
 case class Entity(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the entity")
                    @(VertexProperty@field)
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "The type of the entity")
                    @(VertexProperty@field)
                    entityType: String,
-                   @(ApiModelProperty@field)(required = true, value = "The attributes of the entity")
                    attributes: Map[String, Attribute],
-                   @(ApiModelProperty@field)(required = true, value = "This entity's owning workspace")
                    workspaceName:WorkspaceName,
-                   @(ApiModelProperty@field)(required = false, value = "This entity's Vault ID")
                    @(VertexProperty@field)
                    vaultId:String="") extends Identifiable with Attributable {
   def path : String = workspaceName.path + "/entities/" + name
 }
 
-@ApiModel(value = "Method configuration name")
 case class MethodConfigurationName(
-                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning namespace")
                    namespace: String,
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName: WorkspaceName
                    )
 
-@ApiModel(value = "Method configuration name pair")
 case class MethodConfigurationNamePair(
-                   @(ApiModelProperty@field)(required = true, value = "The source of a copied method configuration")
                    source: MethodConfigurationName,
-                   @(ApiModelProperty@field)(required = true, value = "The destination for a copied method configuration")
                    destination: MethodConfigurationName
                    )
 
-@ApiModel(value = "Entity copy definition")
 case class EntityCopyDefinition(
-                   @(ApiModelProperty@field)(required = true, value = "The source workspace of the entities")
                    sourceWorkspace: WorkspaceName,
-                   @(ApiModelProperty@field)(required = true, value = "The destination workspace for the entities")
                    destinationWorkspace: WorkspaceName,
-                   @(ApiModelProperty@field)(required = true, value = "Type of top level entities to copy")
                    entityType: String,
-                   @(ApiModelProperty@field)(required = true, value = "Names of entities to copy")
                    entityNames: Seq[String]
                    )
 
-@ApiModel(value = "Method Store Method")
 case class MethodStoreMethod(
-                   @(ApiModelProperty@field)(required = true, value = "The namespace of method from method store")
                    @(VertexProperty@field)
                    methodNamespace: String,
-                   @(ApiModelProperty@field)(required = true, value = "The name of method from method store")
                    @(VertexProperty@field)
                    methodName: String,
-                   @(ApiModelProperty@field)(required = true, value = "The version of method from method store")
                    @(VertexProperty@field)
                    methodVersion: String
                    )
-@ApiModel(value = "Method Store Configuration")
 case class MethodStoreConfiguration(
-                   @(ApiModelProperty@field)(required = true, value = "The namespace of method config from method store")
                    @(VertexProperty@field)
                    methodConfigNamespace: String,
-                   @(ApiModelProperty@field)(required = true, value = "The name of method config from method store")
                    @(VertexProperty@field)
                    methodConfigName: String,
-                   @(ApiModelProperty@field)(required = true, value = "The version of method config from method store")
                    @(VertexProperty@field)
                    methodConfigVersion: String
                    )
-@ApiModel(value = "Method Configuration")
+
 case class MethodConfiguration(
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
                    @(VertexProperty@field)
                    namespace: String,
-                   @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                    @(VertexProperty@field)
                    name: String,
-                   @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
                    @(VertexProperty@field)
                    rootEntityType: String,
-                   @(ApiModelProperty@field)(required = false, value = "PreRequisites for the method")
                    prerequisites: Map[String, String],
-                   @(ApiModelProperty@field)(required = true, value = "Inputs for the method")
                    inputs: Map[String, String],
-                   @(ApiModelProperty@field)(required = false, value = "Outputs for the method")
                    outputs: Map[String, String],
-                   @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                    workspaceName:WorkspaceName,
-                   @(ApiModelProperty@field)(required = false, value = "The properties of the method configuration from the method store that this derived from")
                    methodStoreConfig:MethodStoreConfiguration,
-                   @(ApiModelProperty@field)(required = true, value = "The properties of the method from the method store that this config is associated with")
                    methodStoreMethod:MethodStoreMethod
                    ) extends Identifiable {
   def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodStoreConfig, methodStoreMethod, workspaceName, namespace)
 }
-@ApiModel(value = "Method Configuration without inputs, outputs, or prerequisites")
 case class MethodConfigurationShort(
-                                @(ApiModelProperty@field)(required = true, value = "The name of the method configuration")
                                 @(VertexProperty@field)
                                 name: String,
-                                @(ApiModelProperty@field)(required = true, value = "The root entity type that the method will be running on")
                                 @(VertexProperty@field)
                                 rootEntityType: String,
-                                @(ApiModelProperty@field)(required = false, value = "The properties of the method configuration from the method store that this derived from")
                                 methodStoreConfig:MethodStoreConfiguration,
-                                @(ApiModelProperty@field)(required = true, value = "The properties of the method from the method store that this config is associated with")
                                 methodStoreMethod:MethodStoreMethod,
-                                @(ApiModelProperty@field)(required = true, value = "This method configuration's owning workspace")
                                 @(VertexProperty@field)
                                 workspaceName:WorkspaceName,
-                                @(ApiModelProperty@field)(required = true, value = "This method configuration's namespace")
                                 @(VertexProperty@field)
                                 namespace: String)
 
-@ApiModel(value = "Method repository configuration query")
 case class MethodRepoConfigurationQuery(
-                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Namespace")
                                          methodRepoNamespace: String,
-                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Name")
                                          methodRepoName: String,
-                                         @(ApiModelProperty@field)(required = true, value = "Method Repository Snapshot ID")
                                          methodRepoSnapshotId: String,
-                                         @(ApiModelProperty@field)(required = true, value = "The destination for a copied method configuration")
                                          destination: MethodConfigurationName
                                          )
 

@@ -68,7 +68,7 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   "GoogleAuthApi" should "return 303 for post register" in withTestDataApiServices { services =>
     Get("/authentication/register") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.registerPostRoute) ~>
+      sealRoute(services.authRoutes) ~>
       check {
         assertResult(StatusCodes.SeeOther) {
           status
@@ -79,7 +79,7 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   it should "return 201 for get on register_callback" in withTestDataApiServices { services =>
     Get("/authentication/register_callback?code=authCode&state=test") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.registerCallbackRoute) ~>
+      sealRoute(services.authRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status

@@ -1,0 +1,508 @@
+{
+	"apiVersion": "0.1",
+	"swaggerVersion": "1.2",
+	"basePath": "/",
+	"resourcePath": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs",
+	"apis": [{
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs",
+		"operations": [{
+			"method": "POST",
+			"summary": "Create Method configuration in a workspace",
+			"notes": "",
+			"type": "MethodConfiguration",
+			"nickname": "create method configuration",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "methodConfigJson",
+				"description": "Method Configuration contents",
+				"required": true,
+				"type": "MethodConfiguration",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace not found"
+			}, {
+				"code": 409,
+				"message": "MethodConfiguration already exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "GET",
+			"summary": "list method configurations in a workspace",
+			"notes": "",
+			"type": "Object",
+			"nickname": "list method configurations",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace does not exist"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}",
+		"operations": [{
+			"method": "GET",
+			"summary": "get method configuration in a workspace",
+			"notes": "",
+			"type": "MethodConfiguration",
+			"nickname": "get method configuration",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configNamespace",
+				"description": "Method Configuration Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configName",
+				"description": "Method Configuration Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace or Method Configuration does not exist"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "Delete",
+			"summary": "delete method configuration in a workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "delete method configuration",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configNamespace",
+				"description": "Method Configuration Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configName",
+				"description": "Method Configuration Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 204,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace or Method Configuration does not exist"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "Put",
+			"summary": "Update method configuration in a workspace",
+			"notes": "",
+			"type": "MethodConfiguration",
+			"nickname": "update method configuration",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configNamespace",
+				"description": "Method Configuration Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configName",
+				"description": "Method Configuration Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "newMethodConfigJson",
+				"description": "New Method Configuration contents",
+				"required": true,
+				"type": "MethodConfiguration",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace or method configuration does not exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename",
+		"operations": [{
+			"method": "Post",
+			"summary": "rename method configuration in a workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "renamemethodconfig",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configNamespace",
+				"description": "Method Configuration Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "configName",
+				"description": "Method Configuration Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "newMethodConfigurationName",
+				"description": "New Method Configuration Name",
+				"required": true,
+				"type": "MethodConfigurationName",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 204,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace or Method Configuration does not exists"
+			}, {
+				"code": 409,
+				"message": "Method config by that name already exists in workspace"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/copy",
+		"operations": [{
+			"method": "Post",
+			"summary": "Copy method configuration in a workspace from another workspace",
+			"notes": "",
+			"type": "MethodConfiguration",
+			"nickname": "copy method configuration",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "methodConfigurationNamePair",
+				"description": "Source and destination method configuration names",
+				"required": true,
+				"type": "MethodConfigurationNamePair",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Source Workspace or method configuration does not exist"
+			}, {
+				"code": 409,
+				"message": "Destination method configuration by that name already exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/copyFromMethodRepo",
+		"operations": [{
+			"method": "Post",
+			"summary": "Copy method configuration from the method repository",
+			"notes": "",
+			"type": "MethodConfiguration",
+			"nickname": "copy repo configuration",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "methodRepoQuery",
+				"description": "Method Repository Query",
+				"required": true,
+				"type": "MethodRepoConfigurationQuery",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Source method configuration does not exist"
+			}, {
+				"code": 422,
+				"message": "Error parsing source method configuration"
+			}, {
+				"code": 409,
+				"message": "Destination method configuration by that name already exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}],
+	"models": {
+		"MethodConfiguration": {
+			"id": "MethodConfiguration",
+			"description": "",
+			"required": ["namespace", "name", "rootEntityType", "inputs", "workspaceName", "methodStoreMethod"],
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "This method configuration's namespace"
+				},
+				"name": {
+					"type": "string",
+					"description": "The name of the method configuration"
+				},
+				"rootEntityType": {
+					"type": "string",
+					"description": "The root entity type that the method will be running on"
+				},
+				"prerequisites": {
+					"$ref": "Map[string,string]",
+					"description": "PreRequisites for the method"
+				},
+				"inputs": {
+					"$ref": "Map[string,string]",
+					"description": "Inputs for the method"
+				},
+				"outputs": {
+					"$ref": "Map[string,string]",
+					"description": "Outputs for the method"
+				},
+				"workspaceName": {
+					"$ref": "WorkspaceName",
+					"description": "This method configuration's owning workspace"
+				},
+				"methodStoreConfig": {
+					"$ref": "MethodStoreConfiguration",
+					"description": "The properties of the method configuration from the method store that this derived from"
+				},
+				"methodStoreMethod": {
+					"$ref": "MethodStoreMethod",
+					"description": "The properties of the method from the method store that this config is associated with"
+				}
+			}
+		},
+		"MethodRepoConfigurationQuery": {
+			"id": "MethodRepoConfigurationQuery",
+			"description": "",
+			"required": ["methodRepoNamespace", "methodRepoName", "methodRepoSnapshotId", "destination"],
+			"properties": {
+				"methodRepoNamespace": {
+					"type": "string",
+					"description": "Method Repository Namespace"
+				},
+				"methodRepoName": {
+					"type": "string",
+					"description": "Method Repository Name"
+				},
+				"methodRepoSnapshotId": {
+					"type": "string",
+					"description": "Method Repository Snapshot ID"
+				},
+				"destination": {
+					"$ref": "MethodConfigurationName",
+					"description": "The destination for a copied method configuration"
+				}
+			}
+		},
+		"MethodConfigurationNamePair": {
+			"id": "MethodConfigurationNamePair",
+			"description": "",
+			"required": ["source", "destination"],
+			"properties": {
+				"source": {
+					"$ref": "MethodConfigurationName",
+					"description": "The source of a copied method configuration"
+				},
+				"destination": {
+					"$ref": "MethodConfigurationName",
+					"description": "The destination for a copied method configuration"
+				}
+			}
+		},
+		"WorkspaceName": {
+			"id": "WorkspaceName",
+			"description": "",
+			"required": ["namespace", "name"],
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The namespace the workspace belongs to"
+				},
+				"name": {
+					"type": "string",
+					"description": "The name of the workspace"
+				}
+			}
+		},
+		"MethodConfigurationName": {
+			"id": "MethodConfigurationName",
+			"description": "",
+			"required": ["name", "namespace", "workspaceName"],
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "The name of the method configuration"
+				},
+				"namespace": {
+					"type": "string",
+					"description": "This method configuration's owning namespace"
+				},
+				"workspaceName": {
+					"$ref": "WorkspaceName",
+					"description": "This method configuration's owning workspace"
+				}
+			}
+		},
+		"MethodStoreConfiguration": {
+			"id": "MethodStoreConfiguration",
+			"description": "",
+			"required": ["methodConfigNamespace", "methodConfigName", "methodConfigVersion"],
+			"properties": {
+				"methodConfigNamespace": {
+					"type": "string",
+					"description": "The namespace of method config from method store"
+				},
+				"methodConfigName": {
+					"type": "string",
+					"description": "The name of method config from method store"
+				},
+				"methodConfigVersion": {
+					"type": "string",
+					"description": "The version of method config from method store"
+				}
+			}
+		},
+		"MethodStoreMethod": {
+			"id": "MethodStoreMethod",
+			"description": "",
+			"required": ["methodNamespace", "methodName", "methodVersion"],
+			"properties": {
+				"methodNamespace": {
+					"type": "string",
+					"description": "The namespace of method from method store"
+				},
+				"methodName": {
+					"type": "string",
+					"description": "The name of method from method store"
+				},
+				"methodVersion": {
+					"type": "string",
+					"description": "The version of method from method store"
+				}
+			}
+		}
+	}
+}

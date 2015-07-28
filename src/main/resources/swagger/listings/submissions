@@ -1,0 +1,241 @@
+{
+	"apiVersion": "0.1",
+	"swaggerVersion": "1.2",
+	"basePath": "/",
+	"resourcePath": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions",
+	"apis": [{
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions",
+		"operations": [{
+			"method": "POST",
+			"summary": "Create Submission.",
+			"notes": "",
+			"type": "Submission",
+			"nickname": "createSubmission",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "submission",
+				"description": "Description of a submission.",
+				"required": true,
+				"type": "SubmissionRequest",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 400,
+				"message": "Expression eval failed or entities are not of type required by method config"
+			}, {
+				"code": 404,
+				"message": "Method Configuration or Entity not found"
+			}, {
+				"code": 409,
+				"message": "Method Configuration failed to resolve input expressions with the supplied Entity"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}",
+		"operations": [{
+			"method": "GET",
+			"summary": "Monitor Submission Status.",
+			"notes": "",
+			"type": "Submission",
+			"nickname": "getSubmissionStatus",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "submissionId",
+				"description": "Submission Id",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Submission Not Found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}],
+	"models": {
+		"Submission": {
+			"id": "Submission",
+			"description": "",
+			"properties": {
+				"id": {
+					"type": "string",
+					"description": "SubmissionRequest unique identifier"
+				},
+				"submissionDate": {
+					"type": "string",
+					"format": "date-time",
+					"description": "SubmissionRequest date"
+				},
+				"workspaceNamespace": {
+					"type": "string",
+					"description": "Workspace namespace"
+				},
+				"workspaceName": {
+					"type": "string",
+					"description": "Workspace name"
+				},
+				"methodConfigurationNamespace": {
+					"type": "string",
+					"description": "Method configuration namespace"
+				},
+				"methodConfigurationName": {
+					"type": "string",
+					"description": "Method configuration name"
+				},
+				"entityType": {
+					"type": "string",
+					"description": "Entity type"
+				},
+				"entityName": {
+					"type": "string",
+					"description": "Entity name"
+				},
+				"workflows": {
+					"type": "array",
+					"description": "Status of Workflow(s)",
+					"items": {
+						"$ref": "Workflow"
+					}
+				},
+				"notstarted": {
+					"type": "array",
+					"description": "Workflows that failed to start",
+					"items": {
+						"$ref": "WorkflowFailure"
+					}
+				},
+				"status": {
+					"$ref": "SubmissionStatus",
+					"description": "Status"
+				}
+			}
+		},
+		"WorkflowFailure": {
+			"id": "WorkflowFailure",
+			"description": "",
+			"properties": {
+				"workspaceNamespace": {
+					"type": "string",
+					"description": "Workspace namespace"
+				},
+				"workspaceName": {
+					"type": "string",
+					"description": "Workspace name"
+				},
+				"entityName": {
+					"type": "string",
+					"description": "Entity name"
+				},
+				"entityType": {
+					"type": "string",
+					"description": "Entity type"
+				},
+				"errors": {
+					"type": "array",
+					"description": "List of errors starting this workflow",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"Workflow": {
+			"id": "Workflow",
+			"description": "",
+			"properties": {
+				"workspaceNamespace": {
+					"type": "string",
+					"description": "Workspace namespace"
+				},
+				"workspaceName": {
+					"type": "string",
+					"description": "Workspace name"
+				},
+				"id": {
+					"type": "string",
+					"description": "Workflow unique identifier"
+				},
+				"status": {
+					"$ref": "WorkflowStatus",
+					"description": "Workflow status"
+				},
+				"statusLastChangedDate": {
+					"type": "string",
+					"format": "date-time",
+					"description": "Status last-changed date"
+				},
+				"entityType": {
+					"type": "string",
+					"description": "Entity type"
+				},
+				"entityName": {
+					"type": "string",
+					"description": "Entity name"
+				}
+			}
+		},
+		"WorkflowStatus": {
+			"id": "WorkflowStatus",
+			"properties": {
+				"done": {
+					"type": "boolean"
+				}
+			}
+		},
+		"SubmissionRequest": {
+			"id": "SubmissionRequest",
+			"description": "",
+			"required": ["methodConfigurationNamespace", "methodConfigurationName", "entityType", "entityName"],
+			"properties": {
+				"methodConfigurationNamespace": {
+					"type": "string",
+					"description": "Namespace of the method configuration to execute."
+				},
+				"methodConfigurationName": {
+					"type": "string",
+					"description": "Name of the method configuration to execute."
+				},
+				"entityType": {
+					"type": "string",
+					"description": "Type of root entity for expression."
+				},
+				"entityName": {
+					"type": "string",
+					"description": "Name of root entity for expression."
+				},
+				"expression": {
+					"type": "string",
+					"description": "Expression that resolves to one or more entities matching the entity type in the method configuration."
+				}
+			}
+		}
+	}
+}
