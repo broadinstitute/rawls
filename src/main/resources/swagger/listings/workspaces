@@ -1,0 +1,399 @@
+{
+	"apiVersion": "0.1",
+	"swaggerVersion": "1.2",
+	"basePath": "/",
+	"resourcePath": "/workspaces",
+	"apis": [{
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/acl",
+		"operations": [{
+			"method": "GET",
+			"summary": "Get workspace ACL",
+			"notes": "",
+			"type": "string",
+			"nickname": "getACL",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 400,
+				"message": "Can't retrieve ACL for workspace"
+			}, {
+				"code": 404,
+				"message": "Workspace not found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "PUT",
+			"summary": "Set workspace ACL",
+			"notes": "",
+			"type": "void",
+			"nickname": "putACL",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "acl",
+				"description": "New ACL for workspace",
+				"required": true,
+				"type": "string",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 400,
+				"message": "Can't set ACL for workspace"
+			}, {
+				"code": 404,
+				"message": "Workspace not found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces",
+		"operations": [{
+			"method": "POST",
+			"summary": "Create/replace workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "create",
+			"parameters": [{
+				"name": "workspaceJson",
+				"description": "Workspace contents",
+				"required": true,
+				"type": "WorkspaceRequest",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 403,
+				"message": "Unable to create bucket for workspace"
+			}, {
+				"code": 409,
+				"message": "Workspace by that name already exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "GET",
+			"summary": "List workspaces",
+			"notes": "",
+			"type": "Object",
+			"nickname": "list",
+			"produces": ["application/json"],
+			"parameters": [],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}",
+		"operations": [{
+			"method": "Patch",
+			"summary": "Update attributes of a workspace",
+			"notes": "",
+			"type": "Workspace",
+			"nickname": "update workspace",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "entityUpdateJson",
+				"description": "Update operations",
+				"required": true,
+				"type": "Array[AttributeUpdateOperation]",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 400,
+				"message": "Attribute does not exists or is of an unexpected type"
+			}, {
+				"code": 404,
+				"message": "Workspace does not exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}, {
+			"method": "GET",
+			"summary": "Get workspace",
+			"notes": "",
+			"type": "Workspace",
+			"nickname": "list",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace does not exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/clone",
+		"operations": [{
+			"method": "POST",
+			"summary": "Clone workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "clone",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceNameJson",
+				"description": "Name of new workspace",
+				"required": true,
+				"type": "WorkspaceName",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 201,
+				"message": "Successful Request"
+			}, {
+				"code": 400,
+				"message": "Unable to create bucket for workspace"
+			}, {
+				"code": 404,
+				"message": "Source workspace not found"
+			}, {
+				"code": 409,
+				"message": "Destination workspace already exists"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}],
+	"models": {
+		"WorkspaceName": {
+			"id": "WorkspaceName",
+			"description": "",
+			"required": ["namespace", "name"],
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The namespace the workspace belongs to"
+				},
+				"name": {
+					"type": "string",
+					"description": "The name of the workspace"
+				}
+			}
+		},
+		"Workspace": {
+			"id": "Workspace",
+			"description": "",
+			"required": ["namespace", "name", "bucketName", "createdDate", "createdBy", "attributes"],
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The namespace the workspace belongs to"
+				},
+				"name": {
+					"type": "string",
+					"description": "The name of the workspace"
+				},
+				"bucketName": {
+					"type": "string",
+					"description": "The bucket associated with the workspace"
+				},
+				"createdDate": {
+					"type": "string",
+					"format": "date-time",
+					"description": "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ss.SSSZZ format"
+				},
+				"createdBy": {
+					"type": "string",
+					"description": "The user who created the workspace"
+				},
+				"attributes": {
+					"$ref": "Map[string,Attribute]",
+					"description": "The attributes of the workspace"
+				}
+			}
+		},
+		"WorkspaceRequest": {
+			"id": "WorkspaceRequest",
+			"description": "",
+			"required": ["namespace", "name", "attributes"],
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"description": "The namespace the workspace belongs to"
+				},
+				"name": {
+					"type": "string",
+					"description": "The name of the workspace"
+				},
+				"attributes": {
+					"$ref": "Map[string,Attribute]",
+					"description": "The attributes of the workspace"
+				}
+			}
+		},
+
+		"AddUpdateAttribute": {
+			"id": "AddUpdateAttribute",
+			"description": "",
+			"required": ["attributeName", "addUpdateAttribute"],
+			"properties": {
+				"attributeName": {
+					"type": "string",
+					"description": "The name of the attribute"
+				},
+				"addUpdateAttribute": {
+					"$ref": "Attribute",
+					"description": "The update attribute"
+				}
+			}
+		},
+		"RemoveAttribute": {
+			"id": "RemoveAttribute",
+			"description": "",
+			"required": ["attributeName"],
+			"properties": {
+				"attributeName": {
+					"type": "string",
+					"description": "The name of the attribute"
+				}
+			}
+		},
+		"AddListMember": {
+			"id": "AddListMember",
+			"description": "",
+			"required": ["attributeListName", "newMember"],
+			"properties": {
+				"attributeListName": {
+					"type": "string",
+					"description": "The name of the attribute list"
+				},
+				"newMember": {
+					"type": "Attribute",
+					"description": "The attribute to add"
+				}
+			}
+		},
+		"RemoveListMember": {
+			"id": "RemoveListMember",
+			"description": "",
+			"required": ["attributeListName", "removeMember"],
+			"properties": {
+				"attributeListName": {
+					"type": "string",
+					"description": "The name of the attribute list"
+				},
+				"removeMember": {
+					"$ref": "Attribute",
+					"description": "The attribute to remove"
+				}
+			}
+		},
+		"AttributeUpdateOperation": {
+			"id": "AttributeUpdateOperation",
+			"description": "",
+			"required": ["op", "attributeName|attributeListName"],
+			"properties": {
+				"op": {
+					"type": "AddUpdateAttribute|RemoveAttribute|AddListMember|RemoveListMember",
+					"description": "AddUpdateAttribute adds or updates an attribute. Requires attributeName and addUpdateAttribute fields. RemoveAttribute removes an attribute. Requires attributeName. AddListMember adds a member to an attribute list. Requires attributeListName and newMember fields. RemoveListMember removes a member from an attribute list. Requires attributeListName and removeMember fields."
+				},
+				"attributeName|attributeListName": {
+					"type": "string",
+					"description": ""
+				},
+				"addUpdateAttribute|newMember|removeMember": {
+					"type": "Attribute",
+					"description": ""
+				}
+			}
+		}
+	}
+}

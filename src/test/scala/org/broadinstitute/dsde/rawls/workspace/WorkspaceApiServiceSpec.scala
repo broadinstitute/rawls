@@ -92,7 +92,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.postWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -116,7 +116,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -136,7 +136,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -147,7 +147,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "list workspaces" in withTestDataApiServices { services =>
     Get("/workspaces") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.listWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -163,7 +163,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -171,7 +171,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -179,7 +179,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -187,7 +187,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.deleteEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -198,7 +198,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -211,7 +211,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, newSample.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -235,7 +235,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -249,7 +249,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val update3 = EntityUpdateDefinition("s3", "samples", Seq(RemoveListMember("bingo", AttributeString("a"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2, update3).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.batchUpsertEntitiesRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -265,7 +265,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val update2 = EntityUpdateDefinition("s2", "samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.batchUpsertEntitiesRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -283,7 +283,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val update2 = EntityUpdateDefinition("s2", "samples", Seq.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.batchUpsertEntitiesRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -299,7 +299,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on get entity" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -319,7 +319,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on list entity types" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.listEntityTypesRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -338,7 +338,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on list all samples" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.listEntitiesPerTypeRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -357,7 +357,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on non-existing entity" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -368,7 +368,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -382,7 +382,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -399,7 +399,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on update entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -415,7 +415,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on remove attribute from entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
@@ -431,7 +431,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on update to non-existing entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -442,7 +442,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -452,7 +452,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -462,7 +462,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample1.entityType}/${testData.sample1.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("somefoo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -473,7 +473,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 on entity rename when rename already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("sample1").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -484,7 +484,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 204 on entity rename" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -500,7 +500,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/foox/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -516,7 +516,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 204 entity delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.deleteEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -531,7 +531,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/s2_changed") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.deleteEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -542,7 +542,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.evaluateExpressionRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -556,7 +556,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.evaluateExpressionRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
@@ -570,7 +570,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -589,7 +589,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -600,7 +600,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -619,7 +619,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.renameMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -638,7 +638,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.deleteMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
@@ -653,7 +653,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}x") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.deleteMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -674,7 +674,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> "foo2"))
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -690,7 +690,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, testData.methodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.updateMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -701,7 +701,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 on copy method configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairCreated.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -717,7 +717,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 on copy method configuration to existing name" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairConflict.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -728,7 +728,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on copy method configuration from bogus source" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairNotFound.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -741,7 +741,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoGood.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -758,7 +758,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", testData.methodConfigName)
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -769,7 +769,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on copy method configuration from bogus source in method repo" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoMissing.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -780,7 +780,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 422 on copy method configuration when method repo payload is missing" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoEmptyPayload.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
@@ -791,7 +791,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 422 on copy method configuration when method repo payload is unparseable" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoBadPayload.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyMethodRepoConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
@@ -802,7 +802,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -813,7 +813,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "list method Configuration" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.listMethodConfigurationsRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -832,7 +832,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val workspaceCopy = WorkspaceName(namespace = testData.workspace.namespace, name = "test_copy")
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -863,7 +863,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 Conflict on copy if the destination already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -874,7 +874,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest("dsde","not there","Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.submissionRoute) ~>
+      sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
@@ -883,11 +883,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map("pattern"->"String"),Map.empty,mcName.workspaceName, MethodStoreConfiguration("dsde_config","three_step","1"), MethodStoreMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.submissionRoute) ~>
+      sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
@@ -897,16 +897,16 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map.empty,Map.empty, wsName, MethodStoreConfiguration("dsde_config","three_step","1"), MethodStoreMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createMethodConfigurationRoute) ~>
+      sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
     val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.createEntityRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.submissionRoute) ~>
+      sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
   }
 
@@ -922,7 +922,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
     Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.postWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
@@ -937,7 +937,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
         Post(s"/workspaces/${workspace2.namespace}/${workspace2.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
           addMockOpenAmCookie ~>
-          sealRoute(services.createEntityRoute) ~>
+          sealRoute(services.entityRoutes) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
@@ -950,9 +950,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
             val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
-            Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+            Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
               addMockOpenAmCookie ~>
-              sealRoute(services.copyEntitiesRoute) ~>
+              sealRoute(services.entityRoutes) ~>
               check {
                 assertResult(StatusCodes.Created) {
                   status
@@ -970,9 +970,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 409 for copying entities into a workspace with conflicts" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
-    Post("/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+    Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.copyEntitiesRoute) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
           status
@@ -983,7 +983,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.id}") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getStatusRoute) ~>
+      sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(testData.submission1) {responseAs[Submission]}
@@ -993,7 +993,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getStatusRoute) ~>
+      sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}
       }
@@ -1002,7 +1002,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
@@ -1011,7 +1011,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 when requesting an ACL from a non-existent workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/xyzzy/plugh/acl") ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.getACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
       }
@@ -1020,7 +1020,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
@@ -1029,7 +1029,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     Put(s"/workspaces/xyzzy/plugh/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addMockOpenAmCookie ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
       }
@@ -1042,7 +1042,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow an owner-access user to get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addOpenAmCookie("owner-access") ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1053,7 +1053,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow a write-access user to get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addOpenAmCookie("write-access") ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1064,7 +1064,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow a read-access user to get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addOpenAmCookie("read-access") ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1075,7 +1075,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a no-access user to get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addOpenAmCookie("no-access") ~>
-      sealRoute(services.getWorkspacesRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -1088,7 +1088,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow an owner-access user to update a workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addOpenAmCookie("owner-access") ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1099,7 +1099,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow a write-access user to update a workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addOpenAmCookie("write-access") ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
@@ -1110,7 +1110,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a read-access user to update a workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addOpenAmCookie("read-access") ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -1121,7 +1121,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a no-access user to update a workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
       addOpenAmCookie("no-access") ~>
-      sealRoute(services.updateWorkspaceRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
           status
@@ -1134,7 +1134,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "allow an owner-access user to update an ACL" in withTestDataApiServices { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("owner-access") ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
@@ -1143,7 +1143,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a write-access user to update an ACL" in withTestDataApiServices { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("write-access") ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
@@ -1152,7 +1152,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a read-access user to update an ACL" in withTestDataApiServices { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("read-access") ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
@@ -1161,7 +1161,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "not allow a no-access user to update an ACL" in withTestDataApiServices { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("no-access") ~>
-      sealRoute(services.putACLRoute) ~>
+      sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }

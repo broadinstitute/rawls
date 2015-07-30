@@ -71,7 +71,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
 
     postWorkspaceTimer.timedOperation {
       Post(s"/workspaces", httpJson(gen.workspace)) ~>
-        addOpenAmCookie ~> sealRoute(postWorkspaceRoute) ~>
+        addOpenAmCookie ~> sealRoute(workspaceRoutes) ~>
         check { assertResult(StatusCodes.Created) {status} }
     }
 
@@ -86,7 +86,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val sample = gen.createSample(params.numAnnotationsSmall)
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
-          addOpenAmCookie ~> sealRoute(createEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -95,7 +95,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val pair = gen.createPair(params.numAnnotationsSmall)
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pair)) ~>
-          addOpenAmCookie ~> sealRoute(createEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check {assertResult(StatusCodes.Created) {status}}
       }
     }
@@ -109,7 +109,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val sampleSet = gen.createEntitySet("sample", params.numSetMembersSmall)
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sampleSet)) ~>
-          addOpenAmCookie ~> sealRoute(createEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -118,7 +118,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val pairSet = gen.createEntitySet("pair", params.numSetMembersSmall)
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pairSet)) ~>
-          addOpenAmCookie ~> sealRoute(createEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -132,7 +132,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val methodConfig = gen.createMethodConfig(params.numAnnotationsSmall)
       postMethodConfigTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs", httpJson(methodConfig)) ~>
-          addOpenAmCookie ~> sealRoute(createMethodConfigurationRoute) ~>
+          addOpenAmCookie ~> sealRoute(methodConfigRoutes) ~>
           check { assertResult(StatusCodes.Created) {status} }
       }
     }
@@ -144,7 +144,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
 
     listMethodConfigTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs") ~>
-        addOpenAmCookie ~> sealRoute(listMethodConfigurationsRoute) ~>
+        addOpenAmCookie ~> sealRoute(methodConfigRoutes) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
 
@@ -158,7 +158,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val name = gen.pickEntity("sample")
       val sample: Entity = getEntityTimer.timedOperation {
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}") ~>
-          addOpenAmCookie ~> sealRoute(getEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {status}
             responseAs[Entity]
@@ -172,7 +172,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       )
       updateEntityTimer.timedOperation {
         Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}", httpJson(updateOps)) ~>
-          addOpenAmCookie ~> sealRoute(updateEntityRoute) ~>
+          addOpenAmCookie ~> sealRoute(entityRoutes) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
     }
@@ -188,7 +188,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       val name = gen.pickMethodConfig
       val methodConfig: MethodConfiguration = getMethodConfigTimer.timedOperation {
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}") ~>
-          addOpenAmCookie ~> sealRoute(getMethodConfigurationRoute) ~>
+          addOpenAmCookie ~> sealRoute(methodConfigRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {status}
             responseAs[MethodConfiguration]
@@ -202,7 +202,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       )
       updateMethodConfigTimer.timedOperation {
         Put(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}", httpJson(updatedConfig)) ~>
-          addOpenAmCookie ~> sealRoute(updateMethodConfigurationRoute) ~>
+          addOpenAmCookie ~> sealRoute(methodConfigRoutes) ~>
           check { assertResult(StatusCodes.OK) {status} }
       }
     }
@@ -220,7 +220,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     val postEntityTimer = new Timer("Post large entity")
     postEntityTimer.timedOperation {
       Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
-        addOpenAmCookie ~> sealRoute(createEntityRoute) ~>
+        addOpenAmCookie ~> sealRoute(entityRoutes) ~>
         check { assertResult(StatusCodes.Created) {status} }
     }
     postEntityTimer.printElapsed
@@ -228,7 +228,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     val getEntityTimer = new Timer("Get large entity")
     getEntityTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
-        addOpenAmCookie ~> sealRoute(getEntityRoute) ~>
+        addOpenAmCookie ~> sealRoute(entityRoutes) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
     getEntityTimer.printElapsed
@@ -243,7 +243,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
 
     updateEntityTimer.timedOperation {
       Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}", httpJson(sampleUpdates)) ~>
-        addOpenAmCookie ~> sealRoute(updateEntityRoute) ~>
+        addOpenAmCookie ~> sealRoute(entityRoutes) ~>
         check { assertResult(StatusCodes.OK) {status} }
     }
     updateEntityTimer.printElapsed
@@ -251,7 +251,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     val deleteEntityTimer = new Timer("Delete large entity")
     deleteEntityTimer.timedOperation {
       Delete(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
-        addOpenAmCookie ~> sealRoute(deleteEntityRoute) ~>
+        addOpenAmCookie ~> sealRoute(entityRoutes) ~>
         check { assertResult(StatusCodes.NoContent) {status} }
     }
     deleteEntityTimer.printElapsed
