@@ -91,6 +91,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "create an empty list when inserting null via AddListMember" in withTestDataServices { services =>
+    assertResult(Some(AttributeEmptyList)) {
+      services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("nolisthere", AttributeNull))).attributes.get("nolisthere")
+    }
+  }
+
+  it should "do nothing to existing lists when adding AttributeNull" in withTestDataServices { services =>
+    assertResult(Some(attributeList)) {
+      services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember("splat", AttributeNull))).attributes.get("splat")
+    }
+  }
+
   it should "remove item from existing listing entity" in withTestDataServices { services =>
     assertResult(Some(AttributeValueList(Seq(AttributeString("b"), AttributeBoolean(true))))) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(RemoveListMember("splat", AttributeString("a")))).attributes.get("splat")
