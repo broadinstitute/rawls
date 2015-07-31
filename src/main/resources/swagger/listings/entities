@@ -318,7 +318,7 @@
 				"name": "entityUpdateJson",
 				"description": "Update operations",
 				"required": true,
-				"type": "AttributeUpdateOperation",
+				"type": "Array[AddUpdateAttribute]",
 				"paramType": "body",
 				"allowMultiple": false
 			}],
@@ -544,7 +544,7 @@
 			"properties": {
 				"op": {
 					"type": "string",
-					"description": "AddUpdateAttribute adds or updates an attribute. Requires attributeName and addUpdateAttribute fields. RemoveAttribute removes an attribute. Requires attributeName. AddListMember adds a member to an attribute list. Requires attributeListName and newMember fields. RemoveListMember removes a member from an attribute list. Requires attributeListName and removeMember fields."
+					"description": ""
 				}
 			},
 			"subTypes": ["AddUpdateAttribute", "RemoveAttribute", "AddListMember", "RemoveListMember"]
@@ -552,59 +552,72 @@
 		"AddUpdateAttribute": {
 			"id": "AddUpdateAttribute",
 			"description": "",
-			"required": ["attributeName", "addUpdateAttribute"],
+			"required": ["op", "attributeName", "addUpdateAttribute"],
 			"properties": {
+				"op": {
+					"type": "string",
+					"description": "The operation to perform on the attribute"
+				},
 				"attributeName": {
 					"type": "string",
-					"description": ""
+					"description": "The name of the attribute to add"
 				},
 				"addUpdateAttribute": {
 					"type": "Attribute",
-					"description": ""
+					"description": "The attribute to add"
 				}
 			}
 		},
 		"RemoveAttribute": {
 			"id": "RemoveAttribute",
 			"description": "",
-			"required": ["attributeName"],
-			"extends": "AttributeUpdateOperation",
+			"required": ["op", "attributeName"],
 			"properties": {
+				"op": {
+					"type": "string",
+					"description": "The operation to perform on the attribute"
+				},
 				"attributeName": {
 					"type": "string",
-					"description": ""
+					"description": "The attribute to remove"
 				}
 			}
 		},
 		"AddListMember": {
 			"id": "AddListMember",
 			"description": "",
-			"required": ["attributeListName", "newMember"],
-			"extends": "AttributeUpdateOperation",
+			"required": ["op", "attributeListName", "newMember"],
 			"properties": {
+				"op": {
+					"type": "string",
+					"description": "The operation to perform on the attribute"
+				},
 				"attributeListName": {
 					"type": "string",
-					"description": ""
+					"description": "The attribute list to perform the operation on"
 				},
 				"newMember": {
 					"type": "Attribute",
-					"description": ""
+					"description": "The list member to add"
 				}
 			}
 		},
 		"RemoveListMember": {
 			"id": "RemoveListMember",
 			"description": "",
-			"required": ["attributeListName", "removeMember"],
-			"extends": "AttributeUpdateOperation",
+			"required": ["op", "attributeListName", "removeMember"],
 			"properties": {
+				"op": {
+					"type": "string",
+					"description": "The operation to perform on the attribute"
+				},
 				"attributeListName": {
 					"type": "string",
-					"description": ""
+					"description": "The attribute list to perform the operation on"
 				},
 				"removeMember": {
 					"type": "Attribute",
-					"description": ""
+					"description": "The list member to remove"
 				}
 			}
 		},
