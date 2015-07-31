@@ -1077,7 +1077,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
@@ -1112,7 +1112,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
@@ -1123,7 +1123,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.NotFound) {
           status
         }
       }
@@ -1145,7 +1145,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
   }
 
@@ -1154,7 +1154,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
   }
 
@@ -1163,7 +1163,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) { status }
+        assertResult(StatusCodes.NotFound) { status }
       }
   }
 

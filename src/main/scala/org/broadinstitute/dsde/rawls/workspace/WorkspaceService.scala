@@ -450,9 +450,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
+  private def noSuchWorkspaceMessage( namespace: String, name: String ) = s"${namespace}/${name} does not exist"
+
   private def withWorkspace(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage): PerRequestMessage = {
     workspaceDAO.load(workspaceNamespace, workspaceName, txn) match {
-      case None => RequestComplete(http.StatusCodes.NotFound, s"$workspaceNamespace/$workspaceName does not exist")
+      case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceNamespace,workspaceName))
       case Some(workspace) => op(workspace)
     }
   }
@@ -716,7 +718,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     if (acls.maximumAccessLevel >= requiredLevel)
       codeBlock
     else
-      RequestComplete(StatusCodes.Forbidden, "User %s does not have the required access to the requested resource")
+      RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.namespace,workspace.name))
   }
 
   def requireAccess(requiredLevel: GCSAccessLevel, workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
