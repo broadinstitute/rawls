@@ -315,10 +315,10 @@
 				"paramType": "path",
 				"allowMultiple": false
 			}, {
-				"name": "entityUpdateJson",
-				"description": "Update operations",
-				"required": true,
-				"type": "Array[AddUpdateAttribute]",
+				"name": "attributeUpdateJson",
+				"description": "Update operations for attributes",
+				"required": false,
+				"type": "Array[AttributeUpdateOperation]",
 				"paramType": "body",
 				"allowMultiple": false
 			}],
@@ -539,15 +539,24 @@
 		"AttributeUpdateOperation": {
 			"id": "AttributeUpdateOperation",
 			"description": "",
-			"required": ["op"],
-			"discriminator": "op",
 			"properties": {
-				"op": {
-					"type": "string",
+				"Example payload for AddUpdateAttribute": {
+					"type": "AddUpdateAttribute",
+					"description": ""
+				},
+				"Example payload for RemoveAttribute": {
+					"type": "RemoveAttribute",
+					"description": ""
+				},
+				"Example payload for AddListMember": {
+					"type": "AddListMember",
+					"description": ""
+				},
+				"Example payload for RemoveListMember": {
+					"type": "RemoveListMember",
 					"description": ""
 				}
-			},
-			"subTypes": ["AddUpdateAttribute", "RemoveAttribute", "AddListMember", "RemoveListMember"]
+			}
 		},
 		"AddUpdateAttribute": {
 			"id": "AddUpdateAttribute",
@@ -556,6 +565,7 @@
 			"properties": {
 				"op": {
 					"type": "string",
+					"defaultValue": "AddUpdateAttribute",
 					"description": "The operation to perform on the attribute"
 				},
 				"attributeName": {
@@ -575,6 +585,7 @@
 			"properties": {
 				"op": {
 					"type": "string",
+					"defaultValue": "RemoveAttribute",
 					"description": "The operation to perform on the attribute"
 				},
 				"attributeName": {
@@ -590,6 +601,7 @@
 			"properties": {
 				"op": {
 					"type": "string",
+					"defaultValue": "AddListMember",
 					"description": "The operation to perform on the attribute"
 				},
 				"attributeListName": {
@@ -609,6 +621,7 @@
 			"properties": {
 				"op": {
 					"type": "string",
+					"defaultValue": "RemoveListMember",
 					"description": "The operation to perform on the attribute"
 				},
 				"attributeListName": {
@@ -618,6 +631,25 @@
 				"removeMember": {
 					"type": "Attribute",
 					"description": "The list member to remove"
+				}
+			}
+		},
+		"AttributeOperation": {
+			"id": "AttributeOperation",
+			"description": "",
+			"required": ["op", "attributeListName"],
+			"properties": {
+				"op": {
+					"type": "string",
+					"description": "The operation to perform on the attribute. (Options: AddUpdateAttribute or RemoveAttribute)"
+				},
+				"attributeName": {
+					"type": "string",
+					"description": "The name of the attribute"
+				},
+				"addUpdateAttribute": {
+					"type": "Attribute",
+					"description": "The attribute to add (used with AddUpdateAttribute)"
 				}
 			}
 		},

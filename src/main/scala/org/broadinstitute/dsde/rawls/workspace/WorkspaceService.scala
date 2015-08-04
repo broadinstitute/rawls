@@ -285,6 +285,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           if(errorMessages.isEmpty) {
             RequestComplete(StatusCodes.NoContent)
           } else {
+            dataSource.rollbackOnly.set(true)
             RequestComplete(StatusCodes.BadRequest, errorMessages)
           }
         }

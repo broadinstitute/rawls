@@ -379,18 +379,21 @@
 		"AttributeUpdateOperation": {
 			"id": "AttributeUpdateOperation",
 			"description": "",
-			"required": ["op", "attributeName|attributeListName"],
 			"properties": {
-				"op": {
-					"type": "AddUpdateAttribute|RemoveAttribute|AddListMember|RemoveListMember",
-					"description": "AddUpdateAttribute adds or updates an attribute. Requires attributeName and addUpdateAttribute fields. RemoveAttribute removes an attribute. Requires attributeName. AddListMember adds a member to an attribute list. Requires attributeListName and newMember fields. RemoveListMember removes a member from an attribute list. Requires attributeListName and removeMember fields."
-				},
-				"attributeName|attributeListName": {
-					"type": "string",
+				"Example payload for AddUpdateAttribute": {
+					"type": "AddUpdateAttribute",
 					"description": ""
 				},
-				"addUpdateAttribute|newMember|removeMember": {
-					"type": "Attribute",
+				"Example payload for RemoveAttribute": {
+					"type": "RemoveAttribute",
+					"description": ""
+				},
+				"Example payload for AddListMember": {
+					"type": "AddListMember",
+					"description": ""
+				},
+				"Example payload for RemoveListMember": {
+					"type": "RemoveListMember",
 					"description": ""
 				}
 			}
