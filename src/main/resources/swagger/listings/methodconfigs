@@ -354,7 +354,7 @@
 		"MethodConfiguration": {
 			"id": "MethodConfiguration",
 			"description": "",
-			"required": ["namespace", "name", "rootEntityType", "inputs", "workspaceName", "methodStoreMethod"],
+			"required": ["namespace", "name", "rootEntityType", "inputs", "workspaceName", "MethodRepoMethod"],
 			"properties": {
 				"namespace": {
 					"type": "string",
@@ -384,12 +384,12 @@
 					"$ref": "WorkspaceName",
 					"description": "This method configuration's owning workspace"
 				},
-				"methodStoreConfig": {
-					"$ref": "MethodStoreConfiguration",
+				"methodRepoConfig": {
+					"$ref": "MethodRepoConfiguration",
 					"description": "The properties of the method configuration from the method store that this derived from"
 				},
-				"methodStoreMethod": {
-					"$ref": "MethodStoreMethod",
+				"methodRepoMethod": {
+					"$ref": "MethodRepoMethod",
 					"description": "The properties of the method from the method store that this config is associated with"
 				}
 			}
@@ -466,8 +466,8 @@
 				}
 			}
 		},
-		"MethodStoreConfiguration": {
-			"id": "MethodStoreConfiguration",
+		"MethodRepoConfiguration": {
+			"id": "MethodRepoConfiguration",
 			"description": "",
 			"required": ["methodConfigNamespace", "methodConfigName", "methodConfigVersion"],
 			"properties": {
@@ -485,8 +485,8 @@
 				}
 			}
 		},
-		"MethodStoreMethod": {
-			"id": "MethodStoreMethod",
+		"MethodRepoMethod": {
+			"id": "MethodRepoMethod",
 			"description": "",
 			"required": ["methodNamespace", "methodName", "methodVersion"],
 			"properties": {
