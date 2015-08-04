@@ -285,7 +285,7 @@
 			}]
 		}]
 	}, {
-		"path": "/workspaces/methodconfigs/copy",
+		"path": "/methodconfigs/copy",
 		"operations": [{
 			"method": "Post",
 			"summary": "Copy method configuration in a workspace from another workspace",
@@ -316,7 +316,7 @@
 			}]
 		}]
 	}, {
-		"path": "/workspaces/methodconfigs/copyFromMethodRepo",
+		"path": "/methodconfigs/copyFromMethodRepo",
 		"operations": [{
 			"method": "Post",
 			"summary": "Copy method configuration from the method repository",
