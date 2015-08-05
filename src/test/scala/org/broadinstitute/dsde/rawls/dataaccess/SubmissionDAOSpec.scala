@@ -26,18 +26,16 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
     }
   }
 
-
-
     "SubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       assertResult(Some(testData.submission1)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.id,txn) }
+        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
       assertResult(Seq(testData.submission1, testData.submission2)) {
         dao.list(workspace.namespace,workspace.name,txn).toSeq
       }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.id,txn))
+      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.submissionId,txn))
       assertResult(None) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.id,txn) }
+        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
       assertResult(1) {
         dao.list(workspace.namespace,workspace.name,txn).size
       }
@@ -47,17 +45,17 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
 //      dao.save(workspace.namespace,workspace.name,testData.submission2,txn)
       assertResult(Some(testData.submission1)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.id,txn) }
+        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
       assertResult(Some(testData.submission2)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission2.id,txn) }
+        dao.get(workspace.namespace,workspace.name,testData.submission2.submissionId,txn) }
       assertResult(2) {
         dao.list(workspace.namespace,workspace.name,txn).size
       }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.id,txn))
+      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.submissionId,txn))
       assertResult(1) {
         dao.list(workspace.namespace,workspace.name,txn).size
       }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission2.id,txn))
+      assert(dao.delete(workspace.namespace,workspace.name,testData.submission2.submissionId,txn))
       assertResult(0) {
         dao.list(workspace.namespace,workspace.name,txn).size
       }
@@ -76,7 +74,7 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       dao.update(testData.submission1.copy(status = SubmissionStatuses.Done), txn)
       assertResult(Option(testData.submission1.copy(status = SubmissionStatuses.Done))) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.id,txn)
+        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn)
       }
     }
 
@@ -84,25 +82,25 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       val workflow0 = testData.submission1.workflows(0)
       assertResult(Some(workflow0)) {
-        workflowDAO.get(workspace.namespace,workspace.name,workflow0.id,txn)
+        workflowDAO.get(workspace.toWorkspaceName,workflow0.workflowId,txn)
       }
       val workflow1 = testData.submission1.workflows(1)
       assertResult(Some(workflow1)) {
-        workflowDAO.get(workspace.namespace,workspace.name,workflow1.id,txn)
+        workflowDAO.get(workspace.toWorkspaceName,workflow1.workflowId,txn)
       }
       val workflow2 = testData.submission1.workflows(2)
       assertResult(Some(workflow2)) {
-        workflowDAO.get(workspace.namespace,workspace.name,workflow2.id,txn)
+        workflowDAO.get(workspace.toWorkspaceName,workflow2.workflowId,txn)
       }
-      val workflow3 = Workflow(workspace.namespace,workspace.name,workflow1.id,WorkflowStatuses.Failed,DateTime.now,workflow1.entityType,workflow1.entityName)
-      workflowDAO.update(workspace.namespace,workspace.name,workflow3,txn)
+      val workflow3 = Workflow(workspace.toWorkspaceName,workflow1.workflowId,WorkflowStatuses.Failed,DateTime.now,workflow1.workflowEntity)
+      workflowDAO.update(workspace.toWorkspaceName,workflow3,txn)
       assertResult(Some(workflow3)) {
-        workflowDAO.get(workspace.namespace,workspace.name,workflow3.id,txn)
+        workflowDAO.get(workspace.toWorkspaceName,workflow3.workflowId,txn)
       }
-      assert(workflowDAO.delete(workspace.namespace,workspace.name,workflow3.id,txn))
+      assert(workflowDAO.delete(workspace.toWorkspaceName,workflow3.workflowId,txn))
       val submission = testData.submission1.copy(workflows=Seq(workflow0,workflow2))
       assertResult(Some(submission)) {
-        dao.get(workspace.namespace,workspace.name,submission.id,txn)
+        dao.get(workspace.namespace,workspace.name,submission.submissionId,txn)
       }
     }
 

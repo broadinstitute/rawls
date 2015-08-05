@@ -24,21 +24,21 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
       post {
         entity(as[Entity]) { entity =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CreateEntity(workspaceNamespace, workspaceName, entity))
+            WorkspaceService.CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity))
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.GetEntity(workspaceNamespace, workspaceName, entityType, entityName))
+          WorkspaceService.GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.UpdateEntity(workspaceNamespace, workspaceName, entityType, entityName, operations))
+            WorkspaceService.UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations))
         }
       }
     } ~
@@ -46,21 +46,21 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
       post {
         entity(as[Array[EntityUpdateDefinition]]) { operations =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.BatchUpsertEntities(workspaceNamespace, workspaceName, operations))
+            WorkspaceService.BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       delete {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.DeleteEntity(workspaceNamespace, workspaceName, entityType, entityName))
+          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[EntityName]) { newEntityName =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.RenameEntity(workspaceNamespace, workspaceName, entityType, entityName, newEntityName.name))
+            WorkspaceService.RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name))
         }
       }
     } ~
@@ -68,20 +68,20 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
       post {
         entity(as[String]) { expression =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.EvaluateExpression(workspaceNamespace, workspaceName, entityType, entityName, expression))
+            WorkspaceService.EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression))
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntityTypes(workspaceNamespace, workspaceName))
+          WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntities(workspaceNamespace, workspaceName, entityType))
+          WorkspaceService.ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType))
       }
     } ~
     path("workspaces" / "entities" / "copy" ) {

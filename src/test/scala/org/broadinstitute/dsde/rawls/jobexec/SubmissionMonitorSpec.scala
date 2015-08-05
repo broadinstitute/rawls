@@ -29,7 +29,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
     expectMsgClass(10 seconds, classOf[Terminated])
     assertResult(true) { dataSource inTransaction { txn =>
-      submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
+      submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
     }}
   }
 
@@ -38,23 +38,23 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     watch(monitorRef)
 
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running)), testActor)
     }
 
     awaitCond({
       dataSource inTransaction { txn =>
-        submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
+        submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
       }
     }, 10 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded)), testActor)
     }
 
     expectMsgClass(10 seconds, classOf[Terminated])
 
     assertResult(true) { dataSource inTransaction { txn =>
-      submissionDAO.get(testData.submission1.workspaceNamespace, testData.submission1.workspaceName, testData.submission1.id, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
+      submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
     }}
   }
 
@@ -68,7 +68,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
 
     testData.submission1.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
-      system.actorSelection(monitorRef.path / workflow.id).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status)), testActor)
     }
   }
 

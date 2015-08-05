@@ -53,7 +53,7 @@ class SubmissionSupervisor(submissionDAO: SubmissionDAO,
 
   private def startSubmissionMonitor(submission: Submission, authCookie: HttpCookie): Unit = {
     actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, datasource, authCookie)), submission.id)
+      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, datasource, authCookie)), submission.submissionId)
   }
 
   override val supervisorStrategy =

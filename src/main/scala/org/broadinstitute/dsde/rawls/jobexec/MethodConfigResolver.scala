@@ -4,7 +4,7 @@ import cromwell.binding.WdlNamespace
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.RawlsTransaction
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionParser, ExpressionEvaluator}
-import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeConversions, Entity, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
@@ -19,6 +19,7 @@ object MethodConfigResolver {
   private def getSingleResult[T](seq: Seq[T]): Try[T] = seq match {
     case Seq() => Failure(new EmptyResultException)
     case Seq(null) => Failure(new EmptyResultException) // sometimes expression eval returns a Seq(null) for an empty result
+    case Seq(AttributeNull) => Failure(new EmptyResultException)
     case Seq(single) => Success(single)
     case _ => Failure(new MultipleResultException)
   }
@@ -33,7 +34,7 @@ object MethodConfigResolver {
       val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
       methodConfig.inputs.map {
         case (name, expression) => {
-          val evaluated = evaluator.evalFinalAttribute(entity.workspaceName.namespace, entity.workspaceName.name, entity.entityType, entity.name, expression)
+          val evaluated = evaluator.evalFinalAttribute(entity.workspaceName.namespace, entity.workspaceName.name, entity.entityType, entity.name, expression.value)
           // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
           val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
               // TODO: Cromwell doesn't yet have compound types (e.g. Seq)

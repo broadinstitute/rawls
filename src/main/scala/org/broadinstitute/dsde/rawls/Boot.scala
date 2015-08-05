@@ -8,6 +8,7 @@ import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
 import com.google.api.client.util.store.FileDataStoreFactory
+import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -31,6 +32,8 @@ object Boot extends App {
     val orientConfig = conf.getConfig("orientdb")
     val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
     val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
+
+    dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     val gcsConfig = conf.getConfig("gcs")
     val gcsDAO = new HttpGoogleCloudStorageDAO(

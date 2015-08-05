@@ -1,13 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.VertexProperty
 import org.joda.time.DateTime
-import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
-import spray.json._
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-
-import scala.annotation.meta.field
 
 trait Identifiable {
   def path : String
@@ -24,12 +17,11 @@ case class WorkspaceName(
                       namespace: String,
                       name: String) extends Identifiable {
   def path : String = "workspaces/" + namespace + "/" + name
+  override def toString = namespace + "/" + name // used in error messages
 }
 
 case class WorkspaceRequest (
-                      @(VertexProperty@field)
                       namespace: String,
-                      @(VertexProperty@field)
                       name: String,
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
@@ -37,15 +29,10 @@ case class WorkspaceRequest (
 }
 
 case class Workspace (
-                      @(VertexProperty@field)
                       namespace: String,
-                      @(VertexProperty@field)
                       name: String,
-                      @(VertexProperty@field)
                       bucketName: String,
-                      @(VertexProperty@field)
                       createdDate: DateTime,
-                      @(VertexProperty@field)
                       createdBy: String,
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
@@ -57,14 +44,10 @@ case class EntityName(
                    name: String)
 
 case class Entity(
-                   @(VertexProperty@field)
                    name: String,
-                   @(VertexProperty@field)
                    entityType: String,
                    attributes: Map[String, Attribute],
-                   workspaceName:WorkspaceName,
-                   @(VertexProperty@field)
-                   vaultId:String="") extends Identifiable with Attributable {
+                   workspaceName:WorkspaceName) extends Identifiable with Attributable {
   def path : String = workspaceName.path + "/entities/" + name
 }
 
@@ -86,50 +69,37 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-case class MethodStoreMethod(
-                   @(VertexProperty@field)
+case class MethodRepoMethod(
                    methodNamespace: String,
-                   @(VertexProperty@field)
                    methodName: String,
-                   @(VertexProperty@field)
                    methodVersion: String
                    )
-case class MethodStoreConfiguration(
-                   @(VertexProperty@field)
+case class MethodRepoConfiguration(
                    methodConfigNamespace: String,
-                   @(VertexProperty@field)
                    methodConfigName: String,
-                   @(VertexProperty@field)
                    methodConfigVersion: String
                    )
 
 case class MethodConfiguration(
-                   @(VertexProperty@field)
                    namespace: String,
-                   @(VertexProperty@field)
                    name: String,
-                   @(VertexProperty@field)
                    rootEntityType: String,
-                   prerequisites: Map[String, String],
-                   inputs: Map[String, String],
-                   outputs: Map[String, String],
+                   prerequisites: Map[String, AttributeString],
+                   inputs: Map[String, AttributeString],
+                   outputs: Map[String, AttributeString],
                    workspaceName:WorkspaceName,
-                   methodStoreConfig:MethodStoreConfiguration,
-                   methodStoreMethod:MethodStoreMethod
+                   methodRepoConfig:MethodRepoConfiguration,
+                   methodRepoMethod:MethodRepoMethod
                    ) extends Identifiable {
   def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
-  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodStoreConfig, methodStoreMethod, workspaceName, namespace)
+  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoConfig, methodRepoMethod, workspaceName, namespace)
 }
 case class MethodConfigurationShort(
-                                @(VertexProperty@field)
                                 name: String,
-                                @(VertexProperty@field)
                                 rootEntityType: String,
-                                methodStoreConfig:MethodStoreConfiguration,
-                                methodStoreMethod:MethodStoreMethod,
-                                @(VertexProperty@field)
+                                methodStoreConfig:MethodRepoConfiguration,
+                                methodStoreMethod:MethodRepoMethod,
                                 workspaceName:WorkspaceName,
-                                @(VertexProperty@field)
                                 namespace: String)
 
 case class MethodRepoConfigurationQuery(
@@ -141,16 +111,17 @@ case class MethodRepoConfigurationQuery(
 
 case class ConflictingEntities(conflicts: Seq[String])
 
-trait Attribute
-trait AttributeValue extends Attribute
-trait AttributeReference extends Attribute
+sealed trait Attribute
+sealed trait AttributeValue extends Attribute
 
+case object AttributeNull extends AttributeValue
 case class AttributeString(val value: String) extends AttributeValue
 case class AttributeNumber(val value: BigDecimal) extends AttributeValue
 case class AttributeBoolean(val value: Boolean) extends AttributeValue
-case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeValue // recursive
-case class AttributeReferenceList(val list: Seq[AttributeReferenceSingle]) extends AttributeReference // non-recursive
-case class AttributeReferenceSingle(val entityType: String, val entityName: String) extends AttributeReference
+case object AttributeEmptyList extends Attribute
+case class AttributeValueList(val list: Seq[AttributeValue]) extends Attribute
+case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends Attribute
+case class AttributeEntityReference(val entityType: String, val entityName: String) extends Attribute
 
 object AttributeConversions {
   // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
@@ -158,7 +129,7 @@ object AttributeConversions {
     case AttributeBoolean(b) => b
     case AttributeNumber(n) => n.bigDecimal
     case AttributeString(s) => s
-    case AttributeValueList(l) => l.map(attributeToProperty(_)).asJava
+    case AttributeNull => null
     case _ => throw new IllegalArgumentException("Cannot serialize " + att + " as a property")
   }
 
@@ -166,7 +137,7 @@ object AttributeConversions {
     case b: Boolean => AttributeBoolean(b)
     case n: java.math.BigDecimal => AttributeNumber(n)
     case s: String => AttributeString(s)
-    case l: java.util.List[_] => AttributeValueList(l.map(propertyToAttribute(_)))
+    case null => AttributeNull
     case _ => throw new IllegalArgumentException("Cannot deserialize " + prop + " as an attribute")
   }
 }
@@ -175,7 +146,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
-  implicit val EntityFormat = jsonFormat5(Entity)
+  implicit val EntityFormat = jsonFormat4(Entity)
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
@@ -189,9 +160,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
-  implicit val MethodStoreMethodFormat = jsonFormat3(MethodStoreMethod)
+  implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
-  implicit val MethodStoreConfigurationFormat = jsonFormat3(MethodStoreConfiguration)
+  implicit val MethodStoreConfigurationFormat = jsonFormat3(MethodRepoConfiguration)
 
   implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
 

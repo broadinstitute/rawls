@@ -12,27 +12,47 @@ trait JsonSupport extends DefaultJsonProtocol {
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
 
     override def write(obj: Attribute): JsValue = obj match {
+      case AttributeNull => JsNull
       case AttributeBoolean(b) => JsBoolean(b)
       case AttributeNumber(n) => JsNumber(n)
       case AttributeString(s) => JsString(s)
       case AttributeValueList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeReferenceList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeReferenceSingle(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
+      case AttributeEntityReferenceList(l) => JsArray(l.map(write(_)).toSeq:_*)
+      case AttributeEntityReference(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
+      case AttributeEmptyList => JsArray()
     }
 
     override def read(json: JsValue): Attribute = json match {
+      case JsNull => AttributeNull
       case JsString(s) => AttributeString(s)
       case JsBoolean(b) => AttributeBoolean(b)
       case JsNumber(n) => AttributeNumber(n)
       case JsArray(a) => getAttributeList(a.map(read(_)))
-      case JsObject(members) => AttributeReferenceSingle(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
+      case JsObject(members) => AttributeEntityReference(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
       case _ => throw new DeserializationException("unexpected json type")
     }
 
     def getAttributeList(s: Seq[Attribute]) = s match {
+      case e: Seq[_] if e.isEmpty => AttributeEmptyList
       case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
-      case r: Seq[AttributeReferenceSingle @unchecked] if (s.map(_.isInstanceOf[AttributeReferenceSingle]).reduce(_&&_)) => AttributeReferenceList(r)
+      case r: Seq[AttributeEntityReference @unchecked] if (s.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_)) => AttributeEntityReferenceList(r)
       case _ => throw new DeserializationException("illegal array type")
+    }
+  }
+
+  implicit object AttributeStringFormat extends RootJsonFormat[AttributeString] {
+    override def write(obj: AttributeString): JsValue = AttributeFormat.write(obj)
+    override def read(json: JsValue): AttributeString = json match {
+      case JsString(s) => AttributeString(s)
+      case _ => throw new DeserializationException("unexpected json type")
+    }
+  }
+
+  implicit object AttributeReferenceFormat extends RootJsonFormat[AttributeEntityReference] {
+    override def write(obj: AttributeEntityReference): JsValue = AttributeFormat.write(obj)
+    override def read(json: JsValue): AttributeEntityReference = json match {
+      case JsObject(members) => AttributeEntityReference(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
+      case _ => throw new DeserializationException("unexpected json type")
     }
   }
 

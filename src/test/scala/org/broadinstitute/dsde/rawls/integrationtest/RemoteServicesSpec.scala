@@ -19,7 +19,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
-  val methodConfig = MethodConfiguration(wsns, "testConfig", "samples", Map("ready" -> "true"), Map("param1" -> "foo"), Map("out" -> "bar"), WorkspaceName(wsns, wsname), MethodStoreConfiguration("method-a-config", "dsde", "1"), MethodStoreMethod("method-a", "dsde", "1"))
+  val methodConfig = MethodConfiguration(wsns, "testConfig", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), WorkspaceName(wsns, wsname), MethodRepoConfiguration("method-a-config", "dsde", "1"), MethodRepoMethod("method-a", "dsde", "1"))
   val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
 
   val workspace = WorkspaceRequest(wsns, wsname, Map.empty)

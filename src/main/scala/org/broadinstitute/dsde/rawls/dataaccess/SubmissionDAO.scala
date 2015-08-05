@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{Submission,Workflow}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Submission, Workflow}
 
 /**
  * @author tsharpe
@@ -23,11 +23,11 @@ trait SubmissionDAO {
 
 trait WorkflowDAO {
   /** get a workflow by workspace and workflowId */
-  def get(workspaceNamespace: String, workspaceName: String, workflowId: String, txn: RawlsTransaction): Option[Workflow]
+  def get(workspaceName: WorkspaceName, workflowId: String, txn: RawlsTransaction): Option[Workflow]
 
   /** update a workflow */
-  def update(workspaceNamespace: String, workspaceName: String, workflow: Workflow, txn: RawlsTransaction): Workflow
+  def update(workspaceName: WorkspaceName, workflow: Workflow, txn: RawlsTransaction): Workflow
 
   /** delete a workflow */
-  def delete(workspaceNamespace: String, workspaceName: String, workflowId: String, txn: RawlsTransaction): Boolean
+  def delete(workspaceName: WorkspaceName, workflowId: String, txn: RawlsTransaction): Boolean
 }

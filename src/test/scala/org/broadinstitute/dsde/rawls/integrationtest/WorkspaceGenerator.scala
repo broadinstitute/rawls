@@ -55,7 +55,7 @@ object WorkspaceGenerator {
 
   def generateMethodConfigParameters(n: Int) = {
     // this works equally well for inputs, outputs or prerequisites
-    (for (i <- 0 to n) yield (generatePropertyKey, generateMethodConfigValue)).toMap
+    (for (i <- 0 to n) yield (generatePropertyKey, AttributeString(generateMethodConfigValue))).toMap
   }
 }
 
@@ -91,11 +91,11 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
   }
 
   private def generateReferenceSingle(entityType: String) = {
-    AttributeReferenceSingle(entityType, pickEntity(entityType))
+    AttributeEntityReference(entityType, pickEntity(entityType))
   }
 
   private def generateReferenceList(entityType: String, n: Int) = {
-    AttributeReferenceList(pickEntities(entityType, n).map(AttributeReferenceSingle(entityType, _)))
+    AttributeEntityReferenceList(pickEntities(entityType, n).map(AttributeEntityReference(entityType, _)))
   }
 
   def pickEntity(entityType: String) = entities(entityType).toSeq(rand.nextInt(entities(entityType).size))
@@ -149,14 +149,14 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       wn,
-      MethodStoreConfiguration("bar", "baz", "1"), // don't care about method details
-      MethodStoreMethod("bar-config", "baz", "1")) // don't care about method config details
+      MethodRepoConfiguration("bar", "baz", "1"), // don't care about method details
+      MethodRepoMethod("bar-config", "baz", "1")) // don't care about method config details
   }
 
-  def updateParameterSet(params: Map[String, String], nDelete: Int, nModify: Int, nCreate: Int) = {
+  def updateParameterSet(params: Map[String, AttributeString], nDelete: Int, nModify: Int, nCreate: Int) = {
     val (toDelete, toModify) = rand.shuffle(params.keys).take(nDelete + nModify).splitAt(nDelete)
     val unchanged = params.filterNot((toDelete ++ toModify).toSet)
-    val modified = toModify.map(k => (k, generateMethodConfigValue)).toMap
+    val modified = toModify.map(k => (k, AttributeString(generateMethodConfigValue))).toMap
     val created = generateMethodConfigParameters(nCreate)
     unchanged ++ modified ++ created
   }
@@ -172,8 +172,8 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),
       config.workspaceName,
-      config.methodStoreConfig,
-      config.methodStoreMethod
+      config.methodRepoConfig,
+      config.methodRepoMethod
     )
   }
 

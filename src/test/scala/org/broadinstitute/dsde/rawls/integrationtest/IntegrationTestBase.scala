@@ -5,6 +5,7 @@ import java.util.logging.{LogManager, Logger}
 
 import akka.util.Timeout
 import com.orientechnologies.orient.client.remote.OServerAdmin
+import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmClient, RawlsOpenAmConfig, StandardOpenAmDirectives}
@@ -49,6 +50,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     if (admin.existsDatabase()) admin.dropDatabase(dbName)
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
+
+    dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     // TODO replace this once GCS / ACL stuff is figured out
 //    val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsJSON,
