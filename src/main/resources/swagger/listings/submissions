@@ -13,6 +13,20 @@
 			"nickname": "createSubmission",
 			"produces": ["application/json"],
 			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
 				"name": "submission",
 				"description": "Description of a submission.",
 				"required": true,
