@@ -78,7 +78,7 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
       }
     }
 
-  "WorkflowDAO" should "let you dink with Workflows" in withSubmissionData { txn =>
+  "WorkflowDAO" should "let you modify Workflows within a submission" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       val workflow0 = testData.submission1.workflows(0)
       assertResult(Some(workflow0)) {
