@@ -68,6 +68,6 @@ lazy val rawls = project.in(file("."))
   .configs(IntegrationTest)
   .settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
   .settings(
-    testOptions in Test := Seq(Tests.Filter(s => !isIntegrationTest(s))),
+    testOptions in Test ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s)))
   )
