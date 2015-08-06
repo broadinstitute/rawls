@@ -1168,5 +1168,14 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // End ACL-restriction Tests
 
+  it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
+    val dotSample = Entity("sample.with.dots.in.name", "sample", Map("type" -> AttributeString("tumor")), testData.wsName)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, dotSample.toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
+      }
+  }
 
 }

@@ -337,4 +337,15 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       assert(dao.list(testData.workspace.namespace, testData.workspace.name, "Sample", txn).toList.filter(entity => entity == testData.sample1).size == 1)
     }
   }
+
+  it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase { dataSource =>
+    val dottyName = Entity("dotty.name", "Sample", Map.empty, testData.wsName)
+    val dottyType = Entity("dottyType", "Sam.ple", Map.empty, testData.wsName)
+    val dottyAttr = Entity("dottyAttr", "Sample", Map("foo.bar" -> AttributeBoolean(true)), testData.wsName)
+    dataSource inTransaction { txn =>
+      intercept[RawlsException] { dao.save(testData.workspace.namespace, testData.workspace.name, dottyName, txn) }
+      intercept[RawlsException] { dao.save(testData.workspace.namespace, testData.workspace.name, dottyType, txn) }
+      intercept[RawlsException] { dao.save(testData.workspace.namespace, testData.workspace.name, dottyAttr, txn) }
+    }
+  }
 }

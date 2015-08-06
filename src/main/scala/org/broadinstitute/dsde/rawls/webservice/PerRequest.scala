@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
 import org.broadinstitute.dsde.rawls.model.JsonSupport
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
@@ -91,7 +92,11 @@ trait PerRequest extends Actor {
       case e => {
         system.log.error(e, "error processing request: " + r.request.uri)
         import spray.httpx.SprayJsonSupport._
-        r.complete(InternalServerError, new RawlsServerError(e))
+        val code = e match {
+          case e: RawlsExceptionWithStatusCode => e.getCode
+          case _ => InternalServerError
+        }
+        r.complete(code, new RawlsServerError(e))
         Stop
       }
     }

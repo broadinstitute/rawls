@@ -134,9 +134,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         case None =>
           val bucketName = createBucketName(workspaceRequest.name)
           Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
             case Success(_) =>
-              val workspace = Workspace(workspaceRequest.namespace,workspaceRequest.name,bucketName,DateTime.now,userInfo.userId,workspaceRequest.attributes)
+              val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, bucketName, DateTime.now, userInfo.userId, workspaceRequest.attributes)
               workspaceDAO.save(workspace, txn)
               PerRequest.RequestComplete((StatusCodes.Created, workspace))
           }
@@ -182,7 +182,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           Try( gcsDAO.createBucket(userInfo.userId, destWorkspace.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspace}: "+err.getMessage)
             case Success(_) =>
-              val newWorkspace = Workspace(destWorkspace.namespace, destWorkspace.name, bucketName, DateTime.now, userInfo. userId, ws.attributes)
+              val newWorkspace = Workspace(destWorkspace.namespace, destWorkspace.name, bucketName, DateTime.now, userInfo.userId, ws.attributes)
               workspaceDAO.save(newWorkspace, txn)
               entityDAO.cloneAllEntities(ws.namespace, newWorkspace.namespace, ws.name, newWorkspace.name, txn)
               methodConfigurationDAO.list(ws.namespace, ws.name, txn).foreach { methodConfig =>
@@ -277,10 +277,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
             }
             (entityUpdate, trial)
           }
-          val errorMessages = results.collect{
+          val errorMessages = results.collect {
             case (entityUpdate, Failure(regrets)) => s"Could not update ${entityUpdate.entityType} ${entityUpdate.name} : ${regrets.getMessage}"
           }
-          if(errorMessages.isEmpty) {
+          if (errorMessages.isEmpty) {
             RequestComplete(StatusCodes.NoContent)
           } else {
             dataSource.rollbackOnly.set(true)

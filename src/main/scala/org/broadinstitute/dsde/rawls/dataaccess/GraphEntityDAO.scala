@@ -31,14 +31,14 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       .getOrElse(throw new IllegalArgumentException("Cannot clone entity into nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
 
     //map the entities to ((entity type, entity name), vertex)
-    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> createVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
+    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> getOrCreateVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
     entities.foreach(entity => {
       val vertex = entityToVertexMap((entity.entityType, entity.name))
       saveToVertex[Entity](entity, vertex, db, WorkspaceName(newWorkspaceNamespace, newWorkspaceName))
     })
   }
 
-  private def createVertex(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
+  private def getOrCreateVertex(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
     // get the entity, creating if it doesn't already exist
     val entityVertex = getEntityVertex(db, workspaceNamespace, workspaceName, entity.entityType, entity.name).getOrElse({
       val newVertex = addVertex(db, VertexSchema.Entity)
@@ -47,16 +47,21 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       newVertex.setProperty("name", entity.name)
       newVertex.setProperty("entityType", entity.entityType)
 
-      workspace.addEdge(entity.entityType, newVertex)
+      addEdge(workspace, entity.entityType, newVertex)
       newVertex
     })
     entityVertex
   }
 
   def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
+    // check for illegal dot characters
+    validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
+    validateUserDefinedString(entity.name)
+    entity.attributes.keys.foreach(validateUserDefinedString)
+
     val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
       .getOrElse(throw new IllegalArgumentException("Cannot save entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
-    val entityVertex = createVertex(workspace, workspaceNamespace, workspaceName, entity, txn)
+    val entityVertex = getOrCreateVertex(workspace, workspaceNamespace, workspaceName, entity, txn)
     saveToVertex[Entity](entity, entityVertex, db, WorkspaceName(workspaceNamespace, workspaceName))
     entity
   }
