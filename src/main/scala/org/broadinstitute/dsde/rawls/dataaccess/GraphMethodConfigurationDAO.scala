@@ -34,7 +34,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
 
   /** list all method configurations in the workspace */
   override def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = txn withGraph { graph =>
-    workspacePipeline(graph, workspaceNamespace, workspaceName).out(MethodConfigEdgeType).toList map (loadFromVertex[MethodConfigurationShort](_, Option(WorkspaceName(workspaceNamespace, workspaceName))))
+    workspacePipeline(graph, workspaceNamespace, workspaceName).out(methodConfigEdge).toList map (loadFromVertex[MethodConfigurationShort](_, Option(WorkspaceName(workspaceNamespace, workspaceName))))
   }
 
   /** creates or replaces a method configuration */
@@ -46,7 +46,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
     val configVertex = getSinglePipelineResult(methodConfigPipe) match {
       case None =>
         val configVertex = addVertex(graph, VertexSchema.MethodConfig)
-        workspace.addEdge(MethodConfigEdgeType, configVertex)
+        addEdge(workspace, methodConfigEdge, configVertex)
         configVertex
       case Some(configVertex) => configVertex
     }

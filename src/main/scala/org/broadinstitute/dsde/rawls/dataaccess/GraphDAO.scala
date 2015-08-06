@@ -9,8 +9,9 @@ import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
 import org.joda.time.DateTime
+import spray.http.StatusCodes
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -19,7 +20,6 @@ import scala.reflect.ClassTag
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe._
 import scala.reflect.runtime.{universe=>ru}
-
 
 object VertexSchema {
   // model classes
@@ -50,8 +50,7 @@ object VertexSchema {
 }
 
 trait GraphDAO {
-  val MethodConfigEdgeType = "_MethodConfig"
-
+  val methodConfigEdge = "methodConfigEdge"
   val methodRepoMethodEdge: String = "methodRepoMethodEdge"
   val methodRepoConfigEdge: String = "methodRepoConfigEdge"
   val workflowEdge: String = "workflowEdge"
@@ -60,6 +59,17 @@ trait GraphDAO {
 
   implicit def toPipeFunction[A, B](f: A => B) = new PipeFunction[A, B] {
     override def compute(a: A): B = f(a)
+  }
+
+  def validateUserDefinedString(s: String) = {
+    // due to Orient's chained access "feature", we should avoid dots in certain user-defined strings
+    if (s.contains('.')) throw new RawlsExceptionWithStatusCode(message = s"User-defined string $s should not contain dot characters", statusCode = StatusCodes.BadRequest)
+  }
+
+  def addEdge(source: Vertex, label: String, dest: Vertex) = {
+    // fail-safe check to ensure no edge labels have dots
+    if (label.contains('.')) throw new RawlsException(message = s"Edge label $label should not contain dot characters")
+    source.addEdge(label, dest)
   }
 
   def addVertex(graph: Graph, className: String): Vertex = {
@@ -158,7 +168,7 @@ trait GraphDAO {
   }
 
   def methodConfigPipeline(db: Graph, workspaceNamespace: String, workspaceName: String, methodConfigNamespace: String, methodConfigName: String) = {
-    workspacePipeline(db, workspaceNamespace, workspaceName).out(MethodConfigEdgeType).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
+    workspacePipeline(db, workspaceNamespace, workspaceName).out(methodConfigEdge).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
   }
 
   // convenience getters
@@ -263,7 +273,7 @@ trait GraphDAO {
     objs.map { obj =>
       val objVertex = existingObjVertexesById.getOrElse(idFxn(obj), {
         val newVertex = addVertex(graph, VertexSchema.vertexClassOf[T])
-        vertex.addEdge(edgeLabel, newVertex)
+        addEdge(vertex, edgeLabel, newVertex)
         newVertex
       })
 
@@ -276,11 +286,11 @@ trait GraphDAO {
     vertex.getVertices(Direction.OUT, propName).headOption.foreach(removeMapVertex)
 
     val mapVertex = addVertex(graph, VertexSchema.Map)
-    vertex.addEdge(propName, mapVertex)
+    addEdge(vertex, propName, mapVertex)
 
     map.foreach { case (key, attribute) =>
       attribute match {
-        case v: AttributeValue => mapVertex.setProperty(key, AttributeConversions.attributeToProperty(v))
+        case v: AttributeValue => serializeValue(mapVertex, key, v)
         case ref: AttributeEntityReference => serializeReference(mapVertex, key, ref, graph, workspaceName)
         case AttributeValueList(values) => serializeAttributeMap(mapVertex, key, values.zipWithIndex.map{case (value, index) => index.toString -> value}.toMap, graph, workspaceName)
         case AttributeEntityReferenceList(references) => serializeAttributeMap(mapVertex, key, references.zipWithIndex.map{case (ref, index) => index.toString -> ref}.toMap, graph, workspaceName)
@@ -296,11 +306,15 @@ trait GraphDAO {
     mapVertex.remove()
   }
 
+  private def serializeValue(vertex: Vertex, key: String, value: AttributeValue): Unit = {
+    vertex.setProperty(key, AttributeConversions.attributeToProperty(value))
+  }
+
   private def serializeReference(vertex: Vertex, key: String, ref: AttributeEntityReference, graph: Graph, workspaceName: WorkspaceName): Unit = {
     val entityVertex = getSinglePipelineResult(entityPipeline(graph, workspaceName.namespace, workspaceName.name, ref.entityType, ref.entityName)).getOrElse {
       throw new RawlsException(s"${workspaceName.namespace}/${workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
     }
-    vertex.addEdge(key, entityVertex)
+    addEdge(vertex, key, entityVertex)
   }
 
   /**

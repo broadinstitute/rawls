@@ -13,7 +13,7 @@ import scala.util.Try
  * @author tsharpe
  */
 
-class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
+class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   val workspace = testData.workspace
   val workflowDAO = new GraphWorkflowDAO
   val dao: SubmissionDAO = new GraphSubmissionDAO(workflowDAO)
@@ -26,7 +26,7 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
     }
   }
 
-    "SubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
+    "GraphSubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       assertResult(Some(testData.submission1)) {
         dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
@@ -78,7 +78,7 @@ class SubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture 
       }
     }
 
-  "WorkflowDAO" should "let you modify Workflows within a submission" in withSubmissionData { txn =>
+  "GraphWorkflowDAO" should "let you modify Workflows within a submission" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
       val workflow0 = testData.submission1.workflows(0)
       assertResult(Some(workflow0)) {

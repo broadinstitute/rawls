@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -73,6 +74,23 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     dataSource.inTransaction { txn =>
       assert {
         workspaceDAO.list(txn).contains(testData.workspace)
+      }
+    }
+  }
+
+  it should "fail when attempting to put dots in attribute keys" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val dottyWorkspace = Workspace(
+        namespace = testData.wsName.namespace,
+        name = "badness",
+        bucketName = "badBucket",
+        createdDate = DateTime.now(),
+        createdBy = "Mitt Romney",
+        attributes = Map("dots.dots.more.dots" -> AttributeString("foo"))
+      )
+
+      intercept[RawlsException] {
+        workspaceDAO.save(dottyWorkspace, txn)
       }
     }
   }
