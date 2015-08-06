@@ -413,6 +413,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           startingAttributes.get(attributeListName) match {
             case Some(AttributeEmptyList) =>
               newMember match {
+                case AttributeNull =>
+                  startingAttributes
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
@@ -421,6 +423,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
             case Some(l: AttributeValueList) =>
               newMember match {
+                case AttributeNull =>
+                  startingAttributes
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(l.list :+ newMember))
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
@@ -428,6 +432,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
             case Some(l: AttributeEntityReferenceList) =>
               newMember match {
+                case AttributeNull =>
+                  startingAttributes
                 case newMember: AttributeEntityReference =>
                   startingAttributes + (attributeListName -> AttributeEntityReferenceList(l.list :+ newMember))
                 case _ => throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
@@ -435,6 +441,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
             case None =>
               newMember match {
+                case AttributeNull =>
+                  startingAttributes + (attributeListName -> AttributeEmptyList)
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
