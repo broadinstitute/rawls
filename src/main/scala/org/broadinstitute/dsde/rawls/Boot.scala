@@ -50,6 +50,8 @@ object Boot extends App {
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
       new GraphWorkflowDAO(),
+      new GraphEntityDAO(),
+      new GraphMethodConfigurationDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 

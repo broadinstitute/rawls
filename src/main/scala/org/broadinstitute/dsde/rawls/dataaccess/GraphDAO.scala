@@ -228,6 +228,7 @@ trait GraphDAO {
           val workspaceVertex = getSinglePipelineResult(workspacePipeline(graph, workspaceName.namespace, workspaceName.name)).get
           new GremlinPipeline(vertex).out(workflowEdge).linkIn(workflowEdge, workspaceVertex).iterate()
         case Some(x: WorkflowFailure) => serializeDomainObjects(vertex, seq.asInstanceOf[Seq[WorkflowFailure]], workflowFailureEdge, (wf: WorkflowFailure) => (wf.entityType, wf.entityName), graph, workspaceName)
+        case Some(a: Attribute) => serializeSeq(graph, workspaceName, vertex, key, seq.asInstanceOf[Seq[Attribute]])
         case x => throw new RawlsException(s"Unexpected object of type [${x.getClass}] in Seq for attribute [${key}]: [${x}]")
       }
       case (key, Some(mrConfig: MethodRepoConfiguration)) => serializeDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, thereShouldOnlyBeOne, graph, workspaceName)
@@ -292,11 +293,15 @@ trait GraphDAO {
       attribute match {
         case v: AttributeValue => serializeValue(mapVertex, key, v)
         case ref: AttributeEntityReference => serializeReference(mapVertex, key, ref, graph, workspaceName)
-        case AttributeValueList(values) => serializeAttributeMap(mapVertex, key, values.zipWithIndex.map{case (value, index) => index.toString -> value}.toMap, graph, workspaceName)
-        case AttributeEntityReferenceList(references) => serializeAttributeMap(mapVertex, key, references.zipWithIndex.map{case (ref, index) => index.toString -> ref}.toMap, graph, workspaceName)
+        case AttributeValueList(values) => serializeSeq(graph, workspaceName, mapVertex, key, values)
+        case AttributeEntityReferenceList(references) => serializeSeq(graph, workspaceName, mapVertex, key, references)
         case AttributeEmptyList => serializeAttributeMap(mapVertex, key, Map.empty, graph, workspaceName)
       }
     }
+  }
+
+  def serializeSeq(graph: Graph, workspaceName: WorkspaceName, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
+    serializeAttributeMap(vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap, graph, workspaceName)
   }
 
   private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
@@ -364,6 +369,8 @@ trait GraphDAO {
         case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge, workspaceName).headOption.getOrElse {
           throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}")
         }
+
+        case attributeSeq if attributeSeq <:< typeOf[Seq[Attribute]] => vertex.getVertices(Direction.OUT, paramName).headOption.map(deserializeSeq).getOrElse(Seq.empty)
 
         case optionSymbol if optionSymbol <:< typeOf[Option[_]] => vertexProperty
 

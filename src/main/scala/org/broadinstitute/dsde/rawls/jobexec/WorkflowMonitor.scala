@@ -2,18 +2,21 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.{ActorRef, Props, ReceiveTimeout, Actor}
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, ExecutionServiceDAO, WorkflowDAO, DataSource}
-import org.broadinstitute.dsde.rawls.model.{WorkflowStatuses, Workflow}
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Failed, Succeeded}
+import org.broadinstitute.dsde.rawls.model._
 import spray.http.HttpCookie
 
 import scala.concurrent.duration.Duration
+import scala.util.{Success, Failure, Try}
 
 /**
  * Created by dvoet on 6/29/15.
  */
 object WorkflowMonitor {
-  def props(pollInterval: Duration, executionServiceDAO: ExecutionServiceDAO, workflowDAO: WorkflowDAO, datasource: DataSource, authCookie: HttpCookie)(parent: ActorRef, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, workflow, executionServiceDAO, workflowDAO, datasource, authCookie))
+  def props(pollInterval: Duration, executionServiceDAO: ExecutionServiceDAO, workflowDAO: WorkflowDAO, methodConfigurationDAO: MethodConfigurationDAO, datasource: DataSource, authCookie: HttpCookie)(parent: ActorRef, submission: Submission, workflow: Workflow): Props = {
+    Props(new WorkflowMonitor(parent, pollInterval, submission, workflow, executionServiceDAO, workflowDAO, methodConfigurationDAO, datasource, authCookie))
   }
 }
 
@@ -28,7 +31,16 @@ object WorkflowMonitor {
  * @param datasource
  * @param authCookie auth cookie required by executionServiceDAO
  */
-class WorkflowMonitor(parent: ActorRef, pollInterval: Duration, workflow: Workflow, executionServiceDAO: ExecutionServiceDAO, workflowDAO: WorkflowDAO, datasource: DataSource, authCookie: HttpCookie) extends Actor {
+class WorkflowMonitor(parent: ActorRef,
+                      pollInterval: Duration,
+                      submission: Submission,
+                      workflow: Workflow,
+                      executionServiceDAO: ExecutionServiceDAO,
+                      workflowDAO: WorkflowDAO,
+                      methodConfigurationDAO: MethodConfigurationDAO,
+                      datasource: DataSource,
+                      authCookie: HttpCookie) extends Actor {
+
   import context._
 
   setReceiveTimeout(pollInterval)
@@ -46,9 +58,13 @@ class WorkflowMonitor(parent: ActorRef, pollInterval: Duration, workflow: Workfl
     val status = WorkflowStatuses.withName(statusResponse.status)
 
     if (refreshedWorkflow.status != status) {
-      val updatedWorkflow: Workflow = refreshedWorkflow.copy(status = status)
-      onWorkflowDone(updatedWorkflow, txn)
-      parent ! SubmissionMonitor.WorkflowStatusChange(updatedWorkflow)
+      val updates = status match {
+        case Succeeded => onWorkflowSuccess(workflow, status, txn)
+        case Failed => WorkflowStatusChange(refreshedWorkflow.copy(status = status, messages = refreshedWorkflow.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None)
+        case _ => WorkflowStatusChange(refreshedWorkflow.copy(status = status), None)
+      }
+
+      parent ! updates
     }
 
     if (status.isDone) {
@@ -56,7 +72,32 @@ class WorkflowMonitor(parent: ActorRef, pollInterval: Duration, workflow: Workfl
     }
   }
 
-  def onWorkflowDone(updateWorkflow: Workflow, txn: RawlsTransaction): Unit = {
-    // call any code to update entity model here
+  def withMethodConfig(txn: RawlsTransaction)(op: MethodConfiguration => WorkflowStatusChange): WorkflowStatusChange = {
+    methodConfigurationDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) match {
+      case None => WorkflowStatusChange(workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(s"Could not find method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}, was it deleted?")), None)
+      case Some(methodConfig) => op(methodConfig)
+    }
+  }
+
+  def onWorkflowSuccess(workflow: Workflow, completionStatus: WorkflowStatuses.WorkflowStatus, txn: RawlsTransaction): WorkflowStatusChange = {
+    withMethodConfig(txn) { methodConfig =>
+      val outputs = executionServiceDAO.outputs(workflow.workflowId, authCookie).outputs
+
+      val attributes = methodConfig.outputs.map { case (outputName, attributeName) =>
+        Try {
+          attributeName.value -> outputs.getOrElse(outputName, {
+            throw new RawlsException(s"output named ${outputName} does not exist")
+          })
+        }
+      }
+
+      if (attributes.forall(_.isSuccess)) {
+        WorkflowStatusChange(workflow.copy(status = completionStatus), Option(attributes.map(_.get).toMap))
+
+      } else {
+        val errors = attributes.collect { case Failure(t) => AttributeString(t.getMessage) }
+        WorkflowStatusChange(workflow.copy(messages = errors.toSeq, status = WorkflowStatuses.Failed), None)
+      }
+    }
   }
 }

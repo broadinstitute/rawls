@@ -63,6 +63,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(executionServiceServer),
       new GraphWorkflowDAO(),
+      new GraphEntityDAO(),
+      new GraphMethodConfigurationDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 

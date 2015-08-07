@@ -41,6 +41,8 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       new GraphWorkflowDAO(),
+      new GraphEntityDAO(),
+      new GraphMethodConfigurationDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-gauth-submission-supervisor")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
