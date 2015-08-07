@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.FSM.Shutdown
 import akka.actor._
 import akka.testkit.{TestActorRef, TestKit}
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, GraphWorkflowDAO, GraphSubmissionDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.model.{Workflow, WorkflowStatuses, ExecutionServiceStatus}
+import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{Matchers, FlatSpecLike}
 import spray.http.HttpCookie
 import scala.concurrent.duration._
@@ -24,7 +24,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
     expectMsgClass(10 seconds, classOf[Terminated])
@@ -34,11 +34,11 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
     }
 
     awaitCond({
@@ -48,18 +48,44 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }, 10 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
     }
 
     expectMsgClass(10 seconds, classOf[Terminated])
 
-    assertResult(true) { dataSource inTransaction { txn =>
-      submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
-    }}
+    dataSource inTransaction { txn =>
+      assertResult(true) {
+        submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
+      }
+      testData.submission1.workflows.foreach { workflow =>
+        assertResult(Some(AttributeString(workflow.workflowId))) {
+          entityDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).get.attributes.get("test")
+        }
+      }
+    }
+  }
+
+  it should "save workflows with error messages" in withDefaultTestDatabase { dataSource =>
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    watch(monitorRef)
+
+    testData.submission1.workflows.foreach { workflow =>
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString("message"))), None), testActor)
+    }
+
+    expectMsgClass(10 seconds, classOf[Terminated])
+
+    dataSource inTransaction { txn =>
+      submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
+        assertResult(WorkflowStatuses.Failed) { workflow.status }
+        assertResult(Seq(AttributeString("message"))) { workflow.messages }
+      }
+      submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Failed)
+    }
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     // set each workflow to one of the terminal statuses, there should be 3 of each
@@ -68,14 +94,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
 
     testData.submission1.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status)), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status), None), testActor)
     }
   }
 
 }
 
 object TestActor {
-  def props()(parent: ActorRef, workflow: Workflow) = {
+  def props()(parent: ActorRef, submission: Submission, workflow: Workflow) = {
     Props(new TestActor(parent))
   }
 }

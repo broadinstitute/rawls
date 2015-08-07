@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{WorkflowDAO, ExecutionServiceDAO, DataSource, SubmissionDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.duration.Duration
+import scala.util.{Success, Try, Failure}
 
 /**
  * Created by dvoet on 6/26/15.
@@ -16,15 +18,16 @@ object SubmissionMonitor {
   def props(submission: Submission,
             submissionDAO: SubmissionDAO,
             workflowDAO: WorkflowDAO,
+            entityDAO: EntityDAO,
             datasource: DataSource,
             workflowPollInterval: Duration,
             submissionPollInterval: Duration,
-            workflowMonitorProps: (ActorRef, Workflow) => Props): Props = {
-    Props(new SubmissionMonitor(submission, submissionDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
+            workflowMonitorProps: (ActorRef, Submission, Workflow) => Props): Props = {
+    Props(new SubmissionMonitor(submission, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
   }
 
   sealed trait SubmissionMonitorMessage
-  case class WorkflowStatusChange(workflow: Workflow) extends SubmissionMonitorMessage
+  case class WorkflowStatusChange(workflow: Workflow, workflowOutputs: Option[Map[String, Attribute]]) extends SubmissionMonitorMessage
 }
 
 /**
@@ -37,6 +40,7 @@ object SubmissionMonitor {
  * @param submission to monitor
  * @param submissionDAO
  * @param workflowDAO
+ * @param entityDAO
  * @param datasource
  * @param workflowPollInterval time between polls of execution service for individual workflow status
  * @param submissionPollInterval time between polls of db for all workflow statuses within submission while workflows
@@ -47,19 +51,20 @@ object SubmissionMonitor {
 class SubmissionMonitor(submission: Submission,
                         submissionDAO: SubmissionDAO,
                         workflowDAO: WorkflowDAO,
+                        entityDAO: EntityDAO,
                         datasource: DataSource,
                         workflowPollInterval: Duration,
                         submissionPollInterval: Duration,
-                        workflowMonitorProps: (ActorRef, Workflow) => Props) extends Actor {
+                        workflowMonitorProps: (ActorRef, Submission, Workflow) => Props) extends Actor {
   import context._
 
   setReceiveTimeout(submissionPollInterval)
   startWorkflowMonitorActors()
 
   override def receive = {
-    case WorkflowStatusChange(workflow) =>
+    case WorkflowStatusChange(workflow, workflowOutputs) =>
       system.log.debug("workflow state change, submission {}, workflow {} {}", submission.submissionId, workflow.workflowId, workflow.status)
-      handleStatusChange(workflow)
+      handleStatusChange(workflow, workflowOutputs)
     case ReceiveTimeout =>
       system.log.debug("submission monitor timeout, submission {}", submission.submissionId)
       checkSubmissionStatus()
@@ -77,7 +82,7 @@ class SubmissionMonitor(submission: Submission,
 
     if (!workflow.status.isDone) {
       // the workflow is not done but the monitor has terminated
-      handleStatusChange(workflow.copy(status = WorkflowStatuses.Unknown))
+      handleStatusChange(workflow.copy(status = WorkflowStatuses.Unknown), None)
     }
   }
 
@@ -86,14 +91,29 @@ class SubmissionMonitor(submission: Submission,
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
-    watch(actorOf(workflowMonitorProps(self, workflow), workflow.workflowId))
+    watch(actorOf(workflowMonitorProps(self, submission, workflow), workflow.workflowId))
   }
 
-  private def handleStatusChange(workflow: Workflow): Unit = {
-    datasource inTransaction { txn =>
-      workflowDAO.update(workflow.workspaceName, workflow, txn)
+  private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
+    val savedWorkflow = datasource inTransaction { txn =>
+      val saveOutputs = Try {
+        workflowOutputsOption foreach { workflowOutputs =>
+          val entity = entityDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
+            throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
+          }
+          entityDAO.save(submission.workspaceName.namespace, submission.workspaceName.name, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
+        }
+      }
+
+      val workflowToSave = saveOutputs match {
+        case Success(_) => workflow
+        case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
+      }
+
+      workflowDAO.update(workflowToSave.workspaceName, workflowToSave, txn)
     }
-    if (workflow.status.isDone) {
+
+    if (savedWorkflow.status.isDone) {
       checkSubmissionStatus()
     }
   }

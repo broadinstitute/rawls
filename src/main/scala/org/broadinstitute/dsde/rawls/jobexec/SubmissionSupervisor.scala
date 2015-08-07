@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Props, OneForOneStrategy, Actor}
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, WorkflowDAO, ExecutionServiceDAO, SubmissionDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.Submission
 import spray.http.HttpCookie
@@ -20,11 +20,13 @@ object SubmissionSupervisor {
   def props(submissionDAO: SubmissionDAO,
             executionServiceDAO: ExecutionServiceDAO,
             workflowDAO: WorkflowDAO,
+            entityDAO: EntityDAO,
+            methodConfigurationDAO: MethodConfigurationDAO,
             datasource: DataSource,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
 
-    Props(new SubmissionSupervisor(submissionDAO, executionServiceDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval))
+    Props(new SubmissionSupervisor(submissionDAO, executionServiceDAO, workflowDAO, entityDAO, methodConfigurationDAO, datasource, workflowPollInterval, submissionPollInterval))
   }
 }
 
@@ -42,6 +44,8 @@ object SubmissionSupervisor {
 class SubmissionSupervisor(submissionDAO: SubmissionDAO,
                            executionServiceDAO: ExecutionServiceDAO,
                            workflowDAO: WorkflowDAO,
+                           entityDAO: EntityDAO,
+                           methodConfigurationDAO: MethodConfigurationDAO,
                            datasource: DataSource,
                            workflowPollInterval: Duration,
                            submissionPollInterval: Duration) extends Actor {
@@ -52,8 +56,8 @@ class SubmissionSupervisor(submissionDAO: SubmissionDAO,
   }
 
   private def startSubmissionMonitor(submission: Submission, authCookie: HttpCookie): Unit = {
-    actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, datasource, authCookie)), submission.submissionId)
+    actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval,
+      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, methodConfigurationDAO, datasource, authCookie)), submission.submissionId)
   }
 
   override val supervisorStrategy =

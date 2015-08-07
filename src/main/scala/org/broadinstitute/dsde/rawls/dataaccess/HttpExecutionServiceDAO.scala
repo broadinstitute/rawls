@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.model.ExecutionServiceStatus
+import org.broadinstitute.dsde.rawls.model.{ExecutionServiceOutputs, ExecutionServiceStatus}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -28,6 +28,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     val url = executionServiceURL + s"/workflow/${id}/status"
     import system.dispatcher
     val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
+    Await.result(pipeline(Get(url)),Duration.Inf)
+  }
+
+  override def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs = {
+    val url = executionServiceURL + s"/workflow/${id}/outputs"
+    import system.dispatcher
+    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceOutputs]
     Await.result(pipeline(Get(url)),Duration.Inf)
   }
 }

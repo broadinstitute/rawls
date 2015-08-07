@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.jobexec
 import akka.actor.{Terminated, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActors, TestKit, TestActorRef}
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, GraphWorkflowDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{GraphMethodConfigurationDAO, ExecutionServiceDAO, GraphWorkflowDAO}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
@@ -27,7 +28,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
 
   "WorkflowMonitor" should "throw exception for non-existent workflow" in withDefaultTestDatabase { dataSource =>
     val workflow = Workflow(WorkspaceName("wns", "wn"), "id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"))
-    val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, workflow))
+    val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1, workflow))
     intercept[RawlsException] {
       monitorRef.underlyingActor.checkWorkflowStatus()
     }
@@ -35,22 +36,26 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   it should "do nothing for unchanged state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(testData.submission1.workflows.head.status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(testData.submission1.workflows.head.status.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1, testData.submission1.workflows.head))
     expectNoMsg(1 seconds)
     system.stop(monitorRef)
   }
 
   it should "emit update message for changed state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
-    expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Running)))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1, testData.submission1.workflows.head))
+    expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Running), None))
     system.stop(monitorRef)
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"terminate when ${status}" in withDefaultTestDatabase { dataSource =>
-      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.workflows.head))
+      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1, testData.submission1.workflows.head))
       watch(monitorRef)
-      expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status)))
+      status match {
+        case WorkflowStatuses.Failed => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status, messages = testData.submission1.workflows.head.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None))
+        case WorkflowStatuses.Unknown => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
+        case WorkflowStatuses.Succeeded => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), Some(Map("output" -> AttributeString("foo")))))
+      }
       fishForMessage(1 second) {
         case m: Terminated => true
         case x => println(x); false
@@ -59,9 +64,42 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
     }
   }
 
+  it should "fail a workflow if the method config can't be found" in withDefaultTestDatabase { dataSource =>
+    val status = WorkflowStatuses.Succeeded
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission1.copy(methodConfigurationName = "DNE"), testData.submission1.workflows.head))
+    watch(monitorRef)
+    expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString(s"Could not find method config ${testData.submission1.methodConfigurationNamespace}/DNE, was it deleted?"))), None))
+    fishForMessage(1 second) {
+      case m: Terminated => true
+      case x => println(x); false
+    }
+    system.stop(monitorRef)
+  }
+
+  it should "fail a workflow if outputs can't be found" in withDefaultTestDatabase { dataSource =>
+    val status = WorkflowStatuses.Succeeded
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, new WorkflowTestExecutionServiceDAO(status.toString), workflowDAO, new GraphMethodConfigurationDAO(), dataSource, HttpCookie("iPlanetDirectoryPro", "test_token"))(testActor, testData.submission2, testData.submission2.workflows.head))
+    watch(monitorRef)
+    fishForMessage(1 second) {
+      case m: SubmissionMonitor.WorkflowStatusChange =>
+        assertResult(WorkflowStatuses.Failed) { m.workflow.status }
+        assertResult(Set(AttributeString("output named out1 does not exist"), AttributeString("output named out2 does not exist"))) { m.workflow.messages.toSet }
+        true
+      case _ => false
+    }
+    fishForMessage(1 second) {
+      case m: Terminated => true
+      case x => println(x); false
+    }
+    system.stop(monitorRef)
+  }
+
 }
 
 class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionServiceDAO {
   override def submitWorkflow(wdl: String, inputs: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus("test_id", workflowStatus)
+
+  override def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
+
   override def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
 }

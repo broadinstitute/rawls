@@ -48,6 +48,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         new GraphSubmissionDAO(new GraphWorkflowDAO()),
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
         new GraphWorkflowDAO(),
+        new GraphEntityDAO(),
+        new GraphMethodConfigurationDAO(),
         dataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_

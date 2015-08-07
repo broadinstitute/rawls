@@ -106,15 +106,15 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       "ns",
       "testConfig1",
       "Sample",
-      Map("i1" -> AttributeString("input expr")),
-      Map("o1" -> AttributeString("output expr")),
-      Map("p1" -> AttributeString("prereq expr")),
+      Map("p1" -> AttributeString("prereq")),
+      Map("i1" -> AttributeString("input")),
+      Map("o1" -> AttributeString("output")),
       wsName,
       MethodRepoConfiguration("ns", "meth1", "1"),
       MethodRepoMethod("ns-config", "meth1", "1")
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out" -> AttributeString("bar")), wsName, MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(wsName.namespace, "method-a", "1"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), wsName, MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(wsName.namespace, "method-a", "1"))
     val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), wsName, MethodRepoConfiguration("ns", "meth1", "1"), MethodRepoMethod("ns-config", "meth1", "1"))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.type")), outputs=Map.empty, wsName, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
@@ -135,11 +135,11 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
-    val submission1 = Submission("submission1",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(indiv1.entityType, indiv1.name),
+    val submission1 = Submission("submission1",testDate,workspace.toWorkspaceName,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
       Seq(Workflow(workspace.toWorkspaceName,"workflow1",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,"workflow2",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
         Workflow(workspace.toWorkspaceName,"workflow3",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-    val submission2 = Submission("submission2",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(indiv1.entityType, indiv1.name),
+    val submission2 = Submission("submission2",testDate,workspace.toWorkspaceName,methodConfig2.namespace,methodConfig2.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
       Seq(Workflow(workspace.toWorkspaceName,"workflow4",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,"workflow5",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
         Workflow(workspace.toWorkspaceName,"workflow6",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
@@ -167,6 +167,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       entityDAO.save(workspace.namespace, workspace.name, indiv1, txn)
 
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig, txn)
+      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig2, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigValid, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigUnparseable, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigNotAllSamples, txn)

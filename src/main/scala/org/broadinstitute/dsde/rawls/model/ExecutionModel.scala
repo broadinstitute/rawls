@@ -28,13 +28,19 @@ case class ExecutionServiceStatus(
   status: String
 )
 
+case class ExecutionServiceOutputs(
+  id: String,
+  outputs: Map[String, Attribute]
+)
+
 // Status of a successfully started workflow
 case class Workflow(
   workspaceName: WorkspaceName,
   workflowId: String,
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  workflowEntity: AttributeEntityReference
+  workflowEntity: AttributeEntityReference,
+  messages: Seq[AttributeString] = Seq.empty
 )
 
 // Encapsulating errors for workflows that failed to start
@@ -42,7 +48,7 @@ case class WorkflowFailure(
   workspaceName: WorkspaceName,
   entityName: String,
   entityType: String,
-  errors: Seq[String]
+  errors: Seq[AttributeString]
 )
 
 // Status of a submission
@@ -82,7 +88,9 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
 
-  implicit val WorkflowFormat = jsonFormat5(Workflow)
+  implicit val ExecutionServiceOutputsFormat = jsonFormat2(ExecutionServiceOutputs)
+
+  implicit val WorkflowFormat = jsonFormat6(Workflow)
 
   implicit val WorkflowFailureFormat = jsonFormat4(WorkflowFailure)
 
