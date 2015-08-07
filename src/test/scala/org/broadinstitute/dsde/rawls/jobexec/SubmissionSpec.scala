@@ -59,6 +59,23 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
+  def withSubmissionTestWorkspaceService(testCode: WorkspaceService => Any): Unit = {
+    withCustomTestDatabase(new SubmissionTestData) { dataSource =>
+      val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+        new GraphSubmissionDAO(new GraphWorkflowDAO()),
+        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+        new GraphWorkflowDAO(),
+        new GraphEntityDAO(),
+        new GraphMethodConfigurationDAO(),
+        dataSource
+      ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
+      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
+      lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
+      testCode(workspaceService)
+      submissionSupervisor ! PoisonPill
+    }
+  }
+
   "Submission requests" should "400 when given an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Individual", "indiv1", Some("this.is."))
     val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, String)]]
@@ -115,8 +132,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert( newSubmission.workflows.size == 3 )
   }
 
-  //TODO: re-enable when empty sample sets are serialized out of Orient correctly
-  /*"Submission requests"*/ ignore should "return a successful Submission when given an entity expression that evaluates to an empty set of entites" in withWorkspaceService { workspaceService =>
+  "Submission requests" should "return a successful Submission when given an entity expression that evaluates to an empty set of entites" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset_empty", Some("this.samples"))
     val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
     val (status, data) = rqComplete.response
@@ -155,5 +171,69 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     assert( newSubmission.notstarted.size == 1 )
     assert( newSubmission.workflows.size == 2 )
+  }
+
+  "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345")
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+    assertResult(StatusCodes.NotFound) {
+      status
+    }
+  }
+
+  it should "404 if the submission doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "12345")
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+    assertResult(StatusCodes.NotFound) {
+      status
+    }
+  }
+
+  it should "500 if Cromwell can't find the workflow" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subMissingWorkflow")
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+    assertResult(StatusCodes.InternalServerError) {
+      status
+    }
+  }
+
+  it should "500 if Cromwell says the workflow is malformed" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subMalformedWorkflow")
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+    assertResult(StatusCodes.InternalServerError) {
+      status
+    }
+  }
+
+  it should "204 No Content for a valid submission with a single workflow" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subGoodWorkflow")
+    val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
+    assertResult(StatusCodes.NoContent) {
+      status
+    }
+  }
+
+  it should "204 No Content for a valid submission with a workflow that's already terminated" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subTerminalWorkflow")
+    val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
+    assertResult(StatusCodes.NoContent) {
+      status
+    }
+  }
+
+  it should "500 if Cromwell says one workflow in a multi-workflow submission is missing" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subOneMissingWorkflow")
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+    assertResult(StatusCodes.InternalServerError) {
+      status
+    }
+  }
+
+  it should "204 No Content for a valid submission with multiple workflows" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subTwoGoodWorkflows")
+    val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
+    assertResult(StatusCodes.NoContent) {
+      status
+    }
   }
 }

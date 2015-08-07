@@ -189,6 +189,56 @@ class RemoteServicesMockServer(port:Int) {
 }""")
           .withStatusCode(StatusCodes.Created.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/workflow/this_workflow_exists")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "this_workflow_exists",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/workflow/already_terminal_workflow")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "this_workflow_also_exists",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.Forbidden.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/workflow/nonexistent_workflow")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withStatusCode(StatusCodes.NotFound.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("DELETE")
+        .withPath("/workflow/malformed_workflow")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withStatusCode(StatusCodes.NotFound.intValue)
+      )
   }
 
   def stopServer = mockServer.stop()

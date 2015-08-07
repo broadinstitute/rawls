@@ -25,6 +25,7 @@ import spray.http.Uri
 import spray.http.HttpHeaders.Location
 import spray.http.{StatusCodes, HttpCookie}
 import spray.httpx.SprayJsonSupport._
+import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 
 import scala.util.{Failure, Success, Try}
@@ -69,6 +70,7 @@ object WorkspaceService {
 
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
+  case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
@@ -115,6 +117,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
+    case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
   }
 
   def registerUser(callbackPath: String): PerRequestMessage = {
@@ -753,6 +756,37 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         requireAccess(GCSAccessLevel.Read, workspace, txn) {
           withSubmission(workspace, submissionId, txn) { submission =>
             RequestComplete(submission)
+          }
+        }
+      }
+    }
+  }
+
+  def abortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceName, txn) { workspace =>
+        requireAccess(GCSAccessLevel.Write, workspace, txn) {
+          withSubmission(workspace, submissionId, txn) { submission =>
+            val aborts = submission.workflows.map( wf =>
+              Try(executionServiceDAO.abort(wf.workflowId, userInfo.authCookie)) match {
+                case Success(_) => Success(wf.workflowId)
+                //NOTE: Cromwell returns 403 Forbidden if you try to abort a workflow that's already in a terminal
+                //status. This is fine for our purposes, so we turn it into a Success.
+                case Failure(ure:UnsuccessfulResponseException) if ure.response.status == StatusCodes.Forbidden => Success(wf.workflowId)
+                case Failure(regret) => Failure(regret)
+              }
+            )
+
+            if (aborts.count(_.isFailure) == 0) {
+              RequestComplete(StatusCodes.NoContent)
+            } else {
+              //Not entirely sure what to do with bad responses; am aggregating them under a 500 for now.
+              //Possible responses:
+              //400 - malformed workflow ID (how'd we end up with that in our DB?)
+              //404 - unknown workflow ID (uh oh)
+              //500 - cromwell ISE
+              RequestComplete(StatusCodes.InternalServerError, aborts.collect({case Failure(regret) => regret.getMessage}).toJson.toString )
+            }
           }
         }
       }

@@ -85,15 +85,15 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submissionTerminateTest, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
-    // set each workflow to one of the terminal statuses, there should be 3 of each
+    // set each workflow to one of the terminal statuses, there should be 4 of each
     assertResult(WorkflowStatuses.terminalStatuses.size) {
-      testData.submission1.workflows.size
+      testData.submissionTerminateTest.workflows.size
     }
 
-    testData.submission1.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
+    testData.submissionTerminateTest.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status), None), testActor)
     }
   }

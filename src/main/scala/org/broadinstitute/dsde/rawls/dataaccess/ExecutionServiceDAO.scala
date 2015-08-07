@@ -10,4 +10,5 @@ trait ExecutionServiceDAO {
   def submitWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceStatus
   def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus
   def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs
+  def abort(id: String, authCookie: HttpCookie): ExecutionServiceStatus
 }

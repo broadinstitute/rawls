@@ -54,6 +54,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
       status match {
         case WorkflowStatuses.Failed => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status, messages = testData.submission1.workflows.head.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None))
         case WorkflowStatuses.Unknown => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
+        case WorkflowStatuses.Aborted => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
         case WorkflowStatuses.Succeeded => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), Some(Map("output" -> AttributeString("foo")))))
       }
       fishForMessage(1 second) {
@@ -102,4 +103,5 @@ class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionS
   override def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
 
   override def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
+  override def abort(id: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
 }

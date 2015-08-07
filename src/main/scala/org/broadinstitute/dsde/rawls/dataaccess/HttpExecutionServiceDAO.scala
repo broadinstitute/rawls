@@ -35,6 +35,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     val url = executionServiceURL + s"/workflow/${id}/outputs"
     import system.dispatcher
     val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceOutputs]
-    Await.result(pipeline(Get(url)),Duration.Inf)
+    Await.result(pipeline(Get(url)), Duration.Inf)
+  }
+
+  override def abort(id: String, authCookie: HttpCookie): ExecutionServiceStatus = {
+    val url = executionServiceURL + s"/workflow/${id}"
+    import system.dispatcher
+    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
+    Await.result(pipeline(Delete(url)),Duration.Inf)
   }
 }
