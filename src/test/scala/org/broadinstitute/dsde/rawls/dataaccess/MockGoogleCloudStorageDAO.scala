@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{GCSAccessLevel, BucketAccessControlJsonSupport}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceName, GCSAccessLevel, BucketAccessControlJsonSupport}
 import org.broadinstitute.dsde.rawls.mock.MockACLs
 import BucketAccessControlJsonSupport._
 import spray.json._
@@ -35,4 +35,11 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
   }
 
   override def putACL(userId: String, bucketName: String, acl: String): Unit = {}
+
+  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): String = {
+    return ""
+  }
+
+  override def setGroupACL(userId: String, accessLevel: String, createRequest: String): Unit = {}
+
 }

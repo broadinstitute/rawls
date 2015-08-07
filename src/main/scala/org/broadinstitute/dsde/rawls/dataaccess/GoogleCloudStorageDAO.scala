@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
+
 trait GoogleCloudStorageDAO {
   def getOurRedirectURI(callbackPath: String): String
 
@@ -12,4 +14,9 @@ trait GoogleCloudStorageDAO {
   def getACL(userId: String, bucketName: String): String
 
   def putACL(userId: String, bucketName: String, acl: String): Unit
-}
+
+  def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): String
+
+  def setGroupACL(userId: String, accessLevel: String, createRequest: String): Unit
+
+  }
