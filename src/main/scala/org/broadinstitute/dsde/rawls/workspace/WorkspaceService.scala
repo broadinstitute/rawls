@@ -56,6 +56,7 @@ object WorkspaceService {
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
+  case class BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
 
   case class CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
@@ -101,6 +102,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case ListEntities(workspaceName, entityType) => context.parent ! listEntities(workspaceName, entityType)
     case CopyEntities(entityCopyDefinition, uri:Uri) => context.parent ! copyEntities(entityCopyDefinition, uri)
     case BatchUpsertEntities(workspaceName, entityUpdates) => context.parent ! batchUpsertEntities(workspaceName, entityUpdates)
+    case BatchUpdateEntities(workspaceName, entityUpdates) => context.parent ! batchUpdateEntities(workspaceName, entityUpdates)
 
     case CreateMethodConfiguration(workspaceName, methodConfiguration) => context.parent ! createMethodConfiguration(workspaceName, methodConfiguration)
     case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => context.parent ! renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)
@@ -257,6 +259,36 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           entityDAO.get(workspaceName.namespace, workspaceName.name, entity.entityType, entity.name, txn) match {
             case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")
             case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceName.namespace, workspaceName.name, entity, txn))
+          }
+        }
+      }
+    }
+
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceName, txn) { workspace =>
+        requireAccess(GCSAccessLevel.Write, workspace, txn) {
+          val results = entityUpdates.map { entityUpdate =>
+            val entity = entityDAO.get(workspaceName.namespace, workspaceName.name, entityUpdate.entityType, entityUpdate.name, txn)
+
+            entity match {
+              case Some(e) =>
+                val trial = Try {
+                  val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
+                  entityDAO.save(workspaceName.namespace, workspaceName.name, updatedEntity, txn)
+                }
+                (entityUpdate, trial)
+              case None => (entityUpdate, Failure(new RuntimeException("Entity does not exist")))
+            }
+          }
+          val errorMessages = results.collect{
+            case (entityUpdate, Failure(regrets)) => s"Could not update ${entityUpdate.entityType} ${entityUpdate.name} : ${regrets.getMessage}"
+          }
+          if(errorMessages.isEmpty) {
+            RequestComplete(StatusCodes.NoContent)
+          } else {
+            dataSource.rollbackOnly.set(true)
+            RequestComplete(StatusCodes.BadRequest, errorMessages)
           }
         }
       }

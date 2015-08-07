@@ -50,6 +50,14 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
         }
       }
     } ~
+      path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
+        post {
+          entity(as[Array[EntityUpdateDefinition]]) { operations =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
+          }
+        }
+      } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       delete {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),

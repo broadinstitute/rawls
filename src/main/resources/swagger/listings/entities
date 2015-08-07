@@ -455,6 +455,50 @@
 				"message": "Rawls Internal Error"
 			}]
 		}]
+	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate",
+		"operations": [{
+			"method": "Post",
+			"summary": "batch update entities into a workspace. All referenced entities must already exist",
+			"notes": "",
+			"type": "void",
+			"nickname": "batch update entities",
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "batchUpdateJson",
+				"description": "Entity update definitions",
+				"required": true,
+				"type": "Array[EntityUpdateDefinition]",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 204,
+				"message": "No Content (Success)"
+			}, {
+				"code": 400,
+				"message": "Invalid attribute update operation"
+			}, {
+				"code": 404,
+				"message": "Workspace does not exist"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
 	}],
 	"models": {
 		"WorkspaceName": {
