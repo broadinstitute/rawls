@@ -46,6 +46,7 @@ object WorkspaceService {
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class PutACL(workspaceName: WorkspaceName, acl: String) extends WorkspaceServiceMessage
+  case class SetupWorkspaceGroupACLs(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
@@ -94,6 +95,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
     case GetACL(workspaceName) => context.parent ! getACL(workspaceName)
     case PutACL(workspaceName, acl) => context.parent ! putACL(workspaceName, acl)
+    case SetupWorkspaceGroupACLs(workspaceName) => context.parent ! setupWorkspaceGroupACLs(workspaceName)
 
     case CreateEntity(workspaceName, entity) => context.parent ! createEntity(workspaceName, entity)
     case GetEntity(workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceName, entityType, entityName)
@@ -131,7 +133,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     RequestComplete(StatusCodes.Created)
   }
 
-  private def createBucketName(workspaceName: String, randomID: String) = s"${workspaceName}-${randomID}"
+  private def createBucketName(workspaceName: String) = s"${workspaceName}-${UUID.randomUUID}"
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
@@ -139,9 +141,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         case Some(_) =>
           PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
-          val randomID = UUID.randomUUID.toString
-          setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name))
-          val bucketName = createBucketName(workspaceRequest.name, randomID)
+          //setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name))
+          Try( gcsDAO.createGoogleGroup(userInfo.userId, "read_only", WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)) ) match {
+            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+            case Success(_) =>
+              println("created the groupz")
+          }
+          gcsDAO.createGoogleGroup(userInfo.userId, "read_only", WorkspaceName(workspaceRequest.namespace, workspaceRequest.name))
+          val bucketName = createBucketName(workspaceRequest.name)
           Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
             case Success(_) =>
@@ -156,8 +163,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def setupWorkspaceGroupACLs(workspaceName: WorkspaceName): Unit =
     dataSource inTransaction { txn =>
       gcsDAO.createGoogleGroup(userInfo.userId, "read_only", workspaceName)
-      gcsDAO.createGoogleGroup(userInfo.userId, "read_write", workspaceName)
-      gcsDAO.createGoogleGroup(userInfo.userId, "full_control", workspaceName)
+      //gcsDAO.createGoogleGroup(userInfo.userId, "read_write", workspaceName)
+      //gcsDAO.createGoogleGroup(userInfo.userId, "full_control", workspaceName)
     }
 
 
@@ -197,8 +204,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
       (originalWorkspace, copyWorkspace) match {
         case (Some(ws), None) => {
-          val randomID = UUID.randomUUID.toString
-          val bucketName = createBucketName(destWorkspace.namespace, randomID)
+          val bucketName = createBucketName(destWorkspace.namespace)
           Try( gcsDAO.createBucket(userInfo.userId, destWorkspace.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspace}: "+err.getMessage)
             case Success(_) =>

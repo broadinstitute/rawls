@@ -25,7 +25,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
   val gcsReadOnly = "https://www.googleapis.com/auth/devstorage.read_only"
   val gcsStub = "https://www.googleapis.com/auth/devstorage"
   val computeFullControl = "https://www.googleapis.com/auth/compute"
-  val createGroup = "https://www.googleapis.com/admin/directory/v1/groups"
+  val groupBase = "https://www.googleapis.com/admin/directory/v1/groups"
   val scopes = Seq(gcsFullControl,computeFullControl)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
@@ -44,13 +44,17 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
      .build()
   }
 
-  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): String = { //return groupId maybe?
+  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): Unit = { //return groupId maybe?
     //println(s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org""")
-    //return ""
     import system.dispatcher
     val credential = getCredential(userId)
-    val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive ~> unmarshal[String]
-    Await.result(pipeline(Post(s"${createGroup}", s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org", "name": "justatestgroup", "description": "JUST_A_TEST_GROUP}""")),Duration.Inf)
+    //return ""
+    val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
+    //Await.result(pipeline(Post(s"${groupBase}", s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org", "name"\: "justatestgroup", "description": "JUST_A_TEST_GROUP"}""".asJson)),Duration.Inf)
+    println("starting sleep")
+    Thread.sleep(61000L)
+    println("waking up")
+    Await.result(pipeline(Post(s"${groupBase}/fc-broad-dsde-dev_mbemis_groups_test-read_only/members", s"""{"email": "mbemis@broadinstitute.org", "role": "OWNER"}""")),Duration.Inf)
   }
 
   override def setGroupACL(userId: String, accessLevel: String, createRequest: String): Unit = {
@@ -81,8 +85,9 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
 
   override def getACL(userId: String, bucketName: String): String = {
     import system.dispatcher
-    createGoogleGroup(userId, "null", WorkspaceName("broad-dsde-dev", "mbemis_testws"))
     val credential = getCredential(userId)
+    //val pipeline2 = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
+    //Await.result(pipeline2(Post(s"${groupBase}/fc-broad-dsde-dev_mbemis_groups_test-read_only/members", s"""{"email": "mbemis@broadinstitute.org", "role": "OWNER"}""")),Duration.Inf)
     val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive ~> unmarshal[String]
     Await.result(pipeline(Get(s"https://www.googleapis.com/storage/v1/b/${bucketName}/acl")),Duration.Inf)
   }
