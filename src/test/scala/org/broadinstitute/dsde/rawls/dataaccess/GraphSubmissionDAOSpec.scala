@@ -26,57 +26,58 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
     }
   }
 
-    "GraphSubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
+  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, Seq(testData.sample1, testData.sample2, testData.sample3))
+  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, Seq(testData.sample1, testData.sample2, testData.sample3))
+
+
+  "GraphSubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { txn =>
+    dao.save(workspace.namespace,workspace.name,submission3,txn)
+    assertResult(Some(submission3)) {
+      dao.get(workspace.namespace,workspace.name,submission3.submissionId,txn)
+    }
+    assert(dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission3))
+
+    assert(dao.delete(workspace.namespace,workspace.name,submission3.submissionId,txn))
+    assertResult(None) {
+      dao.get(workspace.namespace,workspace.name,submission3.submissionId,txn)
+    }
+    assert(!dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission3))
+  }
+
+  it should "save, get, list, and delete two submission statuses" in withSubmissionData { txn =>
+    dao.save(workspace.namespace,workspace.name,submission3,txn)
+    dao.save(workspace.namespace,workspace.name,submission4,txn)
+    assertResult(Some(submission3)) {
+      dao.get(workspace.namespace,workspace.name,submission3.submissionId,txn) }
+    assertResult(Some(submission4)) {
+      dao.get(workspace.namespace,workspace.name,submission4.submissionId,txn) }
+
+    assert(dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission3))
+    assert(dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission4))
+
+    assert(dao.delete(workspace.namespace,workspace.name,submission3.submissionId,txn))
+    assert(dao.delete(workspace.namespace,workspace.name,submission4.submissionId,txn))
+
+    assert(!dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission3))
+    assert(!dao.list(workspace.namespace,workspace.name,txn).toSet.contains(submission4))
+  }
+
+
+  it should "fail to save into workspaces that don't exist" in withSubmissionData { txn =>
+    assert(Try(dao.save(workspace.namespace,"noSuchThing",testData.submission1,txn)).isFailure)
+  }
+
+  it should "fail to delete submissions that don't exist" in withSubmissionData { txn =>
+    assert(!dao.delete(workspace.namespace,workspace.name,"doesn't exist",txn))
+  }
+
+  it should "update submissions" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
-      assertResult(Some(testData.submission1)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
-      assertResult(Seq(testData.submission1, testData.submission2)) {
-        dao.list(workspace.namespace,workspace.name,txn).toSeq
-      }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.submissionId,txn))
-      assertResult(None) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
-      assertResult(1) {
-        dao.list(workspace.namespace,workspace.name,txn).size
-      }
+    dao.update(testData.submission1.copy(status = SubmissionStatuses.Done), txn)
+    assertResult(Option(testData.submission1.copy(status = SubmissionStatuses.Done))) {
+      dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn)
     }
-
-    it should "save, get, list, and delete two submission statuses" in withSubmissionData { txn =>
-//      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
-//      dao.save(workspace.namespace,workspace.name,testData.submission2,txn)
-      assertResult(Some(testData.submission1)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn) }
-      assertResult(Some(testData.submission2)) {
-        dao.get(workspace.namespace,workspace.name,testData.submission2.submissionId,txn) }
-      assertResult(2) {
-        dao.list(workspace.namespace,workspace.name,txn).size
-      }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission1.submissionId,txn))
-      assertResult(1) {
-        dao.list(workspace.namespace,workspace.name,txn).size
-      }
-      assert(dao.delete(workspace.namespace,workspace.name,testData.submission2.submissionId,txn))
-      assertResult(0) {
-        dao.list(workspace.namespace,workspace.name,txn).size
-      }
-    }
-
-
-    it should "fail to save into workspaces that don't exist" in withSubmissionData { txn =>
-      assert(Try(dao.save(workspace.namespace,"noSuchThing",testData.submission1,txn)).isFailure)
-    }
-
-    it should "fail to delete submissions that don't exist" in withSubmissionData { txn =>
-      assert(!dao.delete(workspace.namespace,workspace.name,"doesn't exist",txn))
-    }
-
-    it should "update submissions" in withSubmissionData { txn =>
-//      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
-      dao.update(testData.submission1.copy(status = SubmissionStatuses.Done), txn)
-      assertResult(Option(testData.submission1.copy(status = SubmissionStatuses.Done))) {
-        dao.get(workspace.namespace,workspace.name,testData.submission1.submissionId,txn)
-      }
-    }
+  }
 
   "GraphWorkflowDAO" should "let you modify Workflows within a submission" in withSubmissionData { txn =>
 //      dao.save(workspace.namespace,workspace.name,testData.submission1,txn)
