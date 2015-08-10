@@ -36,10 +36,8 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
 
   override def putACL(userId: String, bucketName: String, acl: String): Unit = {}
 
-  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): String = {
-    return ""
-  }
+  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName) = {}
 
-  override def setGroupACL(userId: String, accessLevel: String, createRequest: String): Unit = {}
+  override def setGroupACL(userId: String, accessLevel: String, createRequest: String) = {}
 
 }

@@ -1,16 +1,22 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.StringReader
+import java.io.File
+import java.security.PrivateKey
 import java.util.UUID
 
 import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.googleapis.auth.oauth2.{GoogleAuthorizationCodeFlow, GoogleClientSecrets}
+import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleAuthorizationCodeFlow, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.client.util.store.DataStoreFactory
+import com.google.api.services.admin.directory.Directory.Builder
+import com.google.api.services.admin.directory._
+import com.google.api.services.admin.directory.model._
 import com.google.api.services.storage.Storage
 import com.google.api.services.storage.model.Bucket
+import com.google.api.services._
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import scala.collection.JavaConversions._   // Seq[String] -> Collection<String>
@@ -21,12 +27,16 @@ import spray.client.pipelining._
 class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: DataStoreFactory, ourBaseURL: String)(implicit system: ActorSystem) extends GoogleCloudStorageDAO {
   // modify these if we need more granular access in the future
   val gcsFullControl = "https://www.googleapis.com/auth/devstorage.full_control"
+  val groupDirectory = "https://www.googleapis.com/auth/admin.directory.group"
   val gcsReadWrite = "https://www.googleapis.com/auth/devstorage.read_write"
   val gcsReadOnly = "https://www.googleapis.com/auth/devstorage.read_only"
   val gcsStub = "https://www.googleapis.com/auth/devstorage"
   val computeFullControl = "https://www.googleapis.com/auth/compute"
   val groupBase = "https://www.googleapis.com/admin/directory/v1/groups"
+  val groupsSettings = "https://www.googleapis.com/auth/apps.groups.settings"
   val scopes = Seq(gcsFullControl,computeFullControl)
+  val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_USER, DirectoryScopes.ADMIN_DIRECTORY_GROUP, DirectoryScopes.ADMIN_DIRECTORY_GROUP_MEMBER)
+  val sub = "google@test.broadinstitute.org"
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -44,24 +54,37 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
      .build()
   }
 
-  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): Unit = { //return groupId maybe?
-    //println(s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org""")
-    import system.dispatcher
-    val credential = getCredential(userId)
-    //return ""
-    val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
-    //Await.result(pipeline(Post(s"${groupBase}", s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org", "name"\: "justatestgroup", "description": "JUST_A_TEST_GROUP"}""".asJson)),Duration.Inf)
-    println("starting sleep")
-    Thread.sleep(61000L)
-    println("waking up")
-    Await.result(pipeline(Post(s"${groupBase}/fc-broad-dsde-dev_mbemis_groups_test-read_only/members", s"""{"email": "mbemis@broadinstitute.org", "role": "OWNER"}""")),Duration.Inf)
+  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName) = {
+    //val credential = getCredential(userId)
+    println(s"Creating... FireCloud ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}")
+    val theCredential = new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(clientSecrets.getDetails.getClientId) //this might need to be email address of service account
+      .setServiceAccountScopes(directoryScopes)
+      .setServiceAccountUser("google@test.broadinstitute.org") //read from rawls.conf?
+      .setServiceAccountPrivateKeyId("fake") //fix this shit and fix it now, ok?
+      .build()
+    val directory = new Directory.Builder(httpTransport, jsonFactory, theCredential).setApplicationName("firecloud-rawls").build()
+    val group = new Group().setEmail(s"fc-${workspaceName.namespace}_${workspaceName.name}.${accessLevel}@test.broadinstitute.org").setName(s"FireCloud ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}").setAdminCreated(true)
+
+    //val member = new Member().setEmail("mbemis@broadinstitute.org").setRole("OWNER")
+    directory.groups().insert(group).execute()
+
+    //val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
+    //println(s"fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org")
+    //val pipeline = addHeader("blah","blah") ~> sendReceive
+    //Await.result(pipeline(Post(s"${groupBase}", s"""{"email": "fc-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.org", "name": "justatestgroup", "description": "JUST_A_TEST_GROUP"}""")),Duration.Inf)
+    //println("starting sleep")
+    //Thread.sleep(1000L)
+    //println("waking up")
+    //Await.result(pipeline(Post(s"${groupBase}/THIS_GROUP_ISNT_REAL@test.broadinstitute.org", s"""{"email": "mbemis@broadinstitute.org", "role": "OWNER"}""")),Duration.Inf)
   }
 
-  override def setGroupACL(userId: String, accessLevel: String, createRequest: String): Unit = {
-    import system.dispatcher
-    val credential = getCredential(userId)
-    val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
-    Await.result(pipeline(Post(s"${gcsStub}.$accessLevel")),Duration.Inf)
+  override def setGroupACL(groupId: String, accessLevel: String): Unit = {
+    val theCredential = null //will be same as in above method once figured out
+    val directory = new Directory.Builder(httpTransport,jsonFactory,theCredential).setApplicationName("firecloud-rawls").build()
+    //directory.members().
   }
 
   override def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit = {
@@ -86,8 +109,6 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
   override def getACL(userId: String, bucketName: String): String = {
     import system.dispatcher
     val credential = getCredential(userId)
-    //val pipeline2 = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive
-    //Await.result(pipeline2(Post(s"${groupBase}/fc-broad-dsde-dev_mbemis_groups_test-read_only/members", s"""{"email": "mbemis@broadinstitute.org", "role": "OWNER"}""")),Duration.Inf)
     val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive ~> unmarshal[String]
     Await.result(pipeline(Get(s"https://www.googleapis.com/storage/v1/b/${bucketName}/acl")),Duration.Inf)
   }

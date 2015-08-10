@@ -141,30 +141,31 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         case Some(_) =>
           PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
-          //setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name))
-          Try( gcsDAO.createGoogleGroup(userInfo.userId, "read_only", WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)) ) match {
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
-            case Success(_) =>
+          Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)) ) match {
+            case Failure(err) =>
+              RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+            case Success(result) =>
+              println(result)
               println("created the groupz")
+              RequestComplete(StatusCodes.Created)
           }
-          gcsDAO.createGoogleGroup(userInfo.userId, "read_only", WorkspaceName(workspaceRequest.namespace, workspaceRequest.name))
-          val bucketName = createBucketName(workspaceRequest.name)
+          //uncomment this once groups are working
+          /*val bucketName = createBucketName(workspaceRequest.name)
           Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
             case Success(_) =>
               val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, bucketName, DateTime.now, userInfo.userId, workspaceRequest.attributes)
               workspaceDAO.save(workspace, txn)
               PerRequest.RequestComplete((StatusCodes.Created, workspace))
-          }
+          }*/
       }
     }
 
-  //firecloud-{workspaceNamespace}_{workspaceName}-readers etc.
   def setupWorkspaceGroupACLs(workspaceName: WorkspaceName): Unit =
     dataSource inTransaction { txn =>
       gcsDAO.createGoogleGroup(userInfo.userId, "read_only", workspaceName)
-      //gcsDAO.createGoogleGroup(userInfo.userId, "read_write", workspaceName)
-      //gcsDAO.createGoogleGroup(userInfo.userId, "full_control", workspaceName)
+      gcsDAO.createGoogleGroup(userInfo.userId, "read_write", workspaceName)
+      gcsDAO.createGoogleGroup(userInfo.userId, "full_control", workspaceName)
     }
 
 
