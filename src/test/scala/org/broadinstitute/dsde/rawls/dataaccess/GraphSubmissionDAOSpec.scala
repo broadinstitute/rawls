@@ -64,7 +64,9 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
 
 
   it should "fail to save into workspaces that don't exist" in withSubmissionData { txn =>
-    assert(Try(dao.save(workspace.namespace,"noSuchThing",testData.submission1,txn)).isFailure)
+    intercept[IllegalArgumentException]{
+      dao.save(workspace.namespace,"noSuchThing",testData.submission1,txn)
+    }
   }
 
   it should "fail to delete submissions that don't exist" in withSubmissionData { txn =>
