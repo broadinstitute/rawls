@@ -245,26 +245,23 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices { services =>
-    val update1 = EntityUpdateDefinition("s1", "samples", Seq(RemoveListMember("bingo", AttributeString("a"))))
-    val update2 = EntityUpdateDefinition("s2", "samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
-    val update3 = EntityUpdateDefinition("s3", "samples", Seq(RemoveListMember("bingo", AttributeString("a"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2, update3).toJson.toString())) ~>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        assertResult(2) {
+        assertResult(1) {
           responseAs[Array[String]].length
         }
       }
   }
 
   it should "return 204 when batch upserting an entity that does not yet exist" in withTestDataApiServices { services =>
-    val update1 = EntityUpdateDefinition("s1", "samples", Seq.empty)
-    val update2 = EntityUpdateDefinition("s2", "samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
+    val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -272,16 +269,16 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Some(Entity("s2", "samples", Map("newAttribute" -> AttributeString("foo")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, "samples", "s2", txn)
+          assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, "Sample", "newSample", txn)
           }
         }
       }
   }
 
   it should "return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
-    val update1 = EntityUpdateDefinition("s1", "samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
-    val update2 = EntityUpdateDefinition("s2", "samples", Seq.empty)
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
@@ -290,8 +287,55 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Some(Entity("s1", "samples", Map("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, "samples", "s1", txn)
+          assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample1.entityType, testData.sample1.name, txn)
+          }
+        }
+      }
+  }
+
+  it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        assertResult(1) {
+          responseAs[Array[String]].length
+        }
+      }
+  }
+
+  it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition("superDuperNewSample", "Samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        assertResult(1) {
+          responseAs[Array[String]].length
+        }
+      }
+  }
+
+  it should "return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        services.dataSource.inTransaction { txn =>
+          assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample1.entityType, testData.sample1.name, txn)
           }
         }
       }
