@@ -40,7 +40,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, workflowEntities: Seq[Entity]) = {
     val workflows = (workflowEntities collect {
       case ref:Entity => Workflow(workspace.toWorkspaceName,"workflow_" + UUID.randomUUID.toString,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(ref.entityType, ref.name))
-    }).toSeq
+    })
 
     Submission("submission_" + UUID.randomUUID.toString, testDate, workspace.toWorkspaceName, methodConfig.namespace,methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
