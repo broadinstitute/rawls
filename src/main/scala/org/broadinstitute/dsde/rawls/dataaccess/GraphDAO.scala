@@ -8,6 +8,8 @@ import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
 import org.joda.time.DateTime
@@ -235,6 +237,9 @@ trait GraphDAO {
       case (key, Some(mrMethod: MethodRepoMethod)) => serializeDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, thereShouldOnlyBeOne, graph, workspaceName)
       case (key, Some(ws: WorkspaceName)) => // don't serialize workspace name objects
 
+      case (key, Some(ws: WorkflowStatus)) => vertex.setProperty(key, ws.toString)
+      case (key, Some(ss: SubmissionStatus)) => vertex.setProperty(key, ss.toString)
+
       // catchall, treat it as something that can be directly set on the vertex, this works for AnyVal and String
       // but other things may cause orientdb exceptions
       case (key, Some(value)) => vertex.setProperty(key, value)
@@ -300,7 +305,7 @@ trait GraphDAO {
     }
   }
 
-  def serializeSeq(graph: Graph, workspaceName: WorkspaceName, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
+  private def serializeSeq(graph: Graph, workspaceName: WorkspaceName, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
     serializeAttributeMap(vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap, graph, workspaceName)
   }
 
@@ -330,6 +335,7 @@ trait GraphDAO {
    * @return object loaded
    */
   def loadFromVertex[T: TypeTag](vertex: Vertex, workspaceName: Option[WorkspaceName]): T = {
+
     val classT = ru.typeOf[T].typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
     val ctor = ru.typeOf[T].decl(ru.termNames.CONSTRUCTOR).asMethod
@@ -337,11 +343,18 @@ trait GraphDAO {
 
     val parameters = ctor.asMethod.paramLists.head.map { paramSymbol =>
       val paramName = paramSymbol.name.decodedName.toString.trim
+
+      def tryLoad[T](value: Option[T]): T = {
+        value.getOrElse {
+          throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}")
+        }
+      }
+
       val vertexProperty: Option[Any] = Option(vertex.getProperty(paramName))
       paramSymbol.typeSignature match {
 
         case dateSymbol if dateSymbol =:= typeOf[DateTime] =>
-          val date = vertexProperty.getOrElse(throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}"))
+          val date = tryLoad(vertexProperty)
           date match {
             case date: Date => new DateTime(date)
             case _ => throw new RawlsException(s"org.joda.time.DateTime property [${paramName}] of class [${classT.fullName}] does not have a java.util.Date value in ${vertex}")
@@ -363,12 +376,9 @@ trait GraphDAO {
 
         case workflowSymbol if workflowSymbol =:= typeOf[Seq[Workflow]] => deserializeDomainObjects[Workflow](vertex, workflowEdge, workspaceName)
         case workflowFailureSymbol if workflowFailureSymbol =:= typeOf[Seq[WorkflowFailure]] => deserializeDomainObjects[WorkflowFailure](vertex, workflowFailureEdge, workspaceName)
-        case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge, workspaceName).headOption.getOrElse {
-          throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}")
-        }
-        case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge, workspaceName).headOption.getOrElse {
-          throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}")
-        }
+
+        case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => tryLoad(deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge, workspaceName).headOption)
+        case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => tryLoad(deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge, workspaceName).headOption)
 
         case attributeSeq if attributeSeq <:< typeOf[Seq[Attribute]] => vertex.getVertices(Direction.OUT, paramName).headOption.map(deserializeSeq).getOrElse(Seq.empty)
 
@@ -376,7 +386,16 @@ trait GraphDAO {
 
         case workspaceNameSymbol if workspaceNameSymbol =:= typeOf[WorkspaceName] => workspaceName.getOrElse(throw new RawlsException("workspace name not supplied but is required"))
 
-        case _ => vertexProperty.getOrElse(throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}"))
+        case workflowStatusSymbol if workflowStatusSymbol =:= typeOf[WorkflowStatus] => {
+          val statusText = tryLoad(vertexProperty).toString
+          WorkflowStatuses.withName(statusText)
+        }
+        case submissionStatusSymbol if submissionStatusSymbol =:= typeOf[SubmissionStatus] => {
+          val statusText = tryLoad(vertexProperty).toString
+          SubmissionStatuses.withName(statusText)
+        }
+
+        case _ => tryLoad(vertexProperty)
       }
     }
 

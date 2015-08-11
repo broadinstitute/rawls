@@ -49,8 +49,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   }
   val bugData = new BugTestData
 
-  // TODO re-enable this when case sensitivity is fixed
-  ignore should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabase(new BugTestData) { dataSource =>
+  it should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabase(new BugTestData) { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(Some(bugData.sample1)) {
         dao.get(bugData.workspace.namespace, bugData.workspace.name, "Sample", "sample1", txn)

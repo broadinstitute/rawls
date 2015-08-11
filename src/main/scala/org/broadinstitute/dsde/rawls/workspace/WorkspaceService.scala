@@ -741,6 +741,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                       submissionSupervisor ! SubmissionStarted(newSubmission, userInfo.authCookie)
                     }
 
+                    submissionDAO.save(workspaceName.namespace, workspaceName.name, newSubmission, txn)
                     RequestComplete(StatusCodes.Created, newSubmission)
                   }
                 }
