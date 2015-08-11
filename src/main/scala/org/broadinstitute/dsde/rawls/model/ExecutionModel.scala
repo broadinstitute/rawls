@@ -55,6 +55,7 @@ case class WorkflowFailure(
 case class Submission(
   submissionId: String,
   submissionDate: DateTime,
+  submitter: String,
   workspaceName: WorkspaceName,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
@@ -94,7 +95,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFailureFormat = jsonFormat4(WorkflowFailure)
 
-  implicit val SubmissionFormat = jsonFormat9(Submission)
+  implicit val SubmissionFormat = jsonFormat10(Submission)
 }
 
 object WorkflowStatuses {
