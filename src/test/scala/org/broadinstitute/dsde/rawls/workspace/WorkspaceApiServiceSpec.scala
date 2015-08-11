@@ -1044,6 +1044,16 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
+  it should "return 200 when listing submissions" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2)) {responseAs[List[Submission]]}
+      }
+  }
+
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
       addMockOpenAmCookie ~>
