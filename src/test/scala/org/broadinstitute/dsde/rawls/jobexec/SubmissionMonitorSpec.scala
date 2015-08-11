@@ -45,7 +45,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       dataSource inTransaction { txn =>
         submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
       }
-    }, 10 seconds)
+    }, 15 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
