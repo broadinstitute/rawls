@@ -68,6 +68,7 @@ object WorkspaceService {
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
 
+  case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
@@ -115,6 +116,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CopyMethodConfigurationFromMethodRepo(query) => context.parent ! copyMethodConfigurationFromMethodRepo(query)
     case ListMethodConfigurations(workspaceName) => context.parent ! listMethodConfigurations(workspaceName)
 
+    case ListSubmissions(workspaceName) => context.parent ! listSubmissions(workspaceName)
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
@@ -696,6 +698,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       Left(WorkflowFailure( workspaceName = workspace, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }).toSeq ))
     }
   }
+
+  def listSubmissions(workspaceName: WorkspaceName): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      txn withGraph { graph =>
+        withWorkspace(workspaceName, txn) { workspace =>
+          requireAccess(GCSAccessLevel.Read, workspace, txn) {
+            RequestComplete(submissionDAO.list(workspace.namespace, workspace.name, txn).toList)
+          }
+        }
+      }
+    }
 
   def createSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest): PerRequestMessage =
     dataSource inTransaction { txn =>

@@ -5,7 +5,41 @@
 	"resourcePath": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions",
 	"apis": [{
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions",
-		"operations": [{
+		"operations": [
+		{
+			"method": "GET",
+			"summary": "List all submissions.",
+			"notes": "",
+			"type": "Object",
+			"nickname": "listSubmissions",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Successful Request"
+			}, {
+				"code": 404,
+				"message": "Workspace not found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		},
+		{
 			"method": "POST",
 			"summary": "Create Submission.",
 			"notes": "",

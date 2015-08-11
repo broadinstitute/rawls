@@ -19,6 +19,12 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with OpenA
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
   val submissionRoutes = userInfoFromCookie() { userInfo =>
+    path("workspaces" / Segment / Segment / "submissions" ) { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
+    } ~
     path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[SubmissionRequest]) { submission =>
