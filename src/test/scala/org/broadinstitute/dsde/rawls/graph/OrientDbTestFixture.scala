@@ -43,7 +43,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       case ref: Entity => Workflow(workspace.toWorkspaceName, "workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name))
     })
 
-    Submission("submission_" + UUID.randomUUID.toString, testDate, workspace.toWorkspaceName, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
+    Submission("submission_" + UUID.randomUUID.toString, testDate, "testUser", workspace.toWorkspaceName, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
@@ -65,29 +65,29 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       Map("type" -> AttributeString("normal")),
       workspace.toWorkspaceName)
 
-    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(Workflow(workspace.toWorkspaceName,"malformed_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(
         Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
       Seq(
         Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
@@ -207,7 +207,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
 
-    val submissionTerminateTest = Submission("submissionTerminate",testDate,workspace.toWorkspaceName,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
+    val submissionTerminateTest = Submission("submissionTerminate",testDate, "testUser",workspace.toWorkspaceName,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
       Seq(Workflow(workspace.toWorkspaceName,"workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,"workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
         Workflow(workspace.toWorkspaceName,"workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name)),

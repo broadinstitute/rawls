@@ -728,6 +728,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                     val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceName, methodConfig, e, wdl, userInfo.authCookie, txn))
                     val newSubmission = Submission(submissionId = UUID.randomUUID().toString,
                       submissionDate = DateTime.now(),
+                      submitter = userInfo.userId,
                       workspaceName = workspaceName,
                       methodConfigurationNamespace = methodConfig.namespace,
                       methodConfigurationName = methodConfig.name,
