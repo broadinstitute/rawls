@@ -27,7 +27,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.submission1, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
-    expectMsgClass(10 seconds, classOf[Terminated])
+    expectMsgClass(15 seconds, classOf[Terminated])
     assertResult(true) { dataSource inTransaction { txn =>
       submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
     }}
@@ -51,7 +51,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
     }
 
-    expectMsgClass(10 seconds, classOf[Terminated])
+    expectMsgClass(15 seconds, classOf[Terminated])
 
     dataSource inTransaction { txn =>
       assertResult(true) {
@@ -73,7 +73,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString("message"))), None), testActor)
     }
 
-    expectMsgClass(10 seconds, classOf[Terminated])
+    expectMsgClass(15 seconds, classOf[Terminated])
 
     dataSource inTransaction { txn =>
       submissionDAO.get(testData.submission1.workspaceName.namespace, testData.submission1.workspaceName.name, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
