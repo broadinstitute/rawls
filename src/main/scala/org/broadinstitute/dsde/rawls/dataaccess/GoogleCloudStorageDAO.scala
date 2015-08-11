@@ -15,8 +15,8 @@ trait GoogleCloudStorageDAO {
 
   def putACL(userId: String, bucketName: String, acl: String): Unit
 
-  def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName): Unit
+  def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName, bucketName: String)
 
-  def setGroupACL(userId: String, accessLevel: String): Unit
+  def setGroupACL(groupId: String, bcuketName: String, groupRole: String)
 
   }

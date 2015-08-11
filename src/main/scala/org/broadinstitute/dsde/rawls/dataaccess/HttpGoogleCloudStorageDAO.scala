@@ -16,9 +16,10 @@ import com.google.api.services.admin.directory._
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.storage.Storage
 import com.google.api.services.storage.model.Bucket
+import com.google.api.services.storage.model.BucketAccessControl
 import com.google.api.services._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.WorkspaceName
+import org.broadinstitute.dsde.rawls.model.{GCSAccessLevel, BucketAccessControl, WorkspaceName}
 import scala.collection.JavaConversions._   // Seq[String] -> Collection<String>
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -53,9 +54,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
      .build()
   }
 
-  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName) = {
-    println(s"Creating... FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com")
-
+  override def createGoogleGroup(userId: String, accessLevel: String, workspaceName: WorkspaceName, bucketName: String) = {
     val credential = new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
@@ -70,13 +69,10 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
     val member = new Member().setEmail(userId).setRole("OWNER")
 
     directory.groups().insert(group).execute()
-    //directory.groups().delete(s"FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com").execute()
-    //Thread.sleep(61000L)
     directory.members().insert(s"FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com", member).execute()
-
   }
 
-  override def setGroupACL(groupId: String, accessLevel: String): Unit = {
+  override def setGroupACL(groupId: String, bucketName: String, groupRole: String): Unit = {
     val credential = new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
@@ -86,11 +82,8 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
       .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
       .build()
 
-    val directory = new Directory.Builder(httpTransport,jsonFactory,credential).setApplicationName("firecloud-rawls").build()
-
-
-
-    //directory.members().update()
+    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).build()
+    storage.bucketAccessControls().insert(bucketName, new com.google.api.services.storage.model.BucketAccessControl().setEntity(groupId).setRole(groupRole))
   }
 
   override def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit = {
@@ -114,7 +107,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
 
   override def getACL(userId: String, bucketName: String): String = {
     import system.dispatcher
-    val credential = getCredential("fc-broad-dsde-dev_mbemis_testws3-full_control")
+    val credential = getCredential(userId)
     val pipeline = addHeader("Authorization",s"Bearer ${credential.getAccessToken}") ~> sendReceive ~> unmarshal[String]
     Await.result(pipeline(Get(s"https://www.googleapis.com/storage/v1/b/${bucketName}/acl")),Duration.Inf)
   }

@@ -46,7 +46,7 @@ object WorkspaceService {
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class PutACL(workspaceName: WorkspaceName, acl: String) extends WorkspaceServiceMessage
-  case class SetupWorkspaceGroupACLs(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class SetupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
@@ -95,7 +95,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
     case GetACL(workspaceName) => context.parent ! getACL(workspaceName)
     case PutACL(workspaceName, acl) => context.parent ! putACL(workspaceName, acl)
-    case SetupWorkspaceGroupACLs(workspaceName) => context.parent ! setupWorkspaceGroupACLs(workspaceName)
+    case SetupWorkspaceGroupACLs(workspaceName, bucketName) => context.parent ! setupWorkspaceGroupACLs(workspaceName, bucketName)
 
     case CreateEntity(workspaceName, entity) => context.parent ! createEntity(workspaceName, entity)
     case GetEntity(workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceName, entityType, entityName)
@@ -141,15 +141,15 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         case Some(_) =>
           PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
-          Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)) ) match {
+          val bucketName = createBucketName(workspaceRequest.name)
+          Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
             case Failure(err) =>
-              RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+              RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
             case Success(_) =>
-              val bucketName = createBucketName(workspaceRequest.name)
-              Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
+              Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name), bucketName) ) match {
                 case Failure(err) =>
                   dataSource.rollbackOnly.set(true)
-                  RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+                  RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
                 case Success(_) =>
                   val workspace = Workspace(workspaceRequest.namespace,workspaceRequest.name,bucketName,DateTime.now,userInfo.userId,workspaceRequest.attributes)
                   workspaceDAO.save(workspace, txn)
@@ -159,11 +159,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
-  def setupWorkspaceGroupACLs(workspaceName: WorkspaceName): Unit =
+  def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
     dataSource inTransaction { txn =>
-      //gcsDAO.createGoogleGroup(userInfo.userId, "read_only", workspaceName)
-      //gcsDAO.createGoogleGroup(userInfo.userId, "read_write", workspaceName)
-      gcsDAO.createGoogleGroup(userInfo.userId, "full_control", workspaceName)
+      gcsDAO.createGoogleGroup(userInfo.userId, "READERS", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-READERS@test.broadinstitute.com", bucketName, "READER")
+      gcsDAO.createGoogleGroup(userInfo.userId, "WRITERS", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-WRITERS@test.broadinstitute.com", bucketName, "WRITER")
+      gcsDAO.createGoogleGroup(userInfo.userId, "OWNERS", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-OWNERS@test.broadinstitute.com", bucketName, "OWNER")
     }
 
 
