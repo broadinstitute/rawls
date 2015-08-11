@@ -37,14 +37,72 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     def save(txn:RawlsTransaction)
   }
 
+
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, workflowEntities: Seq[Entity]) = {
     val workflows = (workflowEntities collect {
-      case ref:Entity => Workflow(workspace.toWorkspaceName,"workflow_" + UUID.randomUUID.toString,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(ref.entityType, ref.name))
+      case ref: Entity => Workflow(workspace.toWorkspaceName, "workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name))
     })
 
-    Submission("submission_" + UUID.randomUUID.toString, testDate, workspace.toWorkspaceName, methodConfig.namespace,methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
+    Submission("submission_" + UUID.randomUUID.toString, testDate, workspace.toWorkspaceName, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+  }
+
+  class EmptyWorkspace() extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+    }
+  }
+
+  class SubmissionTestData() extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+
+    val sample1 = Entity("sample1", "Sample",
+      Map("type" -> AttributeString("normal")),
+      workspace.toWorkspaceName)
+
+    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"malformed_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(
+        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate,workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(
+        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMissingWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMalformedWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortGoodWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTerminalWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortOneMissingWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTwoGoodWorkflows, txn)
+    }
   }
 
   class DefaultTestData() extends TestData {
@@ -145,8 +203,15 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
+
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
+
+    val submissionTerminateTest = Submission("submissionTerminate",testDate,workspace.toWorkspaceName,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow(workspace.toWorkspaceName,"workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
+        Workflow(workspace.toWorkspaceName,"workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name)),
+        Workflow(workspace.toWorkspaceName,"workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -177,6 +242,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigNotAllSamples, txn)
       methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigAttrTypeMixup, txn)
 
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTerminateTest, txn)
       submissionDAO.save(workspace.namespace, workspace.name, submission1, txn)
       submissionDAO.save(workspace.namespace, workspace.name, submission2, txn)
     }

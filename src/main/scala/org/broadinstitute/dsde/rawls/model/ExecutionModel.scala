@@ -98,7 +98,7 @@ object ExecutionJsonSupport extends JsonSupport {
 }
 
 object WorkflowStatuses {
-  val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Unknown)
+  val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
 
   sealed trait WorkflowStatus {
     def isDone = {
@@ -113,6 +113,7 @@ object WorkflowStatuses {
       case "Running" => Running
       case "Failed" => Failed
       case "Succeeded" => Succeeded
+      case "Aborted" => Aborted
       case "Unknown" => Unknown
       case _ => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
     }
@@ -122,6 +123,7 @@ object WorkflowStatuses {
   case object Running extends WorkflowStatus
   case object Failed extends WorkflowStatus
   case object Succeeded extends WorkflowStatus
+  case object Aborted extends WorkflowStatus
   case object Unknown extends WorkflowStatus
 }
 
