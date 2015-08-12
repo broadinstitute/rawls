@@ -58,9 +58,9 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
       .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
       .build()
 
-    val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud-rawls").build()
+    val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
     val group = new Group().setEmail(s"FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com").setName(s"FireCloud ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}")
-    val member = new Member().setEmail(userId).setRole("OWNER")
+    val member = new Member().setEmail(userId).setRole(GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner))
 
     directory.groups().insert(group).execute()
     directory.members().insert(s"FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com", member).execute()
@@ -76,7 +76,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
       .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
       .build()
 
-    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).build()
+    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
     storage.bucketAccessControls().insert(bucketName, new com.google.api.services.storage.model.BucketAccessControl().setEntity(groupId).setRole(groupRole))
   }
 
@@ -91,7 +91,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
 
   override def createBucket(userId: String, projectId: String, bucketName: String): Unit = {
     val credential = getCredential(userId)
-    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).build()
+    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
     val bucket =  new Bucket().setName(bucketName)
 
     storage.buckets()

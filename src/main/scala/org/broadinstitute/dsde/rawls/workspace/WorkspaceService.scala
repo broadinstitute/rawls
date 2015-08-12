@@ -161,12 +161,15 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
     dataSource inTransaction { txn =>
-      gcsDAO.createGoogleGroup(userInfo.userId, "READERS", workspaceName, bucketName)
-      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-READERS@test.broadinstitute.com", bucketName, "READER")
-      gcsDAO.createGoogleGroup(userInfo.userId, "WRITERS", workspaceName, bucketName)
-      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-WRITERS@test.broadinstitute.com", bucketName, "WRITER")
-      gcsDAO.createGoogleGroup(userInfo.userId, "OWNERS", workspaceName, bucketName)
-      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-OWNERS@test.broadinstitute.com", bucketName, "OWNER")
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)}S@test.broadinstitute.com",
+        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Read))
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)}S@test.broadinstitute.com",
+        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Write))
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)}S@test.broadinstitute.com",
+        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner))
     }
 
 
