@@ -15,9 +15,9 @@ import com.google.api.services.admin.directory.Directory.Builder
 import com.google.api.services.admin.directory._
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.storage.Storage
-import com.google.api.services.storage.model.Bucket
-import com.google.api.services.storage.model.BucketAccessControl
+import com.google.api.services.storage.model.{ObjectAccessControl, StorageObject, Bucket, BucketAccessControl}
 import com.google.api.services._
+import com.google.common.collect.ImmutableList
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{GCSAccessLevel, BucketAccessControl, WorkspaceName}
 import scala.collection.JavaConversions._   // Seq[String] -> Collection<String>
@@ -66,8 +66,8 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
     directory.members().insert(s"FC-${workspaceName.namespace}_${workspaceName.name}-${accessLevel}@test.broadinstitute.com", member).execute()
   }
 
-  override def setGroupACL(groupId: String, bucketName: String, groupRole: String): Unit = {
-    val credential = new GoogleCredential.Builder()
+  override def setGroupACL(userId: String, groupId: String, bucketName: String, groupRole: String): Unit = {
+    val credentialx = new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(clientSecrets.getDetails.get("client_email").toString)
@@ -76,8 +76,11 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
       .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
       .build()
 
+    val credential = getCredential(userId)
+
     val storage = new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
-    storage.bucketAccessControls().insert(bucketName, new com.google.api.services.storage.model.BucketAccessControl().setEntity(groupId).setRole(groupRole))
+    val acl = new com.google.api.services.storage.model.BucketAccessControl().setEntity("group-" + groupId).setRole(groupRole).setBucket(bucketName)
+    storage.bucketAccessControls().insert(bucketName, acl).execute()
   }
 
   override def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit = {
