@@ -57,54 +57,6 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     }
   }
 
-  class SubmissionTestData() extends TestData {
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
-
-    val sample1 = Entity("sample1", "Sample",
-      Map("type" -> AttributeString("normal")),
-      workspace.toWorkspaceName)
-
-    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(workspace.toWorkspaceName,"malformed_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(
-        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
-        Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(
-        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
-        Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
-
-    override def save(txn:RawlsTransaction): Unit = {
-      workspaceDAO.save(workspace, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMissingWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMalformedWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortGoodWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTerminalWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortOneMissingWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTwoGoodWorkflows, txn)
-    }
-  }
-
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val wsName = WorkspaceName("myNamespace", "myWorkspace")

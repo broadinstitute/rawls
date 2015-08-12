@@ -6,11 +6,13 @@ import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{UserInfo, Submission, SubmissionRequest, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes, HttpCookie}
+import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 import spray.http.HttpHeaders.Cookie
 
@@ -42,8 +44,56 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     mockServer.stopServer
   }
 
-  def withWorkspaceService(testCode: WorkspaceService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+  class SubmissionTestData() extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+
+    val sample1 = Entity("sample1", "Sample",
+      Map("type" -> AttributeString("normal")),
+      workspace.toWorkspaceName)
+
+    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"malformed_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(
+        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow(workspace.toWorkspaceName,"nonexistent_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, "testUser", workspace.toWorkspaceName,"std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+      Seq(
+        Workflow(workspace.toWorkspaceName,"this_workflow_exists",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow(workspace.toWorkspaceName,"already_terminal_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
+      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMissingWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMalformedWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortGoodWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTerminalWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortOneMissingWorkflow, txn)
+      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTwoGoodWorkflows, txn)
+    }
+  }
+
+  def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit): Unit = {
+    withDataOp { dataSource =>
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         new GraphSubmissionDAO(new GraphWorkflowDAO()),
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
@@ -64,21 +114,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
+  def withWorkspaceService(testCode: WorkspaceService => Any): Unit = {
+    withDataAndService(testCode, withDefaultTestDatabase)
+  }
+
   def withSubmissionTestWorkspaceService(testCode: WorkspaceService => Any): Unit = {
-    withCustomTestDatabase(new SubmissionTestData) { dataSource =>
-      val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-        new GraphSubmissionDAO(new GraphWorkflowDAO()),
-        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-        new GraphWorkflowDAO(),
-        new GraphEntityDAO(),
-        new GraphMethodConfigurationDAO(),
-        dataSource
-      ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
-      lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
-      testCode(workspaceService)
-      submissionSupervisor ! PoisonPill
-    }
+    withDataAndService(testCode, withCustomTestDatabase(new SubmissionTestData))
   }
 
   private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String) = {
