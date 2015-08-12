@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import java.io.File
 import java.util.UUID
 
 import akka.actor.{ActorRef, Actor, Props}
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -46,7 +48,6 @@ object WorkspaceService {
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class PutACL(workspaceName: WorkspaceName, acl: String) extends WorkspaceServiceMessage
-  case class SetupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
@@ -95,7 +96,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
     case GetACL(workspaceName) => context.parent ! getACL(workspaceName)
     case PutACL(workspaceName, acl) => context.parent ! putACL(workspaceName, acl)
-    case SetupWorkspaceGroupACLs(workspaceName, bucketName) => context.parent ! setupWorkspaceGroupACLs(workspaceName, bucketName)
 
     case CreateEntity(workspaceName, entity) => context.parent ! createEntity(workspaceName, entity)
     case GetEntity(workspaceName, entityType, entityName) => context.parent ! getEntity(workspaceName, entityType, entityName)
@@ -123,6 +123,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
   }
+
+  val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+  val gcsConfig = conf.getConfig("gcs")
 
   def registerUser(callbackPath: String): PerRequestMessage = {
     RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
@@ -161,15 +164,20 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
     dataSource inTransaction { txn =>
-      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)}S", workspaceName, bucketName)
-      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)}S@test.broadinstitute.com",
-        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Read))
-      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)}S", workspaceName, bucketName)
-      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)}S@test.broadinstitute.com",
-        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Write))
-      gcsDAO.createGoogleGroup(userInfo.userId, s"${GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)}S", workspaceName, bucketName)
-      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)}S@test.broadinstitute.com",
-        bucketName, GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner))
+      val owner = GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)
+      val reader = GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)
+      val writer = GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)
+      val appsDomain = gcsConfig.getString("appsDomain")
+
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${reader}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${reader}S@${appsDomain}",
+        bucketName, reader)
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${writer}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${writer}S@${appsDomain}",
+        bucketName, writer)
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${owner}S", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"FC-${workspaceName.namespace}_${workspaceName.name}-${owner}S@${appsDomain}",
+        bucketName, owner)
     }
 
 

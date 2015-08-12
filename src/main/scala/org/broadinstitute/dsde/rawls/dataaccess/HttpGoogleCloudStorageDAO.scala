@@ -18,6 +18,7 @@ import com.google.api.services.storage.Storage
 import com.google.api.services.storage.model.{ObjectAccessControl, StorageObject, Bucket, BucketAccessControl}
 import com.google.api.services._
 import com.google.common.collect.ImmutableList
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{GCSAccessLevel, BucketAccessControl, WorkspaceName}
 import scala.collection.JavaConversions._   // Seq[String] -> Collection<String>
@@ -31,6 +32,9 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
   val computeFullControl = "https://www.googleapis.com/auth/compute"
   val scopes = Seq(gcsFullControl,computeFullControl)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
+
+  val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+  val gcsConfig = conf.getConfig("gcs")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -55,7 +59,7 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
       .setServiceAccountId(clientSecrets.getDetails.get("client_email").toString)
       .setServiceAccountScopes(directoryScopes)
       .setServiceAccountUser(clientSecrets.getDetails.get("sub_email").toString)
-      .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
+      .setServiceAccountPrivateKeyFromP12File(new java.io.File(gcsConfig.getString("pathToP12"))) //add this file to jenkins?
       .build()
 
     val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
@@ -67,19 +71,12 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
   }
 
   override def setGroupACL(userId: String, groupId: String, bucketName: String, groupRole: String): Unit = {
-    val credentialx = new GoogleCredential.Builder()
-      .setTransport(httpTransport)
-      .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientSecrets.getDetails.get("client_email").toString)
-      .setServiceAccountScopes(directoryScopes)
-      .setServiceAccountUser(clientSecrets.getDetails.get("sub_email").toString)
-      .setServiceAccountPrivateKeyFromP12File(new java.io.File("/test.broad.p12")) //add this file to jenkins?
-      .build()
+    import com.google.api.services.storage.model.BucketAccessControl
 
     val credential = getCredential(userId)
-
     val storage = new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName("firecloud:rawls").build()
-    val acl = new com.google.api.services.storage.model.BucketAccessControl().setEntity("group-" + groupId).setRole(groupRole).setBucket(bucketName)
+    val acl = new BucketAccessControl().setEntity("group-" + groupId).setRole(groupRole).setBucket(bucketName)
+
     storage.bucketAccessControls().insert(bucketName, acl).execute()
   }
 
