@@ -28,13 +28,7 @@ import spray.client.pipelining._
 class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: DataStoreFactory, ourBaseURL: String)(implicit system: ActorSystem) extends GoogleCloudStorageDAO {
   // modify these if we need more granular access in the future
   val gcsFullControl = "https://www.googleapis.com/auth/devstorage.full_control"
-  val groupDirectory = "https://www.googleapis.com/auth/admin.directory.group"
-  val gcsReadWrite = "https://www.googleapis.com/auth/devstorage.read_write"
-  val gcsReadOnly = "https://www.googleapis.com/auth/devstorage.read_only"
-  val gcsStub = "https://www.googleapis.com/auth/devstorage"
   val computeFullControl = "https://www.googleapis.com/auth/compute"
-  val groupBase = "https://www.googleapis.com/admin/directory/v1/groups"
-  val groupsSettings = "https://www.googleapis.com/auth/apps.groups.settings"
   val scopes = Seq(gcsFullControl,computeFullControl)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
 
