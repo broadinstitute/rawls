@@ -239,7 +239,7 @@
 				"message": "Successful Request"
 			}, {
 				"code": 400,
-				"message": "Unable to create bucket for workspace"
+				"message": "Unable to create resources for workspace"
 			}, {
 				"code": 404,
 				"message": "Source workspace not found"
