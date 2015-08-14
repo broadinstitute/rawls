@@ -37,7 +37,6 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
 
   it should "save updates to an existing workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      // TODO since workspaces don't currently have mutable properties, is this redundant with EntityDAO?
       // for now, just save the workspace again (making sure it doesn't crash)
       workspaceDAO.save(testData.workspace, txn)
     }
@@ -46,7 +45,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "load a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(Some(testData.workspace)) {
-        workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn)
+        workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
       }
     }
   }
@@ -54,10 +53,10 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "return None when a workspace does not exist" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(None) {
-        new GraphWorkspaceDAO().load(testData.workspace.namespace, "fnord", txn)
+        new GraphWorkspaceDAO().load(WorkspaceName(testData.workspace.namespace, "fnord"), txn)
       }
       assertResult(None) {
-        new GraphWorkspaceDAO().load("fnord", testData.workspace.name, txn)
+        new GraphWorkspaceDAO().load(WorkspaceName("fnord", testData.workspace.name), txn)
       }
     }
   }
@@ -65,7 +64,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "load the short version of a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(Some(testData.workspace)) {
-        workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn)
+        workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
       }
     }
   }

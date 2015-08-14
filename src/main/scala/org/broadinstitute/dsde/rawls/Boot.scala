@@ -47,6 +47,7 @@ object Boot extends App {
     }
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphWorkspaceDAO(),
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
       new GraphWorkflowDAO(),

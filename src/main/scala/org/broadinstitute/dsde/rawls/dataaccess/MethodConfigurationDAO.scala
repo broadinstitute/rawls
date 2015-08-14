@@ -7,17 +7,17 @@ import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, MethodConf
  */
 trait MethodConfigurationDAO {
   /** gets by method config name*/
-  def get(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction) : Option[MethodConfiguration]
+  def get(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction) : Option[MethodConfiguration]
 
   /** creates or replaces a method configuration */
-  def save(workspaceNamespace: String, workspaceName: String, methodConfiguration: MethodConfiguration, txn: RawlsTransaction) : MethodConfiguration
+  def save(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction) : MethodConfiguration
 
   /** delete a method configuration, not sure if we need to delete all or a specific version?*/
-  def delete(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)
+  def delete(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Boolean
 
   /** list all method configurations in the workspace */
-  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort]
+  def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort]
 
   /** rename method configuration */
-  def rename(workspaceNamespace: String, workspaceName: String, methodConfigurationNamespace: String, methodConfiguration: String, newName: String, txn: RawlsTransaction)
+  def rename(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, oldName: String, newName: String, txn: RawlsTransaction): Unit
 }

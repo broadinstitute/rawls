@@ -82,19 +82,22 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMissingWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortMalformedWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortGoodWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTerminalWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortOneMissingWorkflow, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTestAbortTwoGoodWorkflows, txn)
+      withWorkspaceContext(workspace, txn) { context =>
+        entityDAO.save(context, sample1, txn)
+        submissionDAO.save(context, submissionTestAbortMissingWorkflow, txn)
+        submissionDAO.save(context, submissionTestAbortMalformedWorkflow, txn)
+        submissionDAO.save(context, submissionTestAbortGoodWorkflow, txn)
+        submissionDAO.save(context, submissionTestAbortTerminalWorkflow, txn)
+        submissionDAO.save(context, submissionTestAbortOneMissingWorkflow, txn)
+        submissionDAO.save(context, submissionTestAbortTwoGoodWorkflows, txn)
+      }
     }
   }
 
   def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit): Unit = {
     withDataOp { dataSource =>
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+        new GraphWorkspaceDAO(),
         new GraphSubmissionDAO(new GraphWorkflowDAO()),
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
         new GraphWorkflowDAO(),

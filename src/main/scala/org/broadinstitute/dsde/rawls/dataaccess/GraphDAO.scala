@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.Date
 
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientVertex}
-import com.tinkerpop.blueprints.{Graph, Vertex}
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
@@ -52,7 +50,7 @@ object VertexSchema {
 }
 
 trait GraphDAO {
-  val methodConfigEdge = "methodConfigEdge"
+  val methodConfigEdge: String = "methodConfigEdge"
   val methodRepoMethodEdge: String = "methodRepoMethodEdge"
   val methodRepoConfigEdge: String = "methodRepoConfigEdge"
   val workflowEdge: String = "workflowEdge"
@@ -161,26 +159,50 @@ trait GraphDAO {
 
   // named GremlinPipelines
 
-  def workspacePipeline(db: Graph, workspaceNamespace: String, workspaceName: String) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Workspace)).filter(hasProperties(Map("namespace" -> workspaceNamespace, "name" -> workspaceName)))
+  def workspacePipeline(db: Graph, workspaceName: WorkspaceName) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Workspace)).filter(hasProperties(Map("namespace" -> workspaceName.namespace, "name" -> workspaceName.name)))
   }
 
-  def entityPipeline(db: Graph, workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) = {
-    workspacePipeline(db, workspaceNamespace, workspaceName).out(entityType).filter(hasPropertyValue("name", entityName))
+  def workspacePipeline(workspaceContext: WorkspaceContext) = {
+    new GremlinPipeline(workspaceContext.workspaceVertex)
   }
 
-  def methodConfigPipeline(db: Graph, workspaceNamespace: String, workspaceName: String, methodConfigNamespace: String, methodConfigName: String) = {
-    workspacePipeline(db, workspaceNamespace, workspaceName).out(methodConfigEdge).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
+  def entityPipeline(workspaceContext: WorkspaceContext, entityType: String, entityName: String) = {
+    workspacePipeline(workspaceContext).out(entityType).filter(hasPropertyValue("name", entityName))
   }
 
-  // convenience getters
-
-  def getWorkspaceVertex(db: Graph, workspaceNamespace: String, workspaceName: String) = {
-    getSinglePipelineResult(workspacePipeline(db, workspaceNamespace, workspaceName))
+  def methodConfigPipeline(workspaceContext: WorkspaceContext, methodConfigNamespace: String, methodConfigName: String) = {
+    workspacePipeline(workspaceContext).out(methodConfigEdge).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
   }
 
-  def getEntityVertex(db: Graph, workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String) = {
-    getSinglePipelineResult(entityPipeline(db, workspaceNamespace, workspaceName, entityType, entityName))
+  def submissionPipeline(workspaceContext: WorkspaceContext, submissionId: String) = {
+    workspacePipeline(workspaceContext).out(submissionEdge).filter(hasPropertyValue("submissionId", submissionId))
+  }
+
+  def workflowPipeline(workspaceContext: WorkspaceContext, workflowId: String) = {
+    workspacePipeline(workspaceContext).out(workflowEdge).filter(hasPropertyValue("workflowId", workflowId))
+  }
+
+  // vertex getters
+
+  def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
+    getSinglePipelineResult(workspacePipeline(db, workspaceName))
+  }
+
+  def getEntityVertex(workspaceContext: WorkspaceContext, entityType: String, entityName: String) = {
+    getSinglePipelineResult(entityPipeline(workspaceContext, entityType, entityName))
+  }
+
+  def getMethodConfigVertex(workspaceContext: WorkspaceContext, methodConfigNamespace: String, methodConfigName: String) = {
+    getSinglePipelineResult(methodConfigPipeline(workspaceContext, methodConfigNamespace, methodConfigName))
+  }
+
+  def getSubmissionVertex(workspaceContext: WorkspaceContext, submissionId: String) = {
+    getSinglePipelineResult(submissionPipeline(workspaceContext, submissionId))
+  }
+
+  def getWorkflowVertex(workspaceContext: WorkspaceContext, workflowId: String) = {
+    getSinglePipelineResult(workflowPipeline(workspaceContext, workflowId))
   }
 
   /**
@@ -192,12 +214,11 @@ trait GraphDAO {
    *
    * @param obj to save
    * @param vertex to save it to
-   * @param graph
-   * @param workspaceName used to populate workspace name fields
+   * @param workspaceContext the workspace context
    * @tparam T type of object being saved
    * @return resulting vertex
    */
-  def saveToVertex[T: TypeTag: ClassTag](obj: T, vertex: Vertex, graph: Graph, workspaceName: WorkspaceName): Vertex = {
+  def saveToVertex[T: TypeTag: ClassTag](graph: Graph, workspaceContext: WorkspaceContext, obj: T, vertex: Vertex): Vertex = {
 
     def getProperties(obj: T): Iterable[(String, Option[Any])] = {
       val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
@@ -221,20 +242,19 @@ trait GraphDAO {
         vertex.removeProperty(key)
         vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex)
       case (key, Some(value: DateTime)) => vertex.setProperty(key, value.toDate)
-      case (key, Some(value: Map[_,_])) => serializeAttributeMap(vertex, key, value.asInstanceOf[Map[String, Attribute]], graph, workspaceName)
-      case (key, Some(value: AttributeEntityReference)) => serializeReference(vertex, key, value, graph, workspaceName)
+      case (key, Some(value: Map[_,_])) => serializeAttributeMap(graph, workspaceContext, vertex, key, value.asInstanceOf[Map[String, Attribute]])
+      case (key, Some(value: AttributeEntityReference)) => serializeReference(graph, workspaceContext, vertex, key, value)
       case (key, Some(seq: Seq[_])) => seq.headOption match {
         case None => // empty, do nothing
         case Some(x: Workflow) =>
-          serializeDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, (w: Workflow) => w.workflowId, graph, workspaceName)
-          val workspaceVertex = getSinglePipelineResult(workspacePipeline(graph, workspaceName.namespace, workspaceName.name)).get
-          new GremlinPipeline(vertex).out(workflowEdge).linkIn(workflowEdge, workspaceVertex).iterate()
-        case Some(x: WorkflowFailure) => serializeDomainObjects(vertex, seq.asInstanceOf[Seq[WorkflowFailure]], workflowFailureEdge, (wf: WorkflowFailure) => (wf.entityType, wf.entityName), graph, workspaceName)
-        case Some(a: Attribute) => serializeSeq(graph, workspaceName, vertex, key, seq.asInstanceOf[Seq[Attribute]])
+          serializeDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, (w: Workflow) => w.workflowId, graph, workspaceContext)
+          new GremlinPipeline(vertex).out(workflowEdge).linkIn(workflowEdge, workspaceContext.workspaceVertex).iterate()
+        case Some(x: WorkflowFailure) => serializeDomainObjects(vertex, seq.asInstanceOf[Seq[WorkflowFailure]], workflowFailureEdge, (wf: WorkflowFailure) => (wf.entityType, wf.entityName), graph, workspaceContext)
+        case Some(a: Attribute) => serializeSeq(graph, workspaceContext, vertex, key, seq.asInstanceOf[Seq[Attribute]])
         case x => throw new RawlsException(s"Unexpected object of type [${x.getClass}] in Seq for attribute [${key}]: [${x}]")
       }
-      case (key, Some(mrConfig: MethodRepoConfiguration)) => serializeDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, thereShouldOnlyBeOne, graph, workspaceName)
-      case (key, Some(mrMethod: MethodRepoMethod)) => serializeDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, thereShouldOnlyBeOne, graph, workspaceName)
+      case (key, Some(mrConfig: MethodRepoConfiguration)) => serializeDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, thereCanOnlyBeOne, graph, workspaceContext)
+      case (key, Some(mrMethod: MethodRepoMethod)) => serializeDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, thereCanOnlyBeOne, graph, workspaceContext)
       case (key, Some(ws: WorkspaceName)) => // don't serialize workspace name objects
 
       case (key, Some(ws: WorkflowStatus)) => vertex.setProperty(key, ws.toString)
@@ -252,7 +272,7 @@ trait GraphDAO {
    * special function passed into idFxn of serializeDomainObjects when there should only be
    * one object and thus any existing should be overwritten
    */
-  private def thereShouldOnlyBeOne(x: Any) = 1
+  private def thereCanOnlyBeOne(x: Any) = 1
 
   /**
    * Serializes rawls domain objects to sub vertices. Will overwrite corresponding existing vertices, correspondence
@@ -267,9 +287,9 @@ trait GraphDAO {
    * @param workspaceName used to construct domain objects that require a WorkspaceName
    * @tparam T the type of the object being serializes
    */
-  private def serializeDomainObjects[T: TypeTag: ClassTag](vertex: Vertex, objs: Seq[T], edgeLabel: String, idFxn: T => Any, graph: Graph, workspaceName: WorkspaceName): Seq[Vertex] = {
+  private def serializeDomainObjects[T: TypeTag: ClassTag](vertex: Vertex, objs: Seq[T], edgeLabel: String, idFxn: T => Any, graph: Graph, workspaceContext: WorkspaceContext): Seq[Vertex] = {
     val existingObjVertexesById = vertex.getVertices(Direction.OUT, edgeLabel).map { objVertex =>
-      val obj = loadFromVertex[T](objVertex, Option(workspaceName))
+      val obj = loadFromVertex[T](objVertex, Some(workspaceContext.workspaceName))
       idFxn(obj) -> objVertex
     } toMap
 
@@ -283,11 +303,11 @@ trait GraphDAO {
         newVertex
       })
 
-      saveToVertex(obj, objVertex, graph, workspaceName)
+      saveToVertex(graph, workspaceContext, obj, objVertex)
     }
   }
 
-  private def serializeAttributeMap(vertex: Vertex, propName: String, map: Map[String, Attribute], graph: Graph, workspaceName: WorkspaceName): Unit = {
+  private def serializeAttributeMap(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, propName: String, map: Map[String, Attribute]): Unit = {
     // remove existing map then repopulate
     vertex.getVertices(Direction.OUT, propName).headOption.foreach(removeMapVertex)
 
@@ -297,16 +317,27 @@ trait GraphDAO {
     map.foreach { case (key, attribute) =>
       attribute match {
         case v: AttributeValue => serializeValue(mapVertex, key, v)
-        case ref: AttributeEntityReference => serializeReference(mapVertex, key, ref, graph, workspaceName)
-        case AttributeValueList(values) => serializeSeq(graph, workspaceName, mapVertex, key, values)
-        case AttributeEntityReferenceList(references) => serializeSeq(graph, workspaceName, mapVertex, key, references)
-        case AttributeEmptyList => serializeAttributeMap(mapVertex, key, Map.empty, graph, workspaceName)
+        case ref: AttributeEntityReference => serializeReference(graph, workspaceContext, mapVertex, key, ref)
+        case AttributeValueList(values) => serializeSeq(graph, workspaceContext, mapVertex, key, values)
+        case AttributeEntityReferenceList(references) => serializeSeq(graph, workspaceContext, mapVertex, key, references)
+        case AttributeEmptyList => serializeAttributeMap(graph, workspaceContext, mapVertex, key, Map.empty)
       }
     }
   }
 
-  private def serializeSeq(graph: Graph, workspaceName: WorkspaceName, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
-    serializeAttributeMap(vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap, graph, workspaceName)
+  private def serializeSeq(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
+    serializeAttributeMap(graph, workspaceContext, vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap)
+  }
+
+  private def serializeReference(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, key: String, ref: AttributeEntityReference): Unit = {
+    val entityVertex = getEntityVertex(workspaceContext, ref.entityType, ref.entityName).getOrElse {
+      throw new RawlsException(s"${workspaceContext.workspaceName.namespace}/${workspaceContext.workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
+    }
+    addEdge(vertex, key, entityVertex)
+  }
+
+  private def serializeValue(vertex: Vertex, key: String, value: AttributeValue): Unit = {
+    vertex.setProperty(key, AttributeConversions.attributeToProperty(value))
   }
 
   private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
@@ -316,26 +347,16 @@ trait GraphDAO {
     mapVertex.remove()
   }
 
-  private def serializeValue(vertex: Vertex, key: String, value: AttributeValue): Unit = {
-    vertex.setProperty(key, AttributeConversions.attributeToProperty(value))
-  }
-
-  private def serializeReference(vertex: Vertex, key: String, ref: AttributeEntityReference, graph: Graph, workspaceName: WorkspaceName): Unit = {
-    val entityVertex = getSinglePipelineResult(entityPipeline(graph, workspaceName.namespace, workspaceName.name, ref.entityType, ref.entityName)).getOrElse {
-      throw new RawlsException(s"${workspaceName.namespace}/${workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
-    }
-    addEdge(vertex, key, entityVertex)
-  }
-
   /**
    * Loads an object from a vertex as saved by saveToVertex (see that function for how things are saved)
    * @param vertex to load
    * @param workspaceName
    * @tparam T
    * @return object loaded
+   *
+   * TODO once WorkspaceName is removed from the model classes, we won't need to pass it in here
    */
   def loadFromVertex[T: TypeTag](vertex: Vertex, workspaceName: Option[WorkspaceName]): T = {
-
     val classT = ru.typeOf[T].typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
     val ctor = ru.typeOf[T].decl(ru.termNames.CONSTRUCTOR).asMethod
@@ -376,7 +397,6 @@ trait GraphDAO {
 
         case workflowSymbol if workflowSymbol =:= typeOf[Seq[Workflow]] => deserializeDomainObjects[Workflow](vertex, workflowEdge, workspaceName)
         case workflowFailureSymbol if workflowFailureSymbol =:= typeOf[Seq[WorkflowFailure]] => deserializeDomainObjects[WorkflowFailure](vertex, workflowFailureEdge, workspaceName)
-
         case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => tryLoad(deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge, workspaceName).headOption)
         case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => tryLoad(deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge, workspaceName).headOption)
 

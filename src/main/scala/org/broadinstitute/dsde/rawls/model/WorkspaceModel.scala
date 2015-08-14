@@ -26,6 +26,7 @@ case class WorkspaceRequest (
                       attributes: Map[String, Attribute]
                       ) extends Identifiable with Attributable {
   def path = WorkspaceName(namespace,name).path
+  def toWorkspaceName = WorkspaceName(namespace,name)
 }
 
 case class Workspace (
@@ -74,6 +75,7 @@ case class MethodRepoMethod(
                    methodName: String,
                    methodVersion: String
                    )
+
 case class MethodRepoConfiguration(
                    methodConfigNamespace: String,
                    methodConfigName: String,

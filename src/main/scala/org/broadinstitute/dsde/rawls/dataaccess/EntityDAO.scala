@@ -9,32 +9,30 @@ import AttributeUpdateOperations.AttributeUpdateOperation
  */
 trait EntityDAO {
   /** gets the given entity */
-  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity]
+  def get(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity]
 
   /** creates or replaces an entity */
-  def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity
+  def save(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Entity
 
-  /**
-   * deletes an entity
-   */
-  def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction)
+  /** deletes an entity */
+  def delete(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction): Boolean
 
   /** list all entities of the given type in the workspace */
-  def list(workspaceNamespace: String, workspaceName: String, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity]
+  def list(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity]
 
-  def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String, txn: RawlsTransaction)
+  def rename(workspaceContext: WorkspaceContext, entityType: String, oldName: String, newName: String, txn: RawlsTransaction): Unit
 
-  def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String]
+  def getEntityTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[String]
 
-  def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity]
+  def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity]
 
-  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction): Unit
+  def cloneAllEntities(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext, txn: RawlsTransaction): Unit
 
-  def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ): Unit
+  def cloneEntities(destWorkspaceContext: WorkspaceContext, entities: Seq[Entity], txn: RawlsTransaction): Unit
 
-  def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity]
+  def getEntitySubtrees(workspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity]
 
-  def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity]
+  def copyEntities(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): TraversableOnce[Entity]
 
-  def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity]
+  def getCopyConflicts(destWorkspaceContext: WorkspaceContext, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): TraversableOnce[Entity]
 }

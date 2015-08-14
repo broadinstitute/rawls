@@ -7,27 +7,27 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Submission, Workflow}
  */
 trait SubmissionDAO {
   /** get a submission by workspace and submissionId */
-  def get(workspaceNamespace: String, workspaceName: String, submissionId: String, txn: RawlsTransaction): Option[Submission]
+  def get(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Option[Submission]
 
   /** list all submissions in the workspace */
-  def list(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Submission]
+  def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Submission]
 
   /** create a submission (and its workflows) */
-  def save(workspaceNamespace: String, workspaceName: String, submission: Submission, txn: RawlsTransaction): Unit
+  def save(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction): Submission
 
   /** delete a submission (and its workflows) */
-  def delete(workspaceNamespace: String, workspaceName: String, submissionId: String, txn: RawlsTransaction): Boolean
+  def delete(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Boolean
 
-  def update(submission: Submission, txn: RawlsTransaction): Unit
+  def update(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction): Submission
 }
 
 trait WorkflowDAO {
   /** get a workflow by workspace and workflowId */
-  def get(workspaceName: WorkspaceName, workflowId: String, txn: RawlsTransaction): Option[Workflow]
+  def get(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Option[Workflow]
 
   /** update a workflow */
-  def update(workspaceName: WorkspaceName, workflow: Workflow, txn: RawlsTransaction): Workflow
+  def update(workspaceContext: WorkspaceContext, workflow: Workflow, txn: RawlsTransaction): Workflow
 
   /** delete a workflow */
-  def delete(workspaceName: WorkspaceName, workflowId: String, txn: RawlsTransaction): Boolean
+  def delete(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Boolean
 }

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import cromwell.binding.WdlNamespace
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.RawlsTransaction
+import org.broadinstitute.dsde.rawls.dataaccess.{WorkspaceContext, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionParser, ExpressionEvaluator}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -28,13 +28,13 @@ object MethodConfigResolver {
    * Evaluate expressions in a method config against a root entity.
    * @return map from input name to a Try containing a resolved value or failure
    */
-  def resolveInputs(methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
+  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
     val wdlInputs = WdlNamespace.load(wdl).workflows.head.inputs
     txn withGraph { graph =>
-      val evaluator = new ExpressionEvaluator(graph, new ExpressionParser)
+      val evaluator = new ExpressionEvaluator(new ExpressionParser)
       methodConfig.inputs.map {
         case (name, expression) => {
-          val evaluated = evaluator.evalFinalAttribute(entity.workspaceName.namespace, entity.workspaceName.name, entity.entityType, entity.name, expression.value)
+          val evaluated = evaluator.evalFinalAttribute(workspaceContext, entity.entityType, entity.name, expression.value)
           // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
           val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
               // TODO: Cromwell doesn't yet have compound types (e.g. Seq)
@@ -53,8 +53,8 @@ object MethodConfigResolver {
    * Get errors in both expression eval and WDL binding.
    * @return map of from input name to error message (so if the map is empty, the config is valid)
    */
-  def getValidationErrors(methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction) = {
-    val configInputs = resolveInputs(methodConfig, entity, wdl, txn)
+  def getValidationErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction) = {
+    val configInputs = resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
     WdlNamespace.load(wdl).workflows.head.inputs.map {
       case (wdlName, wdlType) => {
         val errorOption = configInputs.get(wdlName) match {
@@ -71,8 +71,8 @@ object MethodConfigResolver {
     } collect { case (name, Some(error)) => (name, error) }
   }
 
-  def resolveInputsAndAggregateErrors(methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Try[Map[String, Any]] = {
-    val resolved = resolveInputs(methodConfig, entity, wdl, txn)
+  def resolveInputsAndAggregateErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Try[Map[String, Any]] = {
+    val resolved = resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
     resolved.count(_._2.isFailure) match {
       case 0 => Success(resolved collect { case (name, Success(value)) => (name, value) } )
       case numFails => Failure(new RawlsException(s"There were $numFails failed expression evaluations"))
