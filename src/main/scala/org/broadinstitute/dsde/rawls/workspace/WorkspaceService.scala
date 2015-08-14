@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import java.io.File
 import java.util.UUID
 
 import akka.actor.{ActorRef, Actor, Props}
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -128,6 +130,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
   }
 
+  val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+  val gcsConfig = conf.getConfig("gcs")
+
   def registerUser(callbackPath: String): PerRequestMessage = {
     RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
   }
@@ -146,14 +151,41 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         case None =>
           val bucketName = createBucketName(workspaceRequest.name)
           Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
-            case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
+            case Failure(err) =>
+              RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
             case Success(_) =>
-              val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, bucketName, DateTime.now, userInfo.userId, workspaceRequest.attributes)
-              workspaceDAO.save(workspace, txn)
-              RequestCompleteWithLocation((StatusCodes.Created,workspace), workspace.toWorkspaceName.path)
+              Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name), bucketName) ) match {
+                case Failure(err) =>
+                  dataSource.rollbackOnly.set(true)
+                  RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
+                case Success(_) =>
+                  val workspace = Workspace(workspaceRequest.namespace,workspaceRequest.name,bucketName,DateTime.now,userInfo.userId,workspaceRequest.attributes)
+                  workspaceDAO.save(workspace, txn)
+                  RequestCompleteWithLocation((StatusCodes.Created,workspace), workspace.toWorkspaceName.path)
+              }
           }
       }
     }
+
+  def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
+    dataSource inTransaction { txn =>
+      val owner = GCSAccessLevel.toGoogleString(GCSAccessLevel.Owner)
+      val reader = GCSAccessLevel.toGoogleString(GCSAccessLevel.Read)
+      val writer = GCSAccessLevel.toGoogleString(GCSAccessLevel.Write)
+      val appsDomain = gcsConfig.getString("appsDomain")
+      val groupsPrefix = gcsConfig.getString("groupsPrefix")
+
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${reader}", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"${groupsPrefix}-${workspaceName.namespace}_${workspaceName.name}-${reader}@${appsDomain}",
+        bucketName, reader)
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${writer}", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"${groupsPrefix}-${workspaceName.namespace}_${workspaceName.name}-${writer}@${appsDomain}",
+        bucketName, writer)
+      gcsDAO.createGoogleGroup(userInfo.userId, s"${owner}", workspaceName, bucketName)
+      gcsDAO.setGroupACL(userInfo.userId, s"${groupsPrefix}-${workspaceName.namespace}_${workspaceName.name}-${owner}@${appsDomain}",
+        bucketName, owner)
+    }
+
 
   def getWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
@@ -187,21 +219,27 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       (workspaceDAO.load(sourceWorkspaceName, txn), workspaceDAO.load(destWorkspaceName, txn)) match {
         case (Some(sourceWorkspace), None) => {
-          val bucketName = createBucketName(destWorkspaceName.namespace)
+          val bucketName = createBucketName(destWorkspaceName.name)
           Try( gcsDAO.createBucket(userInfo.userId, destWorkspaceName.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspaceName}: "+err.getMessage)
             case Success(_) =>
-              val destWorkspace = workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userId, sourceWorkspace.attributes), txn)
-              // now get the contexts. just call .get because it should be impossible to get None at this point
-              val sourceWorkspaceContext = workspaceDAO.loadContext(sourceWorkspaceName, txn).get
-              val destWorkspaceContext = workspaceDAO.loadContext(destWorkspaceName, txn).get
-              entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
-              // TODO add a method for cloning all method configs, instead of doing this
-              methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-                methodConfigurationDAO.save(destWorkspaceContext,
-                  methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
+              Try( setupWorkspaceGroupACLs(destWorkspaceName, bucketName) ) match {
+                case Failure(err) =>
+                  dataSource.rollbackOnly.set(true)
+                  RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${destWorkspaceName}: " + err.getMessage)
+                case Success(_) =>
+                  val destWorkspace = workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userId, sourceWorkspace.attributes), txn)
+                  // now get the contexts. just call .get because it should be impossible to get None at this point
+                  val sourceWorkspaceContext = workspaceDAO.loadContext(sourceWorkspaceName, txn).get
+                  val destWorkspaceContext = workspaceDAO.loadContext(destWorkspaceName, txn).get
+                  entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
+                  // TODO add a method for cloning all method configs, instead of doing this
+                  methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
+                    methodConfigurationDAO.save(destWorkspaceContext,
+                      methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
+                  }
+                  RequestCompleteWithLocation((StatusCodes.Created, destWorkspace), destWorkspace.toWorkspaceName.path)
               }
-              RequestCompleteWithLocation((StatusCodes.Created, destWorkspace), destWorkspace.toWorkspaceName.path)
           }
         }
         case (None, _) => RequestComplete(StatusCodes.NotFound, s"Source workspace ${sourceWorkspaceName} not found")
@@ -776,6 +814,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
+  def requireAccess(workspaceName: WorkspaceName, bucketName: String, requiredLevel: GCSAccessLevel, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
+    if (gcsDAO.getMaximumAccessLevel(userInfo.userId, workspaceName) >= requiredLevel) codeBlock
+    else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
+  }
+
   private def withWorkspace(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage) = {
     workspaceDAO.load(workspaceName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
@@ -824,12 +867,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       case None => RequestComplete(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")
       case Some(workflow) => op(workflow)
     }
-  }
-
-  private def requireAccess(workspaceName: WorkspaceName, bucketName: String, requiredLevel: GCSAccessLevel, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
-    val acls = JsonParser(gcsDAO.getACL(userInfo.userId, bucketName)).convertTo[BucketAccessControls]
-    if (acls.maximumAccessLevel >= requiredLevel) codeBlock
-    else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
   }
 }
 

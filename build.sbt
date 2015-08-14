@@ -44,7 +44,8 @@ libraryDependencies ++= {
       excludeAll (ExclusionRule(organization = "com.gettyimages"), ExclusionRule(organization = "org.webjars")) ,
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
-      .exclude("com.google.guava", "guava-jdk5")
+      .exclude("com.google.guava", "guava-jdk5"),
+    ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0")
   )
 }
 
