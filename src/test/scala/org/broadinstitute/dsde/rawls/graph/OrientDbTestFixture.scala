@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.graph
 import java.util.logging.{LogManager, Logger}
 
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
@@ -155,7 +156,6 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
 
-
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
 
@@ -167,36 +167,37 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
+      withWorkspaceContext(workspace, txn) { context =>
+        entityDAO.save(context, aliquot1, txn)
+        entityDAO.save(context, aliquot2, txn)
+        entityDAO.save(context, sample1, txn)
+        entityDAO.save(context, sample2, txn)
+        entityDAO.save(context, sample3, txn)
+        entityDAO.save(context, sample4, txn)
+        entityDAO.save(context, sample5, txn)
+        entityDAO.save(context, sample6, txn)
+        entityDAO.save(context, sample7, txn)
+        entityDAO.save(context, pair1, txn)
+        entityDAO.save(context, pair2, txn)
+        entityDAO.save(context, ps1, txn)
+        entityDAO.save(context, sset1, txn)
+        entityDAO.save(context, sset2, txn)
+        entityDAO.save(context, sset3, txn)
+        entityDAO.save(context, sset4, txn)
+        entityDAO.save(context, sset_empty, txn)
+        entityDAO.save(context, indiv1, txn)
 
-      entityDAO.save(workspace.namespace, workspace.name, aliquot1, txn)
-      entityDAO.save(workspace.namespace, workspace.name, aliquot2, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample1, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample2, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample3, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample4, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample5, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample6, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sample7, txn)
-      entityDAO.save(workspace.namespace, workspace.name, pair1, txn)
-      entityDAO.save(workspace.namespace, workspace.name, pair2, txn)
-      entityDAO.save(workspace.namespace, workspace.name, ps1, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sset1, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sset2, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sset3, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sset4, txn)
-      entityDAO.save(workspace.namespace, workspace.name, sset_empty, txn)
-      entityDAO.save(workspace.namespace, workspace.name, indiv1, txn)
+        methodConfigDAO.save(context, methodConfig, txn)
+        methodConfigDAO.save(context, methodConfig2, txn)
+        methodConfigDAO.save(context, methodConfigValid, txn)
+        methodConfigDAO.save(context, methodConfigUnparseable, txn)
+        methodConfigDAO.save(context, methodConfigNotAllSamples, txn)
+        methodConfigDAO.save(context, methodConfigAttrTypeMixup, txn)
 
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfig2, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigValid, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigUnparseable, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigNotAllSamples, txn)
-      methodConfigDAO.save(workspace.namespace, workspace.name, methodConfigAttrTypeMixup, txn)
-
-      submissionDAO.save(workspace.namespace, workspace.name, submissionTerminateTest, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submission1, txn)
-      submissionDAO.save(workspace.namespace, workspace.name, submission2, txn)
+        submissionDAO.save(context, submissionTerminateTest, txn)
+        submissionDAO.save(context, submission1, txn)
+        submissionDAO.save(context, submission2, txn)
+      }
     }
   }
   val testData = new DefaultTestData()
@@ -231,5 +232,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     graph.rollback()
     graph.drop()
     graph.shutdown()
+  }
+
+  def withWorkspaceContext(workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => Any) = {
+    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException("WHAT THE F"))
+    testCode(workspaceContext)
   }
 }

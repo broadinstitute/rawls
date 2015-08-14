@@ -14,93 +14,66 @@ import org.broadinstitute.dsde.rawls.model.AttributeConversions._
 
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 
-  def loadEntity(entity: Vertex, workspaceNamespace: String, workspaceName: String) = {
-    loadFromVertex[Entity](entity, Option(WorkspaceName(workspaceNamespace, workspaceName)))
+  def loadEntity(entity: Vertex, workspaceContext: WorkspaceContext) = {
+    loadFromVertex[Entity](entity, Some(workspaceContext.workspaceName))
   }
 
-  def cloneAllEntities(workspaceNamespace: String, newWorkspaceNamespace: String, workspaceName: String, newWorkspaceName: String, txn: RawlsTransaction) = txn withGraph { db =>
-    val entities = listEntitiesAllTypes(workspaceNamespace, workspaceName, txn).toList
-    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot clone entity from nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
-
-    cloneTheseEntities(entities,newWorkspaceNamespace,newWorkspaceName,txn)
-  }
-
-  override def cloneTheseEntities( entities: Seq[Entity], newWorkspaceNamespace: String, newWorkspaceName: String, txn: RawlsTransaction ) = txn withGraph { db =>
-    val newWorkspace = getWorkspaceVertex(db, newWorkspaceNamespace, newWorkspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot clone entity into nonexistent workspace " + newWorkspaceNamespace + "::" + newWorkspaceName))
-
-    //map the entities to ((entity type, entity name), vertex)
-    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> getOrCreateVertex(newWorkspace, newWorkspaceNamespace, newWorkspaceName, entity, txn)}.toMap
-    entities.foreach(entity => {
-      val vertex = entityToVertexMap((entity.entityType, entity.name))
-      saveToVertex[Entity](entity, vertex, db, WorkspaceName(newWorkspaceNamespace, newWorkspaceName))
-    })
-  }
-
-  private def getOrCreateVertex(workspace: Vertex, workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
+  private def getOrCreateVertex(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
     // get the entity, creating if it doesn't already exist
-    val entityVertex = getEntityVertex(db, workspaceNamespace, workspaceName, entity.entityType, entity.name).getOrElse({
+    val entityVertex = getEntityVertex(workspaceContext, entity.entityType, entity.name).getOrElse({
       val newVertex = addVertex(db, VertexSchema.Entity)
       // need to explicitly set name and type so other pipelines can find this vertex,
       // notably in the case of handling cycles
       newVertex.setProperty("name", entity.name)
       newVertex.setProperty("entityType", entity.entityType)
-
-      addEdge(workspace, entity.entityType, newVertex)
+      addEdge(workspaceContext.workspaceVertex, entity.entityType, newVertex)
       newVertex
     })
     entityVertex
   }
 
-  def save(workspaceNamespace: String, workspaceName: String, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
+  override def save(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
     // check for illegal dot characters
     validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
     validateUserDefinedString(entity.name)
     entity.attributes.keys.foreach(validateUserDefinedString)
-
-    val workspace = getWorkspaceVertex(db, workspaceNamespace, workspaceName)
-      .getOrElse(throw new IllegalArgumentException("Cannot save entity to nonexistent workspace " + workspaceNamespace + "::" + workspaceName))
-    val entityVertex = getOrCreateVertex(workspace, workspaceNamespace, workspaceName, entity, txn)
-    saveToVertex[Entity](entity, entityVertex, db, WorkspaceName(workspaceNamespace, workspaceName))
+    val entityVertex = getOrCreateVertex(workspaceContext, entity, txn)
+    saveToVertex[Entity](db, workspaceContext, entity, entityVertex)
     entity
   }
 
-  def get(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
-    getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).map(loadEntity(_, workspaceNamespace, workspaceName))
+  override def get(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
+    getEntityVertex(workspaceContext, entityType, entityName).map(loadEntity(_,workspaceContext))
   }
 
-  def delete(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
-    getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName) match {
-      case Some(v) => v.remove()
-      case None => Unit
+  override def delete(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
+    getEntityVertex(workspaceContext, entityType, entityName) match {
+      case Some(v) => {
+        v.remove
+        true
+      }
+      case None => false
     }
   }
 
-  def list(workspaceNamespace: String, workspaceName: String, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
-      case Some(w) => new GremlinPipeline(w).out(entityType).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
-      case None => List.empty
-    }
+  override def list(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
+    workspacePipeline(workspaceContext).out(entityType).iterator().map(loadEntity(_, workspaceContext))
   }
 
-  def rename(workspaceNamespace: String, workspaceName: String, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
-    getEntityVertex(db, workspaceNamespace, workspaceName, entityType, entityName).foreach(_.setProperty("name", newName))
+  override def rename(workspaceContext: WorkspaceContext, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
+    getEntityVertex(workspaceContext, entityType, entityName).foreach(_.setProperty("name", newName))
   }
 
-  def getEntityTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): Seq[String] = txn withGraph { graph =>
-    workspacePipeline(graph, workspaceNamespace, workspaceName).out().filter(isVertexOfClass(VertexSchema.Entity)).filter(hasProperty("entityType")).property("entityType").dedup().toList.toSeq.map(_.toString)
+  override def getEntityTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): Seq[String] = txn withGraph { graph =>
+    workspacePipeline(workspaceContext).out().filter(isVertexOfClass(VertexSchema.Entity)).filter(hasProperty("entityType")).property("entityType").dedup().toList.toSeq.map(_.toString)
   }
 
-  def listEntitiesAllTypes(workspaceNamespace: String, workspaceName: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    val entityTypes = getEntityTypes(workspaceNamespace, workspaceName, txn)
-    getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
-      case Some(w) => new GremlinPipeline(w).out(entityTypes:_*).iterator().map(loadEntity(_, workspaceNamespace, workspaceName))
-      case None => List.empty
-    }
+  override def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
+    val entityTypes = getEntityTypes(workspaceContext, txn)
+    workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity(_, workspaceContext))
   }
 
-  def getEntitySubtrees(workspaceNamespace: String, workspaceName: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
+  override def getEntitySubtrees(workspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
     def nameFilter = new PipeFunction[Vertex, java.lang.Boolean] {
       override def compute(v: Vertex) = entityNames.contains(v.getProperty("name"))
     }
@@ -109,29 +82,23 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
     }
 
-    val subtreeEntities = getWorkspaceVertex(db, workspaceNamespace, workspaceName) match {
-      case Some(w) => {
-        val topLevelEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
-        val remainingEntities = new GremlinPipeline(w).out(entityType).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_, workspaceNamespace, workspaceName)).toList
-        (topLevelEntities:::remainingEntities).distinct
-      }
-      case None => Seq.empty
-    }
-    subtreeEntities
+    val topLevelEntities = workspacePipeline(workspaceContext).out(entityType).filter(nameFilter).iterator().map(loadEntity(_, workspaceContext)).toList
+    val remainingEntities = workspacePipeline(workspaceContext).out(entityType).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_, workspaceContext)).toList
+    (topLevelEntities:::remainingEntities).distinct
   }
 
-  def getCopyConflicts(destNamespace: String, destWorkspace: String, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity] = {
+  override def getCopyConflicts(destWorkspaceContext: WorkspaceContext, entitiesToCopy: Seq[Entity], txn: RawlsTransaction): Seq[Entity] = {
     val copyMap = entitiesToCopy.map { entity => (entity.entityType, entity.name) -> entity }.toMap
-    listEntitiesAllTypes(destNamespace, destWorkspace, txn).toSeq.filter(entity => copyMap.contains(entity.entityType, entity.name))
+    listEntitiesAllTypes(destWorkspaceContext, txn).toSeq.filter(entity => copyMap.contains(entity.entityType, entity.name))
   }
 
-  def copyEntities(destNamespace: String, destWorkspace: String, sourceNamespace: String, sourceWorkspace: String, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = {
-    val entities = getEntitySubtrees(sourceNamespace, sourceWorkspace, entityType, entityNames, txn).toSeq
-    val conflicts = getCopyConflicts(destNamespace, destWorkspace, entities, txn)
+  override def copyEntities(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = {
+    val entities = getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames, txn)
+    val conflicts = getCopyConflicts(destWorkspaceContext, entities, txn)
 
     conflicts.size match {
       case 0 => {
-        cloneTheseEntities(entities, destNamespace, destWorkspace, txn)
+        cloneEntities(destWorkspaceContext, entities, txn)
         Seq.empty
       }
       case _ => {
@@ -139,4 +106,19 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       }
     }
   }
+
+  override def cloneAllEntities(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext, txn: RawlsTransaction) = txn withGraph { db =>
+    val entities = listEntitiesAllTypes(sourceWorkspaceContext, txn).toList
+    cloneEntities(destWorkspaceContext, entities, txn)
+  }
+
+  override def cloneEntities(destWorkspaceContext: WorkspaceContext, entities: Seq[Entity], txn: RawlsTransaction) = txn withGraph { db =>
+    //map the entities to ((entity type, entity name), vertex)
+    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> getOrCreateVertex(destWorkspaceContext, entity, txn)}.toMap
+    entities.foreach(entity => {
+      val vertex = entityToVertexMap((entity.entityType, entity.name))
+      saveToVertex[Entity](db, destWorkspaceContext, entity, vertex)
+    })
+  }
+
 }

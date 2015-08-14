@@ -17,7 +17,8 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(submission: Submission, authCookie: HttpCookie)
 
-  def props(submissionDAO: SubmissionDAO,
+  def props(workspaceDAO: WorkspaceDAO,
+            submissionDAO: SubmissionDAO,
             executionServiceDAO: ExecutionServiceDAO,
             workflowDAO: WorkflowDAO,
             entityDAO: EntityDAO,
@@ -25,8 +26,7 @@ object SubmissionSupervisor {
             datasource: DataSource,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
-
-    Props(new SubmissionSupervisor(submissionDAO, executionServiceDAO, workflowDAO, entityDAO, methodConfigurationDAO, datasource, workflowPollInterval, submissionPollInterval))
+    Props(new SubmissionSupervisor(workspaceDAO, submissionDAO, executionServiceDAO, workflowDAO, entityDAO, methodConfigurationDAO, datasource, workflowPollInterval, submissionPollInterval))
   }
 }
 
@@ -34,6 +34,7 @@ object SubmissionSupervisor {
  * Supervisor actor that should run for the life of the app. SubmissionStarted messages will start a monitor
  * for the given submission. Errors are logged if that monitor fails.
  * 
+ * @param workspaceDAO
  * @param submissionDAO
  * @param executionServiceDAO
  * @param workflowDAO
@@ -41,7 +42,8 @@ object SubmissionSupervisor {
  * @param workflowPollInterval
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(submissionDAO: SubmissionDAO,
+class SubmissionSupervisor(workspaceDAO: WorkspaceDAO,
+                           submissionDAO: SubmissionDAO,
                            executionServiceDAO: ExecutionServiceDAO,
                            workflowDAO: WorkflowDAO,
                            entityDAO: EntityDAO,
@@ -56,8 +58,8 @@ class SubmissionSupervisor(submissionDAO: SubmissionDAO,
   }
 
   private def startSubmissionMonitor(submission: Submission, authCookie: HttpCookie): Unit = {
-    actorOf(SubmissionMonitor.props(submission, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, workflowDAO, methodConfigurationDAO, datasource, authCookie)), submission.submissionId)
+    actorOf(SubmissionMonitor.props(submission, workspaceDAO, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval,
+      WorkflowMonitor.props(workflowPollInterval, workspaceDAO, executionServiceDAO, workflowDAO, methodConfigurationDAO, entityDAO, datasource, authCookie)), submission.submissionId)
   }
 
   override val supervisorStrategy =

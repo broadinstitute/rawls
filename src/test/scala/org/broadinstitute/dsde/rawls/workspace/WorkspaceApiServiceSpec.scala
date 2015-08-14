@@ -55,6 +55,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphWorkspaceDAO(),
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       new GraphWorkflowDAO(),
@@ -100,13 +101,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(newWorkspace) {
-            val ws = workspaceDAO.load(newWorkspace.namespace, newWorkspace.name, txn).get
-            WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
+            val ws = workspaceDAO.load(newWorkspace.toWorkspaceName, txn).get
+            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
           }
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
@@ -125,7 +126,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
         services.dataSource.inTransaction { txn =>
           assertResult(testData.workspace) {
-            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get
+            workspaceDAO.load(testData.wsName, txn).get
           }
         }
         assertResult(testData.workspace) {
@@ -219,8 +220,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          assertResult(newSample) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, newSample.entityType, newSample.name, txn).get
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(newSample) {
+              entityDAO.get(workspaceContext, newSample.entityType, newSample.name, txn).get
+            }
           }
         }
         assertResult(newSample) {
@@ -269,8 +272,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, "Sample", "newSample", txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+              entityDAO.get(workspaceContext, "Sample", "newSample", txn)
+            }
           }
         }
       }
@@ -287,8 +292,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample1.entityType, testData.sample1.name, txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+              entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
+            }
           }
         }
       }
@@ -334,8 +341,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample1.entityType, testData.sample1.name, txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+              entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
+            }
           }
         }
       }
@@ -351,8 +360,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          assertResult(testData.sample2) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(testData.sample2) {
+              entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get
+            }
           }
         }
         assertResult(testData.sample2) {
@@ -371,10 +382,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          val entityTypes = entityDAO.getEntityTypes(testData.workspace.namespace, testData.workspace.name, txn)
-
-          assertResult(entityTypes) {
-            responseAs[Array[String]]
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            val entityTypes = entityDAO.getEntityTypes(workspaceContext, txn)
+            assertResult(entityTypes) {
+              responseAs[Array[String]]
+            }
           }
         }
       }
@@ -390,10 +402,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          val samples = entityDAO.list(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, txn).toSet
-
-          assertResult(samples) {
-            responseAs[Array[Entity]].toSet
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            val samples = entityDAO.list(workspaceContext, testData.sample2.entityType, txn).toSet
+            assertResult(samples) {
+              responseAs[Array[Entity]].toSet
+            }
           }
         }
       }
@@ -420,7 +433,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         assertResult(Option(AttributeString("bang"))) {
           services.dataSource.inTransaction { txn =>
-            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get.attributes.get("boo")
+            workspaceDAO.load(testData.wsName, txn).get.attributes.get("boo")
           }
         }
       }
@@ -435,7 +448,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
         assertResult(None) {
           services.dataSource.inTransaction { txn =>
-            workspaceDAO.load(testData.workspace.namespace, testData.workspace.name, txn).get.attributes.get("boo")
+            workspaceDAO.load(testData.wsName, txn).get.attributes.get("boo")
           }
         }
       }
@@ -451,7 +464,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         assertResult(Option(AttributeString("bang"))) {
           services.dataSource.inTransaction { txn =>
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("boo")
+            withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+              entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("boo")
+            }
           }
         }
       }
@@ -467,7 +482,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         assertResult(None) {
           services.dataSource.inTransaction { txn =>
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("bar")
+            withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+              entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("bar")
+            }
           }
         }
       }
@@ -535,8 +552,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(true) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, "s2_changed", txn).isDefined
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(true) {
+              entityDAO.get(workspaceContext, testData.sample2.entityType, "s2_changed", txn).isDefined
+            }
           }
         }
       }
@@ -551,8 +570,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(None) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, "s2_changed", txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(None) {
+              entityDAO.get(workspaceContext, testData.sample2.entityType, "s2_changed", txn)
+            }
           }
         }
       }
@@ -567,8 +588,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(None) {
-            entityDAO.get(testData.workspace.namespace, testData.workspace.name, testData.sample2.entityType, testData.sample2.name, txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(None) {
+              entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn)
+            }
           }
         }
       }
@@ -621,8 +644,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(newMethodConfig) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, newMethodConfig.namespace, newMethodConfig.name, txn).get
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(newMethodConfig) {
+              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get
+            }
           }
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${newMethodConfig.path}"))))) {
@@ -651,11 +676,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(true) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "testConfig2_changed", txn).isDefined
-          }
-          assertResult(None) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(true) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "testConfig2_changed", txn).isDefined
+            }
+            assertResult(None) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+            }
           }
         }
       }
@@ -670,11 +697,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(true) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
-          }
-          assertResult(None) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "foox", txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(true) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
+            }
+            assertResult(None) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "foox", txn)
+            }
           }
         }
       }
@@ -689,8 +718,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(None) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(None) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn)
+            }
           }
         }
       }
@@ -705,11 +736,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          assertResult(true) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
-          }
-          assertResult(None) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, "foox", txn)
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(true) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
+            }
+            assertResult(None) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "foox", txn)
+            }
           }
         }
       }
@@ -725,8 +758,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(Option(AttributeString("foo2"))) {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult(Option(AttributeString("foo2"))) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
+            }
           }
         }
       }
@@ -752,8 +787,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult("testConfig1") {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult("testConfig1") {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+            }
           }
         }
       }
@@ -792,8 +829,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult("testConfig1") {
-            methodConfigDAO.get(testData.workspace.namespace, testData.workspace.name, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            assertResult("testConfig1") {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
+            }
           }
         }
       }
@@ -864,9 +903,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          val configs = methodConfigDAO.list(testData.workspace.namespace, testData.workspace.name, txn).toSet
-          assertResult(configs) {
-            responseAs[Array[MethodConfigurationShort]].toSet
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            val configs = methodConfigDAO.list(workspaceContext, txn).toSet
+            assertResult(configs) {
+              responseAs[Array[MethodConfigurationShort]].toSet
+            }
           }
         }
       }
@@ -882,20 +923,25 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          val copiedWorkspace = workspaceDAO.load(workspaceCopy.namespace, workspaceCopy.name, txn).get
 
-          //Name, namespace, creation date, and owner might change, so this is all that remains.
-          assert(copiedWorkspace.attributes == testData.workspace.attributes)
-          assertResult(entityDAO.listEntitiesAllTypes(testData.workspace.namespace, testData.workspace.name, txn).toSet) {
-            entityDAO.listEntitiesAllTypes(workspaceCopy.namespace, workspaceCopy.name, txn) map {
-              _.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
-            } toSet
-          }
-          assertResult(methodConfigDAO.list(testData.workspace.namespace, testData.workspace.name, txn).toSet) {
-            methodConfigDAO.list(workspaceCopy.namespace, workspaceCopy.name, txn) map {
-              _.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
-            } toSet
+        services.dataSource.inTransaction { txn =>
+          withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
+            val copiedWorkspace = workspaceDAO.load(workspaceCopy, txn).get
+            assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+            withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
+              //Name, namespace, creation date, and owner might change, so this is all that remains.
+              assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
+                entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet.map { (e: Entity) =>
+                  e.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+                }
+              }
+              assertResult(methodConfigDAO.list(sourceWorkspaceContext, txn).toSet) {
+                methodConfigDAO.list(copiedWorkspaceContext, txn).toSet.map { (mc: MethodConfigurationShort) =>
+                  mc.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
+                }
+              }
+            }
           }
         }
 
@@ -917,20 +963,20 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest("dsde","not there","Pattern","pattern1",None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest("dsde","not there","Pattern","pattern1", None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    val mcName = MethodConfigurationName("three_step_1","dsde",testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map("pattern"->AttributeString("String")),Map.empty,mcName.workspaceName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    val mcName = MethodConfigurationName("three_step_1","dsde", testData.wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, mcName.workspaceName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
@@ -938,18 +984,18 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 201 Created when creating a submission" in withTestDataApiServices { services =>
     val wsName = testData.wsName
-    val mcName = MethodConfigurationName("three_step","dsde",wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern",Map.empty,Map.empty,Map.empty, wsName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`,methodConf.toJson.toString)) ~>
+    val mcName = MethodConfigurationName("three_step","dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map.empty, Map.empty, wsName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    val entity = Entity("pattern1","Pattern",Map("pattern"->AttributeString("hello")),wsName)
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities", HttpEntity(ContentTypes.`application/json`,entity.toJson.toString)) ~>
+    val entity = Entity("pattern1","Pattern", Map("pattern"->AttributeString("hello")), wsName)
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities", HttpEntity(ContentTypes.`application/json`, entity.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`,SubmissionRequest(mcName.namespace,mcName.name,"Pattern","pattern1",None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None).toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
@@ -958,14 +1004,14 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), testData.wsName)
   val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")
-  val workspace2 = WorkspaceRequest(
+  val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
     Map.empty
   )
 
   it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
-    Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2.toJson.toString())) ~>
+    Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2Request.toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -973,14 +1019,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(workspace2) {
-            val ws = workspaceDAO.load(workspace2.namespace, workspace2.name, txn).get
-            WorkspaceRequest(ws.namespace,ws.name,ws.attributes)
+          assertResult(workspace2Request) {
+            val ws = workspaceDAO.load(workspace2Request.toWorkspaceName, txn).get
+            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
           }
         }
 
-
-        Post(s"/workspaces/${workspace2.namespace}/${workspace2.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
+        Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
           addMockOpenAmCookie ~>
           sealRoute(services.entityRoutes) ~>
           check {
@@ -988,12 +1033,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
               status
             }
             services.dataSource.inTransaction { txn =>
+              val workspaceContext = workspaceDAO.loadContext(workspace2Name, txn).get
               assertResult(z1.copy(workspaceName = workspace2Name)) {
-                entityDAO.get(workspace2.namespace, workspace2.name, z1.entityType, z1.name, txn).get
+                entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
               }
             }
 
-            val sourceWorkspace = WorkspaceName(workspace2.namespace, workspace2.name)
+            val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
             Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
               addMockOpenAmCookie ~>
@@ -1003,8 +1049,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
                   status
                 }
                 services.dataSource.inTransaction { txn =>
-                  assertResult(z1.copy(workspaceName = testData.wsName)) {
-                    entityDAO.get(testData.workspace.namespace, testData.workspace.name, z1.entityType, z1.name, txn).get.copy(workspaceName = testData.wsName)
+                  withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+                    assertResult(z1.copy(workspaceName = testData.wsName)) {
+                      entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get.copy(workspaceName = testData.wsName)
+                    }
                   }
                 }
               }
@@ -1050,7 +1098,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2)) {responseAs[List[Submission]]}
+        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2)) {
+          responseAs[List[Submission]]
+        }
       }
   }
 
@@ -1073,7 +1123,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1082,7 +1132,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
-    Put(s"/workspaces/xyzzy/plugh/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1187,7 +1237,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
   it should "allow an owner-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("owner-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1196,7 +1246,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1205,7 +1255,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a read-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1214,7 +1264,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a no-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl",HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
       addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {

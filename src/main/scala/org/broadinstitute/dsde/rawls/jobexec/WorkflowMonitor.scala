@@ -15,8 +15,16 @@ import scala.util.{Success, Failure, Try}
  * Created by dvoet on 6/29/15.
  */
 object WorkflowMonitor {
-  def props(pollInterval: Duration, executionServiceDAO: ExecutionServiceDAO, workflowDAO: WorkflowDAO, methodConfigurationDAO: MethodConfigurationDAO, datasource: DataSource, authCookie: HttpCookie)(parent: ActorRef, submission: Submission, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, submission, workflow, executionServiceDAO, workflowDAO, methodConfigurationDAO, datasource, authCookie))
+  def props(pollInterval: Duration,
+    workspaceDAO: WorkspaceDAO,
+    executionServiceDAO: ExecutionServiceDAO,
+    workflowDAO: WorkflowDAO,
+    methodConfigurationDAO: MethodConfigurationDAO,
+    entityDAO: EntityDAO,
+    datasource: DataSource,
+    authCookie: HttpCookie)
+    (parent: ActorRef, submission: Submission, workflow: Workflow): Props = {
+    Props(new WorkflowMonitor(parent, pollInterval, submission, workflow, workspaceDAO, executionServiceDAO, workflowDAO, methodConfigurationDAO, entityDAO, datasource, authCookie))
   }
 }
 
@@ -26,6 +34,7 @@ object WorkflowMonitor {
  * @param parent actor ref to report changes to
  * @param pollInterval
  * @param workflow
+ * @param workspaceDAO
  * @param executionServiceDAO
  * @param workflowDAO
  * @param datasource
@@ -35,12 +44,13 @@ class WorkflowMonitor(parent: ActorRef,
                       pollInterval: Duration,
                       submission: Submission,
                       workflow: Workflow,
+                      workspaceDAO: WorkspaceDAO,
                       executionServiceDAO: ExecutionServiceDAO,
                       workflowDAO: WorkflowDAO,
                       methodConfigurationDAO: MethodConfigurationDAO,
+                      entityDAO: EntityDAO,
                       datasource: DataSource,
                       authCookie: HttpCookie) extends Actor {
-
   import context._
 
   setReceiveTimeout(pollInterval)
@@ -51,7 +61,7 @@ class WorkflowMonitor(parent: ActorRef,
 
   def checkWorkflowStatus(): Unit = datasource inTransaction { txn =>
     system.log.debug("polling execution service for workflow {}", workflow.workflowId)
-    val refreshedWorkflow = workflowDAO.get(workflow.workspaceName, workflow.workflowId, txn).getOrElse(
+    val refreshedWorkflow = workflowDAO.get(getWorkspaceContext(workflow.workspaceName, txn), workflow.workflowId, txn).getOrElse(
       throw new RawlsException(s"workflow ${workflow} could not be found")
     )
     val statusResponse = executionServiceDAO.status(workflow.workflowId, authCookie)
@@ -72,15 +82,16 @@ class WorkflowMonitor(parent: ActorRef,
     }
   }
 
-  def withMethodConfig(txn: RawlsTransaction)(op: MethodConfiguration => WorkflowStatusChange): WorkflowStatusChange = {
-    methodConfigurationDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) match {
+  def withMethodConfig(workspaceContext: WorkspaceContext, txn: RawlsTransaction)(op: MethodConfiguration => WorkflowStatusChange): WorkflowStatusChange = {
+    methodConfigurationDAO.get(workspaceContext, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) match {
       case None => WorkflowStatusChange(workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(s"Could not find method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}, was it deleted?")), None)
       case Some(methodConfig) => op(methodConfig)
     }
   }
 
   def onWorkflowSuccess(workflow: Workflow, completionStatus: WorkflowStatuses.WorkflowStatus, txn: RawlsTransaction): WorkflowStatusChange = {
-    withMethodConfig(txn) { methodConfig =>
+    val workspaceContext = getWorkspaceContext(workflow.workspaceName, txn)
+    withMethodConfig(workspaceContext, txn) { methodConfig =>
       val outputs = executionServiceDAO.outputs(workflow.workflowId, authCookie).outputs
 
       val attributes = methodConfig.outputs.map { case (outputName, attributeName) =>
@@ -99,5 +110,9 @@ class WorkflowMonitor(parent: ActorRef,
         WorkflowStatusChange(workflow.copy(messages = errors.toSeq, status = WorkflowStatuses.Failed), None)
       }
     }
+  }
+
+  private def getWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction): WorkspaceContext = {
+    workspaceDAO.loadContext(workspaceName, txn).getOrElse(throw new RawlsException(s"workspace ${workspaceName} does not exist"))
   }
 }

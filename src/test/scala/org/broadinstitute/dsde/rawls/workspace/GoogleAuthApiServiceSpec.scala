@@ -38,6 +38,7 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   case class TestApiService(dataSource: DataSource) extends GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphWorkspaceDAO(),
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       new GraphWorkflowDAO(),

@@ -1,29 +1,42 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.Vertex
+import com.tinkerpop.blueprints.{Graph, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
-class GraphWorkspaceDAO() extends WorkspaceDAO with GraphDAO {
+class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
 
-  override def save(workspace: Workspace, txn: RawlsTransaction) = txn withGraph { db =>
+  override def save(workspace: Workspace, txn: RawlsTransaction): Workspace = txn withGraph { db =>
     // check for illegal dot characters
     validateUserDefinedString(workspace.namespace)
     validateUserDefinedString(workspace.name)
     workspace.attributes.keys.foreach(validateUserDefinedString)
 
     // get the workspace, creating if it doesn't already exist
-    val workspaceVertex = getWorkspaceVertex(db, workspace.namespace, workspace.name).getOrElse(addVertex(db, VertexSchema.Workspace))
-    saveToVertex[Workspace](workspace, workspaceVertex, db, workspace.toWorkspaceName)
+    val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))
+    val context = WorkspaceContext(workspace.toWorkspaceName, workspace.bucketName, vertex)
+    // note that the vertex gets passed in twice (directly and through WorkspaceContext)
+    saveToVertex[Workspace](db, context, workspace, vertex)
     workspace
   }
 
-  override def load(namespace: String, name: String, txn: RawlsTransaction): Option[Workspace] = txn withGraph { db =>
-    getWorkspaceVertex(db, namespace, name).map(loadFromVertex[Workspace](_, None))
+  override def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace] = {
+    loadContext(workspaceName, txn) map { context => loadFromVertex[Workspace](context.workspaceVertex, Some(workspaceName)) }
+  }
+
+  /**
+   * Gets a WorkspaceContext, without fully loading the Workspace and its associated sub-vertices.
+   */
+  override def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext] = txn withGraph { db =>
+    getWorkspaceVertex(db, workspaceName) map { vertex =>
+      val bucketName = Option(vertex.getProperty[String]("bucketName")).getOrElse(throw new RawlsException(s"Workspace ${workspaceName} is missing a bucketName"))
+      WorkspaceContext(workspaceName, bucketName, vertex)
+    }
   }
 
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>

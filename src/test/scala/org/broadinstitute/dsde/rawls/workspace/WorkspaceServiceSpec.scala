@@ -36,6 +36,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val mockServer = RemoteServicesMockServer()
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      new GraphWorkspaceDAO(),
       new GraphSubmissionDAO(new GraphWorkflowDAO()),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       new GraphWorkflowDAO(),

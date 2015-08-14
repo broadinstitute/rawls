@@ -38,10 +38,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   class ConfigData extends TestData {
     override def save(txn: RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      entityDAO.save("workspaces", "test_workspace", sampleGood, txn)
-      entityDAO.save("workspaces", "test_workspace", sampleMissingValue, txn)
-      methodConfigDAO.save("workspaces", "test_workspace", configGood, txn)
-      methodConfigDAO.save("workspaces", "test_workspace", configMissingExpr, txn)
+      withWorkspaceContext(workspace, txn) { context =>
+        entityDAO.save(context, sampleGood, txn)
+        entityDAO.save(context, sampleMissingValue, txn)
+        methodConfigDAO.save(context, configGood, txn)
+        methodConfigDAO.save(context, configMissingExpr, txn)
+      }
     }
   }
   val configData = new ConfigData()
@@ -55,9 +57,11 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   "MethodConfigResolver" should {
     "get validation errors" in withConfigData { dataSource =>
       dataSource.inTransaction { txn =>
-        MethodConfigResolver.getValidationErrors(configGood, sampleGood, littleWdl, txn).get(intArgName) should be(None) // Valid input
-        MethodConfigResolver.getValidationErrors(configGood, sampleMissingValue, littleWdl, txn).get(intArgName) shouldNot be(None) // Entity missing value
-        MethodConfigResolver.getValidationErrors(configMissingExpr, sampleGood, littleWdl, txn).get(intArgName) shouldNot be(None) // Config missing expr
+        withWorkspaceContext(workspace, txn) { context =>
+          MethodConfigResolver.getValidationErrors(context, configGood, sampleGood, littleWdl, txn).get(intArgName) should be(None) // Valid input
+          MethodConfigResolver.getValidationErrors(context, configGood, sampleMissingValue, littleWdl, txn).get(intArgName) shouldNot be(None) // Entity missing value
+          MethodConfigResolver.getValidationErrors(context, configMissingExpr, sampleGood, littleWdl, txn).get(intArgName) shouldNot be(None) // Config missing expr
+        }
       }
     }
   }

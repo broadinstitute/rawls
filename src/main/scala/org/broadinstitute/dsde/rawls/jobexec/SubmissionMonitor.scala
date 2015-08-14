@@ -7,6 +7,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import spray.http
 
 import scala.concurrent.duration.Duration
 import scala.util.{Success, Try, Failure}
@@ -16,6 +18,7 @@ import scala.util.{Success, Try, Failure}
  */
 object SubmissionMonitor {
   def props(submission: Submission,
+            workspaceDAO: WorkspaceDAO,
             submissionDAO: SubmissionDAO,
             workflowDAO: WorkflowDAO,
             entityDAO: EntityDAO,
@@ -23,7 +26,7 @@ object SubmissionMonitor {
             workflowPollInterval: Duration,
             submissionPollInterval: Duration,
             workflowMonitorProps: (ActorRef, Submission, Workflow) => Props): Props = {
-    Props(new SubmissionMonitor(submission, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
+    Props(new SubmissionMonitor(submission, workspaceDAO, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -38,6 +41,7 @@ object SubmissionMonitor {
  * this seems unnecessary, it make me feel better).
  *
  * @param submission to monitor
+ * @param workspaceDAO
  * @param submissionDAO
  * @param workflowDAO
  * @param entityDAO
@@ -49,6 +53,7 @@ object SubmissionMonitor {
  *                             an actor ref to report back to and the workflow to monitor
  */
 class SubmissionMonitor(submission: Submission,
+                        workspaceDAO: WorkspaceDAO,
                         submissionDAO: SubmissionDAO,
                         workflowDAO: WorkflowDAO,
                         entityDAO: EntityDAO,
@@ -75,7 +80,7 @@ class SubmissionMonitor(submission: Submission,
 
   private def handleTerminatedMonitor(workflowId: String): Unit = {
     val workflow = datasource inTransaction { txn =>
-      workflowDAO.get(submission.workspaceName, workflowId, txn).getOrElse(
+      workflowDAO.get(getWorkspaceContext(submission.workspaceName, txn), workflowId, txn).getOrElse(
         throw new RawlsException(s"Could not find workflow in workspace ${submission.workspaceName} with id ${workflowId}")
       )
     }
@@ -96,12 +101,13 @@ class SubmissionMonitor(submission: Submission,
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
     val savedWorkflow = datasource inTransaction { txn =>
+      val workspaceContext = getWorkspaceContext(workflow.workspaceName, txn)
       val saveOutputs = Try {
         workflowOutputsOption foreach { workflowOutputs =>
-          val entity = entityDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
+          val entity = entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
             throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
           }
-          entityDAO.save(submission.workspaceName.namespace, submission.workspaceName.name, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
+          entityDAO.save(workspaceContext, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
         }
       }
 
@@ -110,7 +116,7 @@ class SubmissionMonitor(submission: Submission,
         case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
       }
 
-      workflowDAO.update(workflowToSave.workspaceName, workflowToSave, txn)
+      workflowDAO.update(workspaceContext, workflowToSave, txn)
     }
 
     if (savedWorkflow.status.isDone) {
@@ -121,12 +127,13 @@ class SubmissionMonitor(submission: Submission,
   private def checkSubmissionStatus(): Unit = {
     system.log.debug("polling workflow status, submission {}", submission.submissionId)
     datasource inTransaction { txn =>
-      val refreshedSubmission = submissionDAO.get(submission.workspaceName.namespace, submission.workspaceName.name, submission.submissionId, txn).getOrElse(
+      val workspaceContext = getWorkspaceContext(submission.workspaceName, txn)
+      val refreshedSubmission = submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
         throw new RawlsException(s"submissions ${submission} does not exist")
       )
 
       if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
-        submissionDAO.update(refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
+        submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
         stop(self)
       }
     }
@@ -140,4 +147,7 @@ class SubmissionMonitor(submission: Submission,
       }
     }
 
+  private def getWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction): WorkspaceContext = {
+    workspaceDAO.loadContext(workspaceName, txn).getOrElse(throw new RawlsException(s"workspace ${workspaceName} does not exist"))
+  }
 }
