@@ -127,7 +127,56 @@
 				"message": "Rawls Internal Error"
 			}]
 		}]
-	}],
+	}, {
+        "path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs",
+        "operations": [{
+            "method": "GET",
+            "summary": "Get workflow outputs.",
+            "notes": "",
+            "type": "WorkflowOutputs",
+            "nickname": "getWorkflowOutputs",
+            "produces": ["application/json"],
+            "parameters": [{
+                "name": "workspaceNamespace",
+                "description": "Workspace Namespace",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                "name": "workspaceName",
+                "description": "Workspace Name",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                "name": "submissionId",
+                "description": "Submission Id",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                 "name": "workflowId",
+                 "description": "Workflow Id",
+                 "required": true,
+                 "type": "string",
+                 "paramType": "path",
+                 "allowMultiple": false
+             }],
+            "responseMessages": [{
+                "code": 200,
+                "message": "Successful Request"
+            }, {
+                "code": 404,
+                "message": "Submission or Workflow Not Found"
+            }, {
+                "code": 500,
+                "message": "Rawls Internal Error"
+            }]
+        }]
+    }],
 	"models": {
 		"Submission": {
 			"id": "Submission",
@@ -284,6 +333,40 @@
 					"description": "Expression that resolves to one or more entities matching the entity type in the method configuration."
 				}
 			}
-		}
+		},
+        "TaskOutput": {
+            "id": "TaskOutput",
+            "description": "Outputs from a single task in a workflow",
+            "properties": {
+                "logs": {
+                    "type": "object",
+                    "description": "Log messages from this task",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "outputs": {
+                    "type": "object",
+                    "description": "Outputs from this task"
+                }
+            }
+        },
+        "WorkflowOutputs": {
+            "id": "WorkflowOutputs",
+            "description": "Outputs and logs from all tasks in a workflow",
+            "properties": {
+                "tasks": {
+                    "type": "object",
+                    "description": "Map from tasks to output/log pairs",
+                    "properties": {
+                        "$ref": "TaskOutput"
+                    }
+                },
+                "workflowId": {
+                    "type": "string",
+                    "description": "The id of this workflow"
+                }
+            }
+        }
 	}
 }

@@ -236,6 +236,53 @@ class RemoteServicesMockServer(port:Int) {
           .withHeaders(jsonHeader)
           .withStatusCode(StatusCodes.BadRequest.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/logs")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
+              |  "logs": {
+              |    "wf.x": {
+              |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
+              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"
+              |    },
+              |    "wf.y": {
+              |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout.txt",
+              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr.txt"
+              |    }
+              |  }
+              |}
+              """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/outputs")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "this_workflow_exists",
+              |  "outputs": {
+              |    "wf.x.four": 4,
+              |    "wf.x.five": 4,
+              |    "wf.y.six": 4
+              |  }
+              |}
+            """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
   }
 
   def stopServer = mockServer.stop()

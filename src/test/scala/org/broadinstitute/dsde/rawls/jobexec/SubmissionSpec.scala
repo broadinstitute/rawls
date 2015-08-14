@@ -31,6 +31,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   val cookie = HttpCookie("iPlanetDirectoryPro", "test_token")
   val userInfo = UserInfo("test_token", cookie)
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
+  val subTestData = new SubmissionTestData()
 
   val mockServer = RemoteServicesMockServer()
   override def beforeAll() = {
@@ -82,6 +83,21 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         Workflow(workspace.toWorkspaceName,existingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
         Workflow(workspace.toWorkspaceName,alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name))),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+
+    val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
+      Map(
+        "wf.y" -> TaskOutput(
+          Some(Map(
+            "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout.txt",
+            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr.txt")),
+          Some(Map("wf.y.six" -> AttributeNumber(4)))),
+        "wf.x" -> TaskOutput(
+          Some(Map(
+            "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
+            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt")),
+          Some(Map(
+            "wf.x.four" -> AttributeNumber(4),
+            "wf.x.five" -> AttributeNumber(4))))))
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -255,7 +271,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  "Aborting submissions" should "404 if the workspace doesn't exist" in withWorkspaceService { workspaceService =>
+  "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345")
     val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
     assertResult(StatusCodes.NotFound) {
@@ -263,8 +279,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "404 if the submission doesn't exist" in withWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "12345")
+  it should "404 if the submission doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "12345")
     val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
     assertResult(StatusCodes.NotFound) {
       status
@@ -272,7 +288,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "500 if Cromwell can't find the workflow" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subMissingWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subMissingWorkflow")
     val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
     assertResult(StatusCodes.InternalServerError) {
       status
@@ -280,8 +296,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "500 if Cromwell says the workflow is malformed" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subMalformedWorkflow")
-    println(rqComplete)
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subMalformedWorkflow")
     val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
     assertResult(StatusCodes.InternalServerError) {
       status
@@ -289,7 +304,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with a single workflow" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subGoodWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subGoodWorkflow")
     val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status
@@ -297,7 +312,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with a workflow that's already terminated" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subTerminalWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subTerminalWorkflow")
     val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status
@@ -305,7 +320,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "500 if Cromwell says one workflow in a multi-workflow submission is missing" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subOneMissingWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subOneMissingWorkflow")
     val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
     assertResult(StatusCodes.InternalServerError) {
       status
@@ -313,10 +328,31 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with multiple workflows" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(testData.wsName, "subTwoGoodWorkflows")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subTwoGoodWorkflows")
     val status = rqComplete.asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status
     }
+  }
+
+  "Getting workflow outputs" should "return 200 when all is well" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowOutputs(
+      subTestData.wsName,
+      subTestData.submissionTestAbortGoodWorkflow.submissionId,
+      subTestData.existingWorkflowId)
+    val (status, data) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, WorkflowOutputs)]].response
+
+    assertResult(StatusCodes.OK) {status}
+    assertResult(subTestData.extantWorkflowOutputs) {data}
+  }
+
+  it should "return 404 on getting a workflow that exists, but not in this submission" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowOutputs(
+      subTestData.wsName,
+      subTestData.submissionTestAbortTerminalWorkflow.submissionId,
+      subTestData.existingWorkflowId)
+    val (status, _) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, String)]].response
+
+    assertResult(StatusCodes.NotFound) {status}
   }
 }

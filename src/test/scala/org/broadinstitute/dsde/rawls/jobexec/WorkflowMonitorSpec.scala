@@ -101,6 +101,7 @@ class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionS
   override def submitWorkflow(wdl: String, inputs: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus("test_id", workflowStatus)
 
   override def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
+  override def logs(id: String, authCookie: HttpCookie): ExecutionServiceLogs = ExecutionServiceLogs(id, Map("task1" -> Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar")))
 
   override def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
   override def abort(id: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)

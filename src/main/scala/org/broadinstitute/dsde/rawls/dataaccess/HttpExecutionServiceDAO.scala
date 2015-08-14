@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.UUID
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.model.{ExecutionServiceOutputs, ExecutionServiceStatus}
+import org.broadinstitute.dsde.rawls.model.{ExecutionServiceLogs, ExecutionServiceOutputs, ExecutionServiceStatus}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -38,6 +38,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
     import system.dispatcher
     val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceOutputs]
+    Await.result(pipeline(Get(url)), Duration.Inf)
+  }
+
+  override def logs(id: String, authCookie: HttpCookie): ExecutionServiceLogs = {
+    val url = executionServiceURL + s"/workflows/v1/${id}/logs"
+    import system.dispatcher
+    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceLogs]
     Await.result(pipeline(Get(url)), Duration.Inf)
   }
 
