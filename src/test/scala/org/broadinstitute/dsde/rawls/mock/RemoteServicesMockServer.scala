@@ -174,7 +174,7 @@ class RemoteServicesMockServer(port:Int) {
           .withStatusCode(StatusCodes.OK.intValue)
       )
 
-    val submissionPath = "/workflows"
+    val submissionPath = "/workflows/v1"
     mockServer.when(
       request()
         .withMethod("POST")
@@ -192,14 +192,15 @@ class RemoteServicesMockServer(port:Int) {
 
     mockServer.when(
       request()
-        .withMethod("DELETE")
-        .withPath("/workflow/this_workflow_exists")
+        .withMethod("POST")
+        // this workflow exists
+        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
           .withBody(
             """{
-    "id": "this_workflow_exists",
+    "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
     "status": "Aborted"
 }""")
           .withStatusCode(StatusCodes.OK.intValue)
@@ -207,37 +208,33 @@ class RemoteServicesMockServer(port:Int) {
 
     mockServer.when(
       request()
-        .withMethod("DELETE")
-        .withPath("/workflow/already_terminal_workflow")
+        .withMethod("POST")
+         // already_terminal_workflow
+        .withPath("/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c8778/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
-          .withBody(
-            """{
-    "id": "this_workflow_also_exists",
-    "status": "Aborted"
-}""")
           .withStatusCode(StatusCodes.Forbidden.intValue)
       )
 
     mockServer.when(
       request()
-        .withMethod("DELETE")
-        .withPath("/workflow/nonexistent_workflow")
+        .withMethod("POST")
+        .withPath("/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c9999/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
-          .withStatusCode(StatusCodes.NotFound.intValue)
+          .withStatusCode(StatusCodes.BadRequest.intValue)
       )
 
     mockServer.when(
       request()
-        .withMethod("DELETE")
-        .withPath("/workflow/malformed_workflow")
+        .withMethod("POST")
+        .withPath("/workflows/v1/malformed_workflow/abort")
     ).respond(
         response()
           .withHeaders(jsonHeader)
-          .withStatusCode(StatusCodes.NotFound.intValue)
+          .withStatusCode(StatusCodes.BadRequest.intValue)
       )
   }
 
