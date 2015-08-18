@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStar
 import org.broadinstitute.dsde.rawls.model.GCSAccessLevel.GCSAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
 import org.broadinstitute.dsde.rawls.model.BucketAccessControlJsonSupport.BucketAccessControlsFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
@@ -72,6 +73,7 @@ object WorkspaceService {
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
+  case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
@@ -120,6 +122,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
+    case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
   }
 
   def registerUser(callbackPath: String): PerRequestMessage = {
@@ -708,6 +711,46 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       }
     }
 
+  /**
+   * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
+  private def mergeWorkflowOutputs(execOuts: ExecutionServiceOutputs, execLogs: ExecutionServiceLogs, workflowId: String): PerRequestMessage = {
+    val outs = execOuts.outputs
+    val logs = execLogs.logs
+
+    //Cromwell workflow outputs look like workflow_name.task_name.output_name.
+    //Under perverse conditions it might just be workflow_name.output_name.
+    //Group outputs by everything left of the rightmost dot.
+    val outsByTask = outs groupBy { case (k,_) => k.split('.').dropRight(1).mkString(".") }
+
+    val taskMap = (outsByTask.keySet ++ logs.keySet).map( key => key -> TaskOutput( logs.get(key), outsByTask.get(key)) ).toMap
+    RequestComplete(StatusCodes.OK, WorkflowOutputs(workflowId, taskMap))
+  }
+
+  /**
+   * Get the list of outputs for a given workflow in this submission */
+  def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
+    dataSource inTransaction { txn =>
+      withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
+        withSubmission(workspaceContext, submissionId, txn) { submission =>
+          withWorkflow(submission, workflowId) { workflow =>
+
+            val mergedOutputs:Try[PerRequestMessage] = for {
+              outsRq <- Try(executionServiceDAO.outputs(workflowId, userInfo.authCookie))
+              logsRq <- Try(executionServiceDAO.logs(workflowId, userInfo.authCookie))
+            } yield mergeWorkflowOutputs(outsRq, logsRq, workflowId)
+
+            mergedOutputs match {
+              case Success(happyResponse) => happyResponse
+              case Failure(ure:UnsuccessfulResponseException) => RequestComplete(ure.response.status, ure.response.message.toString)
+              case Failure(regret) => RequestComplete(StatusCodes.InternalServerError, regret.getMessage)
+            }
+          }
+        }
+      }
+    }
+  }
+
+
   // helper methods
 
   private def noSuchWorkspaceMessage( workspaceName: WorkspaceName ) = s"${workspaceName} does not exist"
@@ -765,6 +808,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     submissionDAO.get(workspaceContext, submissionId, txn) match {
       case None => RequestComplete(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")
       case Some(submission) => op(submission)
+    }
+  }
+
+  private def withWorkflow(submission: Submission, workflowId: String)(op: (Workflow) => PerRequestMessage): PerRequestMessage = {
+    submission.workflows.find(wf => wf.workflowId == workflowId) match {
+      case None => RequestComplete(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${submission.workspaceName.namespace}/${submission.workspaceName.name}")
+      case Some(workflow) => op(workflow)
     }
   }
 
