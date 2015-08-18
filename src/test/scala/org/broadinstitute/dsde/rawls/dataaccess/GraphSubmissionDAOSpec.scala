@@ -94,7 +94,7 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
       assertResult(Some(workflow2)) {
         workflowDAO.get(context, workflow2.workflowId, txn)
       }
-      val workflow3 = Workflow(workspace.toWorkspaceName, workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity)
+      val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity)
       workflowDAO.update(context, workflow3, txn)
       assertResult(Some(workflow3)) {
         workflowDAO.get(context, workflow3.workflowId, txn)

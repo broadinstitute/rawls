@@ -255,8 +255,7 @@ trait GraphDAO {
       }
       case (key, Some(mrConfig: MethodRepoConfiguration)) => serializeDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, thereCanOnlyBeOne, graph, workspaceContext)
       case (key, Some(mrMethod: MethodRepoMethod)) => serializeDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, thereCanOnlyBeOne, graph, workspaceContext)
-      case (key, Some(ws: WorkspaceName)) => // don't serialize workspace name objects
-
+      case (key, Some(ws: WorkspaceName)) => throw new RawlsException("WorkspaceName is not a supported attribute type.")
       case (key, Some(ws: WorkflowStatus)) => vertex.setProperty(key, ws.toString)
       case (key, Some(ss: SubmissionStatus)) => vertex.setProperty(key, ss.toString)
 
@@ -284,12 +283,11 @@ trait GraphDAO {
    * @param idFxn function mapping an object of type T to an identifier, used to determine if vertices already in the
    *              graph correspond to any of the nested objects
    * @param graph used to create new vertices
-   * @param workspaceName used to construct domain objects that require a WorkspaceName
    * @tparam T the type of the object being serializes
    */
   private def serializeDomainObjects[T: TypeTag: ClassTag](vertex: Vertex, objs: Seq[T], edgeLabel: String, idFxn: T => Any, graph: Graph, workspaceContext: WorkspaceContext): Seq[Vertex] = {
     val existingObjVertexesById = vertex.getVertices(Direction.OUT, edgeLabel).map { objVertex =>
-      val obj = loadFromVertex[T](objVertex, Some(workspaceContext.workspaceName))
+      val obj = loadFromVertex[T](objVertex)
       idFxn(obj) -> objVertex
     } toMap
 
@@ -350,13 +348,10 @@ trait GraphDAO {
   /**
    * Loads an object from a vertex as saved by saveToVertex (see that function for how things are saved)
    * @param vertex to load
-   * @param workspaceName
    * @tparam T
    * @return object loaded
-   *
-   * TODO once WorkspaceName is removed from the model classes, we won't need to pass it in here
    */
-  def loadFromVertex[T: TypeTag](vertex: Vertex, workspaceName: Option[WorkspaceName]): T = {
+  def loadFromVertex[T: TypeTag](vertex: Vertex): T = {
     val classT = ru.typeOf[T].typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
     val ctor = ru.typeOf[T].decl(ru.termNames.CONSTRUCTOR).asMethod
@@ -395,16 +390,16 @@ trait GraphDAO {
             case Some(nonEntityVertex) => throw new RawlsException(s"property [${paramName}] of class [${classT.fullName}] does not reference non entity vertex ${nonEntityVertex}")
           }
 
-        case workflowSymbol if workflowSymbol =:= typeOf[Seq[Workflow]] => deserializeDomainObjects[Workflow](vertex, workflowEdge, workspaceName)
-        case workflowFailureSymbol if workflowFailureSymbol =:= typeOf[Seq[WorkflowFailure]] => deserializeDomainObjects[WorkflowFailure](vertex, workflowFailureEdge, workspaceName)
-        case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => tryLoad(deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge, workspaceName).headOption)
-        case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => tryLoad(deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge, workspaceName).headOption)
+        case workflowSymbol if workflowSymbol =:= typeOf[Seq[Workflow]] => deserializeDomainObjects[Workflow](vertex, workflowEdge)
+        case workflowFailureSymbol if workflowFailureSymbol =:= typeOf[Seq[WorkflowFailure]] => deserializeDomainObjects[WorkflowFailure](vertex, workflowFailureEdge)
+        case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => tryLoad(deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge).headOption)
+        case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => tryLoad(deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge).headOption)
 
         case attributeSeq if attributeSeq <:< typeOf[Seq[Attribute]] => vertex.getVertices(Direction.OUT, paramName).headOption.map(deserializeSeq).getOrElse(Seq.empty)
 
         case optionSymbol if optionSymbol <:< typeOf[Option[_]] => vertexProperty
 
-        case workspaceNameSymbol if workspaceNameSymbol =:= typeOf[WorkspaceName] => workspaceName.getOrElse(throw new RawlsException("workspace name not supplied but is required"))
+        case workspaceNameSymbol if workspaceNameSymbol =:= typeOf[WorkspaceName] => throw new RawlsException("WorkspaceName is not a supported attribute type.")
 
         case workflowStatusSymbol if workflowStatusSymbol =:= typeOf[WorkflowStatus] => {
           val statusText = tryLoad(vertexProperty).toString
@@ -422,9 +417,9 @@ trait GraphDAO {
     ctorMirror(parameters: _*).asInstanceOf[T]
   }
 
-  private def deserializeDomainObjects[T: TypeTag](vertex: Vertex, edgeLabel: String, workspaceName: Option[WorkspaceName]): Seq[T] = {
+  private def deserializeDomainObjects[T: TypeTag](vertex: Vertex, edgeLabel: String): Seq[T] = {
     vertex.getVertices(Direction.OUT, edgeLabel).map { v =>
-      loadFromVertex[T](v, workspaceName)
+      loadFromVertex[T](v)
     }.toSeq
   }
 

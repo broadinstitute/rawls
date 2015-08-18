@@ -23,8 +23,8 @@ object WorkflowMonitor {
     entityDAO: EntityDAO,
     datasource: DataSource,
     authCookie: HttpCookie)
-    (parent: ActorRef, submission: Submission, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, submission, workflow, workspaceDAO, executionServiceDAO, workflowDAO, methodConfigurationDAO, entityDAO, datasource, authCookie))
+    (parent: ActorRef, workspaceName: WorkspaceName, submission: Submission, workflow: Workflow): Props = {
+    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, workspaceDAO, executionServiceDAO, workflowDAO, methodConfigurationDAO, entityDAO, datasource, authCookie))
   }
 }
 
@@ -42,6 +42,7 @@ object WorkflowMonitor {
  */
 class WorkflowMonitor(parent: ActorRef,
                       pollInterval: Duration,
+                      workspaceName: WorkspaceName,
                       submission: Submission,
                       workflow: Workflow,
                       workspaceDAO: WorkspaceDAO,
@@ -61,7 +62,7 @@ class WorkflowMonitor(parent: ActorRef,
 
   def checkWorkflowStatus(): Unit = datasource inTransaction { txn =>
     system.log.debug("polling execution service for workflow {}", workflow.workflowId)
-    val refreshedWorkflow = workflowDAO.get(getWorkspaceContext(workflow.workspaceName, txn), workflow.workflowId, txn).getOrElse(
+    val refreshedWorkflow = workflowDAO.get(getWorkspaceContext(workspaceName, txn), workflow.workflowId, txn).getOrElse(
       throw new RawlsException(s"workflow ${workflow} could not be found")
     )
     val statusResponse = executionServiceDAO.status(workflow.workflowId, authCookie)
@@ -90,7 +91,7 @@ class WorkflowMonitor(parent: ActorRef,
   }
 
   def onWorkflowSuccess(workflow: Workflow, completionStatus: WorkflowStatuses.WorkflowStatus, txn: RawlsTransaction): WorkflowStatusChange = {
-    val workspaceContext = getWorkspaceContext(workflow.workspaceName, txn)
+    val workspaceContext = getWorkspaceContext(workspaceName, txn)
     withMethodConfig(workspaceContext, txn) { methodConfig =>
       val outputs = executionServiceDAO.outputs(workflow.workflowId, authCookie).outputs
 

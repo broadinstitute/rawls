@@ -17,17 +17,18 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.AttributeConversions
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http
 import spray.http.Uri
 import spray.http.HttpHeaders.Location
-import spray.http.{StatusCodes, HttpCookie}
+import spray.http.{StatusCodes, HttpCookie, HttpHeaders}
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.json._
+import spray.routing.RequestContext
 
 import scala.util.{Failure, Success, Try}
 
@@ -147,7 +148,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
             case Success(_) =>
               val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, bucketName, DateTime.now, userInfo.userId, workspaceRequest.attributes)
               workspaceDAO.save(workspace, txn)
-              PerRequest.RequestComplete((StatusCodes.Created, workspace))
+              RequestCompleteWithLocation((StatusCodes.Created,workspace), workspace.toWorkspaceName.path)
           }
       }
     }
@@ -198,7 +199,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                 methodConfigurationDAO.save(destWorkspaceContext,
                   methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
               }
-              RequestComplete((StatusCodes.Created, destWorkspace))
+              RequestCompleteWithLocation((StatusCodes.Created, destWorkspace), destWorkspace.toWorkspaceName.path)
           }
         }
         case (None, _) => RequestComplete(StatusCodes.NotFound, s"Source workspace ${sourceWorkspaceName} not found")
@@ -255,7 +256,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         entityDAO.get(workspaceContext, entity.entityType, entity.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")
-          case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceContext, entity, txn))
+          case None => RequestCompleteWithLocation((StatusCodes.Created, entityDAO.save(workspaceContext, entity, txn)), entity.path(workspaceContext.workspaceName))
         }
       }
     }
@@ -293,7 +294,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         val results = entityUpdates.map { entityUpdate =>
           val entity = entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn) match {
             case Some(e) => e
-            case None => entityDAO.save(workspaceContext, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspaceContext.workspaceName), txn)
+            case None => entityDAO.save(workspaceContext, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), txn)
           }
           val trial = Try {
             val updatedEntity = applyOperationsToEntity(entity, entityUpdate.operations)
@@ -461,7 +462,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
-            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
+            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.briefName} is not a list")
           }
 
         case RemoveListMember(attributeListName, removeMember) =>
@@ -470,8 +471,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
               startingAttributes + (attributeListName -> AttributeValueList(l.list.filterNot(_ == removeMember)))
             case Some(l: AttributeEntityReferenceList) =>
               startingAttributes + (attributeListName -> AttributeEntityReferenceList(l.list.filterNot(_ == removeMember)))
-            case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.path} does not exist")
-            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.path} is not a list")
+            case None => throw new AttributeNotFoundException(s"$attributeListName of ${attributable.briefName} does not exist")
+            case Some(_) => throw new AttributeUpdateOperationException(s"$attributeListName of ${attributable.briefName} is not a list")
           }
       }
     }
@@ -482,7 +483,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")
-          case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn))
+          case None => RequestCompleteWithLocation((StatusCodes.Created, methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)), methodConfiguration.path(workspaceContext.workspaceName))
         }
       }
     }
@@ -566,9 +567,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       methodConfigurationDAO.get(workspaceContext, dest.namespace, dest.name, txn) match {
         case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
         case None =>
-          val target = methodConfig.copy(name = dest.name, namespace = dest.namespace, workspaceName = dest.workspaceName)
+          val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
           val targetMethodConfig = methodConfigurationDAO.save(workspaceContext, target, txn)
-          RequestComplete(StatusCodes.Created, targetMethodConfig)
+          RequestCompleteWithLocation((StatusCodes.Created, targetMethodConfig), targetMethodConfig.path(workspaceContext.workspaceName))
       }
     }
 
@@ -607,9 +608,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     val inputs = MethodConfigResolver.resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
     if ( inputs.forall(  _._2.isSuccess ) ) {
       val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
-      Right(Workflow(workspaceName = workspaceContext.workspaceName, workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType) ))
+      Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType) ))
     } else {
-      Left(WorkflowFailure( workspaceName = workspaceContext.workspaceName, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }).toSeq ))
+      Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }).toSeq ))
     }
   }
 
@@ -650,7 +651,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                 val newSubmission = Submission(submissionId = UUID.randomUUID().toString,
                   submissionDate = DateTime.now(),
                   submitter = userInfo.userId,
-                  workspaceName = workspaceName,
                   methodConfigurationNamespace = methodConfig.namespace,
                   methodConfigurationName = methodConfig.name,
                   submissionEntity = AttributeEntityReference( entityType = submission.entityType, entityName = submission.entityName ),
@@ -659,7 +659,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                   status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
 
                 if (newSubmission.status == SubmissionStatuses.Submitted) {
-                  submissionSupervisor ! SubmissionStarted(newSubmission, userInfo.authCookie)
+                  submissionSupervisor ! SubmissionStarted(workspaceName, newSubmission, userInfo.authCookie)
                 }
 
                 submissionDAO.save(workspaceContext, newSubmission, txn)
@@ -731,7 +731,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, txn) { submission =>
-          withWorkflow(submission, workflowId) { workflow =>
+          withWorkflow(workspaceContext.workspaceName, submission, workflowId) { workflow =>
 
             val mergedOutputs:Try[PerRequestMessage] = for {
               outsRq <- Try(executionServiceDAO.outputs(workflowId, userInfo.authCookie))
@@ -810,9 +810,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     }
   }
 
-  private def withWorkflow(submission: Submission, workflowId: String)(op: (Workflow) => PerRequestMessage): PerRequestMessage = {
+  private def withWorkflow(workspaceName: WorkspaceName, submission: Submission, workflowId: String)(op: (Workflow) => PerRequestMessage): PerRequestMessage = {
     submission.workflows.find(wf => wf.workflowId == workflowId) match {
-      case None => RequestComplete(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${submission.workspaceName.namespace}/${submission.workspaceName.name}")
+      case None => RequestComplete(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")
       case Some(workflow) => op(workflow)
     }
   }

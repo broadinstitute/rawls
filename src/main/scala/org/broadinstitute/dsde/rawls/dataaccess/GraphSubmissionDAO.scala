@@ -18,7 +18,7 @@ class GraphWorkflowDAO extends WorkflowDAO with GraphDAO {
   /** get a workflow by workspace and workflowId */
   override def get(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Option[Workflow] =
     txn withGraph { db =>
-      getWorkflowVertex(workspaceContext, workflowId) map { loadFromVertex[Workflow](_, Some(workspaceContext.workspaceName)) }
+      getWorkflowVertex(workspaceContext, workflowId) map { loadFromVertex[Workflow](_) }
     }
 
   /** update a workflow */
@@ -49,13 +49,13 @@ class GraphSubmissionDAO(graphWorkflowDAO: GraphWorkflowDAO) extends SubmissionD
   /** get a submission by workspace and submissionId */
   override def get(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Option[Submission] =
     txn withGraph { db =>
-      getSubmissionVertex(workspaceContext, submissionId) map { fromVertex(workspaceContext, _) }
+      getSubmissionVertex(workspaceContext, submissionId) map { loadFromVertex[Submission](_) }
     }
 
   /** list all submissions in the workspace */
   override def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Submission] =
     txn withGraph { db =>
-      workspacePipeline(workspaceContext).out(submissionEdge).transform((v: Vertex) => fromVertex(workspaceContext, v)).toList.asScala
+      workspacePipeline(workspaceContext).out(submissionEdge).transform((v: Vertex) => loadFromVertex[Submission](v)).toList.asScala
     }
 
   /** create a submission (and its workflows) */
@@ -88,8 +88,4 @@ class GraphSubmissionDAO(graphWorkflowDAO: GraphWorkflowDAO) extends SubmissionD
         case None => false
       }
     }
-
-  private def fromVertex(workspaceContext: WorkspaceContext, vertex: Vertex): Submission = {
-    loadFromVertex[Submission](vertex, Some(workspaceContext.workspaceName))
-  }
 }
