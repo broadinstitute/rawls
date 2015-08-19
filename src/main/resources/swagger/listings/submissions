@@ -8,7 +8,7 @@
 		"operations": [
 		{
 			"method": "GET",
-			"summary": "List all submissions.",
+			"summary": "List all submissions",
 			"notes": "",
 			"type": "Object",
 			"nickname": "listSubmissions",
@@ -41,7 +41,7 @@
 		},
 		{
 			"method": "POST",
-			"summary": "Create Submission.",
+			"summary": "Create submission",
 			"notes": "",
 			"type": "Submission",
 			"nickname": "createSubmission",
@@ -89,7 +89,7 @@
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}",
 		"operations": [{
 			"method": "GET",
-			"summary": "Monitor Submission Status.",
+			"summary": "Monitor submission status",
 			"notes": "",
 			"type": "Submission",
 			"nickname": "getSubmissionStatus",
@@ -126,12 +126,51 @@
 				"code": 500,
 				"message": "Rawls Internal Error"
 			}]
-		}]
+		}, {
+            "method": "DELETE",
+            "summary": "Abort submission",
+            "notes": "",
+            "type": "void",
+            "nickname": "abortSubmission",
+            "produces": ["application/json"],
+            "parameters": [{
+                "name": "workspaceNamespace",
+                "description": "Workspace Namespace",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                "name": "workspaceName",
+                "description": "Workspace Name",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                "name": "submissionId",
+                "description": "Submission Id",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }],
+            "responseMessages": [{
+                "code": 204,
+                "message": "Successful Request"
+            }, {
+                "code": 404,
+                "message": "Submission Not Found"
+            }, {
+                "code": 500,
+                "message": "Rawls Internal Error"
+            }]
+        }]
 	}, {
         "path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs",
         "operations": [{
             "method": "GET",
-            "summary": "Get workflow outputs.",
+            "summary": "Get workflow outputs",
             "notes": "",
             "type": "WorkflowOutputs",
             "nickname": "getWorkflowOutputs",
