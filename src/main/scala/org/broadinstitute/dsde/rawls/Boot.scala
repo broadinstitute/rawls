@@ -44,7 +44,8 @@ object Boot extends App {
       gcsConfig.getString("pathToP12"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
-      gcsConfig.getString("appName")
+      gcsConfig.getString("appName"),
+      gcsConfig.getInt("deletedBucketCheckSeconds")
     )
 
     system.registerOnTermination {

@@ -136,6 +136,22 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
+  it should "delete a workspace" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted) {
+          status
+        }
+      }
+      services.dataSource.inTransaction { txn =>
+        assertResult(None) {
+          workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
+        }
+      }
+  }
+
   it should "list workspaces" in withTestDataApiServices { services =>
     Get("/workspaces") ~>
       addMockOpenAmCookie ~>

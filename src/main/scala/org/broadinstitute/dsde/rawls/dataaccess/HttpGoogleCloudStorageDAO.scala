@@ -2,6 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{File, StringReader}
 
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
+
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleAuthorizationCodeFlow, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -11,14 +16,14 @@ import com.google.api.client.util.store.{FileDataStoreFactory, DataStoreFactory}
 import com.google.api.services.admin.directory._
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.compute.ComputeScopes
+import com.google.api.services.storage.model.Bucket.Lifecycle
+import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.{StorageScopes, Storage}
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model.{WorkspaceACLUpdate, WorkspaceACL, WorkspaceAccessLevel, WorkspaceName}
-import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
-import scala.util.{Failure, Success, Try}
 
 // Seq[String] -> Collection<String>
 
@@ -30,7 +35,8 @@ class HttpGoogleCloudStorageDAO(
   p12File: String,
   appsDomain: String,
   groupsPrefix: String,
-  appName: String) extends GoogleCloudStorageDAO {
+  appName: String,
+  deletedBucketCheckSeconds: Int) extends GoogleCloudStorageDAO {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -46,6 +52,8 @@ class HttpGoogleCloudStorageDAO(
   val dataStoreFactory = new FileDataStoreFactory(new File(dataStoreRoot))
 
   val flow = new GoogleAuthorizationCodeFlow.Builder(httpTransport, jsonFactory, clientSecrets, storageScopes).setDataStoreFactory(dataStoreFactory).build()
+
+  val system = akka.actor.ActorSystem("system")
 
   override def getRawlsRedirectURI(callbackPath: String): String = s"${rawlsRedirectBaseUrl}/${callbackPath}"
 
@@ -111,10 +119,36 @@ class HttpGoogleCloudStorageDAO(
     storage.buckets().insert(projectId, bucket).execute()
   }
 
-  override def deleteBucket(ownerId: String, projectId: String, bucketName: String): Unit = {
-    val credential = getBucketCredential(ownerId)
-    val storage = getStorage(credential)
-    storage.buckets().delete(bucketName).execute()
+  override def deleteBucket(userId: String, projectId: String, bucketName: String): Unit = {
+    import system.dispatcher
+    def bucketDeleteFn(): Unit = {
+      val credential = getBucketCredential(userId)
+      val storage = getStorage(credential)
+      val bucket: Bucket = storage.buckets().get(bucketName).execute()
+
+      //Google doesn't let you delete buckets that are full.
+      //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
+      //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
+      //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
+      val deleteEverythingRule = new Lifecycle.Rule()
+        .setAction(new Action().setType("delete"))
+        .setCondition(new Condition().setAge(0))
+
+      val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
+      bucket.setLifecycle(lifecycle)
+
+      Try(storage.buckets().delete(bucketName).execute) match {
+        //Google returns 409 Conflict if the bucket isn't empty.
+        case Failure(gjre: GoogleJsonResponseException) if gjre.getDetails.getCode == 409 =>
+          system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds)(bucketDeleteFn)
+        //TODO: I am entirely unsure what other cases might want to be handled here.
+        //404 means the bucket is already gone, which is fine.
+        //Success is also fine, clearly.
+      }
+    }
+    //It's possible we just created this bucket and need to immediately delete it because something else
+    //has gone bad. In this case, the bucket will already be empty, so we should be able to immediately delete it.
+    bucketDeleteFn()
   }
 
   override def getMaximumAccessLevel(userId: String, workspaceName: WorkspaceName): WorkspaceAccessLevel = {
