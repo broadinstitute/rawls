@@ -11,6 +11,8 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.client.util.store.DataStoreFactory
 import com.google.api.services.storage.Storage
 import com.google.api.services.storage.model.Bucket
+import com.google.api.services.storage.model.Bucket.Lifecycle
+import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Condition, Action}
 import org.broadinstitute.dsde.rawls.RawlsException
 import scala.collection.JavaConversions._   // Seq[String] -> Collection<String>
 import scala.concurrent.Await
@@ -56,6 +58,25 @@ class HttpGoogleCloudStorageDAO(clientSecretsJson: String, dataStoreFactory: Dat
     storage.buckets()
       .insert(projectId, bucket)
       .execute()
+  }
+
+  override def deleteBucket(userId: String, projectId: String, bucketName: String): Unit = {
+    val credential = getCredential(userId)
+    val storage = new Storage.Builder(httpTransport, jsonFactory, credential).build()
+    val bucket: Bucket = storage.buckets().get(bucketName).execute()
+
+    //Google doesn't let you delete buckets that are full.
+    //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
+    //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
+    //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
+    val rule = new Lifecycle.Rule()
+      .setAction(new Action().setType("delete"))
+      .setCondition(new Condition().setAge(0))
+
+    val endItAll = new Lifecycle().setRule(List(rule))
+    bucket.setLifecycle(endItAll)
+
+    //TODO: spawn an Actor that monitors the bucket to see if it's empty, and deletes it once it is.
   }
 
   override def getACL(userId: String, bucketName: String): String = {

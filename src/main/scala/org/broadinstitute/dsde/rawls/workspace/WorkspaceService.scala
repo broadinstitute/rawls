@@ -42,6 +42,7 @@ object WorkspaceService {
 
   case class CreateWorkspace(workspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
@@ -91,6 +92,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
     case CreateWorkspace(workspace) => context.parent ! createWorkspace(workspace)
     case GetWorkspace(workspaceName) => context.parent ! getWorkspace(workspaceName)
+    case DeleteWorkspace(workspaceName) => context.parent ! deleteWorkspace(workspaceName)
     case UpdateWorkspace(workspaceName, operations) => context.parent ! updateWorkspace(workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
@@ -157,6 +159,31 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(workspaceName, workspace.bucketName, GCSAccessLevel.Read, txn) {
           RequestComplete(workspace)
+        }
+      }
+    }
+
+  def deleteWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspace(workspaceName, txn) { workspace =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          requireAccess(workspaceName, workspace.bucketName, GCSAccessLevel.Owner, txn) {
+
+            //attempt to abort any running workflows so they don't write any more to the bucket
+            //if cromwell throws errors - oh well, there's not much we can do
+            //TODO: run the calls to Cromwell in parallel?
+            submissionDAO.list(workspaceContext, txn).flatMap(_.workflows).toList collect {
+              case wf if !wf.status.isDone => Try(executionServiceDAO.abort(wf.workflowId, userInfo.authCookie))
+            }
+
+            gcsDAO.deleteBucket(userInfo.userId,workspace.namespace,workspace.bucketName)
+            //TODO: remove google groups
+
+            workspaceDAO.delete(workspaceName, txn)
+
+            //TODO: return some message indicating that your bucket should be deleted in 24h?
+            RequestComplete(StatusCodes.NoContent)
+          }
         }
       }
     }
