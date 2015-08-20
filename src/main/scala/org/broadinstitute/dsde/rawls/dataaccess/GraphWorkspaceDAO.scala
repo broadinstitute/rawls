@@ -46,7 +46,8 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
   override def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean = txn withGraph { db =>
     getWorkspaceVertex(db, workspaceName) match {
       case Some(v) => {
-        v.remove
+        val ws = loadFromVertex[Workspace](v, Some(workspaceName))
+        deleteVertex(ws, v, WorkspaceContext(ws.toWorkspaceName, ws.bucketName, v))
         true
       }
       case None => false
