@@ -516,8 +516,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) =>
-            methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
-            RequestComplete(StatusCodes.OK)
+            RequestComplete(methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn))
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }
