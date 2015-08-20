@@ -29,6 +29,7 @@ import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -168,21 +169,22 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspace(workspaceName, txn) { workspace =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
           requireAccess(workspaceName, workspace.bucketName, GCSAccessLevel.Owner, txn) {
-
-            //attempt to abort any running workflows so they don't write any more to the bucket
-            //if cromwell throws errors - oh well, there's not much we can do
-            //TODO: run the calls to Cromwell in parallel?
+            import scala.concurrent.ExecutionContext.Implicits.global
+            //Attempt to abort any running workflows so they don't write any more to the bucket.
+            //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
+            //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
+            //ExecutionContext run the futures whenever
             submissionDAO.list(workspaceContext, txn).flatMap(_.workflows).toList collect {
-              case wf if !wf.status.isDone => Try(executionServiceDAO.abort(wf.workflowId, userInfo.authCookie))
+              case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo.authCookie) }
             }
 
             gcsDAO.deleteBucket(userInfo.userId,workspace.namespace,workspace.bucketName)
-            //TODO: remove google groups
+            //TODO: remove google groups - see MattS branch
 
             workspaceDAO.delete(workspaceName, txn)
 
             //TODO: return some message indicating that your bucket should be deleted in 24h?
-            RequestComplete(StatusCodes.NoContent)
+            RequestComplete(StatusCodes.Accepted)
           }
         }
       }

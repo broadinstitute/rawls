@@ -39,7 +39,8 @@ object Boot extends App {
     val gcsDAO = new HttpGoogleCloudStorageDAO(
       gcsConfig.getString("secrets"),
       new FileDataStoreFactory(new File(gcsConfig.getString("dataStoreRoot"))),
-      gcsConfig.getString("redirectBaseURL")
+      gcsConfig.getString("redirectBaseURL"),
+      gcsConfig.getInt("deletedBucketCheckSeconds")
     )
 
     system.registerOnTermination {
