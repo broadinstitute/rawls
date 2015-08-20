@@ -147,11 +147,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "delete a workspace" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent) {
+        assertResult(StatusCodes.Accepted) {
           status
         }
 
