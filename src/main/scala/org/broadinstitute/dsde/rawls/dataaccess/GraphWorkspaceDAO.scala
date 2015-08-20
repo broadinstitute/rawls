@@ -43,13 +43,8 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     new GremlinPipeline(db).V().filter(isWorkspace).transform((v: Vertex) => loadFromVertex[Workspace](v, None)).toList.asScala
   }
 
-  override def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean = txn withGraph { db =>
-    getWorkspaceVertex(db, workspaceName) match {
-      case Some(v) => {
-        v.remove
-        true
-      }
-      case None => false
-    }
+  override def delete(workspaceContext: WorkspaceContext, txn: RawlsTransaction) : Boolean = txn withGraph { db =>
+    workspaceContext.workspaceVertex.remove()
+    true
   }
 }
