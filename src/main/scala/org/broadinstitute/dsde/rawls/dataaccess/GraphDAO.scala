@@ -212,7 +212,7 @@ trait GraphDAO {
     ) yield {
       val fieldMirror = mirror.reflect(obj).reflectField(member.asTerm)
       member.name.decodedName.toString.trim -> (fieldMirror.get match {
-        case v: Option[Any] => v
+        case v: Option[Any] => v //FIXME: also return member.typeSignature ?
         case v => Option(v)
       })
     }
@@ -288,7 +288,10 @@ trait GraphDAO {
         // no value for the key so remove anything that is there
         // can't tell if this is a value or a map anymore so just remove both (there should only be one)
         vertex.removeProperty(key)
-        vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex) //FIXME: I think this is insufficient and doesn't cover the case where you overwrite a map with an empty map
+        vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex)
+        //FIXME: ^^^ I think this is insufficient and doesn't cover the case where you overwrite a Some(foo:FooClass) with None, for a FooClass that requires sub-sub-vertices
+        //FIXME: See FIXME in getProperties - I think we can do this if we have the type too?
+        //Needs some shenanigans to figure out the type of an Option if it's None, see http://bit.ly/1htTZJk
       case (key, Some(value: DateTime)) => vertex.setProperty(key, value.toDate)
       case (key, Some(value: Map[_,_])) => serializeAttributeMap(graph, workspaceContext, vertex, key, value.asInstanceOf[Map[String, Attribute]])
       case (key, Some(value: AttributeEntityReference)) => serializeReference(graph, workspaceContext, vertex, key, value)
