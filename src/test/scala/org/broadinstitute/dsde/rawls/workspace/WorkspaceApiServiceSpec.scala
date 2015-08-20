@@ -757,6 +757,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.OK) {
           status
         }
+        assertResult(modifiedMethodConfig) {
+          responseAs[MethodConfiguration]
+        }
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(Option(AttributeString("foo2"))) {
