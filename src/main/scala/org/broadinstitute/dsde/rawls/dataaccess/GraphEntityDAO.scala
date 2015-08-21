@@ -69,8 +69,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    val entityTypes = getEntityTypes(workspaceContext, txn)
-    workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity(_))
+    workspacePipeline(workspaceContext).out().filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_))
   }
 
   override def getEntitySubtrees(workspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
