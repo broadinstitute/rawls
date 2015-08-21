@@ -86,6 +86,45 @@
 			}]
 		}]
 	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate",
+		"operations": [{
+			"method": "POST",
+			"summary": "Validate submission",
+			"notes": "",
+			"type": "Submission",
+			"nickname": "validateSubmission",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "submission",
+				"description": "Description of a submission.",
+				"required": true,
+				"type": "SubmissionRequest",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Validation Response"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}",
 		"operations": [{
 			"method": "GET",

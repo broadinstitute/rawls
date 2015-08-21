@@ -77,9 +77,15 @@ case class Submission(
   status: SubmissionStatus
 )
 
-object ExecutionJsonSupport extends JsonSupport {
+// Validation of a Submission
+case class SubmissionValidation(
+  validatedInputs: Seq[Entity],
+  failedInputs: Seq[String],
+  runnableWorkflows: Seq[Map[String, String]],    // not a single map because keys are not unique
+  unrunnableWorkflows: Seq[AttributeString]
+)
 
-  import WorkspaceJsonSupport.WorkspaceNameFormat
+object ExecutionJsonSupport extends JsonSupport {
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
@@ -114,6 +120,11 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowFailureFormat = jsonFormat3(WorkflowFailure)
 
   implicit val SubmissionFormat = jsonFormat9(Submission)
+
+  implicit val SubmissionValidationFormat = {
+    import WorkspaceJsonSupport.EntityFormat
+    jsonFormat4(SubmissionValidation)
+  }
 }
 
 object WorkflowStatuses {
