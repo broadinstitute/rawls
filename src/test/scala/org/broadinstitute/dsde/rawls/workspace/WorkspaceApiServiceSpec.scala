@@ -209,7 +209,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 201 on create entity" in withTestDataApiServices { services =>
-    val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")), testData.wsName)
+    val wsName = WorkspaceName(testData.workspace.namespace,testData.workspace.name)
+    val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, newSample.toJson.toString())) ~>
       addMockOpenAmCookie ~>
@@ -230,7 +231,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           responseAs[Entity]
         }
 
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${newSample.path}"))))) {
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(wsName)))))) {
           header("Location")
         }
       }
@@ -273,7 +274,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo"))))) {
               entityDAO.get(workspaceContext, "Sample", "newSample", txn)
             }
           }
@@ -293,7 +294,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar"))))) {
               entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
             }
           }
@@ -342,7 +343,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar")), WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) {
+            assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar"))))) {
               entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
             }
           }
@@ -634,7 +635,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      testData.wsName, MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodRepoMethod(testData.wsName.namespace, "method-a", "1"))
+      MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodRepoMethod(testData.wsName.namespace, "method-a", "1"))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       addMockOpenAmCookie ~>
@@ -650,7 +651,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
             }
           }
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/${newMethodConfig.path}"))))) {
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
           header("Location")
         }
       }
@@ -935,14 +936,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
             withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
               //Name, namespace, creation date, and owner might change, so this is all that remains.
               assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
-                entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet.map { (e: Entity) =>
-                  e.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
-                }
+                entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet
               }
               assertResult(methodConfigDAO.list(sourceWorkspaceContext, txn).toSet) {
-                methodConfigDAO.list(copiedWorkspaceContext, txn).toSet.map { (mc: MethodConfigurationShort) =>
-                  mc.copy(workspaceName = WorkspaceName(testData.workspace.namespace, testData.workspace.name))
-                }
+                methodConfigDAO.list(copiedWorkspaceContext, txn).toSet
               }
             }
           }
@@ -974,7 +971,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step_1","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, mcName.workspaceName, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -1023,7 +1020,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
   val wsName = testData.wsName
     val mcName = MethodConfigurationName("three_step", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, wsName, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
 
@@ -1034,7 +1031,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("three_step", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, wsName, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
@@ -1044,7 +1041,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
-  val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), testData.wsName)
+  val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
   val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
@@ -1076,7 +1073,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
             }
             services.dataSource.inTransaction { txn =>
               val workspaceContext = workspaceDAO.loadContext(workspace2Name, txn).get
-              assertResult(z1.copy(workspaceName = workspace2Name)) {
+              assertResult(z1) {
                 entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
               }
             }
@@ -1092,8 +1089,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
                 }
                 services.dataSource.inTransaction { txn =>
                   withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-                    assertResult(z1.copy(workspaceName = testData.wsName)) {
-                      entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get.copy(workspaceName = testData.wsName)
+                    assertResult(z1) {
+                      entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
                     }
                   }
                 }
@@ -1317,7 +1314,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // End ACL-restriction Tests
 
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
-    val dotSample = Entity("sample.with.dots.in.name", "sample", Map("type" -> AttributeString("tumor")), testData.wsName)
+    val dotSample = Entity("sample.with.dots.in.name", "sample", Map("type" -> AttributeString("tumor")))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, dotSample.toJson.toString())) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>

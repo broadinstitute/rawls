@@ -17,7 +17,8 @@ import scala.util.{Success, Try, Failure}
  * Created by dvoet on 6/26/15.
  */
 object SubmissionMonitor {
-  def props(submission: Submission,
+  def props(workspaceName: WorkspaceName,
+            submission: Submission,
             workspaceDAO: WorkspaceDAO,
             submissionDAO: SubmissionDAO,
             workflowDAO: WorkflowDAO,
@@ -25,8 +26,8 @@ object SubmissionMonitor {
             datasource: DataSource,
             workflowPollInterval: Duration,
             submissionPollInterval: Duration,
-            workflowMonitorProps: (ActorRef, Submission, Workflow) => Props): Props = {
-    Props(new SubmissionMonitor(submission, workspaceDAO, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
+            workflowMonitorProps: (ActorRef, WorkspaceName, Submission, Workflow) => Props): Props = {
+    Props(new SubmissionMonitor(workspaceName, submission, workspaceDAO, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -52,7 +53,8 @@ object SubmissionMonitor {
  * @param workflowMonitorProps constructor function used to create workflow monitor actors. The function takes
  *                             an actor ref to report back to and the workflow to monitor
  */
-class SubmissionMonitor(submission: Submission,
+class SubmissionMonitor(workspaceName: WorkspaceName,
+                        submission: Submission,
                         workspaceDAO: WorkspaceDAO,
                         submissionDAO: SubmissionDAO,
                         workflowDAO: WorkflowDAO,
@@ -60,7 +62,7 @@ class SubmissionMonitor(submission: Submission,
                         datasource: DataSource,
                         workflowPollInterval: Duration,
                         submissionPollInterval: Duration,
-                        workflowMonitorProps: (ActorRef, Submission, Workflow) => Props) extends Actor {
+                        workflowMonitorProps: (ActorRef, WorkspaceName, Submission, Workflow) => Props) extends Actor {
   import context._
 
   setReceiveTimeout(submissionPollInterval)
@@ -80,8 +82,8 @@ class SubmissionMonitor(submission: Submission,
 
   private def handleTerminatedMonitor(workflowId: String): Unit = {
     val workflow = datasource inTransaction { txn =>
-      workflowDAO.get(getWorkspaceContext(submission.workspaceName, txn), workflowId, txn).getOrElse(
-        throw new RawlsException(s"Could not find workflow in workspace ${submission.workspaceName} with id ${workflowId}")
+      workflowDAO.get(getWorkspaceContext(workspaceName, txn), workflowId, txn).getOrElse(
+        throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
       )
     }
 
@@ -96,12 +98,12 @@ class SubmissionMonitor(submission: Submission,
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
-    watch(actorOf(workflowMonitorProps(self, submission, workflow), workflow.workflowId))
+    watch(actorOf(workflowMonitorProps(self, workspaceName, submission, workflow), workflow.workflowId))
   }
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
     val savedWorkflow = datasource inTransaction { txn =>
-      val workspaceContext = getWorkspaceContext(workflow.workspaceName, txn)
+      val workspaceContext = getWorkspaceContext(workspaceName, txn)
       val saveOutputs = Try {
         workflowOutputsOption foreach { workflowOutputs =>
           val entity = entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
@@ -127,7 +129,7 @@ class SubmissionMonitor(submission: Submission,
   private def checkSubmissionStatus(): Unit = {
     system.log.debug("polling workflow status, submission {}", submission.submissionId)
     datasource inTransaction { txn =>
-      val workspaceContext = getWorkspaceContext(submission.workspaceName, txn)
+      val workspaceContext = getWorkspaceContext(workspaceName, txn)
       val refreshedSubmission = submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
         throw new RawlsException(s"submissions ${submission} does not exist")
       )

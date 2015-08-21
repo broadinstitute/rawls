@@ -200,7 +200,7 @@ class ExpressionParser extends JavaTokenParsers {
   //Takes a list of entities at the end of a pipeline and returns them in final format.
   private def outputEntityResult(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
     val dao = new GraphEntityDAO()
-    FinalResult( graphPipeline.toList.map( dao.loadEntity(_, context.workspaceContext) ), "" )
+    FinalResult( graphPipeline.toList.map( dao.loadEntity(_) ), "" )
   }
 }
 

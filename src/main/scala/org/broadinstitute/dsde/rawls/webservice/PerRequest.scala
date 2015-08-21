@@ -30,7 +30,6 @@ import scala.language.postfixOps
 trait PerRequest extends Actor {
   import context._
   import spray.json.DefaultJsonProtocol._
-  import org.broadinstitute.dsde.rawls.model.Identifiable
   import spray.httpx.SprayJsonSupport._
   import RawlsMessageJsonSupport._
 
@@ -45,6 +44,7 @@ trait PerRequest extends Actor {
   def receive = {
     case RequestComplete_(response, marshaller) => complete(response)(marshaller)
     case RequestCompleteWithHeaders_(response, headers, marshaller) => complete(response, headers:_*)(marshaller)
+    case RequestCompleteWithLocation_(response, location, marshaller) => complete(response, HttpHeaders.Location(r.request.uri.copy(path = Uri.Path(location))))(marshaller)
     case ReceiveTimeout => complete(GatewayTimeout)
     case x =>
       system.log.error("Unsupported response message sent to PreRequest actor: " + Option(x).getOrElse("null").toString)
@@ -59,23 +59,16 @@ trait PerRequest extends Actor {
    * @return
    */
   private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]): Unit = {
-    val additionalHeaders = response match {
-      case ( StatusCodes.Created, entity : Identifiable ) => {
-        Option( HttpHeaders.Location(r.request.uri.copy(path = Uri.Path("/"+entity.path))) )
-      }
-      case _ => None
-    }
-
     //if the body of the response is a string, we need to wrap it in a RawlsMessage that can be marshaled to and from json
     response match {
       case (statusCode: StatusCode, message: String) => {
         val newResponse = (statusCode, RawlsMessage(message))
         //we need to explicitly set the implicit marshaller here, otherwise it uses the implicit marshaller above
-        r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
+        r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
         stop(self)
       }
       case _ => {
-        r.withHttpResponseHeadersMapped(h => h ++ headers ++ additionalHeaders).complete(response)
+        r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
         stop(self)
       }
     }
@@ -124,6 +117,11 @@ object PerRequest {
    */
   case class RequestCompleteWithHeaders[T](response: T, headers: HttpHeader*)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
 
+  /**
+   * Report complete with a path to use as a Location header
+   */
+  case class RequestCompleteWithLocation[T](response: T, location: String)(implicit val marshaller: ToResponseMarshaller[T]) extends PerRequestMessage
+
   /** allows for pattern matching with extraction of marshaller */
   private object RequestComplete_ {
     def unapply[T](requestComplete: RequestComplete[T]) = Some((requestComplete.response, requestComplete.marshaller))
@@ -132,6 +130,11 @@ object PerRequest {
   /** allows for pattern matching with extraction of marshaller */
   private object RequestCompleteWithHeaders_ {
     def unapply[T](requestComplete: RequestCompleteWithHeaders[T]) = Some((requestComplete.response, requestComplete.headers, requestComplete.marshaller))
+  }
+
+  /** allows for pattern matching with extraction of marshaller */
+  private object RequestCompleteWithLocation_ {
+    def unapply[T](requestComplete: RequestCompleteWithLocation[T]) = Some((requestComplete.response, requestComplete.location, requestComplete.marshaller))
   }
 
   case class WithProps(r: RequestContext, props: Props, message: AnyRef, timeout: Duration) extends PerRequest {

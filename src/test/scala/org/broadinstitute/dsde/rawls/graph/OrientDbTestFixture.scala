@@ -41,10 +41,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, workflowEntities: Seq[Entity]) = {
     val workflows = (workflowEntities collect {
-      case ref: Entity => Workflow(workspace.toWorkspaceName, "workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name))
+      case ref: Entity => Workflow("workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name))
     })
 
-    Submission("submission_" + UUID.randomUUID.toString, testDate, "testUser", workspace.toWorkspaceName, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
+    Submission("submission_" + UUID.randomUUID.toString, testDate, "testUser", methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
@@ -69,59 +69,49 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         "whatsit" -> AttributeNumber(100),
         "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
         "quot" -> AttributeEntityReference("Aliquot", "aliquot1"),
-        "somefoo" -> AttributeString("itsfoo")),
-      WorkspaceName(wsName.namespace, wsName.name) )
-    val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ), WorkspaceName(wsName.namespace, wsName.name) )
-    val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ), WorkspaceName(wsName.namespace, wsName.name) )
-    val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")), wsName)
-    var sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")), wsName)
-    var sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")), wsName)
-    var sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")), wsName)
+        "somefoo" -> AttributeString("itsfoo")))
+    val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ) )
+    val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ) )
+    val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
 
-    val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty, wsName)
-    val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty, wsName)
+    val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
+    val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
 
     val pair1 = Entity("pair1", "Pair",
       Map( "case" -> AttributeEntityReference("Sample", "sample2"),
-        "control" -> AttributeEntityReference("Sample", "sample1") ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+        "control" -> AttributeEntityReference("Sample", "sample1") ) )
     val pair2 = Entity("pair2", "Pair",
       Map( "case" -> AttributeEntityReference("Sample", "sample3"),
-        "control" -> AttributeEntityReference("Sample", "sample1") ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+        "control" -> AttributeEntityReference("Sample", "sample1") ) )
 
     val sset1 = Entity("sset1", "SampleSet",
       Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample1"),
         AttributeEntityReference("Sample", "sample2"),
-        AttributeEntityReference("Sample", "sample3"))) ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+        AttributeEntityReference("Sample", "sample3"))) ) )
     val sset2 = new Entity("sset2", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ) )
 
     val sset3 = Entity("sset3", "SampleSet",
       Map("hasSamples" -> AttributeEntityReferenceList(Seq(
         AttributeEntityReference("Sample", "sample5"),
-        AttributeEntityReference("Sample", "sample6")))),
-      wsName)
+        AttributeEntityReference("Sample", "sample6")))))
 
     val sset4 = Entity("sset4", "SampleSet",
       Map("hasSamples" -> AttributeEntityReferenceList(Seq(
-        AttributeEntityReference("Sample", "sample7")))),
-      wsName)
+        AttributeEntityReference("Sample", "sample7")))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map( "samples" -> AttributeEmptyList ),
-      wsName )
+      Map( "samples" -> AttributeEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
       Map( "pairs" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
-        AttributeEntityReference("Pair", "pair2"))) ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+        AttributeEntityReference("Pair", "pair2"))) ) )
 
     val indiv1 = Entity("indiv1", "Individual",
-      Map( "sset" -> AttributeEntityReference("SampleSet", "sset1") ),
-      WorkspaceName(wsName.namespace, wsName.name) )
+      Map( "sset" -> AttributeEntityReference("SampleSet", "sset1") ) )
 
     val methodConfig = MethodConfiguration(
       "ns",
@@ -130,27 +120,26 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      wsName,
       MethodRepoConfiguration("ns", "meth1", "1"),
       MethodRepoMethod("ns-config", "meth1", "1")
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), wsName, MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(wsName.namespace, "method-a", "1"))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), wsName, MethodRepoConfiguration("ns", "meth1", "1"), MethodRepoMethod("ns-config", "meth1", "1"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(wsName.namespace, "method-a", "1"))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoConfiguration("ns", "meth1", "1"), MethodRepoMethod("ns-config", "meth1", "1"))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.type")), outputs=Map.empty, wsName, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, wsName, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, wsName, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, wsName, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.type")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
 
-    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, methodConfig.workspaceName)
+    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
     val methodConfigName3 = methodConfigName.copy(name="noSuchName")
     val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName,methodConfigName2)
     val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
     val uniqueMethodConfigName = UUID.randomUUID.toString
-    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, methodConfig.workspaceName)
+    val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
     val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", newMethodConfigName)
     val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", "1", methodConfigName)
     val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
@@ -159,11 +148,11 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
 
-    val submissionTerminateTest = Submission("submissionTerminate",testDate, "testUser",workspace.toWorkspaceName,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
-      Seq(Workflow(workspace.toWorkspaceName,"workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
-        Workflow(workspace.toWorkspaceName,"workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
-        Workflow(workspace.toWorkspaceName,"workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name)),
-        Workflow(workspace.toWorkspaceName,"workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+    val submissionTerminateTest = Submission("submissionTerminate",testDate, "testUser",methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
+      Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
+        Workflow("workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
+        Workflow("workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name)),
+        Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)

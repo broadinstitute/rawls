@@ -107,12 +107,12 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
   def deleteMethodConfigs(configNames: Seq[String]) = configNames.map(methodConfigs.remove(_))
 
   def createEntitySingle(entityType: String, nRandomAnnotations: Int, specialAnnotations: Map[String, Attribute]) = {
-    Entity(makeEntityName(entityType), entityType, generateEntityAnnotations(nRandomAnnotations) ++ specialAnnotations, wn)
+    Entity(makeEntityName(entityType), entityType, generateEntityAnnotations(nRandomAnnotations) ++ specialAnnotations)
   }
 
   def createEntitySet(memberType: String, nMembers: Int) = {
     Entity(makeEntityName(getSetType(memberType)), getSetType(memberType),
-      Map("members" -> generateReferenceList(memberType, nMembers)), wn)
+      Map("members" -> generateReferenceList(memberType, nMembers)))
   }
 
   def createSample(nAnnotations: Int) = {
@@ -148,7 +148,6 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
-      wn,
       MethodRepoConfiguration("bar", "baz", "1"), // don't care about method details
       MethodRepoMethod("bar-config", "baz", "1")) // don't care about method config details
   }
@@ -171,7 +170,6 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       updateParameterSet(config.prerequisites, nDelete, nModify, nCreate),
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),
-      config.workspaceName,
       config.methodRepoConfig,
       config.methodRepoMethod
     )

@@ -18,7 +18,7 @@ import spray.testkit.ScalatestRouteTest
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
-  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList), WorkspaceName(testData.wsName.namespace, testData.wsName.name))
+  val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
   val workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
@@ -141,8 +141,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "return conflicts during an entity copy" in {
-    val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), testData.wsName)
-    val s2 = Entity("s3", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)), testData.wsName)
+    val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)))
+    val s2 = Entity("s3", "child", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)))
     //println("hello " + workspaceService.getCopyConflicts(wsns, wsname, Seq(s1, s2)).size)
     //still needs to be implemented fully
     assertResult(true) {

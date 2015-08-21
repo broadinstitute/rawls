@@ -24,15 +24,15 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
 
   val workspace = new Workspace("workspaces", "test_workspace", "aBucket", DateTime.now, "testUser", Map.empty)
 
-  val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)), WorkspaceName("workspaces", "test_workspace"))
-  val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty, WorkspaceName("workspaces", "test_workspace"))
+  val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
+  val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
 
   val configGood = new MethodConfiguration("config_namespace", "configGood", "Sample",
-    Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty, WorkspaceName("workspaces", "test_workspace"),
+    Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty,
     MethodRepoConfiguration( "method_config_namespace", "test_method", "1"), MethodRepoMethod( "method_namespace", "test_method", "1"))
 
   val configMissingExpr = new MethodConfiguration("config_namespace", "configMissingExpr", "Sample",
-    Map.empty, Map.empty, Map.empty, WorkspaceName("workspaces", "test_workspace"),
+    Map.empty, Map.empty, Map.empty,
     MethodRepoConfiguration( "method_config_namespace", "test_method", "1"), MethodRepoMethod( "method_namespace", "test_method", "1"))
 
   class ConfigData extends TestData {

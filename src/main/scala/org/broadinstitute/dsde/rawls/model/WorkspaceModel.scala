@@ -2,12 +2,9 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.joda.time.DateTime
 
-trait Identifiable {
-  def path : String
-}
-
-trait Attributable extends Identifiable {
+trait Attributable {
   def attributes: Map[String, Attribute]
+  def briefName: String
 }
 
 /**
@@ -15,18 +12,18 @@ trait Attributable extends Identifiable {
  */
 case class WorkspaceName(
                       namespace: String,
-                      name: String) extends Identifiable {
-  def path : String = "workspaces/" + namespace + "/" + name
+                      name: String) {
   override def toString = namespace + "/" + name // used in error messages
+  def path = s"/workspaces/${namespace}/${name}"
 }
 
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
                       attributes: Map[String, Attribute]
-                      ) extends Identifiable with Attributable {
-  def path = WorkspaceName(namespace,name).path
+                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
+  def briefName = toWorkspaceName.toString
 }
 
 case class Workspace (
@@ -36,9 +33,9 @@ case class Workspace (
                       createdDate: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute]
-                      ) extends Identifiable with Attributable {
-  def path = toWorkspaceName.path
+                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
+  def briefName = toWorkspaceName.toString
 }
 
 case class EntityName(
@@ -47,9 +44,10 @@ case class EntityName(
 case class Entity(
                    name: String,
                    entityType: String,
-                   attributes: Map[String, Attribute],
-                   workspaceName:WorkspaceName) extends Identifiable with Attributable {
-  def path : String = workspaceName.path + "/entities/" + name
+                   attributes: Map[String, Attribute]
+                   ) extends Attributable {
+  def briefName = name
+  def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/entities/${name}"
 }
 
 case class MethodConfigurationName(
@@ -89,19 +87,18 @@ case class MethodConfiguration(
                    prerequisites: Map[String, AttributeString],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
-                   workspaceName:WorkspaceName,
                    methodRepoConfig:MethodRepoConfiguration,
                    methodRepoMethod:MethodRepoMethod
-                   ) extends Identifiable {
-  def path : String = workspaceName.path + "/methodConfigs/" + namespace + "/" + name
-  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoConfig, methodRepoMethod, workspaceName, namespace)
+                   ) {
+  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoConfig, methodRepoMethod, namespace)
+  def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
 }
+
 case class MethodConfigurationShort(
                                 name: String,
                                 rootEntityType: String,
                                 methodStoreConfig:MethodRepoConfiguration,
                                 methodStoreMethod:MethodRepoMethod,
-                                workspaceName:WorkspaceName,
                                 namespace: String)
 
 case class MethodRepoConfigurationQuery(
@@ -148,7 +145,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
-  implicit val EntityFormat = jsonFormat4(Entity)
+  implicit val EntityFormat = jsonFormat3(Entity)
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
@@ -166,9 +163,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodStoreConfigurationFormat = jsonFormat3(MethodRepoConfiguration)
 
-  implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
 
-  implicit val MethodConfigurationShortFormat = jsonFormat6(MethodConfigurationShort)
+  implicit val MethodConfigurationShortFormat = jsonFormat5(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
 

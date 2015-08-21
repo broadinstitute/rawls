@@ -12,7 +12,7 @@ import scala.collection.JavaConversions._
 class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   /** gets by method config name */
   override def get(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Option[MethodConfiguration] = txn withGraph { graph =>
-    getMethodConfigVertex(workspaceContext, methodConfigurationNamespace, methodConfigurationName) map { loadFromVertex[MethodConfiguration](_, Some(workspaceContext.workspaceName)) }
+    getMethodConfigVertex(workspaceContext, methodConfigurationNamespace, methodConfigurationName) map { loadFromVertex[MethodConfiguration](_) }
   }
 
   /** rename method configuration */
@@ -34,7 +34,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
 
   /** list all method configurations in the workspace */
   override def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = txn withGraph { graph =>
-    workspacePipeline(workspaceContext).out(methodConfigEdge).toList map (loadFromVertex[MethodConfigurationShort](_, Some(workspaceContext.workspaceName)))
+    workspacePipeline(workspaceContext).out(methodConfigEdge).toList map (loadFromVertex[MethodConfigurationShort](_))
   }
 
   /** creates or replaces a method configuration */
