@@ -296,6 +296,7 @@ trait GraphDAO {
       case (key, Some(value: Map[_,_])) => serializeAttributeMap(graph, workspaceContext, vertex, key, value.asInstanceOf[Map[String, Attribute]])
       case (key, Some(value: AttributeEntityReference)) => serializeReference(graph, workspaceContext, vertex, key, value)
       case (key, Some(seq: Seq[_])) => seq.headOption match {
+        //FIXME: Again, I don't think this isn't sufficient to clear up vertices left behind if we're overwriting a full list with an empty one.
         case None => // empty, do nothing
         case Some(x: Workflow) =>
           serializeDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, (w: Workflow) => w.workflowId, graph, workspaceContext)
