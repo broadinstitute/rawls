@@ -83,9 +83,38 @@ case class Submission(
   def idField = "submissionId"
 }
 
-object ExecutionJsonSupport extends JsonSupport {
+// method configuration input parameter, it's name and the associated expression from the method config
+case class SubmissionValidationInput(
+  wdlName: String,
+  expression: String
+)
 
-  import WorkspaceJsonSupport.WorkspaceNameFormat
+// common values for all the entities -- the entity type and the input descriptions
+case class SubmissionValidationHeader(
+  entityType: String,
+  inputExpressions: Seq[SubmissionValidationInput] // size of Seq is nInputs
+)
+
+// result of an expression parse
+case class SubmissionValidationValue(
+  value: Option[Attribute],
+  error: Option[String]
+)
+
+// the results of parsing each of the inputs for one entity
+case class SubmissionValidationEntityInputs(
+  entityName: String,
+  inputResolutions: Seq[SubmissionValidationValue] // size of Seq in nInputs
+)
+
+// the results of parsing each input for each entity
+case class SubmissionValidationReport(
+  header: SubmissionValidationHeader,
+  validEntities: Seq[SubmissionValidationEntityInputs], // entities for which parsing all inputs succeeded
+  invalidEntities: Seq[SubmissionValidationEntityInputs] // entities for which parsing at least 1 of the inputs failed
+)
+
+object ExecutionJsonSupport extends JsonSupport {
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
@@ -120,6 +149,16 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowFailureFormat = jsonFormat3(WorkflowFailure)
 
   implicit val SubmissionFormat = jsonFormat9(Submission)
+
+  implicit val SubmissionValidationInputFormat = jsonFormat2(SubmissionValidationInput)
+
+  implicit val SubmissionValidationHeaderFormat = jsonFormat2(SubmissionValidationHeader)
+
+  implicit val SubmissionValidationValueFormat = jsonFormat2(SubmissionValidationValue)
+
+  implicit val SubmissionValidationEntityInputsFormat = jsonFormat2(SubmissionValidationEntityInputs)
+
+  implicit val SubmissionValidationReportFormat = jsonFormat3(SubmissionValidationReport)
 }
 
 trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>

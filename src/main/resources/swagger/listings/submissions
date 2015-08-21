@@ -86,6 +86,51 @@
 			}]
 		}]
 	}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate",
+		"operations": [{
+			"method": "POST",
+			"summary": "Validate submission",
+			"notes": "",
+			"type": "SubmissionValidationReport",
+			"nickname": "validateSubmission",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "submission",
+				"description": "Description of a submission.",
+				"required": true,
+				"type": "SubmissionRequest",
+				"paramType": "body",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 200,
+				"message": "Validation Response"
+			},{
+				"code": 400,
+				"message": "Invalid Request"
+			},{
+				"code": 404,
+				"message": "No Entity"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+	}, {
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}",
 		"operations": [{
 			"method": "GET",
@@ -370,6 +415,89 @@
 				"expression": {
 					"type": "string",
 					"description": "Expression that resolves to one or more entities matching the entity type in the method configuration."
+				}
+			}
+		},
+		"SubmissionValidationInput": {
+			"id": "SubmissionValidationInput",
+			"description": "method configuration input parameter, it's name and the associated expression from the method config",
+			"required": ["name", "expression"],
+			"properties": {
+				"wdlName": {
+					"type": "string",
+					"description": "name of input"
+				},
+				"expression": {
+					"type": "string",
+					"description": "expression for input"
+				}
+			}
+		},
+		"SubmissionValidationHeader": {
+			"id": "SubmissionValidationHeader",
+			"description": "common values for all the entities -- the entity type and the input descriptions",
+			"required": ["entityType", "inputExpressions"],
+			"properties": {
+				"entityType": {
+					"type": "string",
+					"description": "type of entity"
+				},
+				"inputExpressions": {
+					"type": "array",
+					"description": "input descriptions",
+					"items": { "$ref": "SubmissionValidationInput" }
+				}
+			}
+		},
+		"SubmissionValidationValue": {
+			"id": "SubmissionValidationValue",
+			"description": "result of an expression parse for one of the inputs",
+			"required": [],
+			"properties": {
+				"value": {
+					"type": "string",
+					"description": "the value of the input expression for the specified entity"
+				},
+				"error": {
+					"type": "string",
+					"description": "parsing error(s)"
+				}
+			}
+		},
+		"SubmissionValidationEntityInputs": {
+			"id": "SubmissionValidationEntityInputs",
+			"description": "the results of parsing each of the inputs for one entity",
+			"required": ["entityName", "inputResolutions"],
+			"properties": {
+				"entityName": {
+					"type": "string",
+					"description": "name of entity"
+				},
+				"inputResolutions": {
+					"type": "array",
+					"description": "input resolution",
+					"items": { "$ref": "SubmissionValidationValue" }
+				}
+			}
+		},
+		"SubmissionValidationReport": {
+			"id": "SubmissionValidationReport",
+			"description": "the results of parsing each input for each entity",
+			"required": ["header", "validEntities", "invalidEntities"],
+			"properties": {
+				"header": {
+					"$ref": "SubmissionValidationHeader",
+					"description": "common values for all entities"
+				},
+				"validEntities": {
+					"type": "array",
+					"description": "runnable entities",
+					"items": { "$ref": "SubmissionValidationEntityInputs" }
+				},
+				"invalidEntities": {
+					"type": "array",
+					"description": "non-runnable entities",
+					"items": { "$ref": "SubmissionValidationEntityInputs" }
 				}
 			}
 		},
