@@ -3,11 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.Date
 
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientVertex}
-import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
+import com.tinkerpop.blueprints.{Edge, Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.RawlsEnumeration
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
 import org.joda.time.DateTime
@@ -15,7 +14,7 @@ import spray.http.StatusCodes
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.collection.SortedMap
+import scala.collection.Map
 import scala.reflect.ClassTag
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe._
@@ -38,6 +37,8 @@ object VertexSchema {
   val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, Map)
 
   def vertexClassOf[T: TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
+  def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString
+  //def vertexClassToType(str: String): Type = ru.runtimeMirror(getClass.getClassLoader).staticClass(str.replace("^", ".")).selfType
 
   /**
    * creates all the vertex classes
@@ -49,12 +50,34 @@ object VertexSchema {
   }
 }
 
+object EdgeSchema {
+  val sep = "_"
+  sealed trait EdgeRelationType {
+    def prefix: String
+    def toLabel(suffix:String) = prefix + sep + suffix
+  }
+  case object Own extends EdgeRelationType {
+    override val prefix = "OWN"
+  }
+  case object Ref extends EdgeRelationType {
+    override val prefix = "REF"
+  }
+  val allEdgeRelations = Seq(Own, Ref)
+
+  def getEdgeRelation(label: String): EdgeRelationType = {
+    toEdgeRelation(label.split(sep).head)
+  }
+
+  def toEdgeRelation(prefix: String): EdgeRelationType = {
+    allEdgeRelations.filter( er => prefix == er.prefix ).head
+  }
+  def stripEdgeRelation(str: String): String = str.split(sep, 2).last
+}
+
 trait GraphDAO {
   val methodConfigEdge: String = "methodConfigEdge"
   val methodRepoMethodEdge: String = "methodRepoMethodEdge"
   val methodRepoConfigEdge: String = "methodRepoConfigEdge"
-  val workflowEdge: String = "workflowEdge"
-  val workflowFailureEdge: String = "workflowFailureEdge"
   val submissionEdge: String = "submissionEdge"
 
   implicit def toPipeFunction[A, B](f: A => B) = new PipeFunction[A, B] {
@@ -66,10 +89,18 @@ trait GraphDAO {
     if (s.contains('.')) throw new RawlsExceptionWithStatusCode(message = s"User-defined string $s should not contain dot characters", statusCode = StatusCodes.BadRequest)
   }
 
-  def addEdge(source: Vertex, label: String, dest: Vertex) = {
+  def addEdge(source: Vertex, edgeType: EdgeSchema.EdgeRelationType, label: String, dest: Vertex) = {
     // fail-safe check to ensure no edge labels have dots
     if (label.contains('.')) throw new RawlsException(message = s"Edge label $label should not contain dot characters")
-    source.addEdge(label, dest)
+    source.addEdge(edgeType.toLabel(label), dest)
+  }
+
+  def getEdges(vertex: Vertex, direction: Direction, edgeType: EdgeSchema.EdgeRelationType, labels: String*): Iterable[Edge] = {
+      vertex.getEdges(direction, labels.map(l => edgeType.toLabel(l)):_* )
+  }
+
+  def getVertices(vertex: Vertex, direction: Direction, edgeType: EdgeSchema.EdgeRelationType, labels: String*): Iterable[Vertex] = {
+    vertex.getVertices(direction, labels.map(l => edgeType.toLabel(l)):_* )
   }
 
   def addVertex(graph: Graph, className: String): Vertex = {
@@ -94,6 +125,21 @@ trait GraphDAO {
     if (pipeline.count() > 0) throw new IllegalStateException("Expected at most one result, but got multiple")
     first
   }
+
+  /**
+   * Returns a tuple of vertex property keys and edge keys. */
+  def getVertexKeysTuple(vertex: Vertex): (Seq[String], Seq[String]) =
+    (vertex.getPropertyKeys.toSeq, vertex.getEdges(Direction.OUT).map( e => EdgeSchema.stripEdgeRelation(e.getLabel) ).toSeq)
+
+  /**
+   * Gets all fields associated with a vertex: its properties and its outbound edge names. */
+  def getVertexKeys(vertex: Vertex): Seq[String] = {
+    getVertexKeysTuple(vertex).productIterator.toList.asInstanceOf[Seq[Seq[String]]].flatten
+  }
+
+  /**
+   * Returns the class of a vertex. */
+  private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
 
   /**
    * Gets the properties of a vertex.
@@ -141,7 +187,7 @@ trait GraphDAO {
   def isWorkspace = isVertexOfClass(VertexSchema.Workspace)
 
   def isVertexOfClass(clazz: String) = new PipeFunction[Vertex, java.lang.Boolean] {
-    override def compute(v: Vertex) = v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(clazz)
+    override def compute(v: Vertex) = getVertexClass(v).equalsIgnoreCase(clazz)
   }
 
   def hasProperty[T](key: String) = new PipeFunction[Vertex, java.lang.Boolean] {
@@ -168,19 +214,15 @@ trait GraphDAO {
   }
 
   def entityPipeline(workspaceContext: WorkspaceContext, entityType: String, entityName: String) = {
-    workspacePipeline(workspaceContext).out(entityType).filter(hasPropertyValue("name", entityName))
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(hasPropertyValue("name", entityName))
   }
 
   def methodConfigPipeline(workspaceContext: WorkspaceContext, methodConfigNamespace: String, methodConfigName: String) = {
-    workspacePipeline(workspaceContext).out(methodConfigEdge).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(methodConfigEdge)).filter(hasProperties(Map("namespace" -> methodConfigNamespace, "name" -> methodConfigName)))
   }
 
   def submissionPipeline(workspaceContext: WorkspaceContext, submissionId: String) = {
-    workspacePipeline(workspaceContext).out(submissionEdge).filter(hasPropertyValue("submissionId", submissionId))
-  }
-
-  def workflowPipeline(workspaceContext: WorkspaceContext, workflowId: String) = {
-    workspacePipeline(workspaceContext).out(workflowEdge).filter(hasPropertyValue("workflowId", workflowId))
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(submissionEdge)).filter(hasPropertyValue("submissionId", submissionId))
   }
 
   // vertex getters
@@ -201,258 +243,313 @@ trait GraphDAO {
     getSinglePipelineResult(submissionPipeline(workspaceContext, submissionId))
   }
 
-  def getWorkflowVertex(workspaceContext: WorkspaceContext, workflowId: String) = {
-    getSinglePipelineResult(workflowPipeline(workspaceContext, workflowId))
+  def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
+    val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
+
+    for( paramSymbol <- ctor.paramLists.head ) yield {
+      (paramSymbol.typeSignature, paramSymbol.name.decodedName.toString.trim)
+    }
   }
 
-  /**
-   * Serializes an object to a vertex. This supports all properties extending AnyVal, String, joda DateTime
-   * Map[String, Attribute], AttributeReference, Seq[Workflow], Seq[WorkflowFailure], MethodRepoConfiguration,
-   * MethodRepoMethod, WorkspaceName. Maps are stored in a sub vertex. Values of AttributeValue as properties on the
-   * sub vertex. Values of AttributeReference are stored as edges from the sub-vertex. Seq[Attribute] are stored as
-   * maps where the keys are the index.
-   *
-   * @param obj to save
-   * @param vertex to save it to
-   * @param workspaceContext the workspace context
-   * @tparam T type of object being saved
-   * @return resulting vertex
-   */
-  def saveToVertex[T: TypeTag: ClassTag](graph: Graph, workspaceContext: WorkspaceContext, obj: T, vertex: Vertex): Vertex = {
+  //NOTE: We return Iterable[(tpe:Type, propName:String, value:Any)], but value will always be of type tpe.
+  //We use getTypeParams to unpack collection types so we don't actually lose info but it makes matching more painful.
+  def getPropertiesAndValues(tpe: Type, obj: DomainObject): Iterable[( Type, String, Any )] = {
+    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
 
-    def getProperties(obj: T): Iterable[(String, Option[Any])] = {
-      val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-
-      for (member <- ru.typeTag[T].tpe.members if (member.asTerm.isVal || member.asTerm.isVar)
-      ) yield {
-        val fieldMirror = mirror.reflect(obj).reflectField(member.asTerm)
-        member.name.decodedName.toString.trim -> (fieldMirror.get match {
-          case v: Option[Any] => v
-          case v => Option(v)
-        })
-      }
+    for (member <- tpe.members if member.asTerm.isVal || member.asTerm.isVar
+    ) yield {
+      val fieldMirror = mirror.reflect(obj).reflectField(member.asTerm)
+      (member.typeSignature, member.name.decodedName.toString.trim, fieldMirror.get)
     }
+  }
 
-    getProperties(obj).foreach(_ match {
-      // each entry we are iterating over has a key and an Option(value). Match on the type of values we
-      // support and serialize to the vertex appropriately
-      case (key, None) =>
-        // no value for the key so remove anything that is there
-        // can't tell if this is a value or a map anymore so just remove both (there should only be one)
-        vertex.removeProperty(key)
-        vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex)
-      case (key, Some(value: DateTime)) => vertex.setProperty(key, value.toDate)
-      case (key, Some(value: Map[_,_])) => serializeAttributeMap(graph, workspaceContext, vertex, key, value.asInstanceOf[Map[String, Attribute]])
-      case (key, Some(value: AttributeEntityReference)) => serializeReference(graph, workspaceContext, vertex, key, value)
-      case (key, Some(seq: Seq[_])) => seq.headOption match {
-        case None => // empty, do nothing
-        case Some(x: Workflow) =>
-          serializeDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, (w: Workflow) => w.workflowId, graph, workspaceContext)
-          new GremlinPipeline(vertex).out(workflowEdge).linkIn(workflowEdge, workspaceContext.workspaceVertex).iterate()
-        case Some(x: WorkflowFailure) => serializeDomainObjects(vertex, seq.asInstanceOf[Seq[WorkflowFailure]], workflowFailureEdge, (wf: WorkflowFailure) => (wf.entityType, wf.entityName), graph, workspaceContext)
-        case Some(a: Attribute) => serializeSeq(graph, workspaceContext, vertex, key, seq.asInstanceOf[Seq[Attribute]])
-        case x => throw new RawlsException(s"Unexpected object of type [${x.getClass}] in Seq for attribute [${key}]: [${x}]")
-      }
-      case (key, Some(mrConfig: MethodRepoConfiguration)) => serializeDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, thereCanOnlyBeOne, graph, workspaceContext)
-      case (key, Some(mrMethod: MethodRepoMethod)) => serializeDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, thereCanOnlyBeOne, graph, workspaceContext)
-      case (key, Some(ws: WorkspaceName)) => throw new RawlsException("WorkspaceName is not a supported attribute type.")
-      case (key, Some(ws: WorkflowStatus)) => vertex.setProperty(key, ws.toString)
-      case (key, Some(ss: SubmissionStatus)) => vertex.setProperty(key, ss.toString)
+  def getTypeParams(tpe: Type) = tpe.asInstanceOf[TypeRefApi].args
 
-      // catchall, treat it as something that can be directly set on the vertex, this works for AnyVal and String
-      // but other things may cause orientdb exceptions
-      case (key, Some(value)) => vertex.setProperty(key, value)
+  //SAVE METHODS
+  def saveObject[T <: DomainObject :TypeTag :ClassTag](obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+    saveObject(typeOf[T], obj, vertex, wsc, graph)
+  }
+
+  def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+    //Serialize out each of the case class properties.
+    getPropertiesAndValues(tpe, obj).foreach({
+      case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph)
     })
-
-    vertex
   }
 
-  /**
-   * special function passed into idFxn of serializeDomainObjects when there should only be
-   * one object and thus any existing should be overwritten
-   */
-  private def thereCanOnlyBeOne(x: Any) = 1
+  private def removeDomainObjectFilterFn(tpe: Type, obj: DomainObject)(vertex: Vertex): Boolean = {
+    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
+    val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
+    vertex.getProperty(obj.idField) == mirror.reflect(obj).reflectField(idFieldSym).get
+  }
 
-  /**
-   * Serializes rawls domain objects to sub vertices. Will overwrite corresponding existing vertices, correspondence
-   * determined by idFxn.
-   *
-   * @param vertex the top level vertex
-   * @param objs the nested objects
-   * @param edgeLabel the label to give to the edges to the sub vertices
-   * @param idFxn function mapping an object of type T to an identifier, used to determine if vertices already in the
-   *              graph correspond to any of the nested objects
-   * @param graph used to create new vertices
-   * @tparam T the type of the object being serializes
-   */
-  private def serializeDomainObjects[T: TypeTag: ClassTag](vertex: Vertex, objs: Seq[T], edgeLabel: String, idFxn: T => Any, graph: Graph, workspaceContext: WorkspaceContext): Seq[Vertex] = {
-    val existingObjVertexesById = vertex.getVertices(Direction.OUT, edgeLabel).map { objVertex =>
-      val obj = loadFromVertex[T](objVertex)
-      idFxn(obj) -> objVertex
-    } toMap
+  def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
+    saveSubObject(typeOf[T], propName, obj, vertex, wsc, graph)
+  }
 
-    // remove any existing that are no longer in the map
-    (existingObjVertexesById -- objs.map(idFxn)).foreach(_._2.remove())
+  def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
+    removeProperty(propName, vertex, graph, removeDomainObjectFilterFn(tpe, obj))
+    val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
+    addEdge(vertex, EdgeSchema.Own, propName, objVert)
+    saveObject(tpe, obj, objVert, wsc, graph)
+    objVert
+  }
 
-    objs.map { obj =>
-      val objVertex = existingObjVertexesById.getOrElse(idFxn(obj), {
-        val newVertex = addVertex(graph, VertexSchema.vertexClassOf[T])
-        addEdge(vertex, edgeLabel, newVertex)
-        newVertex
-      })
+  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+    val mapDummy = addVertex(graph, VertexSchema.Map)
+    addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
 
-      saveToVertex(graph, workspaceContext, obj, objVertex)
+    map.map {case (key, value) =>
+      saveProperty( valuesType, key, value, mapDummy, wsc, graph )
     }
   }
 
-  private def serializeAttributeMap(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, propName: String, map: Map[String, Attribute]): Unit = {
-    // remove existing map then repopulate
-    vertex.getVertices(Direction.OUT, propName).headOption.foreach(removeMapVertex)
-
-    val mapVertex = addVertex(graph, VertexSchema.Map)
-    addEdge(vertex, propName, mapVertex)
-
-    map.foreach { case (key, attribute) =>
-      attribute match {
-        case v: AttributeValue => serializeValue(mapVertex, key, v)
-        case ref: AttributeEntityReference => serializeReference(graph, workspaceContext, mapVertex, key, ref)
-        case AttributeValueList(values) => serializeSeq(graph, workspaceContext, mapVertex, key, values)
-        case AttributeEntityReferenceList(references) => serializeSeq(graph, workspaceContext, mapVertex, key, references)
-        case AttributeEmptyList => serializeAttributeMap(graph, workspaceContext, mapVertex, key, Map.empty)
-      }
+  private def saveOpt(containedType: Type, propName: String, opt: Option[Any], vertex: Vertex, wsc:WorkspaceContext, graph:Graph): Unit = {
+    opt match {
+      case Some(v) => saveProperty(containedType, propName, v, vertex, wsc, graph)
+      case None => //done, already removed
     }
   }
 
-  private def serializeSeq(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
-    serializeAttributeMap(graph, workspaceContext, vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap)
-  }
-
-  private def serializeReference(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, key: String, ref: AttributeEntityReference): Unit = {
-    val entityVertex = getEntityVertex(workspaceContext, ref.entityType, ref.entityName).getOrElse {
-      throw new RawlsException(s"${workspaceContext.workspaceName.namespace}/${workspaceContext.workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
+  private def saveAttributeRef(ref: AttributeEntityReference, propName: String, vertex: Vertex, wsc: WorkspaceContext, graph:Graph): Unit = {
+    val entityVertex = getEntityVertex(wsc, ref.entityType, ref.entityName).getOrElse {
+      throw new RawlsException(s"${wsc.workspaceName.namespace}/${wsc.workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
     }
-    addEdge(vertex, key, entityVertex)
+    addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }
 
-  private def serializeValue(vertex: Vertex, key: String, value: AttributeValue): Unit = {
-    vertex.setProperty(key, AttributeConversions.attributeToProperty(value))
+  private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+    removeProperty(propName, vertex, graph) //remove any previously defined value
+    (tpe, valToSave) match {
+
+      //Basic types. TODO: More of these?
+      case (_, value:String)  => vertex.setProperty(propName, value)
+      case (_, value:Int)     => vertex.setProperty(propName, value)
+      case (_, value:Boolean) => vertex.setProperty(propName, value)
+      case (_, value:DateTime)=> vertex.setProperty(propName, value.toDate)
+
+      //Attributes.
+
+      //Throw an exception if we attempt to save AttributeNull, since a nonexistent property and a null-valued property are indistinguishable
+      case (_, AttributeNull) => throw new RawlsException(s"Attempting to save $propName as AttributeNull; this is illegal")
+      case (_, value:AttributeValue) => vertex.setProperty(propName, AttributeConversions.attributeToProperty(value))
+      case (_, value:AttributeEntityReference) => saveAttributeRef(value, propName, vertex, wsc, graph)
+      case (_, value:AttributeValueList) => saveProperty(typeOf[Seq[AttributeValue]], propName, value.list, vertex, wsc, graph)
+      case (_, value:AttributeEntityReferenceList) => saveProperty(typeOf[Seq[AttributeEntityReference]], propName, value.list, vertex, wsc, graph)
+
+      //set the values type to Any, but it's irrelevant as the map is empty so no values will be serialized
+      case (_, AttributeEmptyList) => saveMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+
+      //Enums.
+      case (_, value:RawlsEnumeration[_]) => vertex.setProperty(propName, value.toString)
+
+      //Collections. Note that a Seq is treated as a map with the keys as indices.
+      //Watch out for type erasure! Ha ha ha ha ha. Ugh.
+      case (_, seq:Seq[_]) => saveMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+
+      case (_, map:Map[String,_])  => saveMap( getTypeParams(tpe).last, propName, map, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Map[String,_]] => saveMap( getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph)
+
+      case (_, value:Option[_]) => saveOpt(getTypeParams(tpe).head, propName, value, vertex, wsc, graph)
+      case (tp, None) if tp <:< typeOf[Option[Any]] => saveOpt(getTypeParams(tp).head, propName, None, vertex, wsc, graph)
+
+      //Everything else (including enum types).
+      case (tp, value:DomainObject) => saveSubObject(tp, propName, value, vertex, wsc, graph)
+
+      //The Forbidden Zone
+      case (_, value:WorkspaceName) => throw new RawlsException("WorkspaceName is not a supported attribute type.")
+
+      //What the hell is this? Run awaaaaay!
+      case (tp, value) => throw new RawlsException(s"Error saving property $propName with value ${value.toString}: unknown type ${tpe.toString}")
+    }
   }
 
-  private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
-
-  private def removeMapVertex(mapVertex: Vertex): Unit = {
-    mapVertex.asInstanceOf[OrientVertex].getVertices(Direction.OUT).filter(getVertexClass(_) == VertexSchema.Map).foreach(removeMapVertex)
-    mapVertex.remove()
+  //LOAD METHODS
+  def loadObject[T: TypeTag](vertex: Vertex): T = {
+    loadObject(typeOf[T], vertex).asInstanceOf[T]
   }
 
-  /**
-   * Loads an object from a vertex as saved by saveToVertex (see that function for how things are saved)
-   * @param vertex to load
-   * @tparam T
-   * @return object loaded
-   */
-  def loadFromVertex[T: TypeTag](vertex: Vertex): T = {
-    val classT = ru.typeOf[T].typeSymbol.asClass
+  def loadObject(tpe: Type, vertex: Vertex): Any = {
+    val classT = tpe.typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
-    val ctor = ru.typeOf[T].decl(ru.termNames.CONSTRUCTOR).asMethod
+    val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
     val ctorMirror = classMirror.reflectConstructor(ctor)
 
-    val parameters = ctor.asMethod.paramLists.head.map { paramSymbol =>
-      val paramName = paramSymbol.name.decodedName.toString.trim
+    val parameters = getCtorProperties(tpe).map({
+      case (tp, prop) =>
+        loadProperty(tp, prop, vertex)
+    }).toSeq
 
-      def tryLoad[T](value: Option[T]): T = {
-        value.getOrElse {
-          throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a value in ${vertex}")
+    ctorMirror(parameters: _*)
+  }
+
+  def loadSubObject(tpe: Type, propName: String, vertex: Vertex): Any = {
+    val subVert = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
+    subVert.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+    loadObject(tpe, subVert)
+  }
+
+  private def loadMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
+    val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
+    mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+
+    getVertexKeys(mapDummy).map({ key =>
+      (key, loadProperty(valuesType, key, mapDummy))
+    }).toMap
+  }
+
+  private def loadOpt(containedType: Type, propName: String, vertex: Vertex): Option[Any] = {
+    getVertexKeys(vertex).contains(propName) match {
+      case true => Option(loadProperty(containedType, propName, vertex))
+      case false => None
+    }
+  }
+
+  //We've determined that propName is one of AttributeEntityReferenceList, AttributeValueList, AttributeEmptyList
+  //Figure out which one and load it!
+  private def loadMysteriouslyTypedAttributeList(propName: String, myVertex: Vertex, mapVertex: Vertex): Attribute = {
+    //Peek at the map vertex for the list type.
+    val (propKeys, edgeKeys) = getVertexKeysTuple(mapVertex)
+
+    if ( propKeys.size + edgeKeys.size == 0 ) {
+      AttributeEmptyList
+    } else if ( propKeys.size > 0 ) {
+      assert(edgeKeys.size == 0, "Mysteriously typed AttributeList vertex has both property and edge keys!")
+      AttributeValueList(
+        loadProperty(typeOf[Seq[AttributeValue]], propName, myVertex)
+          .asInstanceOf[Seq[AttributeValue]] )
+    } else {
+      AttributeEntityReferenceList(
+        loadProperty( typeOf[Seq[AttributeEntityReference]], propName, myVertex )
+          .asInstanceOf[Seq[AttributeEntityReference]] )
+    }
+  }
+
+  /**
+   * Loads an attribute property from the graph.
+   * @param propName A property of type Attribute, most likely a value in a Map[String, Attribute].
+   *                 The class definition doesn't tell us any more than it's an attribute so we have to
+   *                 do some silly inference from the structure of the graph.
+   * @param vertex The map dummy vertex this property lives on.
+   * @return A nicely typed Attribute.
+   */
+  private def loadMysteriouslyTypedAttribute(propName: String, vertex: Vertex): Attribute = {
+    val vertexProp = Option(vertex.getProperty(propName))
+    vertexProp match {
+      case Some(value) => loadProperty(ru.typeOf[AttributeValue], propName, vertex).asInstanceOf[AttributeValue]
+      case None =>
+        val refEdges = vertex.getEdges(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).toSeq
+        val ownEdges = vertex.getEdges(Direction.OUT, EdgeSchema.Own.toLabel(propName)).toSeq
+
+        //The second assert here will need to be removed if we ever implement Set types.
+        assert( refEdges.size + ownEdges.size > 0, s"Attribute in map with property name $propName seems to be missing" )
+        assert( refEdges.size + ownEdges.size <= 1, s"Attribute in map with property name $propName is duplicated" )
+
+        if( refEdges.size == 1 ) {
+          //The only place we currently have references is AttributeEntityRefs.
+          assert(getVertexClass(refEdges.head.getVertex(Direction.IN)).equalsIgnoreCase(VertexSchema.Entity))
+          loadProperty(ru.typeOf[AttributeEntityReference], propName, vertex).asInstanceOf[AttributeEntityReference]
+        } else {
+          //It's either an AttributeEntityReferenceList, an AttributeValueList, or an AttributeEmptyList
+          loadMysteriouslyTypedAttributeList(propName, vertex, ownEdges.head.getVertex(Direction.IN))
         }
-      }
+    }
+  }
 
-      val vertexProperty: Option[Any] = Option(vertex.getProperty(paramName))
-      paramSymbol.typeSignature match {
+  private def loadAttributeRef(propName: String, vertex: Vertex): AttributeEntityReference = {
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
+    AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
+  }
 
-        case dateSymbol if dateSymbol =:= typeOf[DateTime] =>
-          val date = tryLoad(vertexProperty)
-          date match {
-            case date: Date => new DateTime(date)
-            case _ => throw new RawlsException(s"org.joda.time.DateTime property [${paramName}] of class [${classT.fullName}] does not have a java.util.Date value in ${vertex}")
-          }
+  private def loadAttributeList[T](propName: String, vertex: Vertex): Seq[T] = {
+    loadProperty(typeOf[Seq[AttributeValue]], propName, vertex).asInstanceOf[Seq[T]]
+  }
 
-        case mapSymbol if mapSymbol <:< typeOf[Map[String, Attribute]] =>
-          vertex.getVertices(Direction.OUT, paramName).headOption match {
-            case None => Map.empty
-            case Some(mapVertex) => deserializeMap(mapVertex)
-          }
+  //Sneaky. The withName() method is defined in a sealed trait, so no way to instance it to call it.
+  //Instead, we find a subclass of the enum type, instance that, and call withName() on it.
+  private def enumWithName(enumType: Type, enumStr: String): RawlsEnumeration[_] = {
+    val m = ru.runtimeMirror(getClass.getClassLoader)
+    val anEnumElemClass = enumType.typeSymbol.asClass.knownDirectSubclasses.head.asClass.toType
+    val enumModuleMirror = m.staticModule(anEnumElemClass.typeSymbol.asClass.fullName)
+    m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[RawlsEnumeration[_]]
+  }
 
-        case entityRef if entityRef =:= typeOf[AttributeEntityReference] =>
-          vertex.getVertices(Direction.OUT, paramName).headOption match {
-            case None => throw new RawlsException(s"required property [${paramName}] of class [${classT.fullName}] does not have a reference in ${vertex}")
-            case Some(entityVertex) if getVertexClass(entityVertex) == VertexSchema.vertexClassOf[Entity] =>
-              AttributeEntityReference(entityVertex.getProperty("entityType"), entityVertex.getProperty("name"))
-            case Some(nonEntityVertex) => throw new RawlsException(s"property [${paramName}] of class [${classT.fullName}] does not reference non entity vertex ${nonEntityVertex}")
-          }
+  private def loadProperty(tpe: Type, propName: String, vertex: Vertex): Any = {
+    tpe match {
+      //Basic types. TODO: More of these?
+      case tp if tp =:= typeOf[String]  => vertex.getProperty(propName)
+      case tp if tp =:= typeOf[Int]     => vertex.getProperty(propName)
+      case tp if tp =:= typeOf[Boolean] => vertex.getProperty(propName)
+      //serializing joda datetime across the network breaks, though it works fine in-memory
+      case tp if tp =:= typeOf[DateTime]=> new DateTime(vertex.getProperty(propName).asInstanceOf[Date])
 
-        case workflowSymbol if workflowSymbol =:= typeOf[Seq[Workflow]] => deserializeDomainObjects[Workflow](vertex, workflowEdge)
-        case workflowFailureSymbol if workflowFailureSymbol =:= typeOf[Seq[WorkflowFailure]] => deserializeDomainObjects[WorkflowFailure](vertex, workflowFailureEdge)
-        case msConfigSymbol if msConfigSymbol =:= typeOf[MethodRepoConfiguration] => tryLoad(deserializeDomainObjects[MethodRepoConfiguration](vertex, methodRepoConfigEdge).headOption)
-        case msMethodSymbol if msMethodSymbol =:= typeOf[MethodRepoMethod] => tryLoad(deserializeDomainObjects[MethodRepoMethod](vertex, methodRepoMethodEdge).headOption)
+      //Attributes.
+      case tp if tp <:< typeOf[AttributeValue] => AttributeConversions.propertyToAttribute(vertex.getProperty(propName))
+      case tp if tp <:< typeOf[AttributeEntityReference] => loadAttributeRef(propName, vertex)
+      case tp if tp <:< typeOf[AttributeValueList] => AttributeValueList(loadAttributeList[AttributeValue](propName, vertex))
+      case tp if tp <:< typeOf[AttributeEntityReferenceList] => AttributeEntityReferenceList(loadAttributeList[AttributeEntityReference](propName, vertex))
+      case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex)
 
-        case attributeSeq if attributeSeq <:< typeOf[Seq[Attribute]] => vertex.getVertices(Direction.OUT, paramName).headOption.map(deserializeSeq).getOrElse(Seq.empty)
+      //Enums.
+      case tp if tp <:< typeOf[RawlsEnumeration[_]] => enumWithName(tp, vertex.getProperty(propName))
 
-        case optionSymbol if optionSymbol <:< typeOf[Option[_]] => vertexProperty
+      //Collections. Note that a Seq is treated as a map with the keys as indices.
+      case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex)
+      case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
 
-        case workspaceNameSymbol if workspaceNameSymbol =:= typeOf[WorkspaceName] => throw new RawlsException("WorkspaceName is not a supported attribute type.")
+      //Everything else.
+      case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex)
 
-        case workflowStatusSymbol if workflowStatusSymbol =:= typeOf[WorkflowStatus] => {
-          val statusText = tryLoad(vertexProperty).toString
-          WorkflowStatuses.withName(statusText)
-        }
-        case submissionStatusSymbol if submissionStatusSymbol =:= typeOf[SubmissionStatus] => {
-          val statusText = tryLoad(vertexProperty).toString
-          SubmissionStatuses.withName(statusText)
-        }
+      //The Forbidden Zone
+      case tp if tp <:< typeOf[WorkspaceName] => throw new RawlsException("WorkspaceName is not a supported attribute type.")
 
-        case _ => tryLoad(vertexProperty)
+      //Aaaaah! Freak out! (le freak, c'est chic)
+      case tp => throw new RawlsException(s"Error loading property $propName from $vertex: unknown type ${tp.toString}")
+    }
+  }
+
+  //REMOVE METHODS
+  def removeObject(vertex: Vertex, graph: Graph): Unit = {
+    removeOwnedChildVertices(vertex, graph)
+    vertex.remove()
+  }
+
+  //Removes the named property from the vertex.
+  //The vertexFilterFn provides an additional check on target vertices to see if they should be deleted.
+  private def removeProperty(propName: String, vertex: Vertex, graph: Graph, vertexFilterFn: (Vertex => Boolean) = {v => true} ) = {
+    //Remove the property set directly on the vertex...
+    vertex.removeProperty(propName)
+
+    //...and also properties represented by edges.
+    vertex.getEdges(Direction.OUT)
+      .filter( e => EdgeSchema.stripEdgeRelation(e.getLabel) == propName && vertexFilterFn(e.getVertex(Direction.IN)) )
+      .map { e =>
+      EdgeSchema.getEdgeRelation(e.getLabel) match {
+        //We need to recursively delete sub-objects that we own.
+        case EdgeSchema.Own =>
+          val childVertex = e.getVertex(Direction.IN)
+          removeOwnedChildVertices(childVertex, graph)
+          graph.removeVertex(childVertex)
+          //No need to delete the edge as deleting the vertex makes it vanish.
+        case EdgeSchema.Ref =>
+          graph.removeEdge(e)
       }
     }
-
-    ctorMirror(parameters: _*).asInstanceOf[T]
   }
 
-  private def deserializeDomainObjects[T: TypeTag](vertex: Vertex, edgeLabel: String): Seq[T] = {
-    vertex.getVertices(Direction.OUT, edgeLabel).map { v =>
-      loadFromVertex[T](v)
-    }.toSeq
-  }
-
-  private def deserializeMap(vertex: Vertex): Map[String, Attribute] = {
-    vertex.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
-
-    val scalarProps: Map[String, Attribute] = getVertexProperties(vertex).map(entry => entry._1 -> AttributeConversions.propertyToAttribute(entry._2))
-
-    val refProps = vertex.getEdges(Direction.OUT).map { edge =>
-      val subV = edge.getVertex(Direction.IN)
-      getVertexClass(subV) match {
-        case VertexSchema.Map =>
-          // nested maps are sequences where the keys are the indicies
-          val attributes: Seq[Attribute] = deserializeSeq(subV)
-          val typedList = attributes.headOption match {
-            case Some(v: AttributeValue) => AttributeValueList(attributes.map(_.asInstanceOf[AttributeValue]))
-            case Some(r: AttributeEntityReference) => AttributeEntityReferenceList(attributes.map(_.asInstanceOf[AttributeEntityReference]))
-            case None => AttributeEmptyList
-            case x => throw new RawlsException(s"Unexpected member type in attributes Seq [${x.getClass}]: ${x}")
-          }
-          edge.getLabel -> typedList
-        case VertexSchema.Entity => edge.getLabel -> AttributeEntityReference(subV.getProperty("entityType"), subV.getProperty("name"))
-        case _ => throw new RawlsException("unexpected vertex class: " + getVertexClass(subV))
+  //Recursively wipes all linked vertices following ownership chain.
+  private def removeOwnedChildVertices( vertex: Vertex, graph: Graph ): Unit = {
+    vertex.getEdges(Direction.OUT).map { edge =>
+      EdgeSchema.getEdgeRelation(edge.getLabel) match {
+        case EdgeSchema.Own =>
+          val childVertex = edge.getVertex(Direction.IN)
+          removeOwnedChildVertices(childVertex, graph)
+          graph.removeVertex(childVertex)
+        case EdgeSchema.Ref => //no-op
       }
     }
-
-    scalarProps ++ refProps
-  }
-
-  private def deserializeSeq(subV: Vertex): Seq[Attribute] = {
-    // Seqs are stored as maps with the index as key
-    // for some reason, orient converts our numeric edge labels to negatives so use Math.abs
-    SortedMap(deserializeMap(subV).map(entry => Math.abs(entry._1.toInt) -> entry._2).toSeq: _*).values.toSeq
   }
 }
 

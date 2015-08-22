@@ -7,6 +7,11 @@ trait Attributable {
   def briefName: String
 }
 
+trait DomainObject {
+  //the name of a field on this object that uniquely identifies it relative to any graph siblings
+  def idField: String
+}
+
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -33,9 +38,10 @@ case class Workspace (
                       createdDate: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute]
-                      ) extends Attributable {
+                      ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
+  def idField = "name"
 }
 
 case class EntityName(
@@ -45,9 +51,10 @@ case class Entity(
                    name: String,
                    entityType: String,
                    attributes: Map[String, Attribute]
-                   ) extends Attributable {
+                   ) extends Attributable with DomainObject {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/entities/${name}"
+  def idField = "name"
 }
 
 case class MethodConfigurationName(
@@ -72,13 +79,17 @@ case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
                    methodVersion: String
-                   )
+                   ) extends DomainObject {
+  def idField = "methodName"
+}
 
 case class MethodRepoConfiguration(
                    methodConfigNamespace: String,
                    methodConfigName: String,
                    methodConfigVersion: String
-                   )
+                   ) extends DomainObject {
+  def idField = "methodConfigName"
+}
 
 case class MethodConfiguration(
                    namespace: String,
@@ -89,17 +100,20 @@ case class MethodConfiguration(
                    outputs: Map[String, AttributeString],
                    methodRepoConfig:MethodRepoConfiguration,
                    methodRepoMethod:MethodRepoMethod
-                   ) {
+                   ) extends DomainObject {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoConfig, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
+  def idField = "name"
 }
 
 case class MethodConfigurationShort(
                                 name: String,
                                 rootEntityType: String,
-                                methodStoreConfig:MethodRepoConfiguration,
-                                methodStoreMethod:MethodRepoMethod,
-                                namespace: String)
+                                methodRepoConfig:MethodRepoConfiguration,
+                                methodRepoMethod:MethodRepoMethod,
+                                namespace: String) extends DomainObject {
+  def idField = "name"
+}
 
 case class MethodRepoConfigurationQuery(
                                          methodRepoNamespace: String,

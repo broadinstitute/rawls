@@ -52,11 +52,11 @@ object Boot extends App {
     }
 
     val containerDAO = GraphContainerDAO(
-      new GraphWorkflowDAO(),
+      new GraphWorkflowDAO(new GraphSubmissionDAO()),
       new GraphWorkspaceDAO(),
       new GraphEntityDAO(),
       new GraphMethodConfigurationDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO())
+      new GraphSubmissionDAO()
     )
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(

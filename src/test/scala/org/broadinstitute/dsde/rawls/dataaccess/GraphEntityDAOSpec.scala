@@ -259,7 +259,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
         dao.save(context, sample6Copy, txn)
         val entitiesWithCycles = List("sample1", "sample5", "sample7", "sample6")
         txn.withGraph { graph =>
-          val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("name"))).head.getVertices(Direction.OUT).head.getEdges(Direction.OUT, "cycle")
+          val fetched = graph.getVertices().filter(v => entitiesWithCycles.contains(v.getProperty[String]("name"))).head.getVertices(Direction.OUT).head.getEdges(Direction.OUT, EdgeSchema.Ref.toLabel("cycle"))
           assert {
             fetched.size == 1
           }

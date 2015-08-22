@@ -68,12 +68,12 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       checkSubmissionStatus()
     case Terminated(monitor) =>
       system.log.debug("workflow monitor terminated, submission {}, actor ", submission.submissionId, monitor)
-      handleTerminatedMonitor(monitor.path.name)
+      handleTerminatedMonitor(submission.submissionId, monitor.path.name)
   }
 
-  private def handleTerminatedMonitor(workflowId: String): Unit = {
+  private def handleTerminatedMonitor(submissionId: String, workflowId: String): Unit = {
     val workflow = datasource inTransaction { txn =>
-      containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), workflowId, txn).getOrElse(
+      containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), submissionId, workflowId, txn).getOrElse(
         throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
       )
     }
@@ -109,7 +109,7 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
         case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
       }
 
-      containerDAO.workflowDAO.update(workspaceContext, workflowToSave, txn)
+      containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave, txn)
     }
 
     if (savedWorkflow.status.isDone) {

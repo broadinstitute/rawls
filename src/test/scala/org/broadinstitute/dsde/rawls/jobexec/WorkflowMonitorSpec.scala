@@ -1,16 +1,18 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import scala.concurrent.duration._
+
 import akka.actor.{Terminated, ActorSystem}
 import akka.testkit.{ImplicitSender, TestActors, TestKit, TestActorRef}
+import org.joda.time.DateTime
+import org.scalatest.{FlatSpecLike, Matchers}
+import spray.http.HttpCookie
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
-import org.scalatest.{FlatSpecLike, Matchers}
-import spray.http.HttpCookie
-import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 6/30/15.
@@ -19,7 +21,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
   val testDbName = "WorkflowMonitorSpec"
-  val workflowDAO: GraphWorkflowDAO = new GraphWorkflowDAO
+  val workflowDAO: GraphWorkflowDAO = new GraphWorkflowDAO(new GraphSubmissionDAO())
 
   override def afterAll: Unit = {
     TestKit.shutdownActorSystem(system)

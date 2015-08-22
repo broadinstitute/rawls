@@ -13,63 +13,71 @@ import scala.language.implicitConversions
  * @author tsharpe
  */
 
-class GraphWorkflowDAO extends WorkflowDAO with GraphDAO {
+//Workflows are no longer vertices directly hanging off workspaces, so this is now just a wrapper around Submission CRUD.
+class GraphWorkflowDAO(graphSubmissionDAO: GraphSubmissionDAO) extends WorkflowDAO with GraphDAO {
 
-  /** get a workflow by workspace and workflowId */
-  override def get(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Option[Workflow] =
+  /** get a workflow by workspace, submissionId and workflowId */
+  override def get(workspaceContext: WorkspaceContext, submissionId: String, workflowId: String, txn: RawlsTransaction): Option[Workflow] =
     txn withGraph { db =>
-      getWorkflowVertex(workspaceContext, workflowId) map { loadFromVertex[Workflow](_) }
+      graphSubmissionDAO.get(workspaceContext, submissionId, txn).flatMap { submission =>
+        submission.workflows.find( wf => wf.workflowId == workflowId )
+      }
     }
 
   /** update a workflow */
-  override def update(workspaceContext: WorkspaceContext, workflow: Workflow, txn: RawlsTransaction): Workflow =
+  override def update(workspaceContext: WorkspaceContext, submissionId: String, workflow: Workflow, txn: RawlsTransaction): Workflow =
     txn withGraph { db =>
-      getWorkflowVertex(workspaceContext, workflow.workflowId) match {
-        case Some(vertex) => saveToVertex[Workflow](db, workspaceContext, workflow, vertex)
-        case None => throw new RawlsException(s"workflow does not exist: ${workflow}")
+      //workflows.updated( index, newval )
+      graphSubmissionDAO.get(workspaceContext, submissionId, txn).flatMap { submission =>
+        submission.workflows.indexWhere( wf => wf.workflowId == workflow.workflowId ) match {
+          case -1 => throw new RawlsException(s"workflow does not exist: ${workflow}")
+          case idx =>
+            graphSubmissionDAO.update(workspaceContext, submission.copy(workflows = submission.workflows.updated(idx, workflow)), txn)
+            Some(workflow)
+        }
       }
       workflow
     }
 
   /** delete a workflow */
-  override def delete(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Boolean =
+  override def delete(workspaceContext: WorkspaceContext, submissionId: String, workflowId: String, txn: RawlsTransaction): Boolean =
     txn withGraph { db =>
-      getWorkflowVertex(workspaceContext, workflowId) match {
-        case Some(vertex) => {
-          vertex.remove
-          true
+      graphSubmissionDAO.get(workspaceContext, submissionId, txn).flatMap { submission =>
+        submission.workflows.indexWhere( wf => wf.workflowId == workflowId ) match {
+          case -1 => None
+          case idx =>
+            graphSubmissionDAO.save(workspaceContext, submission.copy(workflows = submission.workflows.patch(idx, Nil, 1)), txn)
+            Some(submission)
         }
-        case None => false
-      }
+      }.isDefined
     }
 }
 
-class GraphSubmissionDAO(graphWorkflowDAO: GraphWorkflowDAO) extends SubmissionDAO with GraphDAO {
+class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
 
   /** get a submission by workspace and submissionId */
   override def get(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Option[Submission] =
     txn withGraph { db =>
-      getSubmissionVertex(workspaceContext, submissionId) map { loadFromVertex[Submission](_) }
+      getSubmissionVertex(workspaceContext, submissionId) map { loadObject[Submission] }
     }
 
   /** list all submissions in the workspace */
   override def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Submission] =
     txn withGraph { db =>
-      workspacePipeline(workspaceContext).out(submissionEdge).transform((v: Vertex) => loadFromVertex[Submission](v)).toList.asScala
+      workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(submissionEdge)).transform((v: Vertex) => fromVertex(workspaceContext, v)).toList.asScala
     }
 
   /** create a submission (and its workflows) */
   override def save(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) =
     txn withGraph { db =>
-      val submissionVertex = saveToVertex[Submission](db, workspaceContext, submission, addVertex(db, VertexSchema.Submission))
-      addEdge(workspaceContext.workspaceVertex, submissionEdge, submissionVertex)
+      saveSubObject[Submission](submissionEdge, submission, workspaceContext.workspaceVertex, workspaceContext, db )
       submission
     }
 
   override def update(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) = {
     txn withGraph { db =>
       getSubmissionVertex(workspaceContext, submission.submissionId) match {
-        case Some(vertex) => saveToVertex[Submission](db, workspaceContext, submission, vertex)
+        case Some(vertex) => saveObject[Submission](submission, vertex, workspaceContext, db)
         case None => throw new RawlsException("submission does not exist to be updated: " + submission)
       }
       submission
@@ -81,11 +89,14 @@ class GraphSubmissionDAO(graphWorkflowDAO: GraphWorkflowDAO) extends SubmissionD
     txn withGraph { db =>
       getSubmissionVertex(workspaceContext, submissionId) match {
         case Some(vertex) => {
-          new GremlinPipeline(vertex).out(workflowEdge, workflowFailureEdge).remove
-          vertex.remove
+          removeObject(vertex, db)
           true
         }
         case None => false
       }
     }
+
+  private def fromVertex(workspaceContext: WorkspaceContext, vertex: Vertex): Submission = {
+    loadObject[Submission](vertex)
+  }
 }

@@ -45,14 +45,18 @@ case class Workflow(
   statusLastChangedDate: DateTime,
   workflowEntity: AttributeEntityReference,
   messages: Seq[AttributeString] = Seq.empty
-)
+) extends DomainObject {
+  def idField = "workflowId"
+}
 
 // Encapsulating errors for workflows that failed to start
 case class WorkflowFailure(
   entityName: String,
   entityType: String,
   errors: Seq[AttributeString]
-)
+) extends DomainObject {
+  def idField = "entityName"
+}
 
 case class TaskOutput(
   logs: Option[Map[String, String]],
@@ -75,7 +79,9 @@ case class Submission(
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
-)
+) extends DomainObject {
+  def idField = "submissionId"
+}
 
 object ExecutionJsonSupport extends JsonSupport {
 
@@ -116,14 +122,20 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val SubmissionFormat = jsonFormat9(Submission)
 }
 
+trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>
+  def toString: String
+  def withName(name:String): T
+}
+
 object WorkflowStatuses {
   val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
 
-  sealed trait WorkflowStatus {
+  sealed trait WorkflowStatus extends RawlsEnumeration[WorkflowStatus] {
     def isDone = {
       terminalStatuses.contains(this)
     }
     override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = WorkflowStatuses.withName(name)
   }
 
   def withName(name: String): WorkflowStatus = {
@@ -146,9 +158,11 @@ object WorkflowStatuses {
   case object Unknown extends WorkflowStatus
 }
 
+
 object SubmissionStatuses {
-  sealed trait SubmissionStatus {
+  sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = SubmissionStatuses.withName(name)
   }
 
   def withName(name: String): SubmissionStatus = {

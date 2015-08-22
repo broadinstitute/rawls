@@ -7,7 +7,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.{Pipe, PipeFunction}
 import com.tinkerpop.pipes.branch.LoopPipe
-import org.broadinstitute.dsde.rawls.dataaccess.{WorkspaceContext, VertexSchema, GraphEntityDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{EdgeSchema, WorkspaceContext, VertexSchema, GraphEntityDAO}
 import org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.model.{Entity, AttributeConversions, AttributeValue, Workspace}
 import scala.collection.JavaConversions._
@@ -144,10 +144,10 @@ class ExpressionParser extends JavaTokenParsers {
 
     PipeResult(
       // then entities from the workspace that match the root entity we are starting at
-      graphPipeline.out(context.rootType).filter(entityFunc),
+      graphPipeline.out(EdgeSchema.Own.toLabel(context.rootType)).filter(entityFunc),
       // text for what the pipeline looks like at this step
       // TODO make this less prone to breaking when our graph structure changes
-      s"""new GremlinPipeline(workspace).out(${context.rootType}).filter(entityFunc)"""
+      s"""new GremlinPipeline(workspace).out(EdgeSchema.Own.toLabel(${context.rootType})).filter(entityFunc)"""
     )
   }
 
@@ -163,16 +163,18 @@ class ExpressionParser extends JavaTokenParsers {
       override def compute(v: Vertex) = v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(clazz)
     }
 
-    def entityRefPipe(entityRefName: String) = new GremlinPipeline[Vertex, Vertex]().out(entityRefName)
-    def entityRefListPipe(entityRefName: String) = entityRefPipe(entityRefName).as("listOut").out().loop("listOut", whileNotEntityFunc)
+    //Get a single AttributeEntityReference
+    def entityRefPipe(entityRefName: String) = new GremlinPipeline[Vertex, Vertex]().out(EdgeSchema.Ref.toLabel(entityRefName))
+    //Get an AttributeEntityReferenceList
+    def entityRefListPipe(entityRefName: String) = new GremlinPipeline[Vertex, Vertex]().out(EdgeSchema.Own.toLabel(entityRefName)).out()
 
     PipeResult(
       // an reference name is on the outgoing edge label
       // if it is a single reference, the vertex is on the other end
       // if it's a List-type reference, there are some vertices in the middle so loop until you find entity classes
       // then merge both steps together
-      graphPipeline.out("attributes").copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().asInstanceOf[GremlinPipeline[Vertex, Vertex]].filter(isVertexOfClass(VertexSchema.Entity)),
-      s""".out("attributes").copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().filter(isVertexOfClass(VertexSchema.Entity))"""
+      graphPipeline.out(EdgeSchema.Own.toLabel("attributes")).copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().asInstanceOf[GremlinPipeline[Vertex, Vertex]].filter(isVertexOfClass(VertexSchema.Entity)),
+      s""".out(EdgeSchema.Own.toLabel("attributes")).copySplit(entityRefPipe(entityRefName), entityRefListPipe(entityRefName)).exhaustMerge().filter(isVertexOfClass(VertexSchema.Entity))"""
     )
   }
 
@@ -188,12 +190,12 @@ class ExpressionParser extends JavaTokenParsers {
     // Note that this requires traversing one additional time, from the "last" vertices to their subordinate attribute map vertices.
     FinalResult(
       lastVertices.map((v: Vertex) => {
-        v.getVertices(Direction.OUT, "attributes").headOption match {
+        v.getVertices(Direction.OUT, EdgeSchema.Own.toLabel("attributes")).headOption match {
           case Some(mapVertex) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
           case None => throw new RuntimeException("Boo hoo, what should I do")
         }
       }),
-      s""".out("attributes").getProperty($attributeName)"""
+      s""".out(EdgeSchema.Own.toLabel("attributes")).getProperty($attributeName)"""
     )
   }
 

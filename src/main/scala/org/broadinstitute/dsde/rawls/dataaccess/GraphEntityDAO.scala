@@ -15,21 +15,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeConversions._
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   def loadEntity(entity: Vertex) = {
-    loadFromVertex[Entity](entity)
-  }
-
-  private def getOrCreateVertex(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Vertex = txn withGraph { db =>
-    // get the entity, creating if it doesn't already exist
-    val entityVertex = getEntityVertex(workspaceContext, entity.entityType, entity.name).getOrElse({
-      val newVertex = addVertex(db, VertexSchema.Entity)
-      // need to explicitly set name and type so other pipelines can find this vertex,
-      // notably in the case of handling cycles
-      newVertex.setProperty("name", entity.name)
-      newVertex.setProperty("entityType", entity.entityType)
-      addEdge(workspaceContext.workspaceVertex, entity.entityType, newVertex)
-      newVertex
-    })
-    entityVertex
+    loadObject[Entity](entity)
   }
 
   override def save(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
@@ -37,19 +23,19 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
     validateUserDefinedString(entity.name)
     entity.attributes.keys.foreach(validateUserDefinedString)
-    val entityVertex = getOrCreateVertex(workspaceContext, entity, txn)
-    saveToVertex[Entity](db, workspaceContext, entity, entityVertex)
+
+    saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, workspaceContext, db )
     entity
   }
 
   override def get(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
-    getEntityVertex(workspaceContext, entityType, entityName).map(loadEntity(_))
+    getEntityVertex(workspaceContext, entityType, entityName).map(loadEntity)
   }
 
   override def delete(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
     getEntityVertex(workspaceContext, entityType, entityName) match {
       case Some(v) => {
-        v.remove
+        removeObject(v, db)
         true
       }
       case None => false
@@ -57,7 +43,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def list(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    workspacePipeline(workspaceContext).out(entityType).iterator().map(loadEntity(_))
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).iterator().map(loadEntity)
   }
 
   override def rename(workspaceContext: WorkspaceContext, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
@@ -69,7 +55,8 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    workspacePipeline(workspaceContext).out().filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_))
+    val entityTypes = getEntityTypes(workspaceContext, txn).map(et => EdgeSchema.Own.toLabel(et))
+    workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity)
   }
 
   override def getEntitySubtrees(workspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
@@ -81,8 +68,8 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
     }
 
-    val topLevelEntities = workspacePipeline(workspaceContext).out(entityType).filter(nameFilter).iterator().map(loadEntity(_)).toList
-    val remainingEntities = workspacePipeline(workspaceContext).out(entityType).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_)).toList
+    val topLevelEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).iterator().map(loadEntity).toList
+    val remainingEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity).toList
     (topLevelEntities:::remainingEntities).distinct
   }
 
@@ -112,12 +99,6 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def cloneEntities(destWorkspaceContext: WorkspaceContext, entities: Seq[Entity], txn: RawlsTransaction) = txn withGraph { db =>
-    //map the entities to ((entity type, entity name), vertex)
-    val entityToVertexMap = entities.map { entity => (entity.entityType, entity.name) -> getOrCreateVertex(destWorkspaceContext, entity, txn)}.toMap
-    entities.foreach(entity => {
-      val vertex = entityToVertexMap((entity.entityType, entity.name))
-      saveToVertex[Entity](db, destWorkspaceContext, entity, vertex)
-    })
+    entities.map( e => save(destWorkspaceContext, e, txn) )
   }
-
 }
