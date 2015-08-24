@@ -40,13 +40,13 @@ object Boot extends App {
     }
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new ContainerDAO(conf.getConfig("methodrepo").getString("server"), conf.getConfig("executionservice").getString("server")),
+      new ContainerDAO,
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
-                                                  new ContainerDAO(conf.getConfig("methodrepo").getString("server"), conf.getConfig("executionservice").getString("server")),
+                                                  new ContainerDAO,
                                                   submissionSupervisor),
                     new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")

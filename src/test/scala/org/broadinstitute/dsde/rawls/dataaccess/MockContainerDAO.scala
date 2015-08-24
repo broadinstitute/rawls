@@ -4,7 +4,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
  * Created by mbemis on 8/19/15.
  */
 
-class MockContainerDAO(methodRepoServer: String, executionServiceServer: String) extends ContainerDAO(methodRepoServer, executionServiceServer) {
+class MockContainerDAO(methodRepoServer: String, executionServiceServer: String) extends ContainerDAO {
 
   //force travis re-run
 

@@ -9,7 +9,7 @@ import com.typesafe.config.{ConfigFactory, Config}
 /**
  * Created by mbemis on 8/19/15.
  */
-class ContainerDAO(methodRepoServer: String, executionServiceServer: String) {
+class ContainerDAO() {
 
   implicit val system = ActorSystem("rawls")
   val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
@@ -18,8 +18,8 @@ class ContainerDAO(methodRepoServer: String, executionServiceServer: String) {
   val workspaceDAO = new GraphWorkspaceDAO
   val entityDAO = new GraphEntityDAO
   val methodConfigDAO = new GraphMethodConfigurationDAO
-  val methodRepoDAO = new HttpMethodRepoDAO(methodRepoServer)
-  val executionServiceDAO = new HttpExecutionServiceDAO(executionServiceServer)
+  val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
+  val executionServiceDAO = new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server"))
   val submissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
   val gcsDAO: GoogleCloudStorageDAO = new HttpGoogleCloudStorageDAO(
     conf.getConfig("gcs").getString("secrets"),
