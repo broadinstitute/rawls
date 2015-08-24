@@ -10,8 +10,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   val littleWdl =
     """
       |task t1 {
+      |  Int int_arg
       |  command {
-      |    echo ${Int int_arg}
+      |    echo ${int_arg}
       |  }
       |}
       |

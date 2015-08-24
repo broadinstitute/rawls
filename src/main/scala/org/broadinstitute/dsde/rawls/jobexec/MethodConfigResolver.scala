@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import cromwell.binding.WdlNamespace
+import cromwell.binding.{WorkflowInput, NamespaceWithWorkflow, WdlNamespace}
+import cromwell.engine.backend.Backend
+import cromwell.parser.BackendType
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{WorkspaceContext, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionParser, ExpressionEvaluator}
@@ -29,7 +31,7 @@ object MethodConfigResolver {
    * @return map from input name to a Try containing a resolved value or failure
    */
   def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
-    val wdlInputs = WdlNamespace.load(wdl).workflows.head.inputs
+    val wdlInputs = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map((w:WorkflowInput) => w.fqn -> w.wdlType).toMap
     txn withGraph { graph =>
       val evaluator = new ExpressionEvaluator(new ExpressionParser)
       methodConfig.inputs.map {
@@ -55,9 +57,9 @@ object MethodConfigResolver {
    */
   def getValidationErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction) = {
     val configInputs = resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
-    WdlNamespace.load(wdl).workflows.head.inputs.map {
-      case (wdlName, wdlType) => {
-        val errorOption = configInputs.get(wdlName) match {
+    NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map {
+      case w:WorkflowInput => {
+        val errorOption = configInputs.get(w.fqn) match {
           case Some(Success(rawValue)) => {
             // TODO: currently Cromwell's exposed type-checking is not very robust.
             // TODO: once Cromwell has a validation endpoint, use that; until then, don't bother checking types.
@@ -66,9 +68,9 @@ object MethodConfigResolver {
           case Some(Failure(regret)) => Option(s"Expression eval failure ${regret.getMessage}")
           case None => Option("WDL binding failure: Input is missing from method config")
         }
-        (wdlName, errorOption)
+        (w.fqn, errorOption)
       }
-    } collect { case (name, Some(error)) => (name, error) }
+    } collect { case (name, Some(error)) => name -> error } toMap
   }
 
   def resolveInputsAndAggregateErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Try[Map[String, Any]] = {

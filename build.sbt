@@ -38,7 +38,7 @@ libraryDependencies ++= {
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     "rhino" % "js" % "1.7R2",
-    ("org.broadinstitute" %% "cromwell" % "0.1-SNAPSHOT")
+    ("org.broadinstitute" %% "cromwell" % "0.9")
       excludeAll ExclusionRule(organization = "com.gettyimages"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
