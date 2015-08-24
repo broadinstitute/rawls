@@ -79,11 +79,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef, submissionDAO: SubmissionDAO)(userInfo: UserInfo) =
-    new WorkspaceService(userInfo, dataSource, workspaceDAO, entityDAO, methodConfigurationDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, submissionDAO)
+  def constructor(dataSource: DataSource, containerDAO: ContainerDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
+    new WorkspaceService(userInfo, dataSource, containerDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO: WorkspaceDAO, entityDAO: EntityDAO, methodConfigurationDAO: MethodConfigurationDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef, submissionDAO: SubmissionDAO) extends Actor {
+class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: ContainerDAO, submissionSupervisor : ActorRef) extends Actor {
 
   override def receive = {
     case RegisterUser(callbackPath) => context.parent ! registerUser(callbackPath)
@@ -126,11 +126,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   }
 
   def registerUser(callbackPath: String): PerRequestMessage = {
-    RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
+    RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(containerDAO.gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
   }
 
   def completeUserRegistration(authCode: String, state: String, callbackPath: String): PerRequestMessage = {
-    gcsDAO.storeUser(userInfo.userId,authCode,state,callbackPath)
+    containerDAO.gcsDAO.storeUser(userInfo.userId,authCode,state,callbackPath)
     RequestComplete(StatusCodes.Created)
   }
 
@@ -138,15 +138,15 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
-      workspaceDAO.load(workspaceRequest.toWorkspaceName, txn) match {
+      containerDAO.workspaceDAO.load(workspaceRequest.toWorkspaceName, txn) match {
         case Some(_) => PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
           val bucketName = createBucketName(workspaceRequest.name)
-          Try( gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
+          Try( containerDAO.gcsDAO.createBucket(userInfo.userId,workspaceRequest.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
             case Success(_) =>
               val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, bucketName, DateTime.now, userInfo.userId, workspaceRequest.attributes)
-              workspaceDAO.save(workspace, txn)
+              containerDAO.workspaceDAO.save(workspace, txn)
               PerRequest.RequestComplete((StatusCodes.Created, workspace))
           }
       }
@@ -167,7 +167,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         requireAccess(workspaceName, workspace.bucketName, GCSAccessLevel.Write, txn) {
           try {
             val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
-            RequestComplete(workspaceDAO.save(updatedWorkspace, txn))
+            RequestComplete(containerDAO.workspaceDAO.save(updatedWorkspace, txn))
           } catch {
             case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
           }
@@ -177,26 +177,26 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def listWorkspaces(dataSource: DataSource): PerRequestMessage =
     dataSource inTransaction { txn =>
-      RequestComplete(workspaceDAO.list(txn).toSeq)
+      RequestComplete(containerDAO.workspaceDAO.list(txn).toSeq)
     }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      (workspaceDAO.load(sourceWorkspaceName, txn), workspaceDAO.load(destWorkspaceName, txn)) match {
+      (containerDAO.workspaceDAO.load(sourceWorkspaceName, txn), containerDAO.workspaceDAO.load(destWorkspaceName, txn)) match {
         case (Some(sourceWorkspace), None) => {
           val bucketName = createBucketName(destWorkspaceName.namespace)
-          Try( gcsDAO.createBucket(userInfo.userId, destWorkspaceName.namespace, bucketName) ) match {
+          Try( containerDAO.gcsDAO.createBucket(userInfo.userId, destWorkspaceName.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspaceName}: "+err.getMessage)
             case Success(_) =>
-              val destWorkspace = workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userId, sourceWorkspace.attributes), txn)
+              val destWorkspace = containerDAO.workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userId, sourceWorkspace.attributes), txn)
               // now get the contexts. just call .get because it should be impossible to get None at this point
-              val sourceWorkspaceContext = workspaceDAO.loadContext(sourceWorkspaceName, txn).get
-              val destWorkspaceContext = workspaceDAO.loadContext(destWorkspaceName, txn).get
-              entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
+              val sourceWorkspaceContext = containerDAO.workspaceDAO.loadContext(sourceWorkspaceName, txn).get
+              val destWorkspaceContext = containerDAO.workspaceDAO.loadContext(destWorkspaceName, txn).get
+              containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
               // TODO add a method for cloning all method configs, instead of doing this
-              methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-                methodConfigurationDAO.save(destWorkspaceContext,
-                  methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
+              containerDAO.methodConfigDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
+                containerDAO.methodConfigDAO.save(destWorkspaceContext,
+                  containerDAO.methodConfigDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
               }
               RequestComplete((StatusCodes.Created, destWorkspace))
           }
@@ -209,7 +209,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def getACL(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Owner, txn) { workspaceContext =>
-        Try(gcsDAO.getACL(userInfo.userId, workspaceContext.bucketName)) match {
+        Try(containerDAO.gcsDAO.getACL(userInfo.userId, workspaceContext.bucketName)) match {
           case Success(acl) => RequestComplete(StatusCodes.OK, acl)
           case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Can't retrieve ACL for workspace ${workspaceName}: " + err.getMessage())
         }
@@ -219,7 +219,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def putACL(workspaceName: WorkspaceName, acl: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Owner, txn) { workspaceContext =>
-        Try(gcsDAO.putACL(userInfo.userId, workspaceContext.bucketName, acl)) match {
+        Try(containerDAO.gcsDAO.putACL(userInfo.userId, workspaceContext.bucketName, acl)) match {
           case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Can't set ACL for workspace ${workspaceName}: " + err.getMessage())
           case _ => RequestComplete(StatusCodes.OK)
         }
@@ -232,11 +232,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, GCSAccessLevel.Write, txn) { destWorkspaceContext =>
           val entityNames = entityCopyDef.entityNames
           val entityType = entityCopyDef.entityType
-          val conflicts = entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
+          val conflicts = containerDAO.entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
           conflicts.size match {
             case 0 => {
               // get the entities that were copied into the destination workspace
-              val entityCopies = entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
+              val entityCopies = containerDAO.entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
               RequestComplete(StatusCodes.Created, entityCopies)
             }
             case _ => {
@@ -253,9 +253,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def createEntity(workspaceName: WorkspaceName, entity: Entity): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
-        entityDAO.get(workspaceContext, entity.entityType, entity.name, txn) match {
+        containerDAO.entityDAO.get(workspaceContext, entity.entityType, entity.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")
-          case None => RequestComplete(StatusCodes.Created, entityDAO.save(workspaceContext, entity, txn))
+          case None => RequestComplete(StatusCodes.Created, containerDAO.entityDAO.save(workspaceContext, entity, txn))
         }
       }
     }
@@ -264,12 +264,12 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         val results = entityUpdates.map { entityUpdate =>
-          val entity = entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn)
+          val entity = containerDAO.entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn)
           entity match {
             case Some(e) =>
               val trial = Try {
                 val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
-                entityDAO.save(workspaceContext, updatedEntity, txn)
+                containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn)
               }
               (entityUpdate, trial)
             case None => (entityUpdate, Failure(new RuntimeException("Entity does not exist")))
@@ -291,13 +291,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         val results = entityUpdates.map { entityUpdate =>
-          val entity = entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn) match {
+          val entity = containerDAO.entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn) match {
             case Some(e) => e
-            case None => entityDAO.save(workspaceContext, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspaceContext.workspaceName), txn)
+            case None => containerDAO.entityDAO.save(workspaceContext, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty, workspaceContext.workspaceName), txn)
           }
           val trial = Try {
             val updatedEntity = applyOperationsToEntity(entity, entityUpdate.operations)
-            entityDAO.save(workspaceContext, updatedEntity, txn)
+            containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn)
           }
           (entityUpdate, trial)
         }
@@ -316,14 +316,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def listEntityTypes(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
-        RequestComplete(entityDAO.getEntityTypes(workspaceContext, txn).toSeq)
+        RequestComplete(containerDAO.entityDAO.getEntityTypes(workspaceContext, txn).toSeq)
       }
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
-        RequestComplete(entityDAO.list(workspaceContext, entityType, txn).toList)
+        RequestComplete(containerDAO.entityDAO.list(workspaceContext, entityType, txn).toList)
       }
     }
 
@@ -342,7 +342,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
           try {
             val updatedEntity = applyOperationsToEntity(entity, operations)
-            RequestComplete(entityDAO.save(workspaceContext, updatedEntity, txn))
+            RequestComplete(containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn))
           } catch {
             case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
           }
@@ -354,7 +354,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          entityDAO.delete(workspaceContext, entity.entityType, entity.name, txn)
+          containerDAO.entityDAO.delete(workspaceContext, entity.entityType, entity.name, txn)
           RequestComplete(http.StatusCodes.NoContent)
         }
       }
@@ -364,9 +364,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          entityDAO.get(workspaceContext, entity.entityType, newName, txn) match {
+          containerDAO.entityDAO.get(workspaceContext, entity.entityType, newName, txn) match {
             case None =>
-              entityDAO.rename(workspaceContext, entity.entityType, entity.name, newName, txn)
+              containerDAO.entityDAO.rename(workspaceContext, entity.entityType, entity.name, newName, txn)
               RequestComplete(http.StatusCodes.NoContent)
             case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists")
           }
@@ -480,9 +480,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
-        methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
+        containerDAO.methodConfigDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")
-          case None => RequestComplete(StatusCodes.Created, methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn))
+          case None => RequestComplete(StatusCodes.Created, containerDAO.methodConfigDAO.save(workspaceContext, methodConfiguration, txn))
         }
       }
     }
@@ -491,7 +491,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
-          methodConfigurationDAO.delete(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn)
+          containerDAO.methodConfigDAO.delete(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn)
           RequestComplete(http.StatusCodes.NoContent)
         }
       }
@@ -501,9 +501,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfiguration =>
-          methodConfigurationDAO.get(workspaceContext, methodConfigurationNamespace, newName, txn) match {
+          containerDAO.methodConfigDAO.get(workspaceContext, methodConfigurationNamespace, newName, txn) match {
             case None =>
-              methodConfigurationDAO.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName, newName, txn)
+              containerDAO.methodConfigDAO.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName, newName, txn)
               RequestComplete(http.StatusCodes.NoContent)
             case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination ${newName} already exists")
           }
@@ -514,9 +514,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
-        methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
+        containerDAO.methodConfigDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) =>
-            methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
+            containerDAO.methodConfigDAO.save(workspaceContext, methodConfiguration, txn)
             RequestComplete(StatusCodes.OK)
           case None => RequestComplete(StatusCodes.NotFound)
         }
@@ -535,7 +535,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(mcnp.source.workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
-        methodConfigurationDAO.get(workspaceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
+        containerDAO.methodConfigDAO.get(workspaceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
           case None => RequestComplete(StatusCodes.NotFound)
           case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, txn)
         }
@@ -544,7 +544,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery): PerRequestMessage =
     dataSource inTransaction { txn =>
-      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo.authCookie) match {
+      containerDAO.methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo.authCookie) match {
         case None => RequestComplete(StatusCodes.NotFound)
         case Some(entity) =>
           try {
@@ -564,11 +564,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, txn: RawlsTransaction) =
     withWorkspaceContextAndPermissions(dest.workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
-      methodConfigurationDAO.get(workspaceContext, dest.namespace, dest.name, txn) match {
+      containerDAO.methodConfigDAO.get(workspaceContext, dest.namespace, dest.name, txn) match {
         case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
         case None =>
           val target = methodConfig.copy(name = dest.name, namespace = dest.namespace, workspaceName = dest.workspaceName)
-          val targetMethodConfig = methodConfigurationDAO.save(workspaceContext, target, txn)
+          val targetMethodConfig = containerDAO.methodConfigDAO.save(workspaceContext, target, txn)
           RequestComplete(StatusCodes.Created, targetMethodConfig)
       }
     }
@@ -576,9 +576,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def listMethodConfigurations(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
-        // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
+        // use toList below to eagerly iterate through the response from containerDAO.methodConfigDAO.list
         // to ensure it is evaluated within the transaction
-        RequestComplete(methodConfigurationDAO.list(workspaceContext, txn).toList)
+        RequestComplete(containerDAO.methodConfigDAO.list(workspaceContext, txn).toList)
       }
     }
 
@@ -607,7 +607,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, authCookie: HttpCookie, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
     val inputs = MethodConfigResolver.resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
     if ( inputs.forall(  _._2.isSuccess ) ) {
-      val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
+      val execStatus = containerDAO.executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
       Right(Workflow(workspaceName = workspaceContext.workspaceName, workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType) ))
     } else {
       Left(WorkflowFailure( workspaceName = workspaceContext.workspaceName, entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }).toSeq ))
@@ -617,7 +617,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def listSubmissions(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
-        RequestComplete(submissionDAO.list(workspaceContext, txn).toList)
+        RequestComplete(containerDAO.submissionDAO.list(workspaceContext, txn).toList)
       }
     }
 
@@ -663,7 +663,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
                   submissionSupervisor ! SubmissionStarted(newSubmission, userInfo.authCookie)
                 }
 
-                submissionDAO.save(workspaceContext, newSubmission, txn)
+                containerDAO.submissionDAO.save(workspaceContext, newSubmission, txn)
                 RequestComplete(StatusCodes.Created, newSubmission)
               }
             }
@@ -687,7 +687,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Write, txn) { workspaceContext =>
           withSubmission(workspaceContext, submissionId, txn) { submission =>
             val aborts = submission.workflows.map( wf =>
-              Try(executionServiceDAO.abort(wf.workflowId, userInfo.authCookie)) match {
+              Try(containerDAO.executionServiceDAO.abort(wf.workflowId, userInfo.authCookie)) match {
                 case Success(_) => Success(wf.workflowId)
                 //NOTE: Cromwell returns 403 Forbidden if you try to abort a workflow that's already in a terminal
                 //status. This is fine for our purposes, so we turn it into a Success.
@@ -735,8 +735,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           withWorkflow(submission, workflowId) { workflow =>
 
             val mergedOutputs:Try[PerRequestMessage] = for {
-              outsRq <- Try(executionServiceDAO.outputs(workflowId, userInfo.authCookie))
-              logsRq <- Try(executionServiceDAO.logs(workflowId, userInfo.authCookie))
+              outsRq <- Try(containerDAO.executionServiceDAO.outputs(workflowId, userInfo.authCookie))
+              logsRq <- Try(containerDAO.executionServiceDAO.logs(workflowId, userInfo.authCookie))
             } yield mergeWorkflowOutputs(outsRq, logsRq, workflowId)
 
             mergedOutputs match {
@@ -762,28 +762,28 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   }
 
   private def withWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (WorkspaceContext) => PerRequestMessage) = {
-    workspaceDAO.loadContext(workspaceName, txn) match {
+    containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
       case Some(workspaceContext) => op(workspaceContext)
     }
   }
 
   private def withWorkspace(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (Workspace) => PerRequestMessage) = {
-    workspaceDAO.load(workspaceName, txn) match {
+    containerDAO.workspaceDAO.load(workspaceName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
       case Some(workspace) => op(workspace)
     }
   }
 
   private def withEntity(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
-    entityDAO.get(workspaceContext, entityType, entityName, txn) match {
+    containerDAO.entityDAO.get(workspaceContext, entityType, entityName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext}")
       case Some(entity) => op(entity)
     }
   }
 
   private def withMethodConfig(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)(op: (MethodConfiguration) => PerRequestMessage): PerRequestMessage = {
-    methodConfigurationDAO.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) match {
+    containerDAO.methodConfigDAO.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")
       case Some(methodConfiguration) => op(methodConfiguration)
     }
@@ -791,7 +791,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
   private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: String, authCookie: HttpCookie)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
     // TODO add Method to model instead of exposing AgoraEntity?
-    methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, authCookie) match {
+    containerDAO.methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, authCookie) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")
       case Some(agoraEntity) => op(agoraEntity)
     }
@@ -805,7 +805,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   }
 
   private def withSubmission(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction)(op: (Submission) => PerRequestMessage): PerRequestMessage = {
-    submissionDAO.get(workspaceContext, submissionId, txn) match {
+    containerDAO.submissionDAO.get(workspaceContext, submissionId, txn) match {
       case None => RequestComplete(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")
       case Some(submission) => op(submission)
     }
@@ -819,7 +819,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   }
 
   private def requireAccess(workspaceName: WorkspaceName, bucketName: String, requiredLevel: GCSAccessLevel, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
-    val acls = JsonParser(gcsDAO.getACL(userInfo.userId, bucketName)).convertTo[BucketAccessControls]
+    val acls = JsonParser(containerDAO.gcsDAO.getACL(userInfo.userId, bucketName)).convertTo[BucketAccessControls]
     if (acls.maximumAccessLevel >= requiredLevel) codeBlock
     else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
   }

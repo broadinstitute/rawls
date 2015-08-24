@@ -38,15 +38,13 @@ class GoogleAuthApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   case class TestApiService(dataSource: DataSource) extends GoogleAuthApiService with MockOpenAmDirectives {
     def actorRefFactory = system
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      new GraphWorkflowDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
+      new MockContainerDAO(null, mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-gauth-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
+
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource,
+      new MockContainerDAO(mockServer.mockServerBaseUrl, mockServer.mockServerBaseUrl),
+      submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

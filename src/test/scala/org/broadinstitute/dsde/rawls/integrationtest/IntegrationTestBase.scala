@@ -60,24 +60,14 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val gcsDAO = MockGoogleCloudStorageDAO
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
-      new HttpExecutionServiceDAO(executionServiceServer),
-      new GraphWorkflowDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
+      new MockContainerDAO(null, executionServiceServer),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     WorkspaceService.constructor(
       dataSource,
-      new GraphWorkspaceDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
-      new HttpMethodRepoDAO(methodRepoServer),
-      new HttpExecutionServiceDAO(executionServiceServer),
-      gcsDAO, submissionSupervisor,
-      new GraphSubmissionDAO(new GraphWorkflowDAO)
+      new MockContainerDAO(methodRepoServer, executionServiceServer),
+      submissionSupervisor
     )_
   }
 

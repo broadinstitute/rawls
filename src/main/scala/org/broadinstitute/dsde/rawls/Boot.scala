@@ -35,36 +35,19 @@ object Boot extends App {
 
     dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
-    val gcsConfig = conf.getConfig("gcs")
-    val gcsDAO = new HttpGoogleCloudStorageDAO(
-      gcsConfig.getString("secrets"),
-      new FileDataStoreFactory(new File(gcsConfig.getString("dataStoreRoot"))),
-      gcsConfig.getString("redirectBaseURL")
-    )
-
     system.registerOnTermination {
       dataSource.shutdown()
     }
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
-      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      new GraphWorkflowDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
+      new ContainerDAO(conf.getConfig("methodrepo").getString("server"), conf.getConfig("executionservice").getString("server")),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
-                                                  new GraphWorkspaceDAO(),
-                                                  new GraphEntityDAO(),
-                                                  new GraphMethodConfigurationDAO(),
-                                                  new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
-                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor,
-                                                  new GraphSubmissionDAO(new GraphWorkflowDAO)),
+                                                  new ContainerDAO(conf.getConfig("methodrepo").getString("server"), conf.getConfig("executionservice").getString("server")),
+                                                  submissionSupervisor),
                     new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")
 
