@@ -79,11 +79,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: ContainerDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
+  def constructor(dataSource: DataSource, containerDAO: AbstractContainerDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
     new WorkspaceService(userInfo, dataSource, containerDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: ContainerDAO, submissionSupervisor : ActorRef) extends Actor {
+class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: AbstractContainerDAO, submissionSupervisor : ActorRef) extends Actor {
 
   override def receive = {
     case RegisterUser(callbackPath) => context.parent ! registerUser(callbackPath)

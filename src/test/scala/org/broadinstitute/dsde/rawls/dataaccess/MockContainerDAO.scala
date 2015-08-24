@@ -4,9 +4,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
  * Created by mbemis on 8/19/15.
  */
 
-class MockContainerDAO(methodRepoServer: String, executionServiceServer: String) extends ContainerDAO {
-
-  //force travis re-run
+class MockContainerDAO(methodRepoServer: String, executionServiceServer: String) extends AbstractContainerDAO {
 
   override val workspaceDAO = new GraphWorkspaceDAO
   override val entityDAO = new GraphEntityDAO
@@ -15,5 +13,6 @@ class MockContainerDAO(methodRepoServer: String, executionServiceServer: String)
   override val executionServiceDAO = new HttpExecutionServiceDAO(executionServiceServer)
   override val gcsDAO = MockGoogleCloudStorageDAO
   override val submissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
+  override val workflowDAO = new GraphWorkflowDAO
 
 }

@@ -9,19 +9,19 @@ import com.typesafe.config.{ConfigFactory, Config}
 /**
  * Created by mbemis on 8/19/15.
  */
-class ContainerDAO() {
 
-  implicit val system = ActorSystem("rawls")
+class ContainerDAO extends AbstractContainerDAO {
+
   val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
 
-  val workflowDAO = new GraphWorkflowDAO
-  val workspaceDAO = new GraphWorkspaceDAO
-  val entityDAO = new GraphEntityDAO
-  val methodConfigDAO = new GraphMethodConfigurationDAO
-  val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
-  val executionServiceDAO = new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server"))
-  val submissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
-  val gcsDAO: GoogleCloudStorageDAO = new HttpGoogleCloudStorageDAO(
+  override val workflowDAO = new GraphWorkflowDAO
+  override val workspaceDAO = new GraphWorkspaceDAO
+  override val entityDAO = new GraphEntityDAO
+  override val methodConfigDAO = new GraphMethodConfigurationDAO
+  override val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
+  override val executionServiceDAO = new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server"))
+  override val submissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
+  override val gcsDAO: GoogleCloudStorageDAO = new HttpGoogleCloudStorageDAO(
     conf.getConfig("gcs").getString("secrets"),
     new FileDataStoreFactory(new File(conf.getConfig("gcs").getString("dataStoreRoot"))),
     conf.getConfig("gcs").getString("redirectBaseURL")

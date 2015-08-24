@@ -17,7 +17,7 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(submission: Submission, authCookie: HttpCookie)
 
-  def props(containerDAO: ContainerDAO,
+  def props(containerDAO: AbstractContainerDAO,
             datasource: DataSource,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
@@ -34,7 +34,7 @@ object SubmissionSupervisor {
  * @param workflowPollInterval
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(containerDAO: ContainerDAO,
+class SubmissionSupervisor(containerDAO: AbstractContainerDAO,
                            datasource: DataSource,
                            workflowPollInterval: Duration,
                            submissionPollInterval: Duration) extends Actor {
