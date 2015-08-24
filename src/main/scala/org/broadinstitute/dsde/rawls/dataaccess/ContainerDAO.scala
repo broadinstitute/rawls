@@ -10,9 +10,7 @@ import com.typesafe.config.{ConfigFactory, Config}
  * Created by mbemis on 8/19/15.
  */
 
-class ContainerDAO extends AbstractContainerDAO {
-
-  val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+class ContainerDAO(conf: Config) extends AbstractContainerDAO {
 
   override val workflowDAO = new GraphWorkflowDAO
   override val workspaceDAO = new GraphWorkspaceDAO
