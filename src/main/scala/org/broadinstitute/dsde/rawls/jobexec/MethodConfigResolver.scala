@@ -85,4 +85,11 @@ object MethodConfigResolver {
     inputs map { case (name, value) => (name, value.toJson) }
   ) toString
 
+  def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {
+    val workflow = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow
+    val nothing = AttributeString("expression")
+    val inputs = for ( input <- workflow.inputs ) yield input.fqn.toString -> nothing
+    val outputs = for ( output <- workflow.outputs ) yield output._1.toString -> nothing
+    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs,MethodRepoConfiguration("none","none","none"),methodRepoMethod)
+  }
 }

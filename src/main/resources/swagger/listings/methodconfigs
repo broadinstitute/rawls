@@ -349,6 +349,34 @@
 				"message": "Rawls Internal Error"
 			}]
 		}]
+	}, {
+	    "path": "/methodconfigs/template",
+	    "operations": [{
+	        "method": "Post",
+	        "summary": "Create a template for a method configuration from a method in the method repository",
+	        "notes": "",
+	        "type": "MethodConfiguration",
+	        "nickname": "method configuration template",
+	        "produces": ["application/json"],
+	        "parameters": [{
+	            "name": "methodName",
+	            "description": "name of method to use for template",
+	            "required": true,
+	            "type": "MethodRepoMethod",
+	            "paramType": "body",
+	            "allowMultiple": false
+	        }],
+	        "responseMessages": [{
+	            "code": 200,
+	            "message": "Successful Request"
+	        }, {
+	            "code": 400,
+	            "message": "Method WDL can't be parsed"
+	        }, {
+	            "code": 404,
+	            "message": "No such method"
+	        }]
+	    }]
 	}],
 	"models": {
 		"MethodConfiguration": {
