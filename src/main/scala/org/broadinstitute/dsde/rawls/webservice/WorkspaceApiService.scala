@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import com.wordnik.swagger.annotations.Api
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
