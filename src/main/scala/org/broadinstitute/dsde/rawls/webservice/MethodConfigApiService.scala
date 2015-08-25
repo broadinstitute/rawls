@@ -76,6 +76,15 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Ope
             WorkspaceService.CopyMethodConfigurationFromMethodRepo(query))
         }
       }
+    } ~
+    path("methodconfigs" / "template") {
+      post {
+        entity(as[MethodRepoMethod]) { methodRepoMethod =>
+          requestContext => perRequest(requestContext,
+                                        WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                                        WorkspaceService.CreateMethodConfigurationTemplate(methodRepoMethod))
+        }
+      }
     }
   }
 }

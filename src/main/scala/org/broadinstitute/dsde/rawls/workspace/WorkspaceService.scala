@@ -69,6 +69,7 @@ object WorkspaceService {
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
   case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
 
   case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
@@ -118,6 +119,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case CopyMethodConfigurationFromMethodRepo(query) => context.parent ! copyMethodConfigurationFromMethodRepo(query)
     case ListMethodConfigurations(workspaceName) => context.parent ! listMethodConfigurations(workspaceName)
+    case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => context.parent ! createMethodConfigurationTemplate(methodRepoMethod)
 
     case ListSubmissions(workspaceName) => context.parent ! listSubmissions(workspaceName)
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
@@ -581,6 +583,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
         RequestComplete(methodConfigurationDAO.list(workspaceContext, txn).toList)
       }
     }
+
+  def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): PerRequestMessage = {
+    val method = methodRepoDAO.getMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo.authCookie)
+    if ( method.isEmpty ) RequestComplete(StatusCodes.NotFound,methodRepoMethod)
+    else if ( method.get.payload.isEmpty ) RequestComplete(StatusCodes.BadRequest,"Empty payload.")
+    else RequestComplete(MethodConfigResolver.toMethodConfiguration(method.get.payload.get,methodRepoMethod))
+  }
 
   /**
    * This is the function that would get called if we had a validate method config endpoint.

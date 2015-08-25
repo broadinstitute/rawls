@@ -887,6 +887,29 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
+  it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
+    val method = MethodRepoMethod("dsde","three_step","1")
+    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(),Map(),
+                    Map("three_step.ps.procs"->AttributeString("expression"),"three_step.cgrep.count"->AttributeString("expression"),"three_step.wc.count"->AttributeString("expression")),
+                    MethodRepoConfiguration("none","none","none"),MethodRepoMethod("dsde","three_step","1"))
+        assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step","2").toJson.toString)) ~>
+      addMockOpenAmCookie ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       addMockOpenAmCookie ~>
