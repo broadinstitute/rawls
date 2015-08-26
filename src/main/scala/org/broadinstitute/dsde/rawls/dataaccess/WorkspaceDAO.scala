@@ -10,4 +10,5 @@ trait WorkspaceDAO {
   def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace]
   def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext]
   def list(txn: RawlsTransaction): TraversableOnce[Workspace]
+  def delete(workspaceContext: WorkspaceContext, txn: RawlsTransaction) : Boolean
 }

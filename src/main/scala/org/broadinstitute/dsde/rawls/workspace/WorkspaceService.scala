@@ -30,6 +30,7 @@ import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 import spray.routing.RequestContext
 
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -43,6 +44,7 @@ object WorkspaceService {
 
   case class CreateWorkspace(workspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
@@ -93,6 +95,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
 
     case CreateWorkspace(workspace) => context.parent ! createWorkspace(workspace)
     case GetWorkspace(workspaceName) => context.parent ! getWorkspace(workspaceName)
+    case DeleteWorkspace(workspaceName) => context.parent ! deleteWorkspace(workspaceName)
     case UpdateWorkspace(workspaceName, operations) => context.parent ! updateWorkspace(workspaceName, operations)
     case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
@@ -160,6 +163,30 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
       withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(workspaceName, workspace.bucketName, GCSAccessLevel.Read, txn) {
           RequestComplete(workspace)
+        }
+      }
+    }
+
+  def deleteWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+        requireAccess(workspaceName, workspaceContext.bucketName, GCSAccessLevel.Owner, txn) {
+          import scala.concurrent.ExecutionContext.Implicits.global
+          //Attempt to abort any running workflows so they don't write any more to the bucket.
+          //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
+          //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
+          //ExecutionContext run the futures whenever
+          submissionDAO.list(workspaceContext, txn).flatMap(_.workflows).toList collect {
+            case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo.authCookie) }
+          }
+
+          gcsDAO.deleteBucket(userInfo.userId,workspaceContext.workspaceName.namespace,workspaceContext.bucketName)
+          //TODO: remove google groups - see MattS branch
+
+          workspaceDAO.delete(workspaceContext, txn)
+
+          //TODO: return some message indicating that your bucket should be deleted in 24h?
+          RequestComplete(StatusCodes.Accepted)
         }
       }
     }

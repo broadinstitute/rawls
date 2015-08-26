@@ -14,6 +14,8 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
 
   override def createBucket(userId: String, projectId: String, bucketName: String): Unit = {}
 
+  override def deleteBucket(userId: String, projectId: String, bucketName: String): Unit = {}
+
   val acls = Map(
     // the default test user should have access to everything
     "test@broadinstitute.org" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
