@@ -205,6 +205,67 @@ trait GraphDAO {
     getSinglePipelineResult(workflowPipeline(workspaceContext, workflowId))
   }
 
+  def getProperties[T: TypeTag: ClassTag](obj: T): Iterable[(String, Option[Any])] = {
+    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
+
+    for (member <- ru.typeTag[T].tpe.members if (member.asTerm.isVal || member.asTerm.isVar)
+    ) yield {
+      val fieldMirror = mirror.reflect(obj).reflectField(member.asTerm)
+      member.name.decodedName.toString.trim -> (fieldMirror.get match {
+        case v: Option[Any] => v //FIXME: also return member.typeSignature ?
+        case v => Option(v)
+      })
+    }
+  }
+
+  private def deleteSeq(vertex: Vertex, key: String, values: Seq[Attribute]): Unit = {
+    deleteAttributeMap(vertex, key, values.zipWithIndex.map { case (value, index) => index.toString -> value }.toMap)
+  }
+
+  private def deleteAttributeMap(vertex: Vertex, propName: String, map: Map[String, Attribute]): Unit = {
+    vertex.getVertices(Direction.OUT, propName).headOption match {
+      case Some(mapVertex) =>
+        map.foreach { case (key, attribute) =>
+          attribute match {
+            case AttributeValueList(values) => deleteSeq(mapVertex, key, values)
+            case AttributeEntityReferenceList(references) => deleteSeq(mapVertex, key, references)
+            case AttributeEmptyList => deleteAttributeMap(mapVertex, key, Map.empty)
+            case _ => //the other cases simply set properties on the mapVertex, so no other vertices to delete
+          }
+        }
+        removeMapVertex(mapVertex)
+      case None => //nothing to do
+    }
+  }
+
+  private def deleteDomainObjects[T: TypeTag: ClassTag](vertex: Vertex, objs: Seq[T], edgeLabel: String, workspaceContext: WorkspaceContext): Unit = {
+    vertex.getVertices(Direction.OUT, edgeLabel).map { objVertex =>
+      val obj = loadFromVertex[T](objVertex, Some(workspaceContext.workspaceName))
+      deleteVertex(obj, objVertex, workspaceContext)
+      objVertex.remove()
+    }
+  }
+
+  def deleteVertex[T: TypeTag: ClassTag](obj: T, vertex: Vertex, workspaceContext: WorkspaceContext): Unit = {
+    getProperties(obj).foreach(_ match {
+      case (key, None) => vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex)
+      case (key, Some(value: Map[_,_])) => deleteAttributeMap(vertex, key, value.asInstanceOf[Map[String, Attribute]])
+
+      case (key, Some(seq: Seq[_])) => seq.headOption match {
+        case Some(x: Workflow) => deleteDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, workspaceContext)
+        case Some(x: WorkflowFailure) => deleteDomainObjects(vertex, seq.asInstanceOf[Seq[WorkflowFailure]], workflowEdge, workspaceContext)
+        case Some(a: Attribute) => deleteSeq(vertex, key, seq.asInstanceOf[Seq[Attribute]])
+        case x => throw new RawlsException(s"Unexpected object of type [${x.getClass}] in Seq for attribute [${key}]: [${x}]")
+      }
+
+      case (key, Some(mrConfig: MethodRepoConfiguration)) => deleteDomainObjects(vertex, Seq(mrConfig), methodRepoConfigEdge, workspaceContext)
+      case (key, Some(mrMethod: MethodRepoMethod)) => deleteDomainObjects(vertex, Seq(mrMethod), methodRepoMethodEdge, workspaceContext)
+      case (key, _) => //nothing to do
+    })
+
+    vertex.remove()
+  }
+
   /**
    * Serializes an object to a vertex. This supports all properties extending AnyVal, String, joda DateTime
    * Map[String, Attribute], AttributeReference, Seq[Workflow], Seq[WorkflowFailure], MethodRepoConfiguration,
@@ -220,19 +281,6 @@ trait GraphDAO {
    */
   def saveToVertex[T: TypeTag: ClassTag](graph: Graph, workspaceContext: WorkspaceContext, obj: T, vertex: Vertex): Vertex = {
 
-    def getProperties(obj: T): Iterable[(String, Option[Any])] = {
-      val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-
-      for (member <- ru.typeTag[T].tpe.members if (member.asTerm.isVal || member.asTerm.isVar)
-      ) yield {
-        val fieldMirror = mirror.reflect(obj).reflectField(member.asTerm)
-        member.name.decodedName.toString.trim -> (fieldMirror.get match {
-          case v: Option[Any] => v
-          case v => Option(v)
-        })
-      }
-    }
-
     getProperties(obj).foreach(_ match {
       // each entry we are iterating over has a key and an Option(value). Match on the type of values we
       // support and serialize to the vertex appropriately
@@ -241,10 +289,14 @@ trait GraphDAO {
         // can't tell if this is a value or a map anymore so just remove both (there should only be one)
         vertex.removeProperty(key)
         vertex.getVertices(Direction.OUT, key).foreach(removeMapVertex)
+        //FIXME: ^^^ I think this is insufficient and doesn't cover the case where you overwrite a Some(foo:FooClass) with None, for a FooClass that requires sub-sub-vertices
+        //FIXME: See FIXME in getProperties - I think we can do this if we have the type too?
+        //Needs some shenanigans to figure out the type of an Option if it's None, see http://bit.ly/1htTZJk
       case (key, Some(value: DateTime)) => vertex.setProperty(key, value.toDate)
       case (key, Some(value: Map[_,_])) => serializeAttributeMap(graph, workspaceContext, vertex, key, value.asInstanceOf[Map[String, Attribute]])
       case (key, Some(value: AttributeEntityReference)) => serializeReference(graph, workspaceContext, vertex, key, value)
       case (key, Some(seq: Seq[_])) => seq.headOption match {
+        //FIXME: Again, I don't think this isn't sufficient to clear up vertices left behind if we're overwriting a full list with an empty one.
         case None => // empty, do nothing
         case Some(x: Workflow) =>
           serializeDomainObjects(vertex, seq.asInstanceOf[Seq[Workflow]], workflowEdge, (w: Workflow) => w.workflowId, graph, workspaceContext)
@@ -307,7 +359,7 @@ trait GraphDAO {
 
   private def serializeAttributeMap(graph: Graph, workspaceContext: WorkspaceContext, vertex: Vertex, propName: String, map: Map[String, Attribute]): Unit = {
     // remove existing map then repopulate
-    vertex.getVertices(Direction.OUT, propName).headOption.foreach(removeMapVertex)
+    deleteAttributeMap(vertex, propName, map)
 
     val mapVertex = addVertex(graph, VertexSchema.Map)
     addEdge(vertex, propName, mapVertex)
