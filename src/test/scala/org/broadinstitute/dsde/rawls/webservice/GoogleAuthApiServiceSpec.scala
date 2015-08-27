@@ -1,13 +1,13 @@
-package org.broadinstitute.dsde.rawls.workspace
+package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.PoisonPill
 import akka.testkit.TestKit
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.openam._
 import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.openam._
+import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
 import spray.http._
