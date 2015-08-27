@@ -9,7 +9,7 @@
 			"method": "GET",
 			"summary": "Get workspace ACL",
 			"notes": "",
-			"type": "string",
+			"type": "WorkspaceACL",
 			"nickname": "getACL",
 			"produces": ["application/json"],
 			"parameters": [{
@@ -41,11 +41,11 @@
 				"message": "Rawls Internal Error"
 			}]
 		}, {
-			"method": "PUT",
-			"summary": "Set workspace ACL",
+			"method": "PATCH",
+			"summary": "Update workspace ACL",
 			"notes": "",
 			"type": "void",
-			"nickname": "putACL",
+			"nickname": "updateACL",
 			"parameters": [{
 				"name": "workspaceNamespace",
 				"description": "Workspace Namespace",
@@ -61,10 +61,10 @@
 				"paramType": "path",
 				"allowMultiple": false
 			}, {
-				"name": "acl",
-				"description": "New ACL for workspace",
+				"name": "aclUpdates",
+				"description": "Series of ACL updates for workspace",
 				"required": true,
-				"type": "string",
+				"type": "Array[WorkspaceACLUpdate]",
 				"paramType": "body",
 				"allowMultiple": false
 			}],
@@ -253,6 +253,32 @@
 		}]
 	}],
 	"models": {
+	    "WorkspaceACL": {
+            "id": "WorkspaceACL",
+            "description": "",
+            "required": ["acl"],
+            "properties": {
+                "acl": {
+                    "$ref": "Map[string,WorkspaceAccessLevel]",
+                    "description": "list of users and their access levels"
+                }
+            }
+	    },
+        "WorkspaceACLUpdate": {
+			"id": "WorkspaceACLUpdate",
+			"description": "",
+			"required": ["userId", "accessLevel"],
+			"properties": {
+				"userId": {
+					"type": "string",
+					"description": "ID of the user whose permissions will be changed"
+				},
+				"accessLevel": {
+					"$ref": "WorkspaceAccessLevel",
+					"description": "The access level to grant to this user"
+				}
+			}
+        },
 		"WorkspaceName": {
 			"id": "WorkspaceName",
 			"description": "",

@@ -285,7 +285,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -294,7 +294,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
-    Put(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -399,7 +399,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
   it should "allow an owner-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addOpenAmCookie("owner-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -408,7 +408,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -417,7 +417,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a read-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -426,7 +426,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a no-access user to update an ACL" in withTestDataApiServices { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`text/plain`,"{\"acl\": []}")) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {

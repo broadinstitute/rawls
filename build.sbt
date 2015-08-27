@@ -43,8 +43,8 @@ libraryDependencies ++= {
     ("org.broadinstitute" %% "cromwell" % "0.9")
       excludeAll (ExclusionRule(organization = "com.gettyimages"), ExclusionRule(organization = "org.webjars")) ,
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
-    ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0")
-      .exclude("com.google.guava", "guava-jdk5"),
+    ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
+    ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
     ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0")
   )
 }

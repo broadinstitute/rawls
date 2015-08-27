@@ -37,9 +37,14 @@ object Boot extends App {
 
     val gcsConfig = conf.getConfig("gcs")
     val gcsDAO = new HttpGoogleCloudStorageDAO(
+      false,
       gcsConfig.getString("secrets"),
-      new FileDataStoreFactory(new File(gcsConfig.getString("dataStoreRoot"))),
-      gcsConfig.getString("redirectBaseURL")
+      gcsConfig.getString("dataStoreRoot"),
+      gcsConfig.getString("redirectBaseURL"),
+      gcsConfig.getString("pathToP12"),
+      gcsConfig.getString("appsDomain"),
+      gcsConfig.getString("groupsPrefix"),
+      gcsConfig.getString("appName")
     )
 
     system.registerOnTermination {

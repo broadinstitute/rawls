@@ -26,8 +26,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     LogManager.getLogManager().reset()
     Logger.getLogger(java.util.logging.Logger.GLOBAL_LOGGER_NAME).setLevel(java.util.logging.Level.SEVERE)
   }
-  override def afterAll: Unit = {
-  }
+
+  override def afterAll: Unit = {}
 
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
@@ -37,7 +37,6 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   abstract class TestData {
     def save(txn:RawlsTransaction)
   }
-
 
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, workflowEntities: Seq[Entity]) = {
     val workflows = (workflowEntities collect {
