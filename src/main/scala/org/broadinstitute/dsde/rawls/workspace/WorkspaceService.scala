@@ -799,6 +799,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   private def requireAccess(workspaceName: WorkspaceName, bucketName: String, requiredLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
     val userLevel = gcsDAO.getMaximumAccessLevel(userInfo.userId, workspaceName)
     if (userLevel >= requiredLevel) codeBlock
+    else if (userLevel >= WorkspaceAccessLevel.Read) RequestComplete(http.StatusCodes.Forbidden, accessDeniedMessage(workspaceName))
     else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
   }
 
