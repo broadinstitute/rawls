@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import com.wordnik.swagger.annotations.Api
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -62,11 +62,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
       }
     } ~
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
-      put {
+      patch {
         userInfoFromCookie() { userInfo =>
-          entity(as[String]) { acl =>
+          entity(as[Array[WorkspaceACLUpdate]]) { aclUpdate =>
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                                      WorkspaceService.PutACL(WorkspaceName(workspaceNamespace, workspaceName), acl))
+                                      WorkspaceService.UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate))
           }
         }
       }

@@ -1,38 +1,48 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{GCSAccessLevel, BucketAccessControlJsonSupport}
-import org.broadinstitute.dsde.rawls.mock.MockACLs
-import BucketAccessControlJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
+import WorkspaceACLJsonSupport._
 import spray.json._
 
 object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
-  override def getOurRedirectURI(callbackPath: String): String = "http://localhost.broadinstitute.org:8080/"+callbackPath
+
+  val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
+    "test@broadinstitute.org" -> WorkspaceAccessLevel.Owner,
+    "test_token" -> WorkspaceAccessLevel.Owner,
+    "owner-access" -> WorkspaceAccessLevel.Owner,
+    "write-access" -> WorkspaceAccessLevel.Write,
+    "read-access" -> WorkspaceAccessLevel.Read,
+    "no-access" -> WorkspaceAccessLevel.NoAccess
+  )
+
+  private def getAccessLevelOrDieTrying(userId: String) = {
+    mockPermissions get userId getOrElse {
+      throw new RuntimeException("Need to add %s to MockGoogleCloudStorageDAO.mockPermissions map".format(userId))
+    }
+  }
+
+  override def getRawlsRedirectURI(callbackPath: String): String = "http://localhost.broadinstitute.org:8080/"+callbackPath
 
   override def getGoogleRedirectURI(userId: String, callbackPath: String): String = "https://google.com/other_stuff"
 
   override def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit = {}
 
-  override def createBucket(userId: String, projectId: String, bucketName: String): Unit = {}
+  override def createBucket(ownerId: String, projectId: String, bucketName: String): Unit = {}
 
-  val acls = Map(
-    // the default test user should have access to everything
-    "test@broadinstitute.org" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
-    "test_token" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
-    "owner-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Owner),
-    "write-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Write),
-    "read-access" -> MockACLs.bacsForLevel(GCSAccessLevel.Read),
-    "no-access" -> MockACLs.bacsForLevel(GCSAccessLevel.NoAccess)
- )
+  override def deleteBucket(ownerId: String, projectId: String, bucketName: String): Unit = {}
 
-  override def getACL(userId: String, bucketName: String): String = {
-    val acl = acls get userId orElse {
-      val errorMsg = "Need to add %s to MockGoogleCloudStorageDAO.acls map".format(userId)
-      println(errorMsg)
-      throw new RuntimeException(errorMsg)
-    }
+  override def setupACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit = {}
 
-    acl.toJson.toString
+  override def teardownACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit = {}
+
+  override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
+    WorkspaceACL(mockPermissions)
   }
 
-  override def putACL(userId: String, bucketName: String, acl: String): Unit = {}
+  override def updateACL(bucketName: String, workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) = Map.empty
+
+  override def getMaximumAccessLevel(userId: String, workspaceName: WorkspaceName): WorkspaceAccessLevel = {
+    getAccessLevelOrDieTrying(userId)
+  }
 }

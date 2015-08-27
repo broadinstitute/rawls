@@ -53,10 +53,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
     dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
-    // TODO replace this once GCS / ACL stuff is figured out
-//    val gcsDAO = new HttpGoogleCloudStorageDAO(gcsSecretsJSON,
-//                    new FileDataStoreFactory(new File(gcsDataStoreRoot)),
-//                    gcsRedirectUrl)
+    // NB: use mock DAO for the base, we'll test the real GCS stuff in its own spec
     val gcsDAO = MockGoogleCloudStorageDAO
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(

@@ -24,9 +24,6 @@ trait IntegrationTestConfig {
   // TODO populate fields here instead of RawlsOpenAmConfig
 
   val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
-  val gcsSecretsJSON = gcsConfig.getString("secrets")
-  val gcsDataStoreRoot = gcsConfig.getString("dataStoreRoot")
-  val gcsRedirectUrl = gcsConfig.getString("redirectBaseURL")
 
   val integrationConfig = jenkinsConf.withFallback(etcConf).getConfig("integration")
   val integrationRunFullLoadTest = integrationConfig.getBoolean("runFullLoadTest")
