@@ -27,10 +27,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(
       testData.wsName,
       testData.submission1,
-      new GraphWorkspaceDAO,
-      submissionDAO,
-      new GraphWorkflowDAO,
-      new GraphEntityDAO(),
+      containerDAO,
       dataSource,
       10 milliseconds,
       1 second,
@@ -49,7 +46,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, new GraphWorkspaceDAO, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     testData.submission1.workflows.foreach { workflow =>
@@ -83,7 +80,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "save workflows with error messages" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, workspaceDAO, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     testData.submission1.workflows.foreach { workflow =>
@@ -108,7 +105,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest, workspaceDAO, submissionDAO, new GraphWorkflowDAO, new GraphEntityDAO(), dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     // set each workflow to one of the terminal statuses, there should be 4 of each

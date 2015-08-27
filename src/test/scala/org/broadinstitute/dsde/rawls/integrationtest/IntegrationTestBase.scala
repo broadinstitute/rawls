@@ -31,6 +31,14 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
   lazy val openAmResponse = getOpenAmToken.get
 
+  val containerDAO = GraphContainerDAO(
+    new GraphWorkflowDAO(),
+    new GraphWorkspaceDAO(),
+    new GraphEntityDAO(),
+    new GraphMethodConfigurationDAO(),
+    new GraphSubmissionDAO(new GraphWorkflowDAO())
+  )
+
   def addOpenAmCookie: RequestTransformer = {
     Cookie(HttpCookie("iPlanetDirectoryPro", openAmResponse.tokenId))
   }
@@ -57,24 +65,17 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val gcsDAO = MockGoogleCloudStorageDAO
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      containerDAO,
       new HttpExecutionServiceDAO(executionServiceServer),
-      new GraphWorkflowDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     WorkspaceService.constructor(
       dataSource,
-      new GraphWorkspaceDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
+      containerDAO,
       new HttpMethodRepoDAO(methodRepoServer),
       new HttpExecutionServiceDAO(executionServiceServer),
-      gcsDAO, submissionSupervisor,
-      new GraphSubmissionDAO(new GraphWorkflowDAO)
+      gcsDAO, submissionSupervisor
     )_
   }
 
