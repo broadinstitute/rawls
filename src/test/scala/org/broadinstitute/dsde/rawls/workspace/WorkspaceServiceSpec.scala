@@ -36,16 +36,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val mockServer = RemoteServicesMockServer()
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
+      containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      new GraphWorkflowDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
 
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, workspaceDAO, entityDAO, methodConfigDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor, submissionDAO)_
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

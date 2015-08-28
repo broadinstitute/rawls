@@ -51,25 +51,26 @@ object Boot extends App {
       dataSource.shutdown()
     }
 
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new GraphWorkspaceDAO(),
-      new GraphSubmissionDAO(new GraphWorkflowDAO()),
-      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
+    val containerDAO = GraphContainerDAO(
       new GraphWorkflowDAO(),
+      new GraphWorkspaceDAO(),
       new GraphEntityDAO(),
       new GraphMethodConfigurationDAO(),
+      new GraphSubmissionDAO(new GraphWorkflowDAO())
+    )
+
+    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
+      containerDAO,
+      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
-                                                  new GraphWorkspaceDAO(),
-                                                  new GraphEntityDAO(),
-                                                  new GraphMethodConfigurationDAO(),
+                                                  containerDAO,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor,
-                                                  new GraphSubmissionDAO(new GraphWorkflowDAO)),
+                                                  gcsDAO, submissionSupervisor),
                     new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
                     "rawls-service")
 

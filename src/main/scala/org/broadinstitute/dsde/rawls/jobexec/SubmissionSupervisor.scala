@@ -17,16 +17,12 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie)
 
-  def props(workspaceDAO: WorkspaceDAO,
-            submissionDAO: SubmissionDAO,
+  def props(containerDAO: GraphContainerDAO,
             executionServiceDAO: ExecutionServiceDAO,
-            workflowDAO: WorkflowDAO,
-            entityDAO: EntityDAO,
-            methodConfigurationDAO: MethodConfigurationDAO,
             datasource: DataSource,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
-    Props(new SubmissionSupervisor(workspaceDAO, submissionDAO, executionServiceDAO, workflowDAO, entityDAO, methodConfigurationDAO, datasource, workflowPollInterval, submissionPollInterval))
+    Props(new SubmissionSupervisor(containerDAO, executionServiceDAO, datasource, workflowPollInterval, submissionPollInterval))
   }
 }
 
@@ -34,20 +30,14 @@ object SubmissionSupervisor {
  * Supervisor actor that should run for the life of the app. SubmissionStarted messages will start a monitor
  * for the given submission. Errors are logged if that monitor fails.
  * 
- * @param workspaceDAO
- * @param submissionDAO
+ * @param containerDAO
  * @param executionServiceDAO
- * @param workflowDAO
  * @param datasource
  * @param workflowPollInterval
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(workspaceDAO: WorkspaceDAO,
-                           submissionDAO: SubmissionDAO,
+class SubmissionSupervisor(containerDAO: GraphContainerDAO,
                            executionServiceDAO: ExecutionServiceDAO,
-                           workflowDAO: WorkflowDAO,
-                           entityDAO: EntityDAO,
-                           methodConfigurationDAO: MethodConfigurationDAO,
                            datasource: DataSource,
                            workflowPollInterval: Duration,
                            submissionPollInterval: Duration) extends Actor {
@@ -58,8 +48,8 @@ class SubmissionSupervisor(workspaceDAO: WorkspaceDAO,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie): Unit = {
-    actorOf(SubmissionMonitor.props(workspaceName, submission, workspaceDAO, submissionDAO, workflowDAO, entityDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, workspaceDAO, executionServiceDAO, workflowDAO, methodConfigurationDAO, entityDAO, datasource, authCookie)), submission.submissionId)
+    actorOf(SubmissionMonitor.props(workspaceName, submission, containerDAO, datasource, workflowPollInterval, submissionPollInterval,
+      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, authCookie)), submission.submissionId)
   }
 
   override val supervisorStrategy =
