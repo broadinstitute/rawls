@@ -99,6 +99,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
 
 class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionServiceDAO {
   override def submitWorkflow(wdl: String, inputs: String, authCookie: HttpCookie): ExecutionServiceStatus = ExecutionServiceStatus("test_id", workflowStatus)
+  override def validateWorkflow(wdl: String, inputs: String, authCookie: HttpCookie): ExecutionServiceValidation = ExecutionServiceValidation(true, "No errors")
 
   override def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
   override def logs(id: String, authCookie: HttpCookie): ExecutionServiceLogs = ExecutionServiceLogs(id, Map("task1" -> Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar")))

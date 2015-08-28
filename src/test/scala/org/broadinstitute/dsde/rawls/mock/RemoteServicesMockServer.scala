@@ -92,42 +92,48 @@ class RemoteServicesMockServer(port:Int) {
 
     val methodPath = "/methods"
     val threeStepWDL =
-      """task ps {
-        command {
-          ps
-        }
-        output {
-          File procs = stdout()
-        }
-      }
-      task cgrep {
-        File in_file
-        command {
-          grep '${pattern}' ${in_file} | wc -l
-        }
-        output {
-          Int count = read_int(stdout())
-        }
-      }
-      task wc {
-        File in_file
-        command {
-          cat ${in_file} | wc -l
-        }
-        output {
-          Int count = read_int(stdout())
-        }
-      }
-      workflow three_step {
-        call ps
-        call cgrep {
-          input: in_file=ps.procs
-        }
-        call wc {
-          input: in_file=ps.procs
-        }
-      }
-      """
+    """
+      |task ps {
+      |  command {
+      |    ps
+      |  }
+      |  output {
+      |    File procs = stdout()
+      |  }
+      |}
+      |
+      |task cgrep {
+      |  File in_file
+      |  String pattern
+      |  command {
+      |    grep '${pattern}' ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |task wc {
+      |  File in_file
+      |  command {
+      |    cat ${in_file} | wc -l
+      |  }
+      |  output {
+      |    Int count = read_int(stdout())
+      |  }
+      |}
+      |
+      |workflow three_step {
+      |  call ps
+      |  call cgrep {
+      |    input: in_file=ps.procs
+      |  }
+      |  call wc {
+      |    input: in_file=ps.procs
+      |  }
+      |}
+    """.stripMargin
+
     val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
     mockServer.when(
       request()
@@ -149,12 +155,13 @@ class RemoteServicesMockServer(port:Int) {
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
 
-    val singleInputWdl =
+    // TODO change
+
+    val noInputWdl =
       """
         |task t1 {
-        |  Int int_arg
         |  command {
-        |    echo ${int_arg}
+        |    echo "Hello"
         |  }
         |}
         |
@@ -163,19 +170,18 @@ class RemoteServicesMockServer(port:Int) {
         |}
       """.stripMargin
 
-    val singleInputMethod = AgoraEntity(Some("dsde"), Some("single_input"), Some(1), None, None, None, None,
-      Some(singleInputWdl), None, Some(AgoraEntityType.Workflow))
+    val noInputMethod = AgoraEntity(Some("dsde"), Some("no_input"), Some(1), None, None, None, None, Some(noInputWdl), None, Some(AgoraEntityType.Workflow))
 
     mockServer.when(
       request()
         .withMethod("GET")
-        .withPath(methodPath + "/dsde/single_input/1")
+        .withPath(methodPath + "/dsde/no_input/1")
     ).respond(
-        response()
-          .withHeaders(jsonHeader)
-          .withBody(threeStepMethod.toJson.prettyPrint)
-          .withStatusCode(StatusCodes.OK.intValue)
-      )
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(noInputMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
 
     val submissionPath = "/workflows/v1"
     mockServer.when(

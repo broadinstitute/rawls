@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceAcc
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.AttributeConversions
@@ -622,8 +623,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
             withEntity(workspaceContext, entityType, entityName, txn) { entity =>
               withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, authCookie) { method =>
                 withWdl(method) { wdl =>
-                  // TODO should we return OK even if there are validation errors?
-                  RequestComplete(StatusCodes.OK, MethodConfigResolver.getValidationErrors(workspaceContext, methodConfig, entity, wdl, txn))
+                  val inputs = MethodConfigResolver.resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
+                  val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), authCookie)
+                  RequestComplete(StatusCodes.OK, idation)
                 }
               }
             }
@@ -635,7 +637,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, authCookie: HttpCookie, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
     val inputs = MethodConfigResolver.resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
     if ( inputs.forall(  _._2.isSuccess ) ) {
-      val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs( inputs map { case (key, value) => (key, value.get) } ), authCookie)
+      val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), authCookie)
       Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType) ))
     } else {
       Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = (inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }).toSeq ))
