@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.http.StatusCodes
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -68,6 +69,30 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
                                       WorkspaceService.PutACL(WorkspaceName(workspaceNamespace, workspaceName), acl))
           }
+        }
+      }
+    } ~
+    path("code.js") {
+      get {
+        getFromResource("cytoscape/code.js")
+      }
+    } ~
+      path("style.css") {
+        get {
+          getFromResource("cytoscape/style.css")
+        }
+      } ~
+    path("cytoscape") {
+      get {
+          getFromResource("cytoscape/index.html")
+        } ~ getFromResourceDirectory("cytoscape")
+      } ~
+    //    userInfoFromCookie() { userInfo =>
+    path("data") {
+      get {
+        userInfoFromCookie() { userInfo =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.GetVizData)
         }
       }
     }

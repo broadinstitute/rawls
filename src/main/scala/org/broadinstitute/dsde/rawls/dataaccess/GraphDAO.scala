@@ -6,6 +6,7 @@ import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientVertex}
 import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
@@ -182,8 +183,6 @@ trait GraphDAO {
   def workflowPipeline(workspaceContext: WorkspaceContext, workflowId: String) = {
     workspacePipeline(workspaceContext).out(workflowEdge).filter(hasPropertyValue("workflowId", workflowId))
   }
-
-  // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
     getSinglePipelineResult(workspacePipeline(db, workspaceName))

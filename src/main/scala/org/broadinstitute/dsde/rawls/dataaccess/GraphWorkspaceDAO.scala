@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.{Graph, Vertex}
+import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}

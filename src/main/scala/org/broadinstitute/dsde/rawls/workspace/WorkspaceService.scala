@@ -3,6 +3,10 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import akka.actor.{ActorRef, Actor, Props}
+import com.tinkerpop.blueprints.{Vertex, Direction}
+import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.PipeFunction
+import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -12,9 +16,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
 import org.broadinstitute.dsde.rawls.model.BucketAccessControlJsonSupport.BucketAccessControlsFormat
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.AttributeConversions
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
@@ -29,6 +33,7 @@ import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 import spray.routing.RequestContext
+import scala.collection.JavaConversions._
 
 import scala.util.{Failure, Success, Try}
 
@@ -75,6 +80,9 @@ object WorkspaceService {
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
+
+  case object GetVizData extends WorkspaceServiceMessage
+
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
@@ -124,7 +132,36 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
+
+    case GetVizData => context.parent ! getVisData(dataSource)
   }
+
+  def getVisData(dataSource: DataSource): PerRequestMessage =
+    dataSource inTransaction { txn =>
+      txn withGraph { db =>
+        val graphWorkspaceDAO = new GraphWorkspaceDAO()
+        val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, WorkspaceName("broad-dsde-dev", "tes")).get
+
+        def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+          override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = {
+            true
+          }
+        }
+
+        val rootVertexes = new GremlinPipeline(workspaceVertex).out().toList
+
+        val vertexes = (rootVertexes map { v =>
+          val topLevelEntities = new GremlinPipeline(v).out().iterator().toList
+          val remainingEntities = new GremlinPipeline(v).out().as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().toList
+          topLevelEntities ::: remainingEntities ++ Seq(v)
+        } flatten).distinct
+
+        ////        val vertexes = (new GraphWorkspaceDAO().getWorkspaceVertex(graph, WorkspaceName("broad-dsde-dev", "tes")).get.getVertices(Direction.OUT).toSeq)
+        ////        val vertexes = Seq(new GraphWorkspaceDAO().getWorkspaceVertex(graph, WorkspaceName("broad-dsde-dev", "tes")).get)
+        val data = GraphVizDataTransform.createData(vertexes)
+        RequestComplete(data) //workspaces.head.toWorkspaceName).get))
+      }
+    }
 
   def registerUser(callbackPath: String): PerRequestMessage = {
     RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))

@@ -2,13 +2,19 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
+import com.orientechnologies.orient.core.db.ODatabaseRecordThreadLocal
+import com.tinkerpop.blueprints.Vertex
+import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientEdge, OrientVertex}
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmClient, StandardOpenAmDirectives}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
+import spray.http.StatusCodes
 import spray.routing.Directive.pimpApply
 import spray.routing._
+import spray.httpx.SprayJsonSupport._
 
 import scala.reflect.runtime.universe._
 
