@@ -132,7 +132,7 @@ class HttpGoogleCloudStorageDAO(
     // while the head of the stream is a failure, drop it and construct a new stream
     accessStream.dropWhile(_.isFailure).headOption match {
       case Some(Success(accessLevel)) => accessLevel
-      case None => WorkspaceAccessLevel.NoAccess
+      case _ => WorkspaceAccessLevel.NoAccess
     }
   }
 
