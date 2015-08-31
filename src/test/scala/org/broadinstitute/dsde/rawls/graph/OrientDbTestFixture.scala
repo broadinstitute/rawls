@@ -68,7 +68,13 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val wsAttrs = Map(
+      "string" -> AttributeString("yep, it's a string"),
+      "number" -> AttributeNumber(10),
+      "empty" -> AttributeEmptyList,
+      "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
+    )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", wsAttrs)
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -77,6 +83,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
         "quot" -> AttributeEntityReference("Aliquot", "aliquot1"),
         "somefoo" -> AttributeString("itsfoo")))
+
     val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ) )
     val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ) )
     val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")))
