@@ -53,9 +53,8 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
       watch(monitorRef)
       status match {
         case WorkflowStatuses.Failed => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status, messages = testData.submission1.workflows.head.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None))
-        case WorkflowStatuses.Unknown => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
-        case WorkflowStatuses.Aborted => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
         case WorkflowStatuses.Succeeded => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), Some(Map("output" -> AttributeString("foo")))))
+        case _ => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
       }
       fishForMessage(1 second) {
         case m: Terminated => true
