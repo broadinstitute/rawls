@@ -22,12 +22,12 @@ trait SubmissionDAO {
 }
 
 trait WorkflowDAO {
-  /** get a workflow by workspace and workflowId */
-  def get(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Option[Workflow]
+  /** get a workflow by workspace, submissionId and workflowId */
+  def get(workspaceContext: WorkspaceContext, submissionId: String, workflowId: String, txn: RawlsTransaction): Option[Workflow]
 
   /** update a workflow */
-  def update(workspaceContext: WorkspaceContext, workflow: Workflow, txn: RawlsTransaction): Workflow
+  def update(workspaceContext: WorkspaceContext, submissionId: String, workflow: Workflow, txn: RawlsTransaction): Workflow
 
   /** delete a workflow */
-  def delete(workspaceContext: WorkspaceContext, workflowId: String, txn: RawlsTransaction): Boolean
+  def delete(workspaceContext: WorkspaceContext, submissionId: String, workflowId: String, txn: RawlsTransaction): Boolean
 }

@@ -32,10 +32,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
   lazy val methodConfigDAO = new GraphMethodConfigurationDAO()
-  lazy val submissionDAO: SubmissionDAO = new GraphSubmissionDAO(new GraphWorkflowDAO)
+  lazy val submissionDAO = new GraphSubmissionDAO()
 
   val containerDAO = GraphContainerDAO(
-    new GraphWorkflowDAO,
+    new GraphWorkflowDAO(submissionDAO),
     workspaceDAO,
     entityDAO,
     methodConfigDAO,

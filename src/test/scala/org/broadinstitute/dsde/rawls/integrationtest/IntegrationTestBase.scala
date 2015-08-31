@@ -32,11 +32,11 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
   lazy val openAmResponse = getOpenAmToken.get
 
   val containerDAO = GraphContainerDAO(
-    new GraphWorkflowDAO(),
+    new GraphWorkflowDAO(new GraphSubmissionDAO()),
     new GraphWorkspaceDAO(),
     new GraphEntityDAO(),
     new GraphMethodConfigurationDAO(),
-    new GraphSubmissionDAO(new GraphWorkflowDAO())
+    new GraphSubmissionDAO()
   )
 
   def addOpenAmCookie: RequestTransformer = {

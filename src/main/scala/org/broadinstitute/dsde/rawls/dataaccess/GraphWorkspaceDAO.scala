@@ -21,12 +21,12 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))
     val context = WorkspaceContext(workspace.toWorkspaceName, workspace.bucketName, vertex)
     // note that the vertex gets passed in twice (directly and through WorkspaceContext)
-    saveToVertex[Workspace](db, context, workspace, vertex)
+    saveObject[Workspace](workspace, vertex, context, db)
     workspace
   }
 
   override def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace] = {
-    loadContext(workspaceName, txn) map { context => loadFromVertex[Workspace](context.workspaceVertex) }
+    loadContext(workspaceName, txn) map { context => loadObject[Workspace](context.workspaceVertex) }
   }
 
   /**
@@ -40,6 +40,6 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
   }
 
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>
-    new GremlinPipeline(db).V().filter(isWorkspace).transform((v: Vertex) => loadFromVertex[Workspace](v)).toList.asScala
+    new GremlinPipeline(db).V().filter(isWorkspace).transform( (v:Vertex) => loadObject[Workspace](v) ).toList.asScala
   }
 }

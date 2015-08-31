@@ -15,8 +15,8 @@ import scala.util.Try
 
 class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   val workspace = testData.workspace
-  val workflowDAO = new GraphWorkflowDAO
-  val dao: SubmissionDAO = new GraphSubmissionDAO(workflowDAO)
+  val dao = new GraphSubmissionDAO
+  val workflowDAO = new GraphWorkflowDAO(dao)
   
   def withSubmissionData(testCode: (WorkspaceContext, RawlsTransaction) => Any):Unit = {
     withDefaultTestDatabase { dataSource =>
@@ -84,22 +84,22 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
   "GraphWorkflowDAO" should "let you modify Workflows within a submission" in withSubmissionData { (context, txn) =>
       val workflow0 = testData.submission1.workflows(0)
       assertResult(Some(workflow0)) {
-        workflowDAO.get(context, workflow0.workflowId, txn)
+        workflowDAO.get(context, testData.submission1.submissionId, workflow0.workflowId, txn)
       }
       val workflow1 = testData.submission1.workflows(1)
       assertResult(Some(workflow1)) {
-        workflowDAO.get(context, workflow1.workflowId, txn)
+        workflowDAO.get(context, testData.submission1.submissionId, workflow1.workflowId, txn)
       }
       val workflow2 = testData.submission1.workflows(2)
       assertResult(Some(workflow2)) {
-        workflowDAO.get(context, workflow2.workflowId, txn)
+        workflowDAO.get(context, testData.submission1.submissionId, workflow2.workflowId, txn)
       }
       val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity)
-      workflowDAO.update(context, workflow3, txn)
+      workflowDAO.update(context, testData.submission1.submissionId, workflow3, txn)
       assertResult(Some(workflow3)) {
-        workflowDAO.get(context, workflow3.workflowId, txn)
+        workflowDAO.get(context, testData.submission1.submissionId, workflow3.workflowId, txn)
       }
-      assert(workflowDAO.delete(context, workflow3.workflowId, txn))
+      assert(workflowDAO.delete(context, testData.submission1.submissionId, workflow3.workflowId, txn))
       val submission = testData.submission1.copy(workflows=Seq(workflow0, workflow2))
       assertResult(Some(submission)) {
         dao.get(context, submission.submissionId, txn)

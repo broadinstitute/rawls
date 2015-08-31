@@ -12,7 +12,7 @@ import scala.collection.JavaConversions._
 class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   /** gets by method config name */
   override def get(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Option[MethodConfiguration] = txn withGraph { graph =>
-    getMethodConfigVertex(workspaceContext, methodConfigurationNamespace, methodConfigurationName) map { loadFromVertex[MethodConfiguration](_) }
+    getMethodConfigVertex(workspaceContext, methodConfigurationNamespace, methodConfigurationName) map { loadObject[MethodConfiguration] }
   }
 
   /** rename method configuration */
@@ -24,8 +24,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
   override def delete(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction): Boolean = txn withGraph { graph =>
     getMethodConfigVertex(workspaceContext, methodConfigurationNamespace, methodConfigurationName) match {
       case Some(vertex) => {
-        new GremlinPipeline(vertex).out().remove()
-        vertex.remove()
+        removeObject(vertex, graph)
         true
       }
       case None => false
@@ -34,17 +33,12 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
 
   /** list all method configurations in the workspace */
   override def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[MethodConfigurationShort] = txn withGraph { graph =>
-    workspacePipeline(workspaceContext).out(methodConfigEdge).toList map (loadFromVertex[MethodConfigurationShort](_))
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(methodConfigEdge)).toList.map(loadObject[MethodConfigurationShort])
   }
 
   /** creates or replaces a method configuration */
   override def save(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): MethodConfiguration = txn withGraph { graph =>
-    val configVertex = getMethodConfigVertex(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) getOrElse {
-      val v = addVertex(graph, VertexSchema.MethodConfig)
-      addEdge(workspaceContext.workspaceVertex, methodConfigEdge, v)
-      v
-    }
-    saveToVertex[MethodConfiguration](graph, workspaceContext, methodConfiguration, configVertex)
+    saveSubObject[MethodConfiguration](methodConfigEdge, methodConfiguration, workspaceContext.workspaceVertex, workspaceContext, graph )
     methodConfiguration
   }
 }
