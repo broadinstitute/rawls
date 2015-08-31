@@ -452,6 +452,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
                   startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
+                case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
             case Some(l: AttributeValueList) =>
