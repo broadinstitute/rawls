@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import cromwell.binding.types.WdlArrayType
 import cromwell.binding.{WorkflowInput, NamespaceWithWorkflow, WdlNamespace}
 import cromwell.engine.backend.Backend
 import cromwell.parser.BackendType
@@ -13,12 +14,13 @@ import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
-class EmptyResultException extends RawlsException("Expected one value, but found none")
-class MultipleResultException extends RawlsException("Expected one value, but found multiple")
+class EmptyResultException extends RawlsException("Expected single value for workflow input, but evaluated result set was empty")
+class MultipleResultException extends RawlsException("Expected single value for workflow input, but evaluated result set had multiple values")
+class MissingMandatoryValueException extends RawlsException("Mandatory workflow input is missing or fails to evaluate in method config")
 
 object MethodConfigResolver {
 
-  private def getSingleResult[T](seq: Seq[T]): Try[T] = seq match {
+  private def getSingleResult(seq: Seq[AttributeValue]): Try[AttributeValue] = seq match {
     case Seq() => Failure(new EmptyResultException)
     case Seq(null) => Failure(new EmptyResultException) // sometimes expression eval returns a Seq(null) for an empty result
     case Seq(AttributeNull) => Failure(new EmptyResultException)
@@ -26,63 +28,69 @@ object MethodConfigResolver {
     case _ => Failure(new MultipleResultException)
   }
 
+  private def getArrayResult(seq: Seq[AttributeValue]): Try[AttributeValueList] = {
+    // TODO figure out if this is the right approach to filtering nulls.
+    Success(AttributeValueList(seq.filter(v => v != null && v != AttributeNull)))
+  }
+
   /**
    * Evaluate expressions in a method config against a root entity.
-   * @return map from input name to a Try containing a resolved value or failure
+   * @return map from method config input name to a Try containing a resolved value or failure
    */
-  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
-    val wdlInputs = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map((w:WorkflowInput) => w.fqn -> w.wdlType).toMap
+  def evaluateMethodConfigInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, txn: RawlsTransaction): Map[String, Try[Seq[AttributeValue]]] = {
     txn withGraph { graph =>
       val evaluator = new ExpressionEvaluator(new ExpressionParser)
       methodConfig.inputs.map {
         case (name, expression) => {
           val evaluated = evaluator.evalFinalAttribute(workspaceContext, entity.entityType, entity.name, expression.value)
-          // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
-          val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
-              // TODO: Cromwell doesn't yet have compound types (e.g. Seq)
-              // TODO: so until it does just take the head
-              case Some(wdlType) => getSingleResult(sequence)
-              case None => getSingleResult(sequence)
-            }
-          )
-          (name, unpacked)
+          (name, evaluated)
         }
       }
     }
   }
 
   /**
-   * Get errors in both expression eval and WDL binding.
-   * @return map of from input name to error message (so if the map is empty, the config is valid)
+   * Unpack evaluated method config inputs using WDL.
+   * @return map from workflow input name to a Try containing an unpacked value or failure
    */
-  def getValidationErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction) = {
-    val configInputs = resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
-    NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map {
-      case w:WorkflowInput => {
-        val errorOption = configInputs.get(w.fqn) match {
-          case Some(Success(rawValue)) => {
-            // TODO: currently Cromwell's exposed type-checking is not very robust.
-            // TODO: once Cromwell has a validation endpoint, use that; until then, don't bother checking types.
-            None
-          }
-          case Some(Failure(regret)) => Option(s"Expression eval failure ${regret.getMessage}")
-          case None => Option("WDL binding failure: Input is missing from method config")
-        }
-        (w.fqn, errorOption)
+  def unpackWorkflowInputs(mcInputs: Map[String, Try[Seq[AttributeValue]]], wdl: String): Map[String, Try[Attribute]] = {
+    val wdlNamespace = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL)
+    val workflowInputs = wdlNamespace.workflow.inputs
+    val taskInputs = wdlNamespace.tasks.flatMap(_.inputs)
+    NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs map { wfInput: WorkflowInput =>
+      val mcInputOption = mcInputs.get(wfInput.fqn) match {
+        case Some(Success(input)) => Some(input)
+        case _ => None // if this input is missing OR failed to evaluate, pass None here
       }
-    } collect { case (name, Some(error)) => name -> error } toMap
+      val unpacked = mcInputOption match {
+        case None =>
+          if (wfInput.optional) Success(AttributeNull)
+          else Failure(new MissingMandatoryValueException)
+        case Some(mcSequence) =>
+          wfInput.wdlType match {
+            case arrayType: WdlArrayType => getArrayResult(mcSequence)
+            case _ => getSingleResult(mcSequence)
+          }
+      }
+      (wfInput.fqn, unpacked)
+    } toMap
   }
 
-  def resolveInputsAndAggregateErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Try[Map[String, Any]] = {
-    val resolved = resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
-    resolved.count(_._2.isFailure) match {
-      case 0 => Success(resolved collect { case (name, Success(value)) => (name, value) } )
-      case numFails => Failure(new RawlsException(s"There were $numFails failed expression evaluations"))
-    }
+  /**
+   * @return map from input to resolved value or failure for each WDL input
+   */
+  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
+    val evaluated = evaluateMethodConfigInputs(workspaceContext, methodConfig, entity, txn)
+    val unpacked = unpackWorkflowInputs(evaluated, wdl)
+    unpacked
   }
 
-  def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
-    inputs map { case (name, value) => (name, value.toJson) }
+  /**
+   * Convert result of resolveInputs to WDL input format, ignoring AttributeNulls and Failures
+   * @return serialized JSON to send to Cromwell
+   */
+  def propertiesToWdlInputs(inputs: Map[String, Try[Attribute]]): String = JsObject(
+    inputs collect { case (name, Success(value)) => (name, value.toJson) }
   ) toString
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {

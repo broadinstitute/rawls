@@ -336,8 +336,8 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(),Map(),
-          Map("three_step.ps.procs"->AttributeString("expression"),"three_step.cgrep.count"->AttributeString("expression"),"three_step.wc.count"->AttributeString("expression")),
+        val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
+          Map("three_step.ps.procs"->AttributeString("expression"),"three_step.cgrep.count"->AttributeString("expression"), "three_step.wc.count"->AttributeString("expression")),
           MethodRepoConfiguration("none","none","none"),MethodRepoMethod("dsde","three_step","1"))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
