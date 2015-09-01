@@ -32,21 +32,19 @@ object MethodConfigResolver {
    */
   def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, txn: RawlsTransaction): Map[String, Try[Attribute]] = {
     val wdlInputs = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map((w:WorkflowInput) => w.fqn -> w.wdlType).toMap
-    txn withGraph { graph =>
-      val evaluator = new ExpressionEvaluator(new ExpressionParser)
-      methodConfig.inputs.map {
-        case (name, expression) => {
-          val evaluated = evaluator.evalFinalAttribute(workspaceContext, entity.entityType, entity.name, expression.value)
-          // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
-          val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
-              // TODO: Cromwell doesn't yet have compound types (e.g. Seq)
-              // TODO: so until it does just take the head
-              case Some(wdlType) => getSingleResult(sequence)
-              case None => getSingleResult(sequence)
-            }
-          )
-          (name, unpacked)
-        }
+    val evaluator = new ExpressionEvaluator(new ExpressionParser)
+    methodConfig.inputs.map {
+      case (name, expression) => {
+        val evaluated = evaluator.evalFinalAttribute(workspaceContext, entity.entityType, entity.name, expression.value)
+        // now look at expected WDL type to see if we should unpack a single value from the Seq[Any]
+        val unpacked = evaluated.flatMap(sequence => wdlInputs.get(name) match {
+            // TODO: Cromwell doesn't yet have compound types (e.g. Seq)
+            // TODO: so until it does just take the head
+            case Some(wdlType) => getSingleResult(sequence)
+            case None => getSingleResult(sequence)
+          }
+        )
+        (name, unpacked)
       }
     }
   }

@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.logging.Logger
-import javax.ws.rs.Path
-import com.wordnik.swagger.annotations._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
@@ -31,6 +28,15 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with OpenA
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
+        }
+      }
+    } ~
+    path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[SubmissionRequest]) { submission =>
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ValidateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
         }
       }
     } ~
