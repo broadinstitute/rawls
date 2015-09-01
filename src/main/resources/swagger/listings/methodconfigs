@@ -408,10 +408,6 @@
 					"$ref": "Map[string,string]",
 					"description": "Outputs for the method"
 				},
-				"workspaceName": {
-					"$ref": "WorkspaceName",
-					"description": "This method configuration's owning workspace"
-				},
 				"methodRepoConfig": {
 					"$ref": "MethodRepoConfiguration",
 					"description": "The properties of the method configuration from the method store that this derived from"

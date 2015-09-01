@@ -230,7 +230,7 @@
 				"name": "workspaceNameJson",
 				"description": "Name of new workspace",
 				"required": true,
-				"type": "WorkspaceName",
+				"$ref": "WorkspaceName",
 				"paramType": "body",
 				"allowMultiple": false
 			}],

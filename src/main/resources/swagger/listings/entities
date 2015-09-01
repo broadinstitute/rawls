@@ -569,14 +569,6 @@
 				"attributes": {
 					"$ref": "Map[string,Attribute]",
 					"description": "The attributes of the entity"
-				},
-				"workspaceName": {
-					"$ref": "WorkspaceName",
-					"description": "This entity's owning workspace"
-				},
-				"vaultId": {
-					"type": "string",
-					"description": "This entity's Vault ID"
 				}
 			}
 		},
