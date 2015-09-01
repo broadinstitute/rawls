@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{ExecutionServiceLogs, ExecutionServiceOutputs, ExecutionServiceStatus}
+import org.broadinstitute.dsde.rawls.model._
 import spray.http.HttpCookie
 
 /**
@@ -8,6 +8,7 @@ import spray.http.HttpCookie
  */
 trait ExecutionServiceDAO {
   def submitWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceStatus
+  def validateWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceValidation
   def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus
   def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs
   def logs(id: String, authCookie: HttpCookie): ExecutionServiceLogs

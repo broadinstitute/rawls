@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.UUID
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.model.{ExecutionServiceLogs, ExecutionServiceOutputs, ExecutionServiceStatus}
+import org.broadinstitute.dsde.rawls.model.{ExecutionServiceValidation, ExecutionServiceLogs, ExecutionServiceOutputs, ExecutionServiceStatus}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -23,6 +23,14 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     val url = executionServiceURL+"/workflows/v1"
     import system.dispatcher
     val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
+    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs))
+    Await.result(pipeline(Post(url,formData)),Duration.Inf)
+  }
+
+  override def validateWorkflow(wdl: String, inputs: String, authCookie: HttpCookie): ExecutionServiceValidation = {
+    val url = executionServiceURL + "/workflows/v1/validate"
+    import system.dispatcher
+    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[ExecutionServiceValidation]
     val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs))
     Await.result(pipeline(Post(url,formData)),Duration.Inf)
   }

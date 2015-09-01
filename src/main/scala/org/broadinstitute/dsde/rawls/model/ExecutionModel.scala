@@ -22,10 +22,16 @@ case class SubmissionRequest(
   expression: Option[String]
 )
 
-// Cromwell's response to workflow submission (not decorated with annotations because it's not part of our API)
+// Cromwell's response to workflow submission
 case class ExecutionServiceStatus(
   id: String,
   status: String
+)
+
+// Cromwell's response to workflow validation
+case class ExecutionServiceValidation(
+  valid: Boolean,
+  error: String
 )
 
 case class ExecutionServiceOutputs(
@@ -135,6 +141,8 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
 
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
+
+  implicit val ExecutionServiceValidationFormat = jsonFormat2(ExecutionServiceValidation)
 
   implicit val ExecutionServiceOutputsFormat = jsonFormat2(ExecutionServiceOutputs)
 

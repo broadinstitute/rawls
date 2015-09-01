@@ -84,8 +84,8 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   }
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    val mcName = MethodConfigurationName("three_step_1","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde_config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
+    val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde-config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -133,8 +133,8 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
   val wsName = testData.wsName
-    val mcName = MethodConfigurationName("three_step", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde-config", "no_input", "1"), MethodRepoMethod("dsde", "no_input", "1"))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sample1, None, services)
 
@@ -144,8 +144,8 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   }
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
-    val mcName = MethodConfigurationName("three_step", "dsde", wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde_config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoConfiguration("dsde-config", "no_input", "1"), MethodRepoMethod("dsde", "no_input", "1"))
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
