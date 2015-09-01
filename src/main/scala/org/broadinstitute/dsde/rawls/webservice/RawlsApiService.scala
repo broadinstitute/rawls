@@ -34,7 +34,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
     get {
       pathSingleSlash {
         getFromResource("swagger/index.html")
-      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
+      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/") ~ getFromResourceDirectory("cytoscape")
     }
 
   def receive = runRoute(possibleRoutes)

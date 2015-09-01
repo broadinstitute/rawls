@@ -72,27 +72,16 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
         }
       }
     } ~
-    path("code.js") {
-      get {
-        getFromResource("cytoscape/code.js")
-      }
-    } ~
-      path("style.css") {
-        get {
-          getFromResource("cytoscape/style.css")
-        }
-      } ~
-    path("cytoscape") {
+    path("viz") {
       get {
           getFromResource("cytoscape/index.html")
         } ~ getFromResourceDirectory("cytoscape")
       } ~
-    //    userInfoFromCookie() { userInfo =>
-    path("data") {
+    path("viz" / "data" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
         userInfoFromCookie() { userInfo =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.GetVizData)
+            WorkspaceService.GetVizData(WorkspaceName(workspaceNamespace, workspaceName)))
         }
       }
     }

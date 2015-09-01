@@ -81,7 +81,7 @@ object WorkspaceService {
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
 
-  case object GetVizData extends WorkspaceServiceMessage
+  case class GetVizData(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
 
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
@@ -133,14 +133,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
 
-    case GetVizData => context.parent ! getVisData(dataSource)
+    case GetVizData(workspaceName) => context.parent ! getVisData(dataSource, workspaceName)
   }
 
-  def getVisData(dataSource: DataSource): PerRequestMessage =
+  def getVisData(dataSource: DataSource, workspaceName:WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { db =>
         val graphWorkspaceDAO = new GraphWorkspaceDAO()
-        val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, WorkspaceName("broad-dsde-dev", "tes")).get
+        val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, workspaceName).get
 
         def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
           override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = {
@@ -154,12 +154,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           val topLevelEntities = new GremlinPipeline(v).out().iterator().toList
           val remainingEntities = new GremlinPipeline(v).out().as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().toList
           topLevelEntities ::: remainingEntities ++ Seq(v)
-        } flatten).distinct
+        } flatten).distinct :+ workspaceVertex
 
-        ////        val vertexes = (new GraphWorkspaceDAO().getWorkspaceVertex(graph, WorkspaceName("broad-dsde-dev", "tes")).get.getVertices(Direction.OUT).toSeq)
-        ////        val vertexes = Seq(new GraphWorkspaceDAO().getWorkspaceVertex(graph, WorkspaceName("broad-dsde-dev", "tes")).get)
         val data = GraphVizDataTransform.createData(vertexes)
-        RequestComplete(data) //workspaces.head.toWorkspaceName).get))
+        RequestComplete(data)
       }
     }
 
