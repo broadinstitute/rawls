@@ -43,6 +43,14 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
       assertResult(Success(ArrayBuffer(AttributeString("normal"), AttributeString("tumor"), AttributeString("tumor")))) {
         evaluator.evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.type")
       }
+
+      assertResult(Success(ArrayBuffer())) {
+        evaluator.evalFinalAttribute(workspaceContext, "SampleSet", "sset_empty", "this.samples")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString("a"), AttributeBoolean(true)))) {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.thingies")
+      }
     }
   }
 
@@ -65,7 +73,15 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
         evaluator.evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.sample1ref.type")
       }
 
-      assertResult(Success(ArrayBuffer(AttributeNull))) {
+      assertResult(Success(ArrayBuffer())) {
+        evaluator.evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.empty")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString("another string"), AttributeBoolean(true)))) {
+        evaluator.evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.values")
+      }
+
+      assertResult(Success(ArrayBuffer())) {
         evaluator.evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.this_attribute_is_not_present")
       }
 
