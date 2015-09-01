@@ -22,5 +22,10 @@ trait GoogleCloudStorageDAO {
 
   def updateACL(bucketName: String, workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Map[String, String]
 
+  def getOwners(workspaceName: WorkspaceName): Seq[String]
+
   def getMaximumAccessLevel(userId: String, workspaceName: WorkspaceName): WorkspaceAccessLevel
+
+  def getWorkspaces(userId: String): Seq[(WorkspaceName, WorkspaceAccessLevel)]
+
 }
