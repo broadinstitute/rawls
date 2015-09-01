@@ -14,7 +14,8 @@ class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with Integrat
     gcsConfig.getString("pathToP12"),
     gcsConfig.getString("appsDomain"),
     gcsConfig.getString("groupsPrefix"),
-    gcsConfig.getString("appName")
+    gcsConfig.getString("appName"),
+    gcsConfig.getInt("deletedBucketCheckSeconds")
   )
 
   val testProject = "broad-dsde-dev"

@@ -42,6 +42,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
+      path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+        delete {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.DeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
+        }
+      } ~
     path("workspaces") {
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaces)
