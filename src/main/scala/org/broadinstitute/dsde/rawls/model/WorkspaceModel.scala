@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.joda.time.DateTime
 
 trait Attributable {
@@ -43,6 +44,10 @@ case class Workspace (
   def briefName = toWorkspaceName.toString
   def idField = "name"
 }
+
+case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
+                                    lastFailureDate: Option[DateTime],
+                                    runningSubmissionsCount: Int)
 
 case class EntityName(
                    name: String)
@@ -124,6 +129,11 @@ case class MethodRepoConfigurationQuery(
 
 case class ConflictingEntities(conflicts: Seq[String])
 
+case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
+                                 workspace: Workspace,
+                                 workspaceSubmissionStats: WorkspaceSubmissionStats,
+                                 owners: Seq[String])
+
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
 
@@ -184,4 +194,11 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
 
   implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
+
+  implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
+
+  implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+
+  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
+
 }

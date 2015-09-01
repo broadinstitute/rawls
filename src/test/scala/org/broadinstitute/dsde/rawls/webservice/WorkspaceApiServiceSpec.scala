@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
@@ -17,7 +19,7 @@ import spray.httpx.SprayJsonSupport._
 import spray.json._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
-
+import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 
 /**
@@ -72,6 +74,76 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  class TestWorkspaces() extends TestData {
+    val writerWorkspaceName = WorkspaceName("ns", "writer")
+    val workspaceOwner = Workspace("ns", "owner", "aBucket", testDate, "testUser", Map("a" -> AttributeString("x")) )
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "aBucket", testDate, "testUser", Map("b" -> AttributeString("y")) )
+    val workspaceReader = Workspace("ns", "reader", "aBucket", testDate, "testUser", Map("c" -> AttributeString("z")) )
+    val workspaceNoAccess = Workspace("ns", "noaccess", "aBucket", testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+
+    val sample1 = Entity("sample1", "sample", Map.empty)
+    val sample2 = Entity("sample2", "sample", Map.empty)
+    val sample3 = Entity("sample3", "sample", Map.empty)
+    val sampleSet = Entity("sampleset", "sample_set", Map("samples" -> AttributeEntityReferenceList(Seq(
+      AttributeEntityReference(sample1.entityType, sample1.name),
+      AttributeEntityReference(sample2.entityType, sample2.name),
+      AttributeEntityReference(sample3.entityType, sample3.name)
+    ))))
+
+    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoConfiguration(writerWorkspaceName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(writerWorkspaceName.namespace, "method-a", "1"))
+    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, writerWorkspaceName)
+    val submissionTemplate = createTestSubmission(workspaceWriter, methodConfig, sampleSet, Seq(sample1, sample2, sample3))
+    val submissionSuccess = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Succeeded))
+    )
+    val submissionFail = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Done,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Failed))
+    )
+    val submissionRunning1 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Submitted,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
+    )
+    val submissionRunning2 = submissionTemplate.copy(
+      submissionId = UUID.randomUUID().toString,
+      status = SubmissionStatuses.Submitted,
+      workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
+    )
+
+    override def save(txn: RawlsTransaction): Unit = {
+      workspaceDAO.save(workspaceOwner, txn)
+      workspaceDAO.save(workspaceWriter, txn)
+      workspaceDAO.save(workspaceReader, txn)
+      workspaceDAO.save(workspaceNoAccess, txn)
+
+      withWorkspaceContext(workspaceWriter, txn) { ctx =>
+        entityDAO.save(ctx, sample1, txn)
+        entityDAO.save(ctx, sample2, txn)
+        entityDAO.save(ctx, sample3, txn)
+        entityDAO.save(ctx, sampleSet, txn)
+
+        methodConfigDAO.save(ctx, methodConfig, txn)
+
+        submissionDAO.save(ctx, submissionSuccess, txn)
+        submissionDAO.save(ctx, submissionFail, txn)
+        submissionDAO.save(ctx, submissionRunning1, txn)
+        submissionDAO.save(ctx, submissionRunning2, txn)
+      }
+    }
+  }
+
+  val testWorkspaces = new TestWorkspaces
+
+  def withTestWorkspacesApiServices(testCode: TestApiService => Any): Unit = {
+    withCustomTestDatabase(testWorkspaces) { dataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
@@ -152,8 +224,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "list workspaces" in withTestDataApiServices { services =>
-    Get("/workspaces") ~>
+  it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
       addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -161,8 +232,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(workspaceDAO.list(txn).toSet) {
-            responseAs[Array[Workspace]].toSet
+          assertResult(Set(
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName))
+          )) {
+            responseAs[Array[WorkspaceListResponse]].toSet
           }
         }
       }

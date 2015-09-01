@@ -1,6 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{File, StringReader}
+import java.io.StringReader
+import java.io.File
+import java.security.PrivateKey
+import java.util.UUID
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -10,16 +14,16 @@ import scala.util.{Failure, Success, Try}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleAuthorizationCodeFlow, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.client.util.store.{FileDataStoreFactory, DataStoreFactory}
-import com.google.api.services.admin.directory._
+import com.google.api.client.util.store.FileDataStoreFactory
+import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.compute.ComputeScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.{StorageScopes, Storage}
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
@@ -170,6 +174,14 @@ class HttpGoogleCloudStorageDAO(
     }
   }
 
+  override def getWorkspaces(userId: String): Seq[(WorkspaceName, WorkspaceAccessLevel)] = {
+    val credential = getGroupServiceAccountCredential
+    val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+    val workspaceTuples = directory.groups().list().setUserKey(userId).execute().getGroups.map(g => deconstructGroupId(g.getEmail))
+
+    workspaceTuples.toSeq
+  }
+
   override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
     val credential = getGroupServiceAccountCredential
     val directory = getGroupDirectory(credential)
@@ -183,6 +195,12 @@ class HttpGoogleCloudStorageDAO(
     } reduceRight(_ ++ _) // note that the reduction must go left-to-right so that higher access levels override lower ones
 
     WorkspaceACL(aclMap)
+  }
+
+  override def getOwners(workspaceName: WorkspaceName): Seq[String] = {
+    val credential = getGroupServiceAccountCredential
+    val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+    directory.members.list(makeGroupId(workspaceName, WorkspaceAccessLevel.Owner)).execute().getMembers.map(_.getEmail)
   }
 
   /**
@@ -274,6 +292,14 @@ class HttpGoogleCloudStorageDAO(
   def makeGroupId(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
     s"${groupsPrefix}-${workspaceName.namespace}_${workspaceName.name}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
   }
+
+  def deconstructGroupId(groupId: String): (WorkspaceName, WorkspaceAccessLevel) = {
+    val strippedId = groupId.stripPrefix(s"${groupsPrefix}-").stripSuffix(s"@${appsDomain}").split("_", 2)
+    (WorkspaceName(strippedId.head, stripCoreGroupTraits(strippedId(1))._1),
+      WorkspaceAccessLevel.fromCanonicalString(stripCoreGroupTraits(strippedId(1))._2.stripPrefix("-").toUpperCase))
+  }
+
+  def stripCoreGroupTraits(groupId: String): (String, String) = groupId.splitAt(groupId.lastIndexOf("-"))
 
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 }

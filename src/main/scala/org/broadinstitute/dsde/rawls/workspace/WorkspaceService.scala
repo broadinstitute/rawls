@@ -222,8 +222,33 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def listWorkspaces(dataSource: DataSource): PerRequestMessage =
     dataSource inTransaction { txn =>
-      RequestComplete(containerDAO.workspaceDAO.list(txn).toSeq)
+      val response = for (
+        (workspaceName, accessLevel) <- gcsDAO.getWorkspaces(userInfo.userId);
+        workspaceContext <- containerDAO.workspaceDAO.loadContext(workspaceName, txn)
+      ) yield {
+        WorkspaceListResponse(accessLevel,
+          containerDAO.workspaceDAO.loadFromContext(workspaceContext),
+          getWorkspaceSubmissionStats(workspaceContext, txn),
+          gcsDAO.getOwners(workspaceName)
+        )
+      }
+
+      RequestComplete(response)
     }
+
+  private def getWorkspaceSubmissionStats(workspaceContext: WorkspaceContext, txn: RawlsTransaction): WorkspaceSubmissionStats = {
+    val submissions = containerDAO.submissionDAO.list(workspaceContext, txn)
+
+    val workflowsOrderedByDateDesc = submissions.flatMap(_.workflows).toVector.sortWith { (first, second) =>
+      first.statusLastChangedDate.isAfter(second.statusLastChangedDate)
+    }
+
+    WorkspaceSubmissionStats(
+      lastSuccessDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Succeeded).map(_.statusLastChangedDate),
+      lastFailureDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Failed).map(_.statusLastChangedDate),
+      runningSubmissionsCount = submissions.count(_.status == SubmissionStatuses.Submitted)
+    )
+  }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>

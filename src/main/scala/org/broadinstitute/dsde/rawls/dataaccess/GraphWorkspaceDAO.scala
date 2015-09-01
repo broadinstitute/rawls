@@ -26,7 +26,11 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
   }
 
   override def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace] = {
-    loadContext(workspaceName, txn) map { context => loadObject[Workspace](context.workspaceVertex) }
+    loadContext(workspaceName, txn) map { context => loadFromContext(context) }
+  }
+
+  override def loadFromContext(context: WorkspaceContext): Workspace = {
+    loadObject[Workspace](context.workspaceVertex)
   }
 
   /**

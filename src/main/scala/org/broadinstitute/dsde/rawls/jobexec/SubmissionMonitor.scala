@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusCha
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.joda.time.DateTime
 import spray.http
 
 import scala.concurrent.duration.Duration
@@ -109,7 +110,7 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
         case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
       }
 
-      containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave, txn)
+      containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave.copy(statusLastChangedDate = DateTime.now), txn)
     }
 
     if (savedWorkflow.status.isDone) {

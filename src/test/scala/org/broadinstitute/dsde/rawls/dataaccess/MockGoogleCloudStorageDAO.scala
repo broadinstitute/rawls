@@ -45,4 +45,14 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
   override def getMaximumAccessLevel(userId: String, workspaceName: WorkspaceName): WorkspaceAccessLevel = {
     getAccessLevelOrDieTrying(userId)
   }
+
+  override def getWorkspaces(userId: String): Seq[(WorkspaceName, WorkspaceAccessLevel)] = {
+    Seq(
+      (WorkspaceName("ns", "owner"), WorkspaceAccessLevel.Owner),
+      (WorkspaceName("ns", "writer"), WorkspaceAccessLevel.Write),
+      (WorkspaceName("ns", "reader"), WorkspaceAccessLevel.Read)
+    )
+  }
+
+  override def getOwners(workspaceName: WorkspaceName): Seq[String] = mockPermissions.filter(_._2 == WorkspaceAccessLevel.Owner).keys.toSeq
 }

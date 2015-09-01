@@ -82,6 +82,10 @@ class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with Integrat
     gcsDAO.updateACL(testBucket, testWorkspace, Seq(WorkspaceACLUpdate(testCollaboratorEmail, WorkspaceAccessLevel.NoAccess)))
     gcsDAO.getMaximumAccessLevel(testCollaboratorEmail, testWorkspace) should be (WorkspaceAccessLevel.NoAccess)
 
+    // check that we can properly deconstruct group names
+    val groupName = gcsDAO.makeGroupId(testWorkspace, WorkspaceAccessLevel.Owner)
+    gcsDAO.deconstructGroupId(groupName) should be (testWorkspace, WorkspaceAccessLevel.Owner)
+
     // tear down the ACL. confirm that the corresponding groups are deleted
     gcsDAO.teardownACL(testCreatorEmail, testBucket, testWorkspace)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup).execute() }

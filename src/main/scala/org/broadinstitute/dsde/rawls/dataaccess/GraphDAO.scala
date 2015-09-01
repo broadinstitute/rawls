@@ -391,6 +391,7 @@ trait GraphDAO {
   }
 
   private def loadMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
+
     val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
 
