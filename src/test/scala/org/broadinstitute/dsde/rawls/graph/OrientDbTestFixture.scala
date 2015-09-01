@@ -67,6 +67,15 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     }
   }
 
+  class LockedWorkspace() extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute](), isLocked = true )
+
+    override def save(txn:RawlsTransaction): Unit = {
+      workspaceDAO.save(workspace, txn)
+    }
+  }
+
   class DefaultTestData() extends TestData {
     // setup workspace objects
     val wsName = WorkspaceName("myNamespace", "myWorkspace")

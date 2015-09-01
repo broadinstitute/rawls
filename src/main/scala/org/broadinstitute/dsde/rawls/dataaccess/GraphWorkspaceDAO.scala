@@ -44,7 +44,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
   }
 
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>
-    new GremlinPipeline(db).V().filter(isWorkspace).transform( (v:Vertex) => loadObject[Workspace](v) ).toList.asScala
+    new GremlinPipeline(db).V().filter(isWorkspace).transform((v:Vertex) => loadObject[Workspace](v)).toList.asScala
   }
 
   override def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean = txn withGraph { db =>
@@ -55,5 +55,11 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
       }
       case None => false
     }
+  }
+
+  val LOCK_PROPERTY = "isLocked"
+
+  override def isLocked(workspaceContext: WorkspaceContext): Boolean = {
+    Option(workspaceContext.workspaceVertex.getProperty(LOCK_PROPERTY)).getOrElse(false)
   }
 }

@@ -91,6 +91,18 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
+  def withEmptyWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
+    withCustomTestDatabase(new EmptyWorkspace) { dataSource =>
+      withApiServices(dataSource, user)(testCode)
+    }
+  }
+
+  def withLockedWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
+    withCustomTestDatabase(new LockedWorkspace) { dataSource =>
+      withApiServices(dataSource, user)(testCode)
+    }
+  }
+
   class TestWorkspaces() extends TestData {
     val writerWorkspaceName = WorkspaceName("ns", "writer")
     val workspaceOwner = Workspace("ns", "owner", "aBucket", testDate, "testUser", Map("a" -> AttributeString("x")) )
@@ -512,4 +524,100 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // End ACL-restriction Tests
 
+  // Workspace Locking
+  it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices("owner-access") { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+  }
+
+  it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices("write-access") { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "allow a reader to read a workspace, even when locked"  in withLockedWorkspaceApiServices("read-access") { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "allow an owner to retrieve and adjust an the ACL, even when locked"  in withLockedWorkspaceApiServices("owner-access") { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "not allow an owner to lock a workspace with incomplete submissions" in withTestDataApiServicesAndUser("owner-access") { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
+  it should "allow an owner to unlock the workspace (repeatedly)" in withEmptyWorkspaceApiServices("owner-access") { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+  }
+
+  it should "not allow a non-owner to lock or unlock the workspace" in withEmptyWorkspaceApiServices("write-access") { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
+  it should "not allow a no-access user to infer the existence the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
 }

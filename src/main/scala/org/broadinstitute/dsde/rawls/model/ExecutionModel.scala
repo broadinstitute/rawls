@@ -208,6 +208,7 @@ object WorkflowStatuses {
 
 object SubmissionStatuses {
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
+    def isDone = { this == Done }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = SubmissionStatuses.withName(name)
   }

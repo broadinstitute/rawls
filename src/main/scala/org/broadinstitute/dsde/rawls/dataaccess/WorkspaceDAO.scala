@@ -12,4 +12,5 @@ trait WorkspaceDAO {
   def loadFromContext(context: WorkspaceContext): Workspace
   def list(txn: RawlsTransaction): TraversableOnce[Workspace]
   def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean
+  def isLocked(workspaceContext: WorkspaceContext): Boolean
 }
