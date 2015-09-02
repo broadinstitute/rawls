@@ -207,8 +207,8 @@
             "method": "DELETE",
             "summary": "Delete workspace",
             "notes": "",
-            "type": "Workspace",
-            "nickname": "list",
+            "type": "void",
+            "nickname": "delete workspace",
             "produces": ["application/json"],
             "parameters": [{
                 "name": "workspaceNamespace",
