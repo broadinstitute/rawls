@@ -152,7 +152,7 @@ case class GraphVizObject(data: GraphVizData, group: String,
                           removed: Boolean = false, selected: Boolean = false,
                           selectable: Boolean = true, locked: Boolean = false,
                           grabbed: Boolean = false, grabbable: Boolean = true)
-case class GraphVizData(id: String, name: String, source: Option[String] = None, target: Option[String] = None)
+case class GraphVizData(id: String, name: String, clazz: String, attributes:Map[String, String], source: Option[String] = None, target: Option[String] = None)
 
 
 object GraphVizDataTransform {
@@ -189,16 +189,28 @@ object GraphVizDataTransform {
     new GraphVizData(dataSchema, data)*/
 
     def vertexMapFunction(v: Vertex) = {
-      val nameVal = Option(v.getProperty("name"))
-      GraphVizObject(GraphVizData(id=v.getId.toString, name=(v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal.getOrElse("attributes"))),//(v.getPropertyKeys map {(k:String) => (k+"="+v.getProperty(k))}).mkString(",")))),
+      val nameVal = Option(v.getProperty("name")).getOrElse {
+        val inEdges = Option(v.getEdges(Direction.IN))
+        inEdges match {
+          case Some(es) => es.headOption match {
+            case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
+            case _ => "unknown"
+          }
+          case _ => "unknown"
+        }}
+      GraphVizObject(GraphVizData(id=v.getId.toString,
+                                  clazz=v.asInstanceOf[OrientVertex].getRecord.getClassName,
+                                  attributes=v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
+                                  name=(v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),//(v.getPropertyKeys map {(k:String) => (k+"="+v.getProperty(k))}).mkString(",")))),
         group = "nodes")
     }
     val nodesData = vertexes map(vertexMapFunction) toSeq
 
     val edges = vertexes map {v => (v.getEdges(Direction.OUT)) toSeq} flatten
     def edgeMapFunction(e: Edge) = {
-      GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel,
-        source = Some(e.getVertex(Direction.IN).getId.toString), target = Some(e.getVertex(Direction.OUT).getId.toString)),
+      GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel, clazz="Edge",
+        attributes=e.getPropertyKeys.map(k => (k -> e.getProperty(k).toString)) toMap,
+        source = Some(e.getVertex(Direction.OUT).getId.toString), target = Some(e.getVertex(Direction.IN).getId.toString)),
         group = "edges")
     }
     val edgeData = edges map(edgeMapFunction) toSeq
@@ -246,6 +258,6 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 
-  implicit val GraphVizDataFormat = jsonFormat4(GraphVizData)
+  implicit val GraphVizDataFormat = jsonFormat6(GraphVizData)
   implicit val GraphVizObjectFormat = jsonFormat8(GraphVizObject)
 }
