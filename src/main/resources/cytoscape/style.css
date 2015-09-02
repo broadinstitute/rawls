@@ -88,3 +88,7 @@ a:hover {
     right: 0;
   }
 }
+
+.ui-tooltip, .qtip {
+  max-width: 800px;
+}

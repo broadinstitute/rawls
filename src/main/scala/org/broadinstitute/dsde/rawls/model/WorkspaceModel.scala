@@ -155,79 +155,6 @@ case class GraphVizObject(data: GraphVizData, group: String,
 case class GraphVizData(id: String, name: String, clazz: String, attributes:Map[String, String], source: Option[String] = None, target: Option[String] = None)
 
 
-object GraphVizDataTransform {
-  def createData(): Seq[GraphVizObject] = {
-    val graph = new OrientGraph("memory:foou")
-    val v:OrientVertex = graph.addVertex("v1", null)
-    v.setProperty("name", "rootVertex")
-    v.setProperty("foo", "bar")
-
-    val v2:OrientVertex = graph.addVertex("v2", null)
-    v2.setProperty("name", "nextVertex")
-    v2.setProperty("foo2", "bar2")
-
-    val e = v.addEdge("edge1", v2)
-    e.setProperty("edge_foo", "edge_bar")
-
-    createData(Seq(v))
-  }
-  def createData(vertexes: Seq[Vertex]): Seq[GraphVizObject] = {
-
-
-
-    /*val nodeSchema = Seq(Map("name"->"label", "type"->"string"))
-    val edgesSchema = Seq(Map("name"->"label", "type"->"string"))
-
-    val nodesData  = vertexes map {v => Map("id"->v.getId.toString, "label"-> (Seq("class="+v.getClass.getSimpleName) ++ (v.getPropertyKeys map {k => (k+"="+v.getProperty(k))})).mkString(","))} toSeq
-    val edges = vertexes map {v => (v.getEdges(Direction.OUT)) toSeq} flatten
-    val edgesData  = edges map {e => Map("id"->e.getId.toString, "label"->e.getLabel, "source"->e.getVertex(Direction.IN).getId.toString, "target"->e.getVertex(Direction.OUT).getId.toString)} toSeq
-
-    val dataSchema = new GraphVizVizDataSchema(nodeSchema, edgesSchema)
-    val data = new GraphVizVizData(nodesData, edgesData)
-    import GraphVizJsonSupport._
-    println(new GraphVizData(dataSchema, data).toJson)
-    new GraphVizData(dataSchema, data)*/
-
-    def vertexMapFunction(v: Vertex) = {
-      val nameVal = Option(v.getProperty("name")).getOrElse {
-        val inEdges = Option(v.getEdges(Direction.IN))
-        inEdges match {
-          case Some(es) => es.headOption match {
-            case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
-            case _ => "unknown"
-          }
-          case _ => "unknown"
-        }}
-      GraphVizObject(GraphVizData(id=v.getId.toString,
-                                  clazz=v.asInstanceOf[OrientVertex].getRecord.getClassName,
-                                  attributes=v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
-                                  name=(v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),//(v.getPropertyKeys map {(k:String) => (k+"="+v.getProperty(k))}).mkString(",")))),
-        group = "nodes")
-    }
-    val nodesData = vertexes map(vertexMapFunction) toSeq
-
-    val edges = vertexes map {v => (v.getEdges(Direction.OUT)) toSeq} flatten
-    def edgeMapFunction(e: Edge) = {
-      GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel, clazz="Edge",
-        attributes=e.getPropertyKeys.map(k => (k -> e.getProperty(k).toString)) toMap,
-        source = Some(e.getVertex(Direction.OUT).getId.toString), target = Some(e.getVertex(Direction.IN).getId.toString)),
-        group = "edges")
-    }
-    val edgeData = edges map(edgeMapFunction) toSeq
-
-    (nodesData ++ edgeData)
-    //    {"data":{"id":"605755","name":"PCNAxxx"},"group":"nodes","removed":false,"selected":false,"selectable":true,"locked":false,"grabbed":false,"grabbable":true},
-    //
-    //    {"data":{"id":"611408","name":"FEN1"},"group":"nodes","removed":false,"selected":false,"selectable":true,"locked":false,"grabbed":false,"grabbable":true},
-    //    {"data":{"id":"611409","name":"FEN2"},"group":"nodes","removed":false,"selected":false,"selectable":true,"locked":false,"grabbed":false,"grabbable":true},
-    //
-    //
-    //
-    //    {"data":{"source":"611408","target":"611409","group":"spd","id":"e593", "label":"FOO!"},"group":"edges","removed":false,"selected":false,"selectable":false,"locked":false,"grabbed":false,"grabbable":true},
-    //    {"data":{"source":"611408","target":"605755","group":"spd","id":"e592", "label":"FOO!"},"group":"edges","removed":false,"selected":false,"selectable":false,"locked":false,"grabbed":false,"grabbable":true}
-  }
-}
-
 object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
@@ -259,5 +186,6 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 
   implicit val GraphVizDataFormat = jsonFormat6(GraphVizData)
+
   implicit val GraphVizObjectFormat = jsonFormat8(GraphVizObject)
 }

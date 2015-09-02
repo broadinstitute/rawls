@@ -27,8 +27,6 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       assert {
         txn.withGraph { graph =>
           graph.getVertices.exists(v => {
-            GraphVizDataTransform.createData(v)
-
             v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Workspace) &&
             v.getProperty[String]("name") == workspace2.name && v.getProperty[String]("namespace") == workspace2.namespace
           })

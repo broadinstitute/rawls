@@ -27,7 +27,7 @@ $(function(){ // on dom ready
 
 
   function loadViz(data) {
-    console.log(JSON.stringify(data));
+//    console.log(JSON.stringify(data));
 
 //    cy = cytoscape({
 //      container: document.getElementById('cy'),
@@ -161,8 +161,7 @@ var cy = cytoscape({
         'line-color': '#ddd',
         'content': 'data(name)',
         'target-arrow-color': '#aaa',
-        "text-valign":"top",
-        "text-halign":"center",
+        'edge-text-rotation': 'autorotate',
         "font-style": "italic",
         "font-size":"11px",
         "text-outline-color":"#555"
@@ -234,20 +233,20 @@ var cy = cytoscape({
       n.qtip({
         content: [
           {
-            name: JSON.stringify(g)
+            name: JSON.stringify(g, "  ", 2)
           }
         ].map(function( link ){
-          return '<a target="_blank" href="' + link.url + '">' + link.name + '</a>';
+          return '<pre><span class="inner-pre" style="font-size: 10px">'+link.name+'</span></pre>';
         }).join('<br />\n'),
         position: {
           my: 'top center',
-          at: 'bottom center'
+          at: 'middle center'
         },
         style: {
-          classes: 'qtip-bootstrap',
+          classes: 'ui-tooltip',
           tip: {
             width: 16,
-            height: 8
+            height: 30
           }
         }
       });

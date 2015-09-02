@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.workspace
 import java.util.UUID
 
 import akka.actor.{ActorRef, Actor, Props}
-import com.tinkerpop.blueprints.{Vertex, Direction}
+import com.tinkerpop.blueprints.impls.orient.{OrientVertex, OrientGraph}
+import com.tinkerpop.blueprints.{Edge, Vertex, Direction}
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.pipes.branch.LoopPipe
@@ -148,16 +149,42 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           }
         }
 
+        // get all vertexes off the workspace
         val rootVertexes = new GremlinPipeline(workspaceVertex).out().toList
 
+        // get all the sub-graphs from these vertexes and also include the workspace vertex for the full workspace graph
         val vertexes = (rootVertexes map { v =>
           val topLevelEntities = new GremlinPipeline(v).out().iterator().toList
           val remainingEntities = new GremlinPipeline(v).out().as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().toList
           topLevelEntities ::: remainingEntities ++ Seq(v)
         } flatten).distinct :+ workspaceVertex
 
-        val data = GraphVizDataTransform.createData(vertexes)
-        RequestComplete(data)
+        val nodesData = vertexes map { v=>
+          val nameVal = Option(v.getProperty("name")).getOrElse {
+            val inEdges = Option(v.getEdges(Direction.IN))
+            inEdges match {
+              case Some(es) => es.headOption match {
+                case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
+                case _ => "unknown"
+              }
+              case _ => "unknown"
+            }}
+          GraphVizObject(GraphVizData(id=v.getId.toString,
+            clazz=v.asInstanceOf[OrientVertex].getRecord.getClassName,
+            attributes=v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
+            name=(v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),
+            group = "nodes")
+        } toSeq
+
+        val edges = vertexes map {v => (v.getEdges(Direction.OUT)) toSeq} flatten
+        val edgeData = edges map{ e=>
+          GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel, clazz="Edge",
+            attributes=e.getPropertyKeys.map(k => (k -> e.getProperty(k).toString)) toMap,
+            source = Some(e.getVertex(Direction.OUT).getId.toString), target = Some(e.getVertex(Direction.IN).getId.toString)),
+            group = "edges")
+        } toSeq
+
+        RequestComplete(nodesData ++ edgeData)
       }
     }
 
