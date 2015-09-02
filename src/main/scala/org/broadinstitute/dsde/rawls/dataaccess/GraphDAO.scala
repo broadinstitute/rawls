@@ -271,16 +271,24 @@ trait GraphDAO {
   }
 
   def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+    //Bit of a hack: always make sure that the idField is the first thing to be serialized.
+    //This makes sure that half-serialized objects are always findable even if they didn't save successfully.
+    saveProperty(tpe, obj.idField, getDomainObjectIdField(tpe, obj), vertex, wsc, graph)
+
     //Serialize out each of the case class properties.
     getPropertiesAndValues(tpe, obj).foreach({
       case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph)
     })
   }
 
-  private def removeDomainObjectFilterFn(tpe: Type, obj: DomainObject)(vertex: Vertex): Boolean = {
+  private def getDomainObjectIdField(tpe: Type, obj: DomainObject): String = {
     val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
     val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
-    vertex.getProperty(obj.idField) == mirror.reflect(obj).reflectField(idFieldSym).get
+    mirror.reflect(obj).reflectField(idFieldSym).get.asInstanceOf[String]
+  }
+
+  private def domainObjectFilterFn(tpe: Type, obj: DomainObject)(vertex: Vertex): Boolean = {
+    getDomainObjectIdField(tpe, obj) == vertex.getProperty(obj.idField)
   }
 
   def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
@@ -288,8 +296,23 @@ trait GraphDAO {
   }
 
   def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
-    removeProperty(propName, vertex, graph, removeDomainObjectFilterFn(tpe, obj))
+    //Preserve references into this vertex. List of (vertex, edgeLabel).
+    val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
+      .filter( subV => domainObjectFilterFn(tpe, obj)(subV) ) //only our actual object
+      .map({ subObj =>
+        subObj.getEdges(Direction.IN)
+          .filter( e => EdgeSchema.getEdgeRelation(e.getLabel) == EdgeSchema.Ref )
+          .map( e => ( e.getVertex(Direction.OUT), EdgeSchema.stripEdgeRelation(e.getLabel) ) ).toList
+    }).flatten
+
+    removeProperty(propName, vertex, graph, domainObjectFilterFn(tpe, obj))
     val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
+
+    //Restore vertex references.
+    referencers.map { case (refVtx, label) =>
+      addEdge(refVtx, EdgeSchema.Ref, label, objVert )
+    }
+
     addEdge(vertex, EdgeSchema.Own, propName, objVert)
     saveObject(tpe, obj, objVert, wsc, graph)
     objVert

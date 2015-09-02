@@ -12,6 +12,8 @@ import scala.collection.JavaConverters._
 
 import org.broadinstitute.dsde.rawls.model.AttributeConversions._
 
+import scala.util.Try
+
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   def loadEntity(entity: Vertex) = {
@@ -99,6 +101,13 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def cloneEntities(destWorkspaceContext: WorkspaceContext, entities: Seq[Entity], txn: RawlsTransaction) = txn withGraph { db =>
-    entities.map( e => save(destWorkspaceContext, e, txn) )
+    entities
+      //1. Attempt to save each entity. This will make a vertex for each entity, but might fail after that
+      //if a referenced entity is later in the Seq and hasn't been created yet.
+      .map({ e => (e, Try(save(destWorkspaceContext, e, txn))) })
+      //2. Collect the failures.
+      .filter({ case (e, t) => t.isFailure })
+      //3. Since there's now a vertex for each entity, all references can now be found and resaving the failures will now succeed.
+      .map({ case (e, t) => save(destWorkspaceContext, e, txn) })
   }
 }

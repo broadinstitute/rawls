@@ -161,6 +161,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
+    val submission3 = createTestSubmission(workspace, methodConfig2, pair1, Seq(pair1))
 
     val submissionTerminateTest = Submission("submissionTerminate",testDate, "testUser",methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
       Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
@@ -200,6 +201,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         submissionDAO.save(context, submissionTerminateTest, txn)
         submissionDAO.save(context, submission1, txn)
         submissionDAO.save(context, submission2, txn)
+        submissionDAO.save(context, submission3, txn)
       }
     }
   }
@@ -217,9 +219,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   def withDefaultTestDatabase(testCode:DataSource => Any):Unit = {
     withCustomTestDatabase(testData)(testCode)
   }
-  def withCustomTestDatabase(data:TestData)(testCode:DataSource => Any):Unit = {
+  def withCustomTestDatabase(data:TestData, lwEdges:Boolean = true)(testCode:DataSource => Any):Unit = {
     val dbName = UUID.randomUUID.toString
-    val dataSource = DataSource("memory:"+dbName, "admin", "admin")
+    val dataSource = DataSource("memory:"+dbName, "admin", "admin", lwEdges)
     val graph = new OrientGraph("memory:"+dbName)
 
     // do this twice to make sure it is idempotent
@@ -237,7 +239,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     graph.shutdown()
   }
 
-  def withWorkspaceContext(workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => Any) = {
+  def withWorkspaceContext[T](workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {
     val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException("WHAT THE F"))
     testCode(workspaceContext)
   }

@@ -150,7 +150,10 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           daoCycles.save(originalContext, c3, txn)
           daoCycles.cloneAllEntities(originalContext, cloneContext, txn)
 
-          assertResult(dao.listEntitiesAllTypes(originalContext, txn).toSet) {
+          assertResult(Set(c1, c2, c3)) {
+            dao.listEntitiesAllTypes(originalContext, txn).toSet
+          }
+          assertResult(Set(c1, c2, c3)) {
             dao.listEntitiesAllTypes(cloneContext, txn).toSet
           }
         }
@@ -158,33 +161,49 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
-  it should "save updates to an existing entity" in withDefaultTestDatabase { dataSource =>
+  it should "save updates to an existing entity" in withCustomTestDatabase(testData, lwEdges=false) { dataSource =>
     dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>
-        // flip case / control and add property, remove a property
-        val pair1Updated = Entity("pair1", "Pair",
-          Map(
-            "isItAPair" -> AttributeBoolean(true),
-            "case" -> AttributeEntityReference("Sample", "sample2"),
-            "control" -> AttributeEntityReference("Sample", "sample1")))
-        dao.save(context, pair1Updated, txn)
         txn.withGraph { graph =>
-          val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
+          val numEdges = graph.getEdges.size
+          val numVerts = graph.getVertices.size
+
+          // flip case / control and add property, remove a property
+          val pair1Updated = Entity("pair1", "Pair",
+            Map(
+              "isItAPair" -> AttributeBoolean(true),
+              "case" -> AttributeEntityReference("Sample", "sample2"),
+              "control" -> AttributeEntityReference("Sample", "sample1")))
+          dao.save(context, pair1Updated, txn)
+
           assert {
+            val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
             fetched.getVertices(Direction.OUT).head.getPropertyKeys.contains("isItAPair")
           }
-          // TODO check edges?
-        }
 
-        val pair1UpdatedAgain = Entity("pair1", "Pair",
-          Map(
-            "case" -> AttributeEntityReference("Sample", "sample2"),
-            "control" -> AttributeEntityReference("Sample", "sample1")))
-        dao.save(context, pair1UpdatedAgain, txn)
-        txn.withGraph { graph =>
-          val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
+          //Make sure we haven't lost any edges or vertices in the process.
+          assertResult(numEdges) {
+            graph.getEdges.size
+          }
+          assertResult(numVerts) {
+            graph.getVertices.size
+          }
+
+          val pair1UpdatedAgain = Entity("pair1", "Pair",
+            Map(
+              "case" -> AttributeEntityReference("Sample", "sample2"),
+              "control" -> AttributeEntityReference("Sample", "sample1")))
+          dao.save(context, pair1UpdatedAgain, txn)
+
           assert {
+            val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
             !fetched.getPropertyKeys.contains("isItAPair")
+          }
+          assertResult(numEdges) {
+            graph.getEdges.size
+          }
+          assertResult(numVerts) {
+            graph.getVertices.size
           }
         }
       }
