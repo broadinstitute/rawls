@@ -140,7 +140,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def getVisData(dataSource: DataSource, workspaceName:WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { db =>
-        withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
+//        withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
           val graphWorkspaceDAO = new GraphWorkspaceDAO()
           val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, workspaceName).get
 
@@ -189,7 +189,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           RequestComplete(nodesData ++ edgeData)
         }
       }
-    }
+//    }
 
   def registerUser(callbackPath: String): PerRequestMessage = {
     RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
