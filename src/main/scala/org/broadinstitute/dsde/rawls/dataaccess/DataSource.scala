@@ -16,17 +16,17 @@ object DataSource {
     new DataSource(factory)
   }
 
-  def apply(url: String, user: String, password: String) = {
-    val factory: OrientGraphFactory = createFactory(url, user, password)
+  def apply(url: String, user: String, password: String, lwEdges:Boolean=true) = {
+    val factory: OrientGraphFactory = createFactory(url, user, password, lwEdges)
     new DataSource(factory)
   }
 
-  def createFactory(url: String, user: String, password: String): OrientGraphFactory = {
+  def createFactory(url: String, user: String, password: String, lwEdges:Boolean=true): OrientGraphFactory = {
     val factory = new OrientGraphFactory(url, user, password)
     factory.setThreadMode(THREAD_MODE.MANUAL)
     factory.setAutoStartTx(false)
     factory.setUseClassForEdgeLabel(false)
-    factory.setUseLightweightEdges(true)
+    factory.setUseLightweightEdges(lwEdges)
     factory
   }
 }

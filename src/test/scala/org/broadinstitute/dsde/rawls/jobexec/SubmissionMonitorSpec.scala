@@ -45,7 +45,29 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  ignore should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
+  it should "transition nicely without actor shenanigans" in withDefaultTestDatabase { dataSource =>
+    dataSource inTransaction { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        testData.submission1.workflows.map { wf =>
+          containerDAO.workflowDAO.update(context, testData.submission1.submissionId, wf.copy(status=WorkflowStatuses.Running), txn)
+        }
+        val runningSub = containerDAO.submissionDAO.get(context, testData.submission1.submissionId, txn).get
+        assertResult( true ) {
+          runningSub.workflows.forall( _.status == WorkflowStatuses.Running )
+        }
+
+        runningSub.workflows.map { wf =>
+          containerDAO.workflowDAO.update(context, runningSub.submissionId, wf.copy(status=WorkflowStatuses.Succeeded), txn)
+        }
+        val succeededSub = containerDAO.submissionDAO.get(context, runningSub.submissionId, txn).get
+        assertResult( true ) {
+          succeededSub.workflows.forall( _.status == WorkflowStatuses.Succeeded )
+        }
+      }
+    }
+  }
+
+  it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
@@ -53,11 +75,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
     }
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        awaitCond(submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running), 15 seconds)
+    awaitCond( {
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
+          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
+        }
       }
-    }
+    }, 15 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
