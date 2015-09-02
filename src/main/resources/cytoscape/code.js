@@ -28,58 +28,58 @@ $(function(){ // on dom ready
 
 
   function loadViz(data) {
-  // use to get test data to paste into the fake data section above
-  //    console.log(JSON.stringify(data));
+    // use to get test data to paste into the fake data section above
+    //    console.log(JSON.stringify(data));
 
-var cy = cytoscape({
-  container: document.getElementById('cy'),
+    var cy = cytoscape({
+      container: document.getElementById('cy'),
 
-  style: cytoscape.stylesheet()
-    .selector('node')
-      .css({
-        'background-color': '#bbbbbb',
-        "border-width":"2",
-        "border-color":"#000",
-        "border-opacity":"0.2",
-        'content': 'data(name)',
-        "text-valign":"center",
-        "text-halign":"center"
-      })
-      .selector('node[clazz=\"Workspace\"]')
-        .css({
-          'background-color': '#FF0000',
-        })
-      .selector('node[clazz=\"Entity\"]')
-        .css({
-          'background-color': '#00FF00',
-        })
-      .selector('node[clazz=\"Map\"]')
-        .css({
-          'background-color': '#61bffc',
-        })
-    .selector('edge')
-      .css({
-        'target-arrow-shape': 'triangle',
-        'width': 4,
-        'line-color': '#ddd',
-        'content': 'data(name)',
-        'target-arrow-color': '#aaa',
-        'edge-text-rotation': 'autorotate',
-        "font-style": "italic",
-        "font-size":"11px",
-        "text-outline-color":"#555"
-      })
-    .selector('.highlighted')
-      .css({
-        'background-color': '#61bffc',
-        'line-color': '#61bffc',
-        'target-arrow-color': '#61bffc',
-        'transition-property': 'background-color, line-color, target-arrow-color',
-        'transition-duration': '0.5s'
-      }),
+      style: cytoscape.stylesheet()
+        .selector('node')
+          .css({
+            'background-color': '#bbbbbb',
+            "border-width":"2",
+            "border-color":"#000",
+            "border-opacity":"0.2",
+            'content': 'data(name)',
+            "text-valign":"center",
+            "text-halign":"center"
+          })
+          .selector('node[clazz=\"Workspace\"]')
+            .css({
+              'background-color': '#FF0000',
+            })
+          .selector('node[clazz=\"Entity\"]')
+            .css({
+              'background-color': '#00FF00',
+            })
+          .selector('node[clazz=\"Map\"]')
+            .css({
+              'background-color': '#61bffc',
+            })
+        .selector('edge')
+          .css({
+            'target-arrow-shape': 'triangle',
+            'width': 4,
+            'line-color': '#ddd',
+            'content': 'data(name)',
+            'target-arrow-color': '#aaa',
+            'edge-text-rotation': 'autorotate',
+            "font-style": "italic",
+            "font-size":"11px",
+            "text-outline-color":"#555"
+          })
+        .selector('.highlighted')
+          .css({
+            'background-color': '#61bffc',
+            'line-color': '#61bffc',
+            'target-arrow-color': '#61bffc',
+            'transition-property': 'background-color, line-color, target-arrow-color',
+            'transition-duration': '0.5s'
+          }),
 
-  elements: data,
-});
+      elements: data,
+    });
 
     var params = {
       name: 'breadthfirst',
@@ -147,19 +147,19 @@ var cy = cytoscape({
       });
     });
 
-  cy.on('mousemove','node', function(event){
-                    var target = event.cyTarget;
-                    var sourceName = target.data("source");
-                    var targetName = target.data("target");
+    cy.on('mousemove','node', function(event){
+                      var target = event.cyTarget;
+                      var sourceName = target.data("source");
+                      var targetName = target.data("target");
 
-                    var x=event.cyPosition.x;
-                    var y=event.cyPosition.y;
-   });
+                      var x=event.cyPosition.x;
+                      var y=event.cyPosition.y;
+     });
 
-    $('#config-toggle').on('click', function(){
-      $('#config').toggleClass('config-closed');
-    });
-  }
+      $('#config-toggle').on('click', function(){
+        $('#config').toggleClass('config-closed');
+      });
+    }
 }); // on dom ready
 
 $(function() {
