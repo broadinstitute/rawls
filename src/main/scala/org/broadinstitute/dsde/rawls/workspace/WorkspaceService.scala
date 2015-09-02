@@ -140,51 +140,54 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
   def getVisData(dataSource: DataSource, workspaceName:WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       txn withGraph { db =>
-        val graphWorkspaceDAO = new GraphWorkspaceDAO()
-        val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, workspaceName).get
+        withWorkspaceContextAndPermissions(workspaceName, GCSAccessLevel.Read, txn) { workspaceContext =>
+          val graphWorkspaceDAO = new GraphWorkspaceDAO()
+          val workspaceVertex = graphWorkspaceDAO.getWorkspaceVertex(db, workspaceName).get
 
-        def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
-          override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = {
-            true
+          def emitAll = new PipeFunction[LoopPipe.LoopBundle[Vertex], java.lang.Boolean] {
+            override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = {
+              true
+            }
           }
-        }
 
-        // get all vertexes off the workspace
-        val rootVertexes = new GremlinPipeline(workspaceVertex).out().toList
+          // get all vertexes off the workspace
+          val rootVertexes = new GremlinPipeline(workspaceVertex).out().toList
 
-        // get all the sub-graphs from these vertexes and also include the workspace vertex for the full workspace graph
-        val vertexes = (rootVertexes map { v =>
-          val topLevelEntities = new GremlinPipeline(v).out().iterator().toList
-          val remainingEntities = new GremlinPipeline(v).out().as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().toList
-          topLevelEntities ::: remainingEntities ++ Seq(v)
-        } flatten).distinct :+ workspaceVertex
+          // get all the sub-graphs from these vertexes and also include the workspace vertex for the full workspace graph
+          val vertexes = (rootVertexes map { v =>
+            val topLevelEntities = new GremlinPipeline(v).out().iterator().toList
+            val remainingEntities = new GremlinPipeline(v).out().as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).iterator().toList
+            topLevelEntities ::: remainingEntities ++ Seq(v)
+          } flatten).distinct :+ workspaceVertex
 
-        val nodesData = vertexes map { v=>
-          val nameVal = Option(v.getProperty("name")).getOrElse {
-            val inEdges = Option(v.getEdges(Direction.IN))
-            inEdges match {
-              case Some(es) => es.headOption match {
-                case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
+          val nodesData = vertexes map { v =>
+            val nameVal = Option(v.getProperty("name")).getOrElse {
+              val inEdges = Option(v.getEdges(Direction.IN))
+              inEdges match {
+                case Some(es) => es.headOption match {
+                  case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
+                  case _ => "unknown"
+                }
                 case _ => "unknown"
               }
-              case _ => "unknown"
-            }}
-          GraphVizObject(GraphVizData(id=v.getId.toString,
-            clazz=v.asInstanceOf[OrientVertex].getRecord.getClassName,
-            attributes=v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
-            name=(v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),
-            group = "nodes")
-        } toSeq
+            }
+            GraphVizObject(GraphVizData(id = v.getId.toString,
+              clazz = v.asInstanceOf[OrientVertex].getRecord.getClassName,
+              attributes = v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
+              name = (v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),
+              group = "nodes")
+          } toSeq
 
-        val edges = vertexes map {v => (v.getEdges(Direction.OUT)) toSeq} flatten
-        val edgeData = edges map{ e=>
-          GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel, clazz="Edge",
-            attributes=e.getPropertyKeys.map(k => (k -> e.getProperty(k).toString)) toMap,
-            source = Some(e.getVertex(Direction.OUT).getId.toString), target = Some(e.getVertex(Direction.IN).getId.toString)),
-            group = "edges")
-        } toSeq
+          val edges = vertexes map { v => (v.getEdges(Direction.OUT)) toSeq } flatten
+          val edgeData = edges map { e =>
+            GraphVizObject(GraphVizData(id = e.getId.toString, name = e.getLabel, clazz = "Edge",
+              attributes = e.getPropertyKeys.map(k => (k -> e.getProperty(k).toString)) toMap,
+              source = Some(e.getVertex(Direction.OUT).getId.toString), target = Some(e.getVertex(Direction.IN).getId.toString)),
+              group = "edges")
+          } toSeq
 
-        RequestComplete(nodesData ++ edgeData)
+          RequestComplete(nodesData ++ edgeData)
+        }
       }
     }
 
