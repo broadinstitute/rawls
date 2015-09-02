@@ -9,7 +9,7 @@ import com.tinkerpop.pipes.{Pipe, PipeFunction}
 import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.dataaccess.{EdgeSchema, WorkspaceContext, VertexSchema, GraphEntityDAO}
 import org.broadinstitute.dsde.rawls.expressions
-import org.broadinstitute.dsde.rawls.model.{Entity, AttributeConversions, AttributeValue, Workspace}
+import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 import scala.util.{Try, Failure, Success}
 import scala.util.parsing.combinator
@@ -76,6 +76,10 @@ class ExpressionParser extends JavaTokenParsers {
     rootDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
       case root ~ Nil ~ last => PipelineQuery(List(root), last)
       case root ~ ref ~ last => PipelineQuery(List(root) ++ ref, last)
+    } |
+    workspaceDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
+      case workspace ~ Nil ~ last => PipelineQuery(List(workspace), last)
+      case workspace ~ ref ~ last => PipelineQuery(List(workspace) ++ ref, last)
     }
   }
 
@@ -87,6 +91,10 @@ class ExpressionParser extends JavaTokenParsers {
     rootDot ~ rep(entityRefDot) ~ entityRef ^^ {
       case root ~ Nil ~ last => PipelineQuery(List(root) :+ last, outputEntityResult)
       case root ~ ref ~ last => PipelineQuery(List(root) ++ ref :+ last, outputEntityResult)
+    } |
+    workspaceDot ~ rep(entityRefDot) ~ entityRef ^^ {
+      case workspace ~ Nil ~ last => PipelineQuery(List(workspace) :+ last, outputEntityResult)
+      case workspace ~ ref ~ last => PipelineQuery(List(workspace) ++ ref :+ last, outputEntityResult)
     }
   }
 
@@ -97,6 +105,10 @@ class ExpressionParser extends JavaTokenParsers {
   // root followed by dot meaning it is to be followed by refs or attributes
   private def rootDot: Parser[PipeFunc] =
     "this." ^^ { _ => rootFunc}
+
+  // workspace followed by dot meaning it is to be followed by attributes
+  private def workspaceDot: Parser[PipeFunc] =
+    "workspace." ^^ { _ => workspaceFunc}
 
   // an entity reference as the final attribute in an expression
   private def entityRef: Parser[PipeFunc] =
@@ -149,6 +161,11 @@ class ExpressionParser extends JavaTokenParsers {
       // TODO make this less prone to breaking when our graph structure changes
       s"""new GremlinPipeline(workspace).out(EdgeSchema.Own.toLabel(${context.rootType})).filter(entityFunc)"""
     )
+  }
+
+  // the workspace function starts the pipeline at the workspace itself
+  private def workspaceFunc(context: ExpressionContext, graphPipeline: PipeType): PipeResult = {
+    PipeResult(graphPipeline, "new GremlinPipeline(workspace)")
   }
 
   // add pipe to an entity referenced by the current entity
