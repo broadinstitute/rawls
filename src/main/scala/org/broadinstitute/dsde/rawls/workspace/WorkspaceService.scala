@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionValidationReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.AttributeConversions
@@ -676,8 +677,12 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
             withEntity(workspaceContext, entityType, entityName, txn) { entity =>
               withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, authCookie) { method =>
                 withWdl(method) { wdl =>
-                  // TODO should we return OK even if there are validation errors?
-                  RequestComplete(StatusCodes.OK, MethodConfigResolver.getValidationErrors(workspaceContext, methodConfig, entity, wdl, txn))
+                  MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
+                    case Left(failures) => RequestComplete(StatusCodes.OK, failures)
+                    case Right(unpacked) =>
+                      val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), authCookie)
+                      RequestComplete(StatusCodes.OK, idation)
+                  }
                 }
               }
             }
@@ -694,7 +699,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): PerRequestMessage =
-    withDataSourceAndWorkspaceContextAndPermissionsAndMethodConfigAndMethodAndWdlAndSubmissionEntities(workspaceName,submissionRequest) {
+    withSubmissionParameters(workspaceName,submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
         //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
         val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, userInfo.authCookie, txn))
@@ -717,9 +722,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): PerRequestMessage =
-    withDataSourceAndWorkspaceContextAndPermissionsAndMethodConfigAndMethodAndWdlAndSubmissionEntities(workspaceName,submissionRequest) {
+    withSubmissionParameters(workspaceName,submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
-        val resolvedInputs = jobEntities map{ entity => entity -> MethodConfigResolver.resolveInputs(workspaceContext,methodConfig,entity,wdl,txn) }
+        val resolvedInputs = jobEntities map{ entity => entity -> MethodConfigResolver.resolveInputs(workspaceContext,methodConfig,entity,wdl) }
         val (goodEntMap, badEntMap) = resolvedInputs partition{ case (entity,inputMap) => inputMap.values.forall(_.isSuccess) }
         val methodConfigInputs = methodConfig.inputs.toSeq.map{ case (wdlName,attr) => SubmissionValidationInput(wdlName,attr.value) }
         val header = SubmissionValidationHeader(methodConfig.rootEntityType,methodConfigInputs)
@@ -889,15 +894,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, authCookie: HttpCookie, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
-    val inputs = MethodConfigResolver.resolveInputs(workspaceContext, methodConfig, entity, wdl, txn)
-    val successes = inputs collect { case (key, Success(value)) => (key, value) }
-    val failures = inputs collect { case (key, Failure(regret)) => AttributeString(regret.getMessage) }
-    if (failures.isEmpty ) {
-      val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(successes), authCookie)
-      Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType)))
-    }
-    else {
-      Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.toSeq))
+    MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
+      case Left(failures) => Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.map(AttributeString(_))))
+      case Right(inputs) =>
+        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), authCookie)
+        Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType)))
     }
   }
 
@@ -933,7 +934,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def withDataSourceAndWorkspaceContextAndPermissionsAndMethodConfigAndMethodAndWdlAndSubmissionEntities(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
+  private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
    ( op: (RawlsTransaction, WorkspaceContext, MethodConfiguration, AgoraEntity, String, Seq[Entity]) => PerRequestMessage): PerRequestMessage = {
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
@@ -950,7 +951,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 }
-
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
