@@ -145,6 +145,7 @@ class HttpGoogleCloudStorageDAO(
         //Google returns 409 Conflict if the bucket isn't empty.
         case Failure(gjre: GoogleJsonResponseException) if gjre.getDetails.getCode == 409 =>
           system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds)(bucketDeleteFn)
+        case _ =>
         //TODO: I am entirely unsure what other cases might want to be handled here.
         //404 means the bucket is already gone, which is fine.
         //Success is also fine, clearly.
