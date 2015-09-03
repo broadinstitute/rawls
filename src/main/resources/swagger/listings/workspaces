@@ -163,10 +163,10 @@
 				"message": "Successful Request"
 			}, {
 				"code": 400,
-				"message": "Attribute does not exists or is of an unexpected type"
+				"message": "Attribute does not exist or is of an unexpected type"
 			}, {
 				"code": 404,
-				"message": "Workspace does not exists"
+				"message": "Workspace does not exist"
 			}, {
 				"code": 500,
 				"message": "Rawls Internal Error"
@@ -198,12 +198,44 @@
 				"message": "Successful Request"
 			}, {
 				"code": 404,
-				"message": "Workspace does not exists"
+				"message": "Workspace does not exist"
 			}, {
 				"code": 500,
 				"message": "Rawls Internal Error"
 			}]
-		}]
+		}, {
+            "method": "DELETE",
+            "summary": "Delete workspace",
+            "notes": "",
+            "type": "void",
+            "nickname": "delete workspace",
+            "produces": ["application/json"],
+            "parameters": [{
+                "name": "workspaceNamespace",
+                "description": "Workspace Namespace",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }, {
+                "name": "workspaceName",
+                "description": "Workspace Name",
+                "required": true,
+                "type": "string",
+                "paramType": "path",
+                "allowMultiple": false
+            }],
+            "responseMessages": [{
+                "code": 202,
+                "message": "Request Accepted"
+            }, {
+                "code": 404,
+                "message": "Workspace does not exist"
+            }, {
+                "code": 500,
+                "message": "Rawls Internal Error"
+            }]
+        }]
 	}, {
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/clone",
 		"operations": [{
