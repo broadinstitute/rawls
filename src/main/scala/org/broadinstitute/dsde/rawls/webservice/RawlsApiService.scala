@@ -26,7 +26,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   def actorRefFactory = context
   def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~
     get {
-      pathSingleSlash {
+      path("swagger") {
         getFromResource("swagger/index.html")
       } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
     }
