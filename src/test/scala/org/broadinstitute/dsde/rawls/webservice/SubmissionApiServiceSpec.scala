@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionRequestFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
@@ -28,10 +28,6 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
 
-  // these tokens won't work for login to remote services: that requires a password and is therefore limited to the integration test
-  def addOpenAmCookie(token: String) = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", token)))
-  def addMockOpenAmCookie = addOpenAmCookie("test_token")
-
   def actorRefFactory = system
 
   val mockServer = RemoteServicesMockServer()
@@ -46,7 +42,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
+  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -78,7 +74,6 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest("dsde","not there","Pattern","pattern1", None).toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -87,11 +82,9 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde-config","three_step","1"), MethodRepoMethod("dsde","three_step","1"))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None).toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -100,8 +93,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
                                          submissionEntity: Entity, submissionExpression: Option[String],
                                           services: TestApiService): Submission = {
       Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
-        addMockOpenAmCookie ~>
-        sealRoute(services.methodConfigRoutes) ~>
+          sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -110,16 +102,14 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
       val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
       Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, submissionRq.toJson.toString)) ~>
-        addMockOpenAmCookie ~>
-        sealRoute(services.submissionRoutes) ~>
+          sealRoute(services.submissionRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
           }
           val submission = responseAs[Submission]
           Get(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions/${submission.submissionId}") ~>
-            addMockOpenAmCookie ~>
-            sealRoute(services.submissionRoutes) ~>
+                  sealRoute(services.submissionRoutes) ~>
             check {
               assertResult(StatusCodes.OK) {
                 status
@@ -165,7 +155,6 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.submissionId}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
@@ -175,7 +164,6 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}
@@ -184,7 +172,6 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
@@ -12,14 +12,14 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 
-trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+trait WorkspaceApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   import spray.httpx.SprayJsonSupport._
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
-  val workspaceRoutes = userInfoFromCookie() { userInfo =>
+  val workspaceRoutes = requireUserInfo() { userInfo =>
     path("workspaces") {
       post {
         entity(as[WorkspaceRequest]) { workspace =>
@@ -68,7 +68,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with OpenAm
     } ~
     path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
       patch {
-        userInfoFromCookie() { userInfo =>
+        requireUserInfo() { userInfo =>
           entity(as[Array[WorkspaceACLUpdate]]) { aclUpdate =>
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
                                       WorkspaceService.UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate))

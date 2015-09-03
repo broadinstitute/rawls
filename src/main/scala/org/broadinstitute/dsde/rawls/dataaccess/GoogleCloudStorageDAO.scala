@@ -1,22 +1,16 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
-import org.broadinstitute.dsde.rawls.model.{WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
 
 trait GoogleCloudStorageDAO {
-  def getRawlsRedirectURI(callbackPath: String): String
+  def createBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit
 
-  def getGoogleRedirectURI(userId: String, callbackPath: String): String
+  def deleteBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit
 
-  def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit
+  def setupACL(userInfo: UserInfo, bucketName: String, workspaceName: WorkspaceName): Unit
 
-  def createBucket(ownerId: String, projectId: String, bucketName: String): Unit
-
-  def deleteBucket(ownerId: String, projectId: String, bucketName: String): Unit
-
-  def setupACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit
-
-  def teardownACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit
+  def teardownACL(bucketName: String, workspaceName: WorkspaceName): Unit
 
   def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL
 

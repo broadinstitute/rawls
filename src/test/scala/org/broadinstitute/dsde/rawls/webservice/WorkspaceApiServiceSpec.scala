@@ -10,16 +10,19 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.{UserInfoDirectives, MockUserInfoDirectives}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import spray.routing.HttpService
+import spray.routing.Directives._
+import spray.routing._
 import spray.testkit.ScalatestRouteTest
 import scala.collection.immutable.HashMap
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /**
@@ -29,10 +32,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
-
-  // these tokens won't work for login to remote services: that requires a password and is therefore limited to the integration test
-  def addOpenAmCookie(token: String) = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", token)))
-  def addMockOpenAmCookie = addOpenAmCookie("test_token")
 
   def actorRefFactory = system
 
@@ -48,7 +47,15 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
+  trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
+    val user: String
+    def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
+      // just return the cookie text as the common name
+      provide(UserInfo(user, OAuth2BearerToken("token"), 123))
+    }
+  }
+
+  case class TestApiService(dataSource: DataSource, user: String) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -63,8 +70,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
-  def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource)
+  def withApiServices(dataSource: DataSource, user: String = "test_token")(testCode: TestApiService => Any): Unit = {
+    val apiService = new TestApiService(dataSource, user)
     try {
       testCode(apiService)
     } finally {
@@ -75,6 +82,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
       withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def withTestDataApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
+    withDefaultTestDatabase { dataSource =>
+      withApiServices(dataSource, user)(testCode)
     }
   }
 
@@ -156,7 +169,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     )
 
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -180,7 +192,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "get a workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -199,7 +210,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -210,7 +220,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "delete a workspace" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted) {
@@ -225,7 +234,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -245,7 +253,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -253,7 +260,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
       }
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -261,7 +267,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
       }
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -269,7 +274,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
       }
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -280,7 +284,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -294,7 +297,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
 
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -312,7 +314,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   it should "copy a workspace if the source exists" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceName(namespace = testData.workspace.namespace, name = "test_copy")
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -344,7 +345,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 409 Conflict on copy if the destination already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -355,7 +355,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -364,7 +363,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 when requesting an ACL from a non-existent workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/xyzzy/plugh/acl") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -373,7 +371,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -382,7 +379,6 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -393,9 +389,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
-  it should "allow an owner-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow an owner-access user to get a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addOpenAmCookie("owner-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -404,9 +399,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a write-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow a write-access user to get a workspace" in withTestDataApiServicesAndUser("write-access") { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -415,9 +409,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a read-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "allow a read-access user to get a workspace" in withTestDataApiServicesAndUser("read-access") { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -426,9 +419,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a no-access user to get a workspace" in withTestDataApiServices { services =>
+  it should "not allow a no-access user to get a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
-      addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -439,9 +431,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
-  it should "allow an owner-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addOpenAmCookie("owner-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -450,9 +441,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a write-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser("write-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -461,9 +451,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a read-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser("read-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -472,9 +461,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a no-access user to update a workspace" in withTestDataApiServices { services =>
+  it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
-      addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -485,36 +473,32 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
-  it should "allow an owner-access user to update an ACL" in withTestDataApiServices { services =>
+  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser("owner-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addOpenAmCookie("owner-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
   }
 
-  it should "not allow a write-access user to update an ACL" in withTestDataApiServices { services =>
+  it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser("write-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addOpenAmCookie("write-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
-  it should "not allow a read-access user to update an ACL" in withTestDataApiServices { services =>
+  it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser("read-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addOpenAmCookie("read-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
-  it should "not allow a no-access user to update an ACL" in withTestDataApiServices { services =>
+  it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
-      addOpenAmCookie("no-access") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }

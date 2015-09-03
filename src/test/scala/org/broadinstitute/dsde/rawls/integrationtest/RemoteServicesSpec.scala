@@ -4,12 +4,12 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{GoogleAuthApiService, MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
+import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
 import spray.http.StatusCodes
 
 import scala.concurrent.duration._
 
-class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService {
+class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService {
   def actorRefFactory = system
 
   // setup workspace service
@@ -36,7 +36,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
   "RemoteServicesSpec" should "copy a method config from the method repo" ignore {
     // need to init workspace
     Post(s"/workspaces", httpJson(workspace)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -45,7 +45,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
       }
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoGood)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -54,7 +54,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
       }
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoGood)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -63,7 +63,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
       }
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoMissing)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -72,7 +72,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
       }
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoEmptyPayload)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -81,7 +81,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
       }
 
     Post(copyFromMethodRepoEndpoint, httpJson(methodRepoBadPayload)) ~>
-      addOpenAmCookie ~>
+      addSecurityHeaders ~>
       sealRoute(methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {

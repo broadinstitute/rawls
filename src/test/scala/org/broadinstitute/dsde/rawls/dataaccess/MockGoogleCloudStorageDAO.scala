@@ -22,19 +22,13 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
     }
   }
 
-  override def getRawlsRedirectURI(callbackPath: String): String = "http://localhost.broadinstitute.org:8080/"+callbackPath
+  override def createBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit = {}
 
-  override def getGoogleRedirectURI(userId: String, callbackPath: String): String = "https://google.com/other_stuff"
+  override def deleteBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit = {}
 
-  override def storeUser(userId: String, authCode: String, state: String, callbackPath: String): Unit = {}
+  override def setupACL(userInfo: UserInfo, bucketName: String, workspaceName: WorkspaceName): Unit = {}
 
-  override def createBucket(ownerId: String, projectId: String, bucketName: String): Unit = {}
-
-  override def deleteBucket(ownerId: String, projectId: String, bucketName: String): Unit = {}
-
-  override def setupACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit = {}
-
-  override def teardownACL(ownerId: String, bucketName: String, workspaceName: WorkspaceName): Unit = {}
+  override def teardownACL(bucketName: String, workspaceName: WorkspaceName): Unit = {}
 
   override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
     WorkspaceACL(mockPermissions)

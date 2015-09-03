@@ -8,28 +8,19 @@ import com.orientechnologies.orient.client.remote.OServerAdmin
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmClient, RawlsOpenAmConfig, StandardOpenAmDirectives}
+import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.vault.common.openam.OpenAMResponse.AuthenticateResponse
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpHeaders.Cookie
-import spray.http.{ContentTypes, HttpCookie, HttpEntity}
+import spray.http.HttpHeaders.{RawHeader, Cookie}
+import spray.http.{HttpHeader, ContentTypes, HttpCookie, HttpEntity}
 import spray.json.{JsonWriter, _}
 import spray.testkit.ScalatestRouteTest
 
-import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
 
-trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers with IntegrationTestConfig with StandardOpenAmDirectives {
+trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers with IntegrationTestConfig with StandardUserInfoDirectives {
   val timeoutDuration = new FiniteDuration(5, TimeUnit.SECONDS)
   implicit val timeout = Timeout(timeoutDuration)
-  val rawlsOpenAmClient = new RawlsOpenAmClient(new RawlsOpenAmConfig(openAmConfig))
-
-  def getOpenAmToken: Option[AuthenticateResponse] = {
-    Some(Await.result(rawlsOpenAmClient.authenticate, timeoutDuration))
-  }
-
-  lazy val openAmResponse = getOpenAmToken.get
 
   val containerDAO = GraphContainerDAO(
     new GraphWorkflowDAO(new GraphSubmissionDAO()),
@@ -39,8 +30,10 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     new GraphSubmissionDAO()
   )
 
-  def addOpenAmCookie: RequestTransformer = {
-    Cookie(HttpCookie("iPlanetDirectoryPro", openAmResponse.tokenId))
+  def addSecurityHeaders: RequestTransformer = {
+    addHeader(RawHeader("OIDC_access_token", "accesstoken")) ~>
+    addHeader(RawHeader("OIDC_access_token_expires", "123")) ~>
+    addHeader(RawHeader("OIDC_CLAIM_email", "foo@bar.com"))
   }
 
   // convenience methods - TODO add these to unit tests too?

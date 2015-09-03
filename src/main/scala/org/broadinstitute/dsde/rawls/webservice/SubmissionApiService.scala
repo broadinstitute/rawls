@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.httpx.SprayJsonSupport._
 import spray.routing._
@@ -10,12 +10,12 @@ import spray.routing._
 /**
  * Created by dvoet on 6/4/15.
  */
-trait SubmissionApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+trait SubmissionApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
-  val submissionRoutes = userInfoFromCookie() { userInfo =>
+  val submissionRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions" ) { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),

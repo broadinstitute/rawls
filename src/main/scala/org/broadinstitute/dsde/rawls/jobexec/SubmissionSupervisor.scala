@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Props, OneForOneStrategy, Actor}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
-import org.broadinstitute.dsde.rawls.model.{Submission,WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{UserInfo, Submission, WorkspaceName}
 import spray.http.HttpCookie
 
 import scala.concurrent.duration._
@@ -15,7 +15,7 @@ import scala.concurrent.duration._
 object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
-  case class SubmissionStarted(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie)
+  case class SubmissionStarted(workspaceName: WorkspaceName, submission: Submission, userInfo: UserInfo)
 
   def props(containerDAO: GraphContainerDAO,
             executionServiceDAO: ExecutionServiceDAO,
@@ -44,12 +44,12 @@ class SubmissionSupervisor(containerDAO: GraphContainerDAO,
   import context._
 
   override def receive = {
-    case SubmissionStarted(workspaceName, submission, authCookie) => startSubmissionMonitor(workspaceName, submission, authCookie)
+    case SubmissionStarted(workspaceName, submission, userInfo) => startSubmissionMonitor(workspaceName, submission, userInfo)
   }
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName, submission: Submission, authCookie: HttpCookie): Unit = {
+  private def startSubmissionMonitor(workspaceName: WorkspaceName, submission: Submission, userInfo: UserInfo): Unit = {
     actorOf(SubmissionMonitor.props(workspaceName, submission, containerDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, authCookie)), submission.submissionId)
+      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, userInfo)), submission.submissionId)
   }
 
   override val supervisorStrategy =

@@ -7,12 +7,10 @@ import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
-import com.google.api.client.util.store.FileDataStoreFactory
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmConfig, RawlsOpenAmClient}
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -39,8 +37,6 @@ object Boot extends App {
     val gcsDAO = new HttpGoogleCloudStorageDAO(
       false,
       gcsConfig.getString("secrets"),
-      gcsConfig.getString("dataStoreRoot"),
-      gcsConfig.getString("redirectBaseURL"),
       gcsConfig.getString("pathToP12"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
@@ -71,8 +67,7 @@ object Boot extends App {
                                                   containerDAO,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor),
-                    new RawlsOpenAmClient(new RawlsOpenAmConfig(conf.getConfig("openam")))),
+                                                  gcsDAO, submissionSupervisor)),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

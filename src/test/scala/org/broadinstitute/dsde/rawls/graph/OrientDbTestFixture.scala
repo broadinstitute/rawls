@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
+import spray.http.OAuth2BearerToken
 import scala.collection.immutable.HashMap
 import org.scalatest.BeforeAndAfterAll
 import java.util.UUID
@@ -20,6 +21,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   this : org.scalatest.BeforeAndAfterAll with org.scalatest.Suite =>
 
   val testDate = new DateTime()
+  val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123)
 
   override def beforeAll: Unit = {
     // TODO find a better way to set the log level. Nothing else seems to work.

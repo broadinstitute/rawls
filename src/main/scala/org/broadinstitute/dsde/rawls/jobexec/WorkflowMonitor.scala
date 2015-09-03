@@ -19,9 +19,9 @@ object WorkflowMonitor {
     containerDAO: GraphContainerDAO,
     executionServiceDAO: ExecutionServiceDAO,
     datasource: DataSource,
-    authCookie: HttpCookie)
+    userInfo: UserInfo)
     (parent: ActorRef, workspaceName: WorkspaceName, submission: Submission, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, containerDAO, executionServiceDAO, datasource, authCookie))
+    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, containerDAO, executionServiceDAO, datasource, userInfo))
   }
 }
 
@@ -34,7 +34,7 @@ object WorkflowMonitor {
  * @param containerDAO
  * @param executionServiceDAO
  * @param datasource
- * @param authCookie auth cookie required by executionServiceDAO
+ * @param userInfo userInfo required by executionServiceDAO
  */
 class WorkflowMonitor(parent: ActorRef,
                       pollInterval: Duration,
@@ -44,7 +44,7 @@ class WorkflowMonitor(parent: ActorRef,
                       containerDAO: GraphContainerDAO,
                       executionServiceDAO: ExecutionServiceDAO,
                       datasource: DataSource,
-                      authCookie: HttpCookie) extends Actor {
+                      userInfo: UserInfo) extends Actor {
   import context._
 
   setReceiveTimeout(pollInterval)
@@ -58,7 +58,7 @@ class WorkflowMonitor(parent: ActorRef,
     val refreshedWorkflow = containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), submission.submissionId, workflow.workflowId, txn).getOrElse(
       throw new RawlsException(s"workflow ${workflow} could not be found")
     )
-    val statusResponse = executionServiceDAO.status(workflow.workflowId, authCookie)
+    val statusResponse = executionServiceDAO.status(workflow.workflowId, userInfo)
     val status = WorkflowStatuses.withName(statusResponse.status)
 
     if (refreshedWorkflow.status != status) {
@@ -86,7 +86,7 @@ class WorkflowMonitor(parent: ActorRef,
   def onWorkflowSuccess(workflow: Workflow, completionStatus: WorkflowStatuses.WorkflowStatus, txn: RawlsTransaction): WorkflowStatusChange = {
     val workspaceContext = getWorkspaceContext(workspaceName, txn)
     withMethodConfig(workspaceContext, txn) { methodConfig =>
-      val outputs = executionServiceDAO.outputs(workflow.workflowId, authCookie).outputs
+      val outputs = executionServiceDAO.outputs(workflow.workflowId, userInfo).outputs
 
       val attributes = methodConfig.outputs.map { case (outputName, attributeName) =>
         Try {

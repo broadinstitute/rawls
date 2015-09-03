@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.model.UserInfo
-import org.broadinstitute.dsde.rawls.openam.{RawlsOpenAmClient, StandardOpenAmDirectives}
+import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
 import spray.routing.Directive.pimpApply
@@ -13,20 +13,20 @@ import spray.routing._
 import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, rawlsOpenAmClient: RawlsOpenAmClient): Props = {
-    Props(new RawlsApiServiceActor(workspaceServiceConstructor, rawlsOpenAmClient))
+  def props(workspaceServiceConstructor: UserInfo => WorkspaceService): Props = {
+    Props(new RawlsApiServiceActor(workspaceServiceConstructor))
   }
 }
 
-class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val rawlsOpenAmClient: RawlsOpenAmClient) extends Actor
-  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService
-  with StandardOpenAmDirectives {
+class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService) extends Actor
+  with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
+  with StandardUserInfoDirectives {
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ authRoutes ~ swaggerRoute ~
+  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~
     get {
-      pathSingleSlash {
+      path("swagger") {
         getFromResource("swagger/index.html")
       } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
     }

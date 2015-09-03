@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
@@ -28,10 +28,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
 
-  // these tokens won't work for login to remote services: that requires a password and is therefore limited to the integration test
-  def addOpenAmCookie(token: String) = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", token)))
-  def addMockOpenAmCookie = addOpenAmCookie("test_token")
-
   def actorRefFactory = system
 
   val mockServer = RemoteServicesMockServer()
@@ -46,7 +42,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
+  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -78,7 +74,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -92,7 +87,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
     val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, newSample.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -118,7 +112,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -130,7 +123,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -145,7 +137,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "return 204 when batch upserting an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -165,7 +156,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
     val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -184,7 +174,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -199,7 +188,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition("superDuperNewSample", "Samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -214,7 +202,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -232,7 +219,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on get entity" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -254,7 +240,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on list entity types" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -274,7 +259,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on list all samples" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -294,7 +278,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 404 on non-existing entity" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -305,7 +288,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on update entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -323,7 +305,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on remove attribute from entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -341,7 +322,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 404 on update to non-existing entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -352,7 +332,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -362,7 +341,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   }
   it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -372,7 +350,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   }
   it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample1.entityType}/${testData.sample1.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("somefoo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -383,7 +360,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 409 on entity rename when rename already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("sample1").toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -394,7 +370,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 204 on entity rename" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -412,7 +387,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/foox/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -430,7 +404,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 204 entity delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -447,7 +420,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   }
   it should "return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/s2_changed") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -458,7 +430,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -472,7 +443,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -492,7 +462,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
 
   it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
     Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2Request.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -506,8 +475,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         }
 
         Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
-          addMockOpenAmCookie ~>
-          sealRoute(services.entityRoutes) ~>
+              sealRoute(services.entityRoutes) ~>
           check {
             assertResult(StatusCodes.Created) {
               status
@@ -522,8 +490,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
             Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
-              addMockOpenAmCookie ~>
-              sealRoute(services.entityRoutes) ~>
+                      sealRoute(services.entityRoutes) ~>
               check {
                 assertResult(StatusCodes.Created) {
                   status
@@ -544,7 +511,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
     Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -556,7 +522,6 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
     val dotSample = Entity("sample.with.dots.in.name", "sample", Map("type" -> AttributeString("tumor")))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, dotSample.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
