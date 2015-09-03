@@ -7,10 +7,10 @@ import spray.http.HttpCookie
  * @author tsharpe
  */
 trait ExecutionServiceDAO {
-  def submitWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceStatus
-  def validateWorkflow( wdl: String, inputs: String, authCookie: HttpCookie ): ExecutionServiceValidation
-  def status(id: String, authCookie: HttpCookie): ExecutionServiceStatus
-  def outputs(id: String, authCookie: HttpCookie): ExecutionServiceOutputs
-  def logs(id: String, authCookie: HttpCookie): ExecutionServiceLogs
-  def abort(id: String, authCookie: HttpCookie): ExecutionServiceStatus
+  def submitWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceStatus
+  def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceValidation
+  def status(id: String, userInfo: UserInfo): ExecutionServiceStatus
+  def outputs(id: String, userInfo: UserInfo): ExecutionServiceOutputs
+  def logs(id: String, userInfo: UserInfo): ExecutionServiceLogs
+  def abort(id: String, userInfo: UserInfo): ExecutionServiceStatus
 }

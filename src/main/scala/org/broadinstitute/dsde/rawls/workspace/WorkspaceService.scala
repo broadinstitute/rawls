@@ -43,9 +43,6 @@ import scala.util.{Failure, Success, Try}
 
 object WorkspaceService {
   sealed trait WorkspaceServiceMessage
-  case class RegisterUser(callbackPath: String) extends WorkspaceServiceMessage
-  case class CompleteUserRegistration( authCode: String, state: String, callbackPath: String) extends WorkspaceServiceMessage
-
   case class CreateWorkspace(workspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -95,9 +92,6 @@ object WorkspaceService {
 class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef) extends Actor {
 
   override def receive = {
-    case RegisterUser(callbackPath) => context.parent ! registerUser(callbackPath)
-    case CompleteUserRegistration(authCode, state, callbackPath) => context.parent ! completeUserRegistration(authCode,state,callbackPath)
-
     case CreateWorkspace(workspace) => context.parent ! createWorkspace(workspace)
     case GetWorkspace(workspaceName) => context.parent ! getWorkspace(workspaceName)
     case DeleteWorkspace(workspaceName) => context.parent ! deleteWorkspace(workspaceName)
@@ -137,15 +131,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
   }
 
-  def registerUser(callbackPath: String): PerRequestMessage = {
-    RequestCompleteWithHeaders(StatusCodes.SeeOther,Location(gcsDAO.getGoogleRedirectURI(userInfo.userId, callbackPath)))
-  }
-
-  def completeUserRegistration(authCode: String, state: String, callbackPath: String): PerRequestMessage = {
-    gcsDAO.storeUser(userInfo.userId,authCode,state,callbackPath)
-    RequestComplete(StatusCodes.Created)
-  }
-
   private def createBucketName(workspaceName: String) = s"${workspaceName}-${UUID.randomUUID}"
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
@@ -154,16 +139,16 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         case Some(_) => PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
         case None =>
           val bucketName = createBucketName(workspaceRequest.name)
-          Try( gcsDAO.createBucket(userInfo.userId, workspaceRequest.namespace, bucketName) ) match {
+          Try( gcsDAO.createBucket(userInfo, workspaceRequest.namespace, bucketName) ) match {
             case Failure(err) =>
               RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
             case Success(_) =>
               Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name), bucketName) ) match {
                 case Failure(err) =>
-                  gcsDAO.deleteBucket(userInfo.userId, workspaceRequest.namespace, bucketName)
+                  gcsDAO.deleteBucket(userInfo, workspaceRequest.namespace, bucketName)
                   RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
                 case Success(_) =>
-                  val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name,bucketName,DateTime.now,userInfo.userId,workspaceRequest.attributes)
+                  val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name,bucketName,DateTime.now,userInfo.userEmail,workspaceRequest.attributes)
                   containerDAO.workspaceDAO.save(workspace, txn)
                   RequestCompleteWithLocation((StatusCodes.Created,workspace), workspace.toWorkspaceName.path)
               }
@@ -173,7 +158,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
     dataSource inTransaction { txn =>
-      gcsDAO.setupACL(userInfo.userId, bucketName, workspaceName)
+      gcsDAO.setupACL(userInfo, bucketName, workspaceName)
     }
 
   def getWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
@@ -195,11 +180,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
           //ExecutionContext run the futures whenever
           containerDAO.submissionDAO.list(workspaceContext, txn).flatMap(_.workflows).toList collect {
-            case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo.authCookie) }
+            case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
           }
 
-          gcsDAO.deleteBucket(userInfo.userId,workspaceContext.workspaceName.namespace,workspaceContext.bucketName)
-          gcsDAO.teardownACL(userInfo.userId,workspaceContext.bucketName, workspaceContext.workspaceName)
+          gcsDAO.deleteBucket(userInfo, workspaceContext.workspaceName.namespace, workspaceContext.bucketName)
+          gcsDAO.teardownACL(workspaceContext.bucketName, workspaceContext.workspaceName)
           containerDAO.workspaceDAO.delete(workspaceContext.workspaceName, txn)
 
           RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.bucketName} will be deleted within 24h.")
@@ -224,7 +209,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def listWorkspaces(dataSource: DataSource): PerRequestMessage =
     dataSource inTransaction { txn =>
       val response = for (
-        (workspaceName, accessLevel) <- gcsDAO.getWorkspaces(userInfo.userId);
+        (workspaceName, accessLevel) <- gcsDAO.getWorkspaces(userInfo.userEmail);
         workspaceContext <- containerDAO.workspaceDAO.loadContext(workspaceName, txn)
       ) yield {
         WorkspaceListResponse(accessLevel,
@@ -256,15 +241,15 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       (containerDAO.workspaceDAO.load(sourceWorkspaceName, txn), containerDAO.workspaceDAO.load(destWorkspaceName, txn)) match {
         case (Some(sourceWorkspace), None) => {
           val bucketName = createBucketName(destWorkspaceName.name)
-          Try( gcsDAO.createBucket(userInfo.userId, destWorkspaceName.namespace, bucketName) ) match {
+          Try( gcsDAO.createBucket(userInfo, destWorkspaceName.namespace, bucketName) ) match {
             case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspaceName}: "+err.getMessage)
             case Success(_) =>
               Try( setupWorkspaceGroupACLs(destWorkspaceName, bucketName) ) match {
                 case Failure(err) =>
-                  gcsDAO.deleteBucket(userInfo.userId, destWorkspaceName.namespace, bucketName)
+                  gcsDAO.deleteBucket(userInfo, destWorkspaceName.namespace, bucketName)
                   RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${destWorkspaceName}: " + err.getMessage)
                 case Success(_) =>
-                  val destWorkspace = containerDAO.workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userId, sourceWorkspace.attributes), txn)
+                  val destWorkspace = containerDAO.workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userEmail, sourceWorkspace.attributes), txn)
                   // now get the contexts. just call .get because it should be impossible to get None at this point
                   val sourceWorkspaceContext = containerDAO.workspaceDAO.loadContext(sourceWorkspaceName, txn).get
                   val destWorkspaceContext = containerDAO.workspaceDAO.loadContext(destWorkspaceName, txn).get
@@ -620,7 +605,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery): PerRequestMessage =
     dataSource inTransaction { txn =>
-      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo.authCookie) match {
+      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) match {
         case None => RequestComplete(StatusCodes.NotFound)
         case Some(entity) =>
           try {
@@ -659,7 +644,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): PerRequestMessage = {
-    val method = methodRepoDAO.getMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo.authCookie)
+    val method = methodRepoDAO.getMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo)
     if ( method.isEmpty ) RequestComplete(StatusCodes.NotFound,methodRepoMethod)
     else if ( method.get.payload.isEmpty ) RequestComplete(StatusCodes.BadRequest,"Empty payload.")
     else RequestComplete(MethodConfigResolver.toMethodConfiguration(method.get.payload.get,methodRepoMethod))
@@ -670,17 +655,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
    */
   def validateMethodConfig(workspaceName: WorkspaceName,
     methodConfigurationNamespace: String, methodConfigurationName: String,
-    entityType: String, entityName: String, authCookie: HttpCookie): PerRequestMessage = {
+    entityType: String, entityName: String, userInfo: UserInfo): PerRequestMessage = {
       dataSource inTransaction { txn =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-              withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, authCookie) { method =>
+              withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
                 withWdl(method) { wdl =>
                   MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
                     case Left(failures) => RequestComplete(StatusCodes.OK, failures)
                     case Right(unpacked) =>
-                      val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), authCookie)
+                      val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), userInfo)
                       RequestComplete(StatusCodes.OK, idation)
                   }
                 }
@@ -702,10 +687,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     withSubmissionParameters(workspaceName,submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
         //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
-        val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, userInfo.authCookie, txn))
+        val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, userInfo, txn))
         val newSubmission = Submission(submissionId = UUID.randomUUID().toString,
           submissionDate = DateTime.now(),
-          submitter = userInfo.userId,
+          submitter = userInfo.userEmail,
           methodConfigurationNamespace = methodConfig.namespace,
           methodConfigurationName = methodConfig.name,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
@@ -714,7 +699,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
 
         if (newSubmission.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, newSubmission, userInfo.authCookie)
+          submissionSupervisor ! SubmissionStarted(workspaceName, newSubmission, userInfo)
         }
 
         containerDAO.submissionDAO.save(workspaceContext, newSubmission, txn)
@@ -754,7 +739,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
           withSubmission(workspaceContext, submissionId, txn) { submission =>
             val aborts = submission.workflows.map( wf =>
-              Try(executionServiceDAO.abort(wf.workflowId, userInfo.authCookie)) match {
+              Try(executionServiceDAO.abort(wf.workflowId, userInfo)) match {
                 case Success(_) => Success(wf.workflowId)
                 //NOTE: Cromwell returns 403 Forbidden if you try to abort a workflow that's already in a terminal
                 //status. This is fine for our purposes, so we turn it into a Success.
@@ -802,8 +787,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           withWorkflow(workspaceContext.workspaceName, submission, workflowId) { workflow =>
 
             val mergedOutputs:Try[PerRequestMessage] = for {
-              outsRq <- Try(executionServiceDAO.outputs(workflowId, userInfo.authCookie))
-              logsRq <- Try(executionServiceDAO.logs(workflowId, userInfo.authCookie))
+              outsRq <- Try(executionServiceDAO.outputs(workflowId, userInfo))
+              logsRq <- Try(executionServiceDAO.logs(workflowId, userInfo))
             } yield mergeWorkflowOutputs(outsRq, logsRq, workflowId)
 
             mergedOutputs match {
@@ -837,7 +822,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   private def requireAccess(workspaceName: WorkspaceName, bucketName: String, requiredLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(codeBlock: => PerRequestMessage): PerRequestMessage = {
-    val userLevel = gcsDAO.getMaximumAccessLevel(userInfo.userId, workspaceName)
+    val userLevel = gcsDAO.getMaximumAccessLevel(userInfo.userEmail, workspaceName)
     if (userLevel >= requiredLevel) codeBlock
     else if (userLevel >= WorkspaceAccessLevel.Read) RequestComplete(http.StatusCodes.Forbidden, accessDeniedMessage(workspaceName))
     else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
@@ -864,9 +849,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: String, authCookie: HttpCookie)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
+  private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: String, userInfo: UserInfo)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
     // TODO add Method to model instead of exposing AgoraEntity?
-    methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, authCookie) match {
+    methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")
       case Some(agoraEntity) => op(agoraEntity)
     }
@@ -893,11 +878,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, authCookie: HttpCookie, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
+  private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, userInfo: UserInfo, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
     MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
       case Left(failures) => Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.map(AttributeString(_))))
       case Right(inputs) =>
-        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), authCookie)
+        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), userInfo)
         Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType)))
     }
   }
@@ -939,7 +924,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, txn) { methodConfig =>
-          withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo.authCookie) { agoraEntity =>
+          withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { agoraEntity =>
             withWdl(agoraEntity) { wdl =>
               withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, txn) { jobEntities =>
                 op(txn, workspaceContext, methodConfig, agoraEntity, wdl, jobEntities)

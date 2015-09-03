@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.model.AgoraEntity
+import org.broadinstitute.dsde.rawls.model.{UserInfo, AgoraEntity}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -15,11 +15,11 @@ import spray.httpx.SprayJsonSupport._
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorSystem ) extends MethodRepoDAO {
+class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorSystem ) extends MethodRepoDAO with DsdeHttpDAO {
 
-  private def getAgoraEntity( url: String, authCookie: HttpCookie ): Option[AgoraEntity] = {
+  private def getAgoraEntity( url: String, userInfo: UserInfo ): Option[AgoraEntity] = {
     import system.dispatcher
-    val pipeline = addHeader(Cookie(authCookie)) ~> sendReceive ~> unmarshal[AgoraEntity]
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[AgoraEntity]
     Try(Await.result(pipeline(Get(url)),Duration.Inf)) match {
       case Success(entity) => Option(entity)
       case Failure(notOK: UnsuccessfulResponseException) if StatusCodes.NotFound == notOK.response.status => None
@@ -27,11 +27,11 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorS
     }
   }
 
-  override def getMethodConfig( namespace: String, name: String, version: String, authCookie: HttpCookie ): Option[AgoraEntity] = {
-    getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",authCookie)
+  override def getMethodConfig( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity] = {
+    getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
   }
 
-  override def getMethod( namespace: String, name: String, version: String, authCookie: HttpCookie ): Option[AgoraEntity] = {
-    getAgoraEntity(s"${methodRepoServiceURL}/methods/${namespace}/${name}/${version}",authCookie)
+  override def getMethod( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity] = {
+    getAgoraEntity(s"${methodRepoServiceURL}/methods/${namespace}/${name}/${version}",userInfo)
   }
 }

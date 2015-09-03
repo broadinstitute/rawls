@@ -11,10 +11,9 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
-import spray.http.{StatusCode, StatusCodes, HttpCookie}
+import spray.http.{StatusCode, StatusCodes}
 import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
-import spray.http.HttpHeaders.Cookie
 
 import scala.concurrent.Await
 
@@ -28,8 +27,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def this() = this(ActorSystem("SubmissionSpec"))
 
   val testDbName = "SubmissionSpec"
-  val cookie = HttpCookie("iPlanetDirectoryPro", "test_token")
-  val userInfo = UserInfo("test_token", cookie)
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
   val subTestData = new SubmissionTestData()
 

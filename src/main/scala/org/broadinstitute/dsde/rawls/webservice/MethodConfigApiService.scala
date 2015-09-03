@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
@@ -10,7 +10,7 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 
-trait MethodConfigApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+trait MethodConfigApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -18,7 +18,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Ope
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
-  val methodConfigRoutes = userInfoFromCookie() { userInfo =>
+  val methodConfigRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "methodconfigs") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[MethodConfiguration]) { methodConfiguration =>

@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.MockOpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.Cookie
@@ -27,10 +27,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
 
-  // these tokens won't work for login to remote services: that requires a password and is therefore limited to the integration test
-  def addOpenAmCookie(token: String) = addHeader(Cookie(HttpCookie("iPlanetDirectoryPro", token)))
-  def addMockOpenAmCookie = addOpenAmCookie("test_token")
-
   def actorRefFactory = system
 
   val mockServer = RemoteServicesMockServer()
@@ -45,7 +41,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with GoogleAuthApiService with MockOpenAmDirectives {
+  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -80,7 +76,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
       MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodRepoMethod(testData.wsName.namespace, "method-a", "1"))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -101,7 +96,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -112,7 +106,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -133,7 +126,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -154,7 +146,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -172,7 +163,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}x") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -195,7 +185,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   it should "return 200 on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -216,7 +205,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, testData.methodConfig.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -227,7 +215,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 201 on copy method configuration" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairCreated.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -245,7 +232,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 409 on copy method configuration to existing name" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairConflict.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -256,7 +242,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 on copy method configuration from bogus source" in withTestDataApiServices { services =>
     Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairNotFound.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -269,7 +254,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoGood.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -288,7 +272,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
     val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", testData.methodConfigName)
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -299,7 +282,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 on copy method configuration from bogus source in method repo" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoMissing.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -310,7 +292,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 422 on copy method configuration when method repo payload is missing" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoEmptyPayload.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -321,7 +302,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 422 on copy method configuration when method repo payload is unparseable" in withTestDataApiServices { services =>
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoBadPayload.toJson.toString())) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -333,7 +313,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
     val method = MethodRepoMethod("dsde","three_step","1")
     Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
@@ -346,7 +325,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
     Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step","2").toJson.toString)) ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -355,7 +333,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -366,7 +343,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "list method Configuration" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
-      addMockOpenAmCookie ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

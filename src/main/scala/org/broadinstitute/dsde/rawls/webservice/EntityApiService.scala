@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.OpenAmDirectives
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
@@ -11,7 +11,7 @@ import spray.routing._
  * Created by dvoet on 6/4/15.
  */
 
-trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDirectives {
+trait EntityApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   lazy private implicit val executionContext = actorRefFactory.dispatcher
 
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -19,7 +19,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with OpenAmDir
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
-  val entityRoutes = userInfoFromCookie() { userInfo =>
+  val entityRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[Entity]) { entity =>
