@@ -177,9 +177,11 @@ class HttpGoogleCloudStorageDAO(
   override def getWorkspaces(userId: String): Seq[(WorkspaceName, WorkspaceAccessLevel)] = {
     val credential = getGroupServiceAccountCredential
     val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
-    val workspaceTuples = directory.groups().list().setUserKey(userId).execute().getGroups.map(g => deconstructGroupId(g.getEmail))
+    val groupsQuery = directory.groups().list().setUserKey(userId).execute()
 
-    workspaceTuples.toSeq
+    val workspaceGroups = Option(groupsQuery.getGroups).getOrElse(List.empty[Group].asJava)
+
+    workspaceGroups.map(g => deconstructGroupId(g.getEmail)).toSeq
   }
 
   override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
@@ -200,7 +202,10 @@ class HttpGoogleCloudStorageDAO(
   override def getOwners(workspaceName: WorkspaceName): Seq[String] = {
     val credential = getGroupServiceAccountCredential
     val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
-    directory.members.list(makeGroupId(workspaceName, WorkspaceAccessLevel.Owner)).execute().getMembers.map(_.getEmail)
+    //a workspace should always have an owner, but just in case for some reason it doesn't...
+    val ownersQuery = directory.members.list(makeGroupId(workspaceName, WorkspaceAccessLevel.Owner)).execute()
+
+    Option(ownersQuery.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
   }
 
   /**
