@@ -467,6 +467,11 @@ trait GraphDAO {
     loadProperty(typeOf[Seq[AttributeValue]], propName, vertex).asInstanceOf[Seq[T]]
   }
 
+  //type <:< RawlsEnumeration[_] seems to work inconsistently, so use this as a workaround
+  private def isRawlsEnum(tpe: Type): Boolean = {
+    tpe.baseClasses.contains(ru.typeOf[RawlsEnumeration[_]].typeSymbol)
+  }
+
   //Sneaky. The withName() method is defined in a sealed trait, so no way to instance it to call it.
   //Instead, we find a subclass of the enum type, instance that, and call withName() on it.
   private def enumWithName(enumType: Type, enumStr: String): RawlsEnumeration[_] = {
@@ -493,7 +498,7 @@ trait GraphDAO {
       case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex)
 
       //Enums.
-      case tp if tp <:< typeOf[RawlsEnumeration[_]] => enumWithName(tp, vertex.getProperty(propName))
+      case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
       case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
