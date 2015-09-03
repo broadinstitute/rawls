@@ -15,11 +15,11 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     implicit val ec = magnet.value
     for(accessToken <- accessTokenHeaderDirective;
         userEmail <- emailHeaderDirective;
-        accessTokenExpires <- accessTokenExpiresHeaderDirective
-    ) yield UserInfo(userEmail, OAuth2BearerToken(accessToken), accessTokenExpires.toLong)
+        accessTokenExpiresIn <- accessTokenExpiresInHeaderDirective
+    ) yield UserInfo(userEmail, OAuth2BearerToken(accessToken), accessTokenExpiresIn.toLong)
   }
 
   private def accessTokenHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token")
-  private def accessTokenExpiresHeaderDirective: Directive1[String] = headerValueByName("OIDC_access_token_expires")
+  private def accessTokenExpiresInHeaderDirective: Directive1[String] = headerValueByName("OIDC_CLAIM_expires_in")
   private def emailHeaderDirective: Directive1[String] = headerValueByName("OIDC_CLAIM_email")
 }

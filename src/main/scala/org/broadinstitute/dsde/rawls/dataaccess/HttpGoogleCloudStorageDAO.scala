@@ -250,7 +250,7 @@ class HttpGoogleCloudStorageDAO(
   }
 
   def getUserCredential(userInfo: UserInfo): Credential = {
-    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpirationTimeMilliseconds(userInfo.accessTokenExpires)
+    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
   }
 
   def getGroupServiceAccountCredential: Credential = {
