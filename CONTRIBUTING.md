@@ -24,4 +24,5 @@ Add the following to your main PR comment
 - [ ] **Submitter**: Verify swagger UI on dev server still works after deployment
 - [ ] **Submitter**: Inform other teams of any API changes via hipchat and/or email
 - [ ] **Submitter**: Mark JIRA issue as resolved once this checklist is completed
+- [ ] blah
 ```
