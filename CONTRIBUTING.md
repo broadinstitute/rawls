@@ -11,7 +11,8 @@ Copy and paste the following into your main PR comment
 - [ ] dvoet does a once-over of the PR
 - [ ] Anoint a lead reviewer (LR). Assign PR to LR
 - [ ] Initial review by LR and others - LR then assigns back to submitter for updates
-  repeat as necessary:
+
+repeat as necessary:
 =========================
   - Rest of team may comment on PR at will
   - Further commits. DO NOT SQUASH. Reassign to LR
@@ -19,6 +20,7 @@ Copy and paste the following into your main PR comment
   - Further review. Reassign to submitter
   - Re-rebase to master.
   - [ ] LR signs off. Assign to submitter to finalize PR
+
 Submitter should then:
 =========================
 - [ ] Verify all tests go green, including CI tests
