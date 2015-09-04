@@ -38,7 +38,8 @@ case class Workspace (
                       bucketName: String,
                       createdDate: DateTime,
                       createdBy: String,
-                      attributes: Map[String, Attribute]
+                      attributes: Map[String, Attribute],
+                      isLocked: Boolean = false
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
@@ -176,7 +177,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat6(Workspace)
+  implicit val WorkspaceFormat = jsonFormat7(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 

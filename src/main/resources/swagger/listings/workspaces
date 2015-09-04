@@ -4,6 +4,82 @@
 	"basePath": "/",
 	"resourcePath": "/workspaces",
 	"apis": [{
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/lock",
+		"operations": [{
+			"method": "PUT",
+			"summary": "Lock workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "lockWorkspace",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 204,
+				"message": "Successful Request"
+			}, {
+				"code": 403,
+				"message": "Not Owner"
+			}, {
+				"code": 404,
+				"message": "Workspace Not Found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+		}, {
+		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/unlock",
+		"operations": [{
+			"method": "PUT",
+			"summary": "Unlock workspace",
+			"notes": "",
+			"type": "void",
+			"nickname": "unlockWorkspace",
+			"produces": ["application/json"],
+			"parameters": [{
+				"name": "workspaceNamespace",
+				"description": "Workspace Namespace",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}, {
+				"name": "workspaceName",
+				"description": "Workspace Name",
+				"required": true,
+				"type": "string",
+				"paramType": "path",
+				"allowMultiple": false
+			}],
+			"responseMessages": [{
+				"code": 204,
+				"message": "Successful Request"
+			}, {
+				"code": 403,
+				"message": "Not Owner"
+			}, {
+				"code": 404,
+				"message": "Workspace Not Found"
+			}, {
+				"code": 500,
+				"message": "Rawls Internal Error"
+			}]
+		}]
+		}, {
 		"path": "/workspaces/{workspaceNamespace}/{workspaceName}/acl",
 		"operations": [{
 			"method": "GET",
