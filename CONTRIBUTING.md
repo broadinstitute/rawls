@@ -14,11 +14,11 @@ Please follow the process below when making a Pull Request
 - [x] LR: Initial review by LR and others - LR then assigns back to submitter for updates
 
 repeat as necessary:
-  - Rest of team may comment on PR at will
-  - Further commits. DO NOT SQUASH. Reassign to LR
-  - Update documentation as needed
-  - Further review. Reassign to submitter
-  - Re-rebase to master.
+    - Rest of team may comment on PR at will
+    - Further commits. DO NOT SQUASH. Reassign to LR
+    - Update documentation as needed
+    - Further review. Reassign to submitter
+    - Re-rebase to master.
 
 - [x] LR signs off. Assign to submitter to finalize PR
 - [x] LR: sign off on PR, assign to submitter to finalize PR
