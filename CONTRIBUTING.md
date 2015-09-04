@@ -12,14 +12,12 @@ Please follow the process below when making a Pull Request
 - [x] dvoet: does a once-over of the PR
 - [x] dvoet: Anoint a lead reviewer (LR). Assign PR to LR
 - [x] LR: Initial review by LR and others - LR then assigns back to submitter for updates
-
 - repeat as necessary:
   * Rest of team may comment on PR at will
   * Further commits. DO NOT SQUASH. Reassign to LR
   * Update documentation as needed
   * Further review. Reassign to submitter
   * Re-rebase to master.
-
 - [x] LR signs off. Assign to submitter to finalize PR
 - [x] LR: sign off on PR, assign to submitter to finalize PR
 - [x] Submitter: Verify all tests go green, including CI tests
@@ -29,7 +27,6 @@ Please follow the process below when making a Pull Request
 - [x] Submitter: Double check documentation
 - [x] Submitter: Inform other teams of any API changes
 - [x] Submitter: Mark JIRA issue as resolved once this checklist is completed
-
 - [x] Rebase to master. DO NOT SQUASH
 - [x] Make sure Swagger is updated if API changes
 - [x] Make sure documentation for code is complete
