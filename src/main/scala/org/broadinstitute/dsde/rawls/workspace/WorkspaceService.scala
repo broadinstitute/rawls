@@ -96,7 +96,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case GetWorkspace(workspaceName) => context.parent ! getWorkspace(workspaceName)
     case DeleteWorkspace(workspaceName) => context.parent ! deleteWorkspace(workspaceName)
     case UpdateWorkspace(workspaceName, operations) => context.parent ! updateWorkspace(workspaceName, operations)
-    case ListWorkspaces => context.parent ! listWorkspaces(dataSource)
+    case ListWorkspaces => context.parent ! listWorkspaces()
     case CloneWorkspace(sourceWorkspace, destWorkspace) => context.parent ! cloneWorkspace(sourceWorkspace, destWorkspace)
     case GetACL(workspaceName) => context.parent ! getACL(workspaceName)
     case UpdateACL(workspaceName, aclUpdates) => context.parent ! updateACL(workspaceName, aclUpdates)
@@ -165,7 +165,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inTransaction { txn =>
       withWorkspace(workspaceName, txn) { workspace =>
         requireAccess(workspaceName, workspace.bucketName, WorkspaceAccessLevel.Read, txn) {
-          RequestComplete(workspace)
+          val response = for (
+            permissionsPair <- gcsDAO.getWorkspace(userInfo.userEmail, workspaceName);
+            workspaceContext <- containerDAO.workspaceDAO.loadContext(permissionsPair.workspaceName, txn)
+          ) yield {
+              WorkspaceListResponse(permissionsPair.accessLevel,
+                containerDAO.workspaceDAO.loadFromContext(workspaceContext),
+                getWorkspaceSubmissionStats(workspaceContext, txn),
+                gcsDAO.getOwners(permissionsPair.workspaceName)
+              )
+            }
+          RequestComplete(response.head)
         }
       }
     }
@@ -206,16 +216,16 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def listWorkspaces(dataSource: DataSource): PerRequestMessage =
+  def listWorkspaces(): PerRequestMessage =
     dataSource inTransaction { txn =>
       val response = for (
-        (workspaceName, accessLevel) <- gcsDAO.getWorkspaces(userInfo.userEmail);
-        workspaceContext <- containerDAO.workspaceDAO.loadContext(workspaceName, txn)
+        permissionsPair <- gcsDAO.getWorkspaces(userInfo.userEmail);
+        workspaceContext <- containerDAO.workspaceDAO.loadContext(permissionsPair.workspaceName, txn)
       ) yield {
-        WorkspaceListResponse(accessLevel,
+        WorkspaceListResponse(permissionsPair.accessLevel,
           containerDAO.workspaceDAO.loadFromContext(workspaceContext),
           getWorkspaceSubmissionStats(workspaceContext, txn),
-          gcsDAO.getOwners(workspaceName)
+          gcsDAO.getOwners(permissionsPair.workspaceName)
         )
       }
 

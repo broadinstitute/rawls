@@ -157,7 +157,7 @@ class HttpGoogleCloudStorageDAO(
     }
   }
 
-  override def getWorkspaces(userId: String): Seq[(WorkspaceName, WorkspaceAccessLevel)] = {
+  override def getWorkspaces(userId: String): Seq[WorkspacePermissionsPair] = {
     val credential = getGroupServiceAccountCredential
     val directory = new Directory.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
     val groupsQuery = directory.groups().list().setUserKey(userId).execute()
@@ -165,6 +165,10 @@ class HttpGoogleCloudStorageDAO(
     val workspaceGroups = Option(groupsQuery.getGroups).getOrElse(List.empty[Group].asJava)
 
     workspaceGroups.map(g => deconstructGroupId(g.getEmail)).toSeq
+  }
+
+  override def getWorkspace(userId: String, workspaceName: WorkspaceName): Seq[WorkspacePermissionsPair] = {
+    getWorkspaces(userId).filter(ws => ws.workspaceName.equals(workspaceName))
   }
 
   override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
@@ -279,9 +283,9 @@ class HttpGoogleCloudStorageDAO(
     s"${groupsPrefix}-${workspaceName.namespace}_${workspaceName.name}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
   }
 
-  def deconstructGroupId(groupId: String): (WorkspaceName, WorkspaceAccessLevel) = {
+  def deconstructGroupId(groupId: String): WorkspacePermissionsPair = {
     val strippedId = groupId.stripPrefix(s"${groupsPrefix}-").stripSuffix(s"@${appsDomain}").split("_", 2)
-    (WorkspaceName(strippedId.head, stripCoreGroupTraits(strippedId(1))._1),
+    WorkspacePermissionsPair(WorkspaceName(strippedId.head, stripCoreGroupTraits(strippedId(1))._1),
       WorkspaceAccessLevel.fromCanonicalString(stripCoreGroupTraits(strippedId(1))._2.stripPrefix("-").toUpperCase))
   }
 

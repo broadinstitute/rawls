@@ -134,6 +134,9 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Seq[String])
 
+case class WorkspacePermissionsPair(workspaceName: WorkspaceName,
+                                    accessLevel: WorkspaceAccessLevel)
+
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
 
