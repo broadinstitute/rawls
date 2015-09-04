@@ -161,6 +161,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
+  def withTestWorkspacesApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
+    withCustomTestDatabase(testWorkspaces) { dataSource =>
+      withApiServices(dataSource, user)(testCode)
+    }
+  }
+
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = "newNamespace",
@@ -190,20 +196,19 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "get a workspace" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+  it should "get a workspace" in withTestWorkspacesApiServices { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
         services.dataSource.inTransaction { txn =>
-          assertResult(testData.workspace) {
-            workspaceDAO.load(testData.wsName, txn).get
+          assertResult(
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName))
+          ){
+            responseAs[WorkspaceListResponse]
           }
-        }
-        assertResult(testData.workspace) {
-          responseAs[Workspace]
         }
       }
   }
@@ -389,8 +394,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
-  it should "allow an owner-access user to get a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+  it should "allow an owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -399,8 +404,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a write-access user to get a workspace" in withTestDataApiServicesAndUser("write-access") { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+  it should "allow a write-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("write-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceWriter.namespace}/${testWorkspaces.workspaceWriter.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -409,8 +414,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a read-access user to get a workspace" in withTestDataApiServicesAndUser("read-access") { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+  it should "allow a read-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("read-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceReader.namespace}/${testWorkspaces.workspaceReader.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -419,8 +424,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a no-access user to get a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+  it should "not allow a no-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceNoAccess.namespace}/${testWorkspaces.workspaceNoAccess.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {

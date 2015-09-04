@@ -175,7 +175,7 @@
 			"method": "GET",
 			"summary": "Get workspace",
 			"notes": "",
-			"type": "Workspace",
+			"type": "WorkspaceListResponse",
 			"nickname": "list",
 			"produces": ["application/json"],
 			"parameters": [{
