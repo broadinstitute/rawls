@@ -161,20 +161,25 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, workspaceDAO:
           } flatten).distinct :+ workspaceVertex
 
           val nodesData = vertexes map { v =>
-            val nameVal = Option(v.getProperty("name")).getOrElse {
-              val inEdges = Option(v.getEdges(Direction.IN))
-              inEdges match {
-                case Some(es) => es.headOption match {
-                  case Some(e) => "for: " + e.getVertex(Direction.OUT).getProperty("name")
-                  case _ => "unknown"
-                }
-                case _ => "unknown"
-              }
+            val clazz = v.asInstanceOf[OrientVertex].getRecord.getClassName
+
+            val name = clazz match {
+              case VertexSchema.Workspace => s"""Workspace: ${v.getProperty("name")}"""
+              case VertexSchema.MethodConfig => s"""MC"""//: ${v.getProperty("name")}"""
+              case VertexSchema.Entity => s"""${v.getProperty("entityType")}: ${v.getProperty("name")}"""
+              case VertexSchema.MethodRepoConfig => "RepoMC"
+              case VertexSchema.MethodRepoMethod => "RepoMethod"
+              case VertexSchema.Submission => "Submission"
+              case VertexSchema.Workflow => "Workflow"
+              case VertexSchema.WorkflowFailure => "WorkflowFailure"
+              case VertexSchema.Map => s"""Map"""// for ${v.getEdges(Direction.IN).head.getVertex(Direction.OUT).getProperty("name")}"""
             }
+            val attributesMap = v.getPropertyKeys.map(k => (k -> (s"${Option(v.getProperty(k)).getOrElse("")}"))) toMap
+
             GraphVizObject(GraphVizData(id = v.getId.toString,
-              clazz = v.asInstanceOf[OrientVertex].getRecord.getClassName,
-              attributes = v.getPropertyKeys.map(k => (k -> v.getProperty(k).toString)) toMap,
-              name = (v.asInstanceOf[OrientVertex].getRecord.getClassName + "-" + nameVal)),
+              clazz = clazz,
+              attributes = attributesMap,
+              name = name),
               group = "nodes")
           } toSeq
 
