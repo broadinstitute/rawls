@@ -21,6 +21,7 @@ Add the following to your main PR comment
 - [ ] **Submitter**: Squash commits, rebase if necessary
 - [ ] **Submitter**: Verify all tests go green, including CI tests
 - [ ] **Submitter**: Merge to master
+- [ ] **Submitter**: Delete branch after merge
 - [ ] **Submitter**: Check configuration files in Jenkins in case they need changes
 - [ ] **Submitter**: Verify swagger UI on dev server still works after deployment
 - [ ] **Submitter**: Inform other teams of any API changes via hipchat and/or email
