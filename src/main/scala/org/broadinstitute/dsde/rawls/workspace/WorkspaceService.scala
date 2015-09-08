@@ -749,19 +749,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): PerRequestMessage =
     withSubmissionParameters(workspaceName,submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
-        val resolvedInputs = jobEntities map{ entity => entity -> MethodConfigResolver.resolveInputs(workspaceContext,methodConfig,entity,wdl) }
-        val (goodEntMap, badEntMap) = resolvedInputs partition{ case (entity,inputMap) => inputMap.values.forall(_.isSuccess) }
-        val methodConfigInputs = methodConfig.inputs.toSeq.map{ case (wdlName,attr) => SubmissionValidationInput(wdlName,attr.value) }
-        val header = SubmissionValidationHeader(methodConfig.rootEntityType,methodConfigInputs)
-        val goodEnts = goodEntMap map{ case (entity,inputMap) =>
-          SubmissionValidationEntityInputs(entity.name,inputMap.values.map{ foo => SubmissionValidationValue(foo.toOption,None)}.toSeq)}
-        val badEnts = badEntMap map{ case (entity,inputMap) =>
-          SubmissionValidationEntityInputs(entity.name,inputMap.values.map{
-            case Failure(regrets) => SubmissionValidationValue(None,Option(regrets.getMessage))
-            case Success(attr) => SubmissionValidationValue(Option(attr),None)
-          }.toSeq)
+        val methodConfigInputs = methodConfig.inputs.toSeq.map { case (wdlName, attr) => SubmissionValidationInput(wdlName, attr.value) }
+        val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+        val resolvedInputsPerEntity = jobEntities map { entity =>
+          SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,methodConfig,entity,wdl).values.toSeq)
         }
-        RequestComplete(StatusCodes.OK,SubmissionValidationReport(header,goodEnts,badEnts))
+        val (succeeded, failed) = resolvedInputsPerEntity partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }
+        RequestComplete(StatusCodes.OK, SubmissionValidationReport(header, succeeded, failed))
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {

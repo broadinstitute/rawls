@@ -100,7 +100,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
       dataSource.inTransaction { txn =>
         withWorkspaceContext(workspace, txn) { context =>
           // success cases
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNull))
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
           MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
           MethodConfigResolver.resolveInputsOrGatherErrors(context, configSampleSet, sampleSet, arrayWdl) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
 

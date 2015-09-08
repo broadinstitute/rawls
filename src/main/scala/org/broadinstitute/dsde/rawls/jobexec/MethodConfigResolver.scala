@@ -14,28 +14,27 @@ import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
-class EmptyResultException extends RawlsException("Expected single value for workflow input, but evaluated result set was empty")
-class MultipleResultException extends RawlsException("Expected single value for workflow input, but evaluated result set had multiple values")
-class MissingMandatoryValueException extends RawlsException("Mandatory workflow input is not specified in method config")
-
 object MethodConfigResolver {
+  val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
+  val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
+  val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
 
-  private def getSingleResult(seq: Seq[AttributeValue], optional: Boolean): Try[AttributeValue] = {
-    def handleEmpty = if (optional) Success(AttributeNull) else Failure(new EmptyResultException)
+  private def getSingleResult(seq: Seq[AttributeValue], optional: Boolean): SubmissionValidationValue = {
+    def handleEmpty = if (optional) None else Some(emptyResultError)
     seq match {
-      case Seq() => handleEmpty
-      case Seq(null) => handleEmpty
-      case Seq(AttributeNull) => handleEmpty
-      case Seq(single) => Success(single)
-      case _ => Failure(new MultipleResultException)
+      case Seq() => SubmissionValidationValue(None, handleEmpty)
+      case Seq(null) => SubmissionValidationValue(None, handleEmpty)
+      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty)
+      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None)
+      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues)), Some(multipleResultError))
     }
   }
 
-  private def getArrayResult(seq: Seq[AttributeValue]): Try[AttributeValueList] = {
-    Success(AttributeValueList(seq.filter(v => v != null && v != AttributeNull)))
+  private def getArrayResult(seq: Seq[AttributeValue]): SubmissionValidationValue = {
+    SubmissionValidationValue(Some(AttributeValueList(seq.filter(v => v != null && v != AttributeNull))), None)
   }
 
-  private def unpackResult(mcSequence: Seq[AttributeValue], wfInput: WorkflowInput): Try[Attribute] = wfInput.wdlType match {
+  private def unpackResult(mcSequence: Seq[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
     case arrayType: WdlArrayType => getArrayResult(mcSequence)
     case _ => getSingleResult(mcSequence, wfInput.optional)
   }
@@ -48,25 +47,32 @@ object MethodConfigResolver {
   /**
    * Try (1) evaluating inputs, and then (2) unpacking them against WDL.
    *
-   * @return A map from input to a Try containing either the unpacked value or a failure
+   * @return A map from input name to a SubmissionValidationValue containing a resolved value and / or error
    */
-  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Map[String, Try[Attribute]] = {
+  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Map[String, SubmissionValidationValue] = {
     NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs map { wfInput: WorkflowInput =>
       val result = methodConfig.inputs.get(wfInput.fqn) match {
         case Some(AttributeString(expression)) =>
-          evaluateResult(workspaceContext, entity, expression) flatMap { mcSequence => unpackResult(mcSequence, wfInput) }
+          evaluateResult(workspaceContext, entity, expression) match {
+            case Success(mcSequence) => unpackResult(mcSequence, wfInput)
+            case Failure(regret) => SubmissionValidationValue(None, Some(regret.getMessage))
+          }
         case _ =>
-          if (wfInput.optional) Success(AttributeNull) // if an optional value is unspecified in the MC, we don't care
-          else Failure(new MissingMandatoryValueException)
+          val errorOption = if (wfInput.optional) None else Some(missingMandatoryValueError) // if an optional value is unspecified in the MC, we don't care
+          SubmissionValidationValue(None, errorOption)
         }
         (wfInput.fqn, result)
       } toMap
     }
 
+  /**
+   * Try resolving inputs. If there are any failures, ONLY return the error messages.
+   * Otherwise extract the resolved values (excluding empty / None values) and return those.
+   */
   def resolveInputsOrGatherErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Either[Seq[String], Map[String, Attribute]] = {
-    val (successes, failures) = resolveInputs(workspaceContext, methodConfig, entity, wdl) partition (_._2.isSuccess)
-    if (failures.nonEmpty) Left( failures collect { case (key, Failure(regret)) => s"Error resolving ${key}: ${regret.getMessage}" } toSeq )
-    else Right( successes collect { case (key, Success(value)) => (key, value) } )
+    val (successes, failures) = resolveInputs(workspaceContext, methodConfig, entity, wdl) partition (_._2.error.isEmpty)
+    if (failures.nonEmpty) Left( failures collect { case (key, SubmissionValidationValue(_, Some(error))) => s"Error resolving ${key}: ${error}" } toSeq )
+    else Right( successes collect { case (key, SubmissionValidationValue(Some(attribute), _)) => (key, attribute) } )
   }
 
   /**
