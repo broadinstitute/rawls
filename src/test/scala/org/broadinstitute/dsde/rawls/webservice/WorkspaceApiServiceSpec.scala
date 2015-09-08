@@ -194,7 +194,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(newWorkspace) {
-            val ws = workspaceDAO.load(newWorkspace.toWorkspaceName, txn).get
+            val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
           }
         }
@@ -245,7 +245,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
       services.dataSource.inTransaction { txn =>
         assertResult(None) {
-          workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
+          workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn)
         }
       }
   }
@@ -308,7 +308,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         assertResult(Option(AttributeString("bang"))) {
           services.dataSource.inTransaction { txn =>
-            workspaceDAO.load(testData.wsName, txn).get.attributes.get("boo")
+            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
       }
@@ -322,7 +322,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
         assertResult(None) {
           services.dataSource.inTransaction { txn =>
-            workspaceDAO.load(testData.wsName, txn).get.attributes.get("boo")
+            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
       }
@@ -339,7 +339,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
-            val copiedWorkspace = workspaceDAO.load(workspaceCopy, txn).get
+            val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy, txn).get.workspace
             assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
             withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>

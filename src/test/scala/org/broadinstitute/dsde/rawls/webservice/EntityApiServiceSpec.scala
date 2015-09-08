@@ -469,7 +469,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         }
         services.dataSource.inTransaction { txn =>
           assertResult(workspace2Request) {
-            val ws = workspaceDAO.load(workspace2Request.toWorkspaceName, txn).get
+            val ws = workspaceDAO.loadContext(workspace2Request.toWorkspaceName, txn).get.workspace
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
           }
         }
