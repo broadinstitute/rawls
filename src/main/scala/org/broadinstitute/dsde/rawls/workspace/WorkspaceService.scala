@@ -850,7 +850,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => PerRequestMessage): PerRequestMessage = {
     withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-      requireAccess(workspaceName, containerDAO.workspaceDAO.isLocked(workspaceContext), accessLevel) { op(workspaceContext) }
+      requireAccess(workspaceName, containerDAO.workspaceDAO.loadFromContext(workspaceContext).isLocked, accessLevel) { op(workspaceContext) }
     }
   }
 
