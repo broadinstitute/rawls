@@ -56,10 +56,4 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
       case None => false
     }
   }
-
-  val LOCK_PROPERTY = "isLocked"
-
-  override def isLocked(workspaceContext: WorkspaceContext): Boolean = {
-    Option(workspaceContext.workspaceVertex.getProperty(LOCK_PROPERTY)).getOrElse(false)
-  }
 }
