@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.MediaTypes._
+import spray.http.{HttpResponse, StatusCodes}
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -28,6 +29,13 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
     get {
       path("swagger") {
         getFromResource("swagger/index.html")
+      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
+    } ~
+    get {
+      pathSingleSlash {
+        complete {
+          HttpResponse(StatusCodes.Unauthorized);
+        }
       } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
     }
 
