@@ -6,10 +6,9 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 /**
  * Holds information about a workspace inside a DB transaction.
  *
- * @param workspaceName
- * @param bucketName
+ * @param workspace
  * @param workspaceVertex
  */
-case class WorkspaceContext(workspaceName: WorkspaceName, bucketName: String, workspaceVertex: Vertex) {
-  override def toString = workspaceName.toString // used in error messages
+case class WorkspaceContext(workspace: Workspace, workspaceVertex: Vertex) {
+  override def toString = workspace.briefName // used in error messages
 }

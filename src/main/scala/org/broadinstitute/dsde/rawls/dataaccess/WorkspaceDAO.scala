@@ -6,10 +6,8 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
  * Created by dvoet on 4/24/15.
  */
 trait WorkspaceDAO {
-  def save(workspace: Workspace, txn: RawlsTransaction): Workspace
-  def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace]
+  def save(workspace: Workspace, txn: RawlsTransaction): WorkspaceContext
   def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext]
-  def loadFromContext(context: WorkspaceContext): Workspace
   def list(txn: RawlsTransaction): TraversableOnce[Workspace]
   def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean
 }

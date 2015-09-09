@@ -11,7 +11,7 @@ import scala.language.implicitConversions
 
 class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
 
-  override def save(workspace: Workspace, txn: RawlsTransaction): Workspace = txn withGraph { db =>
+  override def save(workspace: Workspace, txn: RawlsTransaction): WorkspaceContext = txn withGraph { db =>
     // check for illegal dot characters
     validateUserDefinedString(workspace.namespace)
     validateUserDefinedString(workspace.name)
@@ -19,18 +19,10 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
 
     // get the workspace, creating if it doesn't already exist
     val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))
-    val context = WorkspaceContext(workspace.toWorkspaceName, workspace.bucketName, vertex)
     // note that the vertex gets passed in twice (directly and through WorkspaceContext)
-    saveObject[Workspace](workspace, vertex, context, db)
-    workspace
-  }
-
-  override def load(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[Workspace] = {
-    loadContext(workspaceName, txn) map { context => loadFromContext(context) }
-  }
-
-  override def loadFromContext(context: WorkspaceContext): Workspace = {
-    loadObject[Workspace](context.workspaceVertex)
+    val workspaceContext = WorkspaceContext(workspace, vertex)
+    saveObject[Workspace](workspace, vertex, workspaceContext, db)
+    workspaceContext
   }
 
   /**
@@ -38,8 +30,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
    */
   override def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext] = txn withGraph { db =>
     getWorkspaceVertex(db, workspaceName) map { vertex =>
-      val bucketName = Option(vertex.getProperty[String]("bucketName")).getOrElse(throw new RawlsException(s"Workspace ${workspaceName} is missing a bucketName"))
-      WorkspaceContext(workspaceName, bucketName, vertex)
+      WorkspaceContext(loadObject[Workspace](vertex), vertex)
     }
   }
 

@@ -313,7 +313,7 @@ trait GraphDAO {
 
   private def saveAttributeRef(ref: AttributeEntityReference, propName: String, vertex: Vertex, wsc: WorkspaceContext, graph:Graph): Unit = {
     val entityVertex = getEntityVertex(wsc, ref.entityType, ref.entityName).getOrElse {
-      throw new RawlsException(s"${wsc.workspaceName.namespace}/${wsc.workspaceName.name}/${ref.entityType}/${ref.entityName} does not exist")
+      throw new RawlsException(s"${wsc.workspace.namespace}/${wsc.workspace.name}/${ref.entityType}/${ref.entityName} does not exist")
     }
     addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }

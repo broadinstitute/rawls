@@ -45,7 +45,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "load a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(Some(testData.workspace)) {
-        workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
+        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace )
       }
     }
   }
@@ -53,10 +53,10 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "return None when a workspace does not exist" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(None) {
-        new GraphWorkspaceDAO().load(WorkspaceName(testData.workspace.namespace, "fnord"), txn)
+        new GraphWorkspaceDAO().loadContext(WorkspaceName(testData.workspace.namespace, "fnord"), txn)
       }
       assertResult(None) {
-        new GraphWorkspaceDAO().load(WorkspaceName("fnord", testData.workspace.name), txn)
+        new GraphWorkspaceDAO().loadContext(WorkspaceName("fnord", testData.workspace.name), txn)
       }
     }
   }
@@ -64,7 +64,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   it should "load the short version of a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       assertResult(Some(testData.workspace)) {
-        workspaceDAO.load(testData.workspace.toWorkspaceName, txn)
+        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace )
       }
     }
   }
