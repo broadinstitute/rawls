@@ -123,4 +123,25 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
       }
     }
   }
+
+  test("workspace entity expression") {
+    withTestWorkspace { (workspaceContext, txn) =>
+      val evaluator = new ExpressionEvaluator(new ExpressionParser)
+
+      assertResult(Success(ArrayBuffer(testData.sample1))) {
+        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+        workspaceDAO.save(testData.workspace.copy(attributes = attributesPlusReference), txn)
+
+        evaluator.evalFinalEntity(workspaceContext, "dummy text", "dummy text", "workspace.sample1ref")
+      }
+
+      assertResult(Success(ArrayBuffer(testData.sample2))) {
+        val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
+        val attributesPlusReference = testData.workspace.attributes + ("samplerefs" -> reflist)
+        workspaceDAO.save(testData.workspace.copy(attributes = attributesPlusReference), txn)
+
+        evaluator.evalFinalEntity(workspaceContext, "dummy text", "dummy text", "workspace.samplerefs")
+      }
+    }
+  }
 }
