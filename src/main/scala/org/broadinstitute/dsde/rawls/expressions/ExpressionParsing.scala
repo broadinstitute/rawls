@@ -1,20 +1,15 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import java.lang
-
 import com.tinkerpop.blueprints._
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import com.tinkerpop.pipes.{Pipe, PipeFunction}
+import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.dataaccess.{EdgeSchema, WorkspaceContext, VertexSchema, GraphEntityDAO}
-import org.broadinstitute.dsde.rawls.expressions
 import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 import scala.util.{Try, Failure, Success}
-import scala.util.parsing.combinator
 import scala.util.parsing.combinator.JavaTokenParsers
-import scala.util.parsing.input.Reader
 
 object ExpressionTypes {
   // to make a less verbose type
@@ -197,7 +192,6 @@ class ExpressionParser extends JavaTokenParsers {
 
   private def lastAttributePipeFunc(attributeName: String)(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
     val lastVertices = graphPipeline.toList
-
     if (lastVertices.isEmpty) {
       throw new RuntimeException(s"Could not dereference $attributeName because pipe returned no entities")
     }
@@ -208,11 +202,23 @@ class ExpressionParser extends JavaTokenParsers {
     FinalResult(
       lastVertices.map((v: Vertex) => {
         v.getVertices(Direction.OUT, EdgeSchema.Own.toLabel("attributes")).headOption match {
-          case Some(mapVertex) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
-          case None => throw new RuntimeException("Boo hoo, what should I do")
+          case Some(mapVertex) =>
+            // wrap in Option() because this can return null
+            Option(mapVertex.getProperty(attributeName)) match {
+              // AttributeValue case
+              case Some(_) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
+              // AttributeValueList case
+              case None =>
+                mapVertex.getVertices(Direction.OUT, EdgeSchema.Own.toLabel(attributeName)).headOption match {
+                  case Some(attributeVertex) =>
+                    attributeVertex.getPropertyKeys.toList.sortBy(_.toInt).map(attributeVertex.getProperty(_).asInstanceOf[Object])
+                  case None => List()
+                }
+            }
+          case None => throw new RuntimeException("Error retrieving vertex attributes")
         }
       }),
-      s""".out(EdgeSchema.Own.toLabel("attributes")).getProperty($attributeName)"""
+      s""".out(EdgeSchema.Own.toLabel("attributes")).getProperty($attributeName) / .out(EdgeSchema.Own.toLabel($attributeName)).map(getProperty) """
     )
   }
 
@@ -227,7 +233,12 @@ class ExpressionEvaluator(parser:ExpressionParser)  {
   def evalFinalAttribute(workspaceContext: WorkspaceContext, rootType:String, rootName:String, expression:String):Try[Seq[AttributeValue]] = {
     parser.parseAttributeExpr(expression)
       .flatMap( runPipe(ExpressionContext(workspaceContext, rootType, rootName), _) )
-      .flatMap( ls => Success(ls.map(AttributeConversions.propertyToAttribute(_))) )
+      .flatMap( ls => Success(ls flatMap
+        {
+          case l: Seq[Any] => l map AttributeConversions.propertyToAttribute
+          case p => Seq(AttributeConversions.propertyToAttribute(p))
+        }
+        ))
   }
 
   def evalFinalEntity(workspaceContext: WorkspaceContext, rootType:String, rootName:String, expression:String):Try[Seq[Entity]] = {
