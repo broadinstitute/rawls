@@ -201,21 +201,25 @@ class ExpressionParser extends JavaTokenParsers {
     // Note that this requires traversing one additional time, from the "last" vertices to their subordinate attribute map vertices.
     FinalResult(
       lastVertices.map((v: Vertex) => {
-        v.getVertices(Direction.OUT, EdgeSchema.Own.toLabel("attributes")).headOption match {
-          case Some(mapVertex) =>
-            // wrap in Option() because this can return null
-            Option(mapVertex.getProperty(attributeName)) match {
-              // AttributeValue case
-              case Some(_) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
-              // AttributeValueList case
-              case None =>
-                mapVertex.getVertices(Direction.OUT, EdgeSchema.Own.toLabel(attributeName)).headOption match {
-                  case Some(attributeVertex) =>
-                    attributeVertex.getPropertyKeys.toList.sortBy(_.toInt).map(attributeVertex.getProperty(_).asInstanceOf[Object])
-                  case None => List()
-                }
-            }
-          case None => throw new RuntimeException("Error retrieving vertex attributes")
+        if (Attributable.reservedAttributeNames.contains(attributeName)) {
+          v.getProperty(attributeName)
+        } else {
+          v.getVertices(Direction.OUT, EdgeSchema.Own.toLabel("attributes")).headOption match {
+            case Some(mapVertex) =>
+              // wrap in Option() because this can return null
+              Option(mapVertex.getProperty(attributeName)) match {
+                // AttributeValue case
+                case Some(_) => mapVertex.getProperty(attributeName).asInstanceOf[Object]
+                // AttributeValueList case
+                case None =>
+                  mapVertex.getVertices(Direction.OUT, EdgeSchema.Own.toLabel(attributeName)).headOption match {
+                    case Some(attributeVertex) =>
+                      attributeVertex.getPropertyKeys.toList.sortBy(_.toInt).map(attributeVertex.getProperty(_).asInstanceOf[Object])
+                    case None => List()
+                  }
+              }
+            case None => throw new RuntimeException("Error retrieving vertex attributes")
+          }
         }
       }),
       s""".out(EdgeSchema.Own.toLabel("attributes")).getProperty($attributeName) / .out(EdgeSchema.Own.toLabel($attributeName)).map(getProperty) """

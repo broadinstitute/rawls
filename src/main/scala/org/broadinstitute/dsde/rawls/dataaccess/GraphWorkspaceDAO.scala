@@ -16,6 +16,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     validateUserDefinedString(workspace.namespace)
     validateUserDefinedString(workspace.name)
     workspace.attributes.keys.foreach(validateUserDefinedString)
+    workspace.attributes.keys.foreach(validateAttributeName)
 
     // get the workspace, creating if it doesn't already exist
     val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))

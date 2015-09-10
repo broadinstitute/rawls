@@ -362,4 +362,15 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       }
     }
   }
+
+  Attributable.reservedAttributeNames.foreach { reserved =>
+    it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { dataSource =>
+      val e = Entity("test_sample", "Sample", Map(reserved -> AttributeString("foo")))
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
+          intercept[RawlsException] { dao.save(context, e, txn) }
+        }
+      }
+    }
+  }
 }

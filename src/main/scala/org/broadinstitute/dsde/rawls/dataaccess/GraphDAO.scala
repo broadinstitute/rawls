@@ -89,6 +89,12 @@ trait GraphDAO {
     if (s.contains('.')) throw new RawlsExceptionWithStatusCode(message = s"User-defined string $s should not contain dot characters", statusCode = StatusCodes.BadRequest)
   }
 
+  def validateAttributeName(name: String) = {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(name))) {
+      throw new RawlsExceptionWithStatusCode(message = s"Attribute name $name is reserved", statusCode = StatusCodes.BadRequest)
+    }
+  }
+
   def addEdge(source: Vertex, edgeType: EdgeSchema.EdgeRelationType, label: String, dest: Vertex) = {
     // fail-safe check to ensure no edge labels have dots
     if (label.contains('.')) throw new RawlsException(message = s"Edge label $label should not contain dot characters")

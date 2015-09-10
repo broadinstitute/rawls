@@ -1,7 +1,12 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.joda.time.DateTime
+
+object Attributable {
+  val reservedAttributeNames = Set("name", "entityType")
+}
 
 trait Attributable {
   def attributes: Map[String, Attribute]
@@ -59,7 +64,7 @@ case class Entity(
                    attributes: Map[String, Attribute]
                    ) extends Attributable with DomainObject {
   def briefName = name
-  def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/entities/${name}"
+  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
   def idField = "name"
 }
 
