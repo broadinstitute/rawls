@@ -103,7 +103,7 @@ class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionS
   override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceValidation = ExecutionServiceValidation(true, "No errors")
 
   override def outputs(id: String, userInfo: UserInfo): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
-  override def logs(id: String, userInfo: UserInfo): ExecutionServiceLogs = ExecutionServiceLogs(id, Map("task1" -> Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar")))
+  override def logs(id: String, userInfo: UserInfo): ExecutionServiceLogs = ExecutionServiceLogs(id, Map("task1" -> Seq(Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar"))))
 
   override def status(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
   override def abort(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
