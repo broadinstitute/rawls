@@ -83,14 +83,19 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
       Map(
         "wf.y" -> TaskOutput(
-          Some(Map(
-            "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout.txt",
-            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr.txt")),
+          Some(Seq(
+            Map(
+              "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-1.txt",
+              "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt"),
+            Map(
+              "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
+              "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-2.txt")
+          )),
           Some(Map("wf.y.six" -> AttributeNumber(4)))),
         "wf.x" -> TaskOutput(
-          Some(Map(
+          Some(Seq(Map(
             "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
-            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt")),
+            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"))),
           Some(Map(
             "wf.x.four" -> AttributeNumber(4),
             "wf.x.five" -> AttributeNumber(4))))))

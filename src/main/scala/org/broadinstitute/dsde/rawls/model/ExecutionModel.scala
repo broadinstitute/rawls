@@ -41,7 +41,7 @@ case class ExecutionServiceOutputs(
 
 case class ExecutionServiceLogs(
  id: String,
- logs: Map[String, Map[String,String]]
+ logs: Map[String, Seq[Map[String,String]]]
 )
 
 // Status of a successfully started workflow
@@ -65,7 +65,7 @@ case class WorkflowFailure(
 }
 
 case class TaskOutput(
-  logs: Option[Map[String, String]],
+  logs: Option[Seq[Map[String, String]]],
   outputs: Option[Map[String, Attribute]]
 )
 

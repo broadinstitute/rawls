@@ -256,14 +256,18 @@ class RemoteServicesMockServer(port:Int) {
               |{
               |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
               |  "logs": {
-              |    "wf.x": {
+              |    "wf.x": [{
               |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
               |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"
+              |    }],
+              |    "wf.y": [{
+              |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-1.txt",
+              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt"
               |    },
-              |    "wf.y": {
-              |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout.txt",
-              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr.txt"
-              |    }
+              |    {
+              |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
+              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-2.txt"
+              |    }]
               |  }
               |}
               """.stripMargin)
