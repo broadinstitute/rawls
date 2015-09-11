@@ -93,4 +93,22 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       }
     }
   }
+
+  Attributable.reservedAttributeNames.foreach { reserved =>
+    it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { dataSource =>
+      val e = Workspace(
+        namespace = testData.wsName.namespace,
+        name = "badness",
+        bucketName = "badBucket",
+        createdDate = DateTime.now(),
+        createdBy = "Mitt Romney",
+        attributes = Map(reserved -> AttributeString("foo"))
+      )
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
+          intercept[RawlsException] { workspaceDAO.save(e, txn) }
+        }
+      }
+    }
+  }
 }

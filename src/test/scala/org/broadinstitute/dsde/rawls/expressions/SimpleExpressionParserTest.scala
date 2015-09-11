@@ -54,6 +54,27 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
     }
   }
 
+  test("reserved attribute expression") {
+    withTestWorkspace { (workspaceContext, txn) =>
+      val evaluator = new ExpressionEvaluator(new ExpressionParser)
+      assertResult(Success(ArrayBuffer(AttributeString("sample1")))) {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.name")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString("Sample"), AttributeString("Sample"), AttributeString("Sample")))) {
+        evaluator.evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.entityType")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString(workspaceContext.workspace.name)))) {
+        evaluator.evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.name")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeNull))) {
+        evaluator.evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.entityType")
+      }
+    }
+  }
+
   test("workspace attribute expression") {
     withTestWorkspace { (workspaceContext, txn) =>
       val evaluator = new ExpressionEvaluator(new ExpressionParser)

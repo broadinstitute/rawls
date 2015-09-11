@@ -23,6 +23,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
     validateUserDefinedString(entity.name)
     entity.attributes.keys.foreach(validateUserDefinedString)
+    entity.attributes.keys.foreach(validateAttributeName)
 
     saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, workspaceContext, db )
     entity
