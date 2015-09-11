@@ -1,0 +1,1753 @@
+
+swagger: '2.0'
+info:
+  version: 1.0.0
+  title: Workspace API
+  description: Workspace
+  contact:
+    email: workspace@broadinstitute.org
+  license:
+    name: BSD
+    url: 'http://opensource.org/licenses/BSD-3-Clause'
+  termsOfService: 'http://www.github.com/broadinstitute/rawls'
+paths:
+  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Submission'
+        '404':
+          description: Workspace not found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: List all submissions
+      operationId: listSubmissions
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+    post:
+      responses:
+        '200':
+          description: No response was specified
+          schema:
+            $ref: '#/definitions/Submission'
+        '201':
+          description: Successful Request
+        '400':
+          description: Expression eval failed or entities are not of type required by method config
+        '404':
+          description: Method Configuration or Entity not found
+        '409':
+          description: Method Configuration failed to resolve input expressions with the supplied Entity
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: Create submission
+      operationId: createSubmission
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Description of a submission.
+          name: submission
+          required: true
+          schema:
+            $ref: '#/definitions/SubmissionRequest'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
+    post:
+      responses:
+        '200':
+          description: Validation Response
+          schema:
+            $ref: '#/definitions/SubmissionValidationReport'
+        '400':
+          description: Invalid Request
+        '404':
+          description: No Entity
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: Validate submission
+      operationId: validateSubmission
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Description of a submission.
+          name: submission
+          required: true
+          schema:
+            $ref: '#/definitions/SubmissionRequest'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Submission'
+        '404':
+          description: Submission Not Found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: Monitor submission status
+      operationId: getSubmissionStatus
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Submission Id
+          name: submissionId
+          required: true
+          type: string
+    delete:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '404':
+          description: Submission Not Found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: Abort submission
+      operationId: abortSubmission
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Submission Id
+          name: submissionId
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkflowOutputs'
+        '404':
+          description: Submission or Workflow Not Found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/submissions
+      summary: Get workflow outputs
+      operationId: getWorkflowOutputs
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Submission Id
+          name: submissionId
+          required: true
+          type: string
+        - in: path
+          description: Workflow Id
+          name: workflowId
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '404':
+          description: Workspace or Entity does not exist
+        '409':
+          description: Entity already exists in workspace
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: rename entity in a workspace
+      operationId: renameEntity
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+        - in: path
+          description: Entity Name
+          name: entityName
+          required: true
+          type: string
+        - in: body
+          description: New entity name
+          name: newEntityNameJson
+          required: true
+          schema:
+            $ref: '#/definitions/EntityName'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
+    post:
+      responses:
+        '200':
+          description: Successful Request
+        '400':
+          description: Invalid entity expression
+        '404':
+          description: Workspace or Entity does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: evaluate expression on an entity
+      operationId: evaluateExpression
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+        - in: path
+          description: Entity Name
+          name: entityName
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: string
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: list all entity types in a workspace
+      operationId: list_entity_types
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+    post:
+      responses:
+        '200':
+          description: No response was specified
+          schema:
+            $ref: '#/definitions/Entity'
+        '201':
+          description: Successful Request
+        '404':
+          description: Workspace not found
+        '409':
+          description: Entity already exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: Create entity in a workspace
+      operationId: create_entity
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Entity data
+          name: entityJson
+          required: true
+          schema:
+            $ref: '#/definitions/Entity'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Entity'
+        '404':
+          description: Workspace or entityType does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: list all entities of given type in a workspace
+      operationId: list_entities
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Entity'
+        '404':
+          description: Workspace or Entity does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: Get entity in a workspace
+      operationId: get_entity
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+        - in: path
+          description: Entity Name
+          name: entityName
+          required: true
+          type: string
+    patch:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Entity'
+        '400':
+          description: Attribute does not exists or is of an unexpected type
+        '404':
+          description: Workspace or Entity does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: Update entity in a workspace
+      operationId: update_entity
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+        - in: path
+          description: Entity Name
+          name: entityName
+          required: true
+          type: string
+        - in: body
+          description: Update operations for attributes
+          name: attributeUpdateJson
+          required: false
+          schema:
+            $ref: '#/definitions/AttributeUpdateOperation'
+    delete:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '404':
+          description: Workspace or Entity does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: delete entity in a workspace
+      operationId: delete_entity
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Entity Type
+          name: entityType
+          required: true
+          type: string
+        - in: path
+          description: Entity Name
+          name: entityName
+          required: true
+          type: string
+  /workspaces/entities/copy:
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '201':
+          description: Successful Request
+        '404':
+          description: Source Workspace or source entities does not exist
+        '409':
+          description: One or more entities of that name/type already exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: copy entities from one workspace into another workspace
+      operationId: copy_entities
+      parameters:
+        - in: body
+          description: Source and destination for entities
+          name: entityCopyDefinition
+          required: true
+          schema:
+            $ref: '#/definitions/EntityCopyDefinition'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: No Content (Success)
+        '400':
+          description: Invalid attribute update operation
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: batch upsert entities into a workspace
+      operationId: batch_upsert_entities
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Entity update definitions
+          name: batchUpsertJson
+          required: true
+          schema:
+            $ref: '#/definitions/EntityUpdateDefinition'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: No Content (Success)
+        '400':
+          description: Invalid attribute update operation
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/entities
+      summary: batch update entities into a workspace. All referenced entities must already exist
+      operationId: batch_update_entities
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Entity update definitions
+          name: batchUpdateJson
+          required: true
+          schema:
+            $ref: '#/definitions/EntityUpdateDefinition'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '201':
+          description: Successful Request
+        '404':
+          description: Workspace not found
+        '409':
+          description: MethodConfiguration already exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: Create Method configuration in a workspace
+      operationId: create_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Method Configuration contents
+          name: methodConfigJson
+          required: true
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: list method configurations in a workspace
+      operationId: list_method_configurations
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '404':
+          description: Workspace or Method Configuration does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: get method configuration in a workspace
+      operationId: get_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+    delete:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '404':
+          description: Workspace or Method Configuration does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: delete method configuration in a workspace
+      operationId: delete_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+    put:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '404':
+          description: Workspace or method configuration does not exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: Update method configuration in a workspace
+      operationId: update_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+        - in: body
+          description: New Method Configuration contents
+          name: newMethodConfigJson
+          required: true
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '404':
+          description: Workspace or Method Configuration does not exists
+        '409':
+          description: Method config by that name already exists in workspace
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: rename method configuration in a workspace
+      operationId: rename_method_config
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+        - in: body
+          description: New Method Configuration Name
+          name: newMethodConfigurationName
+          required: true
+          schema:
+            $ref: '#/definitions/MethodConfigurationName'
+  /methodconfigs/copy:
+    post:
+      responses:
+        '200':
+          description: No response was specified
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '201':
+          description: Successful Request
+        '404':
+          description: Source Workspace or method configuration does not exist
+        '409':
+          description: Destination method configuration by that name already exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: Copy method configuration in a workspace from another workspace
+      operationId: copy_method_configuration
+      parameters:
+        - in: body
+          description: Source and destination method configuration names
+          name: methodConfigurationNamePair
+          required: true
+          schema:
+            $ref: '#/definitions/MethodConfigurationNamePair'
+  /methodconfigs/copyFromMethodRepo:
+    post:
+      responses:
+        '200':
+          description: No response was specified
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '201':
+          description: Successful Request
+        '404':
+          description: Source method configuration does not exist
+        '409':
+          description: Destination method configuration by that name already exists
+        '422':
+          description: Error parsing source method configuration
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: Copy method configuration from the method repository
+      operationId: copy_repo_configuration
+      parameters:
+        - in: body
+          description: Method Repository Query
+          name: methodRepoQuery
+          required: true
+          schema:
+            $ref: '#/definitions/MethodRepoConfigurationQuery'
+  /methodconfigs/template:
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+        '400':
+          description: "Method WDL can't be parsed"
+        '404':
+          description: No such method
+      description: ''
+      tags:
+        - listings/methodconfigs
+      summary: Create a template for a method configuration from a method in the method repository
+      operationId: method_config_template
+      parameters:
+        - in: body
+          description: name of method to use for template
+          name: methodName
+          required: true
+          schema:
+            $ref: '#/definitions/MethodRepoMethod'
+  '/workspaces/{workspaceNamespace}/{workspaceName}/lock':
+    put:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '403':
+          description: Not Owner
+        '404':
+          description: Workspace Not Found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Lock workspace
+      operationId: lockWorkspace
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
+    put:
+      responses:
+        '200':
+          description: No response was specified
+        '204':
+          description: Successful Request
+        '403':
+          description: Not Owner
+        '404':
+          description: Workspace Not Found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Unlock workspace
+      operationId: unlockWorkspace
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/acl':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceACL'
+        '400':
+          description: "Can't retrieve ACL for workspace"
+        '404':
+          description: Workspace not found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Get workspace ACL
+      operationId: getACL
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+    patch:
+      responses:
+        '200':
+          description: Successful Request
+        '400':
+          description: "Can't set ACL for workspace"
+        '404':
+          description: Workspace not found
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Update workspace ACL
+      operationId: updateACL
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Series of ACL updates for workspace
+          name: aclUpdates
+          required: true
+          schema:
+            $ref: '#/definitions/WorkspaceACLUpdate'
+  /workspaces:
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '201':
+          description: Successful Request
+        '403':
+          description: Unable to create bucket for workspace
+        '409':
+          description: Workspace by that name already exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Create/replace workspace
+      operationId: create
+      parameters:
+        - in: body
+          description: Workspace contents
+          name: workspaceJson
+          required: true
+          schema:
+            $ref: '#/definitions/WorkspaceRequest'
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceListResponse'
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: List workspaces
+      operationId: list
+  '/workspaces/{workspaceNamespace}/{workspaceName}':
+    patch:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/Workspace'
+        '400':
+          description: Attribute does not exist or is of an unexpected type
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Update attributes of a workspace
+      operationId: update_workspace
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Update operations
+          name: entityUpdateJson
+          required: true
+          schema:
+            $ref: '#/definitions/AttributeUpdateOperation'
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceListResponse'
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Get workspace
+      operationId: list
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+    delete:
+      responses:
+        '200':
+          description: No response was specified
+        '202':
+          description: Request Accepted
+        '404':
+          description: Workspace does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Delete workspace
+      operationId: delete_workspace
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/clone':
+    post:
+      responses:
+        '200':
+          description: No response was specified
+        '201':
+          description: Successful Request
+        '400':
+          description: Unable to create resources for workspace
+        '404':
+          description: Source workspace not found
+        '409':
+          description: Destination workspace already exists
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - listings/workspaces
+      summary: Clone workspace
+      operationId: clone
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Name of new workspace
+          name: workspaceNameJson
+          required: true
+          schema:
+            $ref: '#/definitions/WorkspaceName'
+tags:
+  - name: listings/submissions
+    description: Submissions API
+  - name: listings/entities
+    description: Entity manipulation API
+  - name: listings/methodconfigs
+    description: Method Configuration manipulation API
+  - name: listings/workspaces
+    description: Workspace manipulation API
+host: localhost
+basePath: /
+schemes:
+  - http
+definitions:
+  Submission:
+    description: ''
+    properties:
+      id:
+        type: string
+        description: SubmissionRequest unique identifier
+      submissionDate:
+        type: string
+        format: date-time
+        description: SubmissionRequest date
+      workspaceNamespace:
+        type: string
+        description: Workspace namespace
+      workspaceName:
+        type: string
+        description: Workspace name
+      methodConfigurationNamespace:
+        type: string
+        description: Method configuration namespace
+      methodConfigurationName:
+        type: string
+        description: Method configuration name
+      entityType:
+        type: string
+        description: Entity type
+      entityName:
+        type: string
+        description: Entity name
+      workflows:
+        type: array
+        description: Status of Workflow(s)
+        items:
+          $ref: '#/definitions/Workflow'
+      notstarted:
+        type: array
+        description: Workflows that failed to start
+        items:
+          $ref: '#/definitions/WorkflowFailure'
+      status:
+        $ref: '#/definitions/SubmissionStatus'
+        description: Status
+  SubmissionStatus:
+    description: ''
+    properties:
+      name:
+        type: string
+        description: submission status
+  WorkflowFailure:
+    description: ''
+    properties:
+      workspaceNamespace:
+        type: string
+        description: Workspace namespace
+      workspaceName:
+        type: string
+        description: Workspace name
+      entityName:
+        type: string
+        description: Entity name
+      entityType:
+        type: string
+        description: Entity type
+      errors:
+        type: array
+        description: List of errors starting this workflow
+        items:
+          type: string
+  Workflow:
+    description: ''
+    properties:
+      workspaceNamespace:
+        type: string
+        description: Workspace namespace
+      workspaceName:
+        type: string
+        description: Workspace name
+      id:
+        type: string
+        description: Workflow unique identifier
+      status:
+        $ref: '#/definitions/WorkflowStatus'
+        description: Workflow status
+      statusLastChangedDate:
+        type: string
+        format: date-time
+        description: Status last-changed date
+      entityType:
+        type: string
+        description: Entity type
+      entityName:
+        type: string
+        description: Entity name
+  WorkflowStatus:
+    properties:
+      done:
+        type: boolean
+  SubmissionRequest:
+    description: ''
+    required:
+      - methodConfigurationNamespace
+      - methodConfigurationName
+      - entityType
+      - entityName
+    properties:
+      methodConfigurationNamespace:
+        type: string
+        description: Namespace of the method configuration to execute.
+      methodConfigurationName:
+        type: string
+        description: Name of the method configuration to execute.
+      entityType:
+        type: string
+        description: Type of root entity for expression.
+      entityName:
+        type: string
+        description: Name of root entity for expression.
+      expression:
+        type: string
+        description: Expression that resolves to one or more entities matching the entity type in the method configuration.
+  SubmissionValidationInput:
+    description: "method configuration input parameter, it's name and the associated expression from the method config"
+    required:
+      - wdlName
+      - expression
+    properties:
+      wdlName:
+        type: string
+        description: name of input
+      expression:
+        type: string
+        description: expression for input
+  SubmissionValidationHeader:
+    description: common values for all the entities -- the entity type and the input descriptions
+    required:
+      - entityType
+      - inputExpressions
+    properties:
+      entityType:
+        type: string
+        description: type of entity
+      inputExpressions:
+        type: array
+        description: input descriptions
+        items:
+          $ref: '#/definitions/SubmissionValidationInput'
+  SubmissionValidationValue:
+    description: result of an expression parse for one of the inputs
+    required: []
+    properties:
+      value:
+        type: string
+        description: the value of the input expression for the specified entity
+      error:
+        type: string
+        description: parsing error(s)
+  SubmissionValidationEntityInputs:
+    description: the results of parsing each of the inputs for one entity
+    required:
+      - entityName
+      - inputResolutions
+    properties:
+      entityName:
+        type: string
+        description: name of entity
+      inputResolutions:
+        type: array
+        description: input resolution
+        items:
+          $ref: '#/definitions/SubmissionValidationValue'
+  SubmissionValidationReport:
+    description: the results of parsing each input for each entity
+    required:
+      - header
+      - validEntities
+      - invalidEntities
+    properties:
+      header:
+        $ref: '#/definitions/SubmissionValidationHeader'
+        description: common values for all entities
+      validEntities:
+        type: array
+        description: runnable entities
+        items:
+          $ref: '#/definitions/SubmissionValidationEntityInputs'
+      invalidEntities:
+        type: array
+        description: non-runnable entities
+        items:
+          $ref: '#/definitions/SubmissionValidationEntityInputs'
+  TaskOutput:
+    description: Outputs from a single task in a workflow
+    properties:
+      logs:
+        $ref: '#/definitions/Map[string,string]'
+      outputs:
+        $ref: '#/definitions/Map[string,Attribute]'
+  WorkflowOutputs:
+    description: Outputs and logs from all tasks in a workflow
+    properties:
+      tasks:
+        type: array
+        description: Map from tasks to output/log pairs
+        items:
+          $ref: '#/definitions/TaskOutput'
+      workflowId:
+        type: string
+        description: The id of this workflow
+  WorkspaceName:
+    description: ''
+    required:
+      - namespace
+      - name
+    properties:
+      namespace:
+        type: string
+        description: The namespace the workspace belongs to
+      name:
+        type: string
+        description: The name of the workspace
+  EntityName:
+    description: ''
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        description: The name of the entity
+  EntityCopyDefinition:
+    description: ''
+    required:
+      - sourceWorkspace
+      - destinationWorkspace
+      - entityType
+      - entityNames
+    properties:
+      sourceWorkspace:
+        $ref: '#/definitions/WorkspaceName'
+        description: The source workspace of the entities
+      destinationWorkspace:
+        $ref: '#/definitions/WorkspaceName'
+        description: The destination workspace for the entities
+      entityType:
+        type: string
+        description: Type of top level entities to copy
+      entityNames:
+        type: array
+        description: Names of entities to copy
+        items:
+          type: string
+  Entity:
+    description: ''
+    required:
+      - name
+      - entityType
+      - attributes
+      - workspaceName
+    properties:
+      name:
+        type: string
+        description: The name of the entity
+      entityType:
+        type: string
+        description: The type of the entity
+      attributes:
+        $ref: '#/definitions/Map[string,Attribute]'
+      workspaceName:
+        type: string
+        description: The name of the workspace
+  AttributeUpdateOperation:
+    description: ''
+    properties:
+      Example payload for AddUpdateAttribute:
+        $ref: '#/definitions/AddUpdateAttribute'
+      Example payload for RemoveAttribute:
+        $ref: '#/definitions/RemoveAttribute'
+      Example payload for AddListMember:
+        $ref: '#/definitions/AddListMember'
+      Example payload for RemoveListMember:
+        $ref: '#/definitions/RemoveListMember'
+  AddUpdateAttribute:
+    description: ''
+    required:
+      - attributeName
+      - addUpdateAttribute
+    properties:
+      attributeName:
+        type: string
+        description: The name of the attribute
+      addUpdateAttribute:
+        $ref: '#/definitions/Attribute'
+        description: The update attribute
+  RemoveAttribute:
+    description: ''
+    required:
+      - attributeName
+    properties:
+      attributeName:
+        type: string
+        description: The name of the attribute
+  AddListMember:
+    description: ''
+    required:
+      - attributeListName
+      - newMember
+    properties:
+      attributeListName:
+        type: string
+        description: The name of the attribute list
+      newMember:
+        $ref: '#/definitions/Attribute'
+  RemoveListMember:
+    description: ''
+    required:
+      - attributeListName
+      - removeMember
+    properties:
+      attributeListName:
+        type: string
+        description: The name of the attribute list
+      removeMember:
+        $ref: '#/definitions/Attribute'
+        description: The attribute to remove
+  EntityUpdateDefinition:
+    description: ''
+    required:
+      - name
+      - entityType
+      - operations
+    properties:
+      name:
+        type: string
+        description: The name of the entity
+      entityType:
+        type: string
+        description: The type of the entity
+      operations:
+        $ref: '#/definitions/Array[AttributeUpdateOperation]'
+  MethodConfiguration:
+    description: ''
+    required:
+      - namespace
+      - name
+      - rootEntityType
+      - inputs
+      - workspaceName
+      - methodRepoMethod
+    properties:
+      namespace:
+        type: string
+        description: "This method configuration's namespace"
+      name:
+        type: string
+        description: The name of the method configuration
+      rootEntityType:
+        type: string
+        description: The root entity type that the method will be running on
+      prerequisites:
+        $ref: '#/definitions/Map[string,string]'
+      inputs:
+        $ref: '#/definitions/Map[string,string]'
+      workspaceName:
+        type: string
+        description: The workspace name
+      outputs:
+        $ref: '#/definitions/Map[string,string]'
+      methodRepoConfig:
+        $ref: '#/definitions/MethodRepoConfiguration'
+        description: The properties of the method configuration from the method store that this derived from
+      methodRepoMethod:
+        $ref: '#/definitions/MethodRepoMethod'
+        description: The properties of the method from the method store that this config is associated with
+  MethodRepoConfigurationQuery:
+    description: ''
+    required:
+      - methodRepoNamespace
+      - methodRepoName
+      - methodRepoSnapshotId
+      - destination
+    properties:
+      methodRepoNamespace:
+        type: string
+        description: Method Repository Namespace
+      methodRepoName:
+        type: string
+        description: Method Repository Name
+      methodRepoSnapshotId:
+        type: string
+        description: Method Repository Snapshot ID
+      destination:
+        $ref: '#/definitions/MethodConfigurationName'
+        description: The destination for a copied method configuration
+  MethodConfigurationNamePair:
+    description: ''
+    required:
+      - source
+      - destination
+    properties:
+      source:
+        $ref: '#/definitions/MethodConfigurationName'
+        description: The source of a copied method configuration
+      destination:
+        $ref: '#/definitions/MethodConfigurationName'
+        description: The destination for a copied method configuration
+  MethodConfigurationName:
+    description: ''
+    required:
+      - name
+      - namespace
+      - workspaceName
+    properties:
+      name:
+        type: string
+        description: The name of the method configuration
+      namespace:
+        type: string
+        description: "This method configuration's owning namespace"
+      workspaceName:
+        $ref: '#/definitions/WorkspaceName'
+        description: "This method configuration's owning workspace"
+  MethodRepoConfiguration:
+    description: ''
+    required:
+      - methodConfigNamespace
+      - methodConfigName
+      - methodConfigVersion
+    properties:
+      methodConfigNamespace:
+        type: string
+        description: The namespace of method config from method store
+      methodConfigName:
+        type: string
+        description: The name of method config from method store
+      methodConfigVersion:
+        type: string
+        description: The version of method config from method store
+  MethodRepoMethod:
+    description: ''
+    required:
+      - methodNamespace
+      - methodName
+      - methodVersion
+    properties:
+      methodNamespace:
+        type: string
+        description: The namespace of method from method store
+      methodName:
+        type: string
+        description: The name of method from method store
+      methodVersion:
+        type: string
+        description: The version of method from method store
+  WorkspaceACL:
+    description: ''
+    required:
+      - acl
+    properties:
+      acl:
+        $ref: '#/definitions/Map[string,WorkspaceAccessLevel]'
+  WorkspaceACLUpdate:
+    description: ''
+    required:
+      - userId
+      - accessLevel
+    properties:
+      userId:
+        type: string
+        description: ID of the user whose permissions will be changed
+      accessLevel:
+        $ref: '#/definitions/WorkspaceAccessLevel'
+        description: The access level to grant to this user
+  Workspace:
+    description: ''
+    required:
+      - namespace
+      - name
+      - bucketName
+      - createdDate
+      - createdBy
+      - attributes
+    properties:
+      namespace:
+        type: string
+        description: The namespace the workspace belongs to
+      name:
+        type: string
+        description: The name of the workspace
+      bucketName:
+        type: string
+        description: The bucket associated with the workspace
+      createdDate:
+        type: string
+        format: date-time
+        description: "The date the workspace was created in yyyy-MM-dd'T'HH:mm:ss.SSSZZ format"
+      createdBy:
+        type: string
+        description: The user who created the workspace
+      attributes:
+        $ref: '#/definitions/Map[string,Attribute]'
+  WorkspaceSubmissionStats:
+    description: Statistics about submissions in a workspace
+    required:
+      - runningSubmissionsCount
+    properties:
+      lastSuccessDate:
+        type: string
+        format: date-time
+        description: The date of the last successful workflow
+      lastFailureDate:
+        type: string
+        format: date-time
+        description: The date of the last failed workflow
+      runningSubmissionsCount:
+        type: integer
+        description: Count of all the running submissions
+  WorkspaceRequest:
+    description: ''
+    required:
+      - namespace
+      - name
+      - attributes
+    properties:
+      namespace:
+        type: string
+        description: The namespace the workspace belongs to
+      name:
+        type: string
+        description: The name of the workspace
+      attributes:
+        $ref: '#/definitions/Map[string,Attribute]'
+  WorkspaceAccessLevel:
+    description: ''
+    properties:
+      workspaceAccessLevel:
+        type: integer
+        description: ''
+  Attribute:
+    description: ''
+    properties:
+      value:
+        type: string
+        description: ''
+  WorkspaceListResponse:
+    description: ''
+    properties:
+      accessLevel:
+        $ref: '#/definitions/WorkspaceAccessLevel'
+      workspace:
+        $ref: '#/definitions/Workspace'
+      workspaceSubmissionStats:
+        $ref: '#/definitions/WorkspaceSubmissionStats'
+      owners:
+        $ref: '#/definitions/Array[String]'
+
+
