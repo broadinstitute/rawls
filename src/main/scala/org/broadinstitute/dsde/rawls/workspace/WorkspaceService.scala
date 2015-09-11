@@ -34,6 +34,7 @@ import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 import spray.routing.RequestContext
 
+import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
@@ -135,45 +136,26 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
   }
 
-  private def createBucketName(workspaceName: String) = s"${workspaceName}-${UUID.randomUUID}"
-
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
     dataSource inTransaction { txn =>
-      containerDAO.workspaceDAO.loadContext(workspaceRequest.toWorkspaceName, txn) match {
-        case Some(_) => PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
-        case None =>
-          val bucketName = createBucketName(workspaceRequest.name)
-          Try( gcsDAO.createBucket(userInfo, workspaceRequest.namespace, bucketName) ) match {
-            case Failure(err) =>
-              RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
-            case Success(_) =>
-              Try( setupWorkspaceGroupACLs(WorkspaceName(workspaceRequest.namespace, workspaceRequest.name), bucketName) ) match {
-                case Failure(err) =>
-                  gcsDAO.deleteBucket(userInfo, workspaceRequest.namespace, bucketName)
-                  RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: "+err.getMessage)
-                case Success(_) =>
-                  val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name,bucketName,DateTime.now,userInfo.userEmail,workspaceRequest.attributes)
-                  containerDAO.workspaceDAO.save(workspace, txn)
-                  RequestCompleteWithLocation((StatusCodes.Created,workspace), workspace.toWorkspaceName.path)
-              }
-          }
+      withNewWorkspaceContext(workspaceRequest, txn) { workspaceContext =>
+        RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path)
       }
-    }
-
-  def setupWorkspaceGroupACLs(workspaceName: WorkspaceName, bucketName: String): Unit =
-    dataSource inTransaction { txn =>
-      gcsDAO.setupACL(userInfo, bucketName, workspaceName)
     }
 
   def getWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
-        val permissionsPair = gcsDAO.getWorkspace(userInfo.userEmail, workspaceName).head
-        val response = WorkspaceListResponse(permissionsPair.accessLevel,
-                            workspaceContext.workspace,
-                            getWorkspaceSubmissionStats(workspaceContext, txn),
-                            gcsDAO.getOwners(permissionsPair.workspaceName))
-        RequestComplete(response)
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+        val accessLevel = gcsDAO.getMaximumAccessLevel(userInfo.userEmail,workspaceContext.workspace.workspaceId)
+        if ( accessLevel < WorkspaceAccessLevel.Read )
+          RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
+        else {
+          val response = WorkspaceListResponse(accessLevel,
+            workspaceContext.workspace,
+            getWorkspaceSubmissionStats(workspaceContext, txn),
+            gcsDAO.getOwners(workspaceContext.workspace.workspaceId))
+          RequestComplete(response)
+        }
       }
     }
 
@@ -189,11 +171,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
         }
 
-        gcsDAO.deleteBucket(userInfo, workspaceContext.workspace.namespace, workspaceContext.workspace.bucketName)
-        gcsDAO.teardownACL(workspaceContext.workspace.bucketName, workspaceName)
+        gcsDAO.deleteBucket(userInfo, workspaceContext.workspace.workspaceId)
+        gcsDAO.deleteACLGroups(workspaceContext.workspace.workspaceId)
         containerDAO.workspaceDAO.delete(workspaceName, txn)
 
-        RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
+        RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)} will be deleted within 24h.")
       }
     }
 
@@ -213,12 +195,12 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inTransaction { txn =>
       val response = for (
         permissionsPair <- gcsDAO.getWorkspaces(userInfo.userEmail);
-        workspaceContext <- containerDAO.workspaceDAO.loadContext(permissionsPair.workspaceName, txn)
+        workspaceContext <- containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn)
       ) yield {
         WorkspaceListResponse(permissionsPair.accessLevel,
           workspaceContext.workspace,
           getWorkspaceSubmissionStats(workspaceContext, txn),
-          gcsDAO.getOwners(permissionsPair.workspaceName)
+          gcsDAO.getOwners(permissionsPair.workspaceId)
         )
       }
 
@@ -242,30 +224,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevel.Read,txn) { sourceWorkspaceContext =>
-        containerDAO.workspaceDAO.loadContext(destWorkspaceName, txn) match {
-          case Some(_) => RequestComplete(StatusCodes.Conflict, s"Destination workspace ${destWorkspaceName} already exists")
-          case None => {
-            val bucketName = createBucketName(destWorkspaceName.name)
-            Try( gcsDAO.createBucket(userInfo, destWorkspaceName.namespace, bucketName) ) match {
-              case Failure(err) => RequestComplete(StatusCodes.Forbidden,s"Unable to create bucket for ${destWorkspaceName}: "+err.getMessage)
-              case Success(_) =>
-                Try( setupWorkspaceGroupACLs(destWorkspaceName, bucketName) ) match {
-                  case Failure(err) =>
-                    gcsDAO.deleteBucket(userInfo, destWorkspaceName.namespace, bucketName)
-                    RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${destWorkspaceName}: " + err.getMessage)
-                  case Success(_) =>
-                    val destWorkspaceContext = containerDAO.workspaceDAO.save(Workspace(destWorkspaceName.namespace, destWorkspaceName.name, bucketName, DateTime.now, userInfo.userEmail, sourceWorkspaceContext.workspace.attributes), txn)
-                    // now get the contexts. just call .get because it should be impossible to get None at this point
-                    containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
-                    // TODO add a method for cloning all method configs, instead of doing this
-                    containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-                      containerDAO.methodConfigurationDAO.save(destWorkspaceContext,
-                        containerDAO.methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
-                    }
-                    RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceName.path)
-                }
-            }
+        withNewWorkspaceContext(WorkspaceRequest(destWorkspaceName.namespace,destWorkspaceName.name,sourceWorkspaceContext.workspace.attributes),txn) { destWorkspaceContext =>
+          containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
+          // TODO add a method for cloning all method configs, instead of doing this
+          containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
+            containerDAO.methodConfigurationDAO.save(destWorkspaceContext,
+              containerDAO.methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
           }
+          RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceName.path)
         }
       }
     }
@@ -273,8 +239,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def getACL(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceName) {
-          Try(gcsDAO.getACL(workspaceContext.workspace.bucketName, workspaceName)) match {
+        requireOwnerIgnoreLock(workspaceContext.workspace) {
+          Try(gcsDAO.getACL(workspaceContext.workspace.workspaceId)) match {
             case Success(acl) => RequestComplete(StatusCodes.OK, acl)
             case Failure(err) => RequestComplete(StatusCodes.Forbidden, s"Can't retrieve ACL for workspace ${workspaceName}: " + err.getMessage())
           }
@@ -285,8 +251,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceName) {
-          val updateErrors = gcsDAO.updateACL(workspaceContext.workspace.bucketName, workspaceName, aclUpdates)
+        requireOwnerIgnoreLock(workspaceContext.workspace) {
+          val updateErrors = gcsDAO.updateACL(workspaceContext.workspace.workspaceId, aclUpdates)
           updateErrors.size match {
             case 0 => RequestComplete(StatusCodes.OK)
             case _ => RequestComplete(StatusCodes.Conflict, updateErrors)
@@ -298,7 +264,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def lockWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceName) {
+        requireOwnerIgnoreLock(workspaceContext.workspace) {
           if ( !containerDAO.submissionDAO.list(workspaceContext,txn).forall(_.status.isDone) )
             RequestComplete(StatusCodes.Conflict,s"There are running submissions in workspace ${workspaceName}, so it cannot be locked.")
           else {
@@ -313,7 +279,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def unlockWorkspace(workspaceName: WorkspaceName): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceName) {
+        requireOwnerIgnoreLock(workspaceContext.workspace) {
           if ( workspaceContext.workspace.isLocked )
             containerDAO.workspaceDAO.save(workspaceContext.workspace.copy(isLocked = false),txn)
           RequestComplete(StatusCodes.NoContent)
@@ -833,12 +799,46 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   // helper methods
 
+  @tailrec
+  private def retry[T](nTries: Int)(op: => T): Try[T] = {
+    val result = Try(op)
+    if ( result.isSuccess || nTries <= 1 )
+      result
+    else
+      retry(nTries-1)(op)
+  }
+
+  private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)
+                                     (op: (WorkspaceContext) => PerRequestMessage): PerRequestMessage = {
+    containerDAO.workspaceDAO.loadContext(workspaceRequest.toWorkspaceName, txn) match {
+      case Some(_) => PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
+      case None =>
+        retry(2) {
+          val workspaceId = UUID.randomUUID.toString
+          gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId)
+          workspaceId
+        } match {
+          case Failure(err) =>
+            RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
+          case Success(workspaceId) =>
+            Try(gcsDAO.createACLGroups(userInfo, workspaceId, workspaceRequest.toWorkspaceName)) match {
+              case Failure(err) =>
+                gcsDAO.deleteBucket(userInfo, workspaceId)
+                RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
+              case Success(_) =>
+                val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
+                op(containerDAO.workspaceDAO.save(workspace, txn))
+            }
+        }
+    }
+  }
+
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => PerRequestMessage): PerRequestMessage = {
     withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-      requireAccess(workspaceName, workspaceContext.workspace.isLocked, accessLevel) { op(workspaceContext) }
+      requireAccess(workspaceContext.workspace, accessLevel) { op(workspaceContext) }
     }
   }
 
@@ -849,18 +849,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def requireAccess(workspaceName: WorkspaceName, isLocked: Boolean, requiredLevel: WorkspaceAccessLevel)(codeBlock: => PerRequestMessage): PerRequestMessage = {
-    val userLevel = gcsDAO.getMaximumAccessLevel(userInfo.userEmail, workspaceName)
+  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(codeBlock: => PerRequestMessage): PerRequestMessage = {
+    val userLevel = gcsDAO.getMaximumAccessLevel(userInfo.userEmail, workspace.workspaceId)
     if (userLevel >= requiredLevel) {
-      if ( (requiredLevel > WorkspaceAccessLevel.Read) && isLocked ) RequestComplete(http.StatusCodes.Forbidden, s"The workspace ${workspaceName} is locked.")
+      if ( (requiredLevel > WorkspaceAccessLevel.Read) && workspace.isLocked ) RequestComplete(http.StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")
       else codeBlock
     }
-    else if (userLevel >= WorkspaceAccessLevel.Read) RequestComplete(http.StatusCodes.Forbidden, accessDeniedMessage(workspaceName))
-    else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))
+    else if (userLevel >= WorkspaceAccessLevel.Read) RequestComplete(http.StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))
+    else RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))
   }
 
-  private def requireOwnerIgnoreLock(workspaceName: WorkspaceName)(op: => PerRequestMessage): PerRequestMessage = {
-    requireAccess(workspaceName,false,WorkspaceAccessLevel.Owner)(op)
+  private def requireOwnerIgnoreLock(workspace: Workspace)(op: => PerRequestMessage): PerRequestMessage = {
+    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevel.Owner)(op)
   }
 
   private def withEntity(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {
@@ -917,7 +917,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def workflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Option[String] = {
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make toJson work below
-    Option(ExecutionServiceWorkflowOptions(s"gs://${workspaceContext.workspace.bucketName}/${submissionId}").toJson.toString)
+    val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
+    Option(ExecutionServiceWorkflowOptions(s"gs://${bucketName}/${submissionId}").toJson.toString)
   }
 
   private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: WorkspaceContext, rootEntityType: String, txn: RawlsTransaction)(op: (Seq[Entity]) => PerRequestMessage): PerRequestMessage = {

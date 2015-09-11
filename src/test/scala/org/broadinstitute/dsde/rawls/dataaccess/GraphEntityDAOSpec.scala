@@ -117,7 +117,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       val workspaceOriginal = Workspace(
         namespace = testData.wsName.namespace + "Original",
         name = testData.wsName.name + "Original",
-        bucketName = "aBucket",
+        workspaceId = "aBucket",
         createdDate = DateTime.now(),
         createdBy = "Joe Biden",
         Map.empty
@@ -126,7 +126,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       val workspaceClone = Workspace(
         namespace = testData.wsName.namespace + "Clone",
         name = testData.wsName.name + "Clone",
-        bucketName = "anotherBucket",
+        workspaceId = "anotherBucket",
         createdDate = DateTime.now(),
         createdBy = "Joe Biden",
         Map.empty
@@ -303,7 +303,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   val workspace2 = Workspace(
     namespace = testData.wsName.namespace + "2",
     name = testData.wsName.name + "2",
-    bucketName = "aBucket",
+    workspaceId = "aBucket",
     createdDate = DateTime.now(),
     createdBy = "Joe Biden",
     Map.empty

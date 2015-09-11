@@ -35,6 +35,13 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     }
   }
 
+  override def findById(workspaceId: String, txn: RawlsTransaction): Option[WorkspaceContext] =
+    txn withGraph { db =>
+      getWorkspaceVertex(db, workspaceId) map { vertex =>
+        WorkspaceContext(loadObject[Workspace](vertex), vertex)
+    }
+  }
+
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>
     new GremlinPipeline(db).V().filter(isWorkspace).transform((v:Vertex) => loadObject[Workspace](v)).toList.asScala
   }

@@ -215,6 +215,10 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Workspace)).filter(hasProperties(Map("namespace" -> workspaceName.namespace, "name" -> workspaceName.name)))
   }
 
+  def workspacePipeline(db: Graph, workspaceId: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Workspace)).filter(hasPropertyValue("workspaceId",workspaceId))
+  }
+
   def workspacePipeline(workspaceContext: WorkspaceContext) = {
     new GremlinPipeline(workspaceContext.workspaceVertex)
   }
@@ -235,6 +239,10 @@ trait GraphDAO {
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
     getSinglePipelineResult(workspacePipeline(db, workspaceName))
+  }
+
+  def getWorkspaceVertex(db: Graph, workspaceId: String) = {
+    getSinglePipelineResult(workspacePipeline(db, workspaceId))
   }
 
   def getEntityVertex(workspaceContext: WorkspaceContext, entityType: String, entityName: String) = {

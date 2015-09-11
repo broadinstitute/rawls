@@ -18,39 +18,37 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
 
   private def getAccessLevelOrDieTrying(userId: String) = {
     mockPermissions get userId getOrElse {
-      throw new RuntimeException("Need to add %s to MockGoogleCloudStorageDAO.mockPermissions map".format(userId))
+      throw new RuntimeException(s"Need to add ${userId} to MockGoogleCloudStorageDAO.mockPermissions map")
     }
   }
 
-  override def createBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit = {}
+  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String): Unit = {}
 
-  override def deleteBucket(userInfo: UserInfo, projectId: String, bucketName: String): Unit = {}
+  override def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit = {}
 
-  override def setupACL(userInfo: UserInfo, bucketName: String, workspaceName: WorkspaceName): Unit = {}
+  override def createACLGroups(userInfo: UserInfo, workspaceId: String, workspaceName: WorkspaceName): Unit = {}
 
-  override def teardownACL(bucketName: String, workspaceName: WorkspaceName): Unit = {}
+  override def deleteACLGroups(workspaceId: String): Unit = {}
 
-  override def getACL(bucketName: String, workspaceName: WorkspaceName): WorkspaceACL = {
+  override def getACL(workspaceId: String): WorkspaceACL = {
     WorkspaceACL(mockPermissions)
   }
 
-  override def updateACL(bucketName: String, workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) = Map.empty
+  override def updateACL(workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]) = Map.empty
 
-  override def getMaximumAccessLevel(userId: String, workspaceName: WorkspaceName): WorkspaceAccessLevel = {
+  override def getOwners(workspaceId: String): Seq[String] = mockPermissions.filter(_._2 == WorkspaceAccessLevel.Owner).keys.toSeq
+
+  override def getMaximumAccessLevel(userId: String, workspaceId: String): WorkspaceAccessLevel = {
     getAccessLevelOrDieTrying(userId)
   }
 
   override def getWorkspaces(userId: String): Seq[WorkspacePermissionsPair] = {
     Seq(
-      WorkspacePermissionsPair(WorkspaceName("ns", "owner"), WorkspaceAccessLevel.Owner),
-      WorkspacePermissionsPair(WorkspaceName("ns", "writer"), WorkspaceAccessLevel.Write),
-      WorkspacePermissionsPair(WorkspaceName("ns", "reader"), WorkspaceAccessLevel.Read)
+      WorkspacePermissionsPair("bucket1", WorkspaceAccessLevel.Owner),
+      WorkspacePermissionsPair("bucket2", WorkspaceAccessLevel.Write),
+      WorkspacePermissionsPair("bucket3", WorkspaceAccessLevel.Read)
     )
   }
 
-  override def getWorkspace(userId: String, workspaceName: WorkspaceName): Seq[WorkspacePermissionsPair] = {
-    Seq(WorkspacePermissionsPair(workspaceName,mockPermissions.getOrElse[WorkspaceAccessLevel](userId,WorkspaceAccessLevel.NoAccess)))
-  }
-
-  override def getOwners(workspaceName: WorkspaceName): Seq[String] = mockPermissions.filter(_._2 == WorkspaceAccessLevel.Owner).keys.toSeq
+  override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 }

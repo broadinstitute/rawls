@@ -40,7 +40,7 @@ case class WorkspaceRequest (
 case class Workspace (
                       namespace: String,
                       name: String,
-                      bucketName: String,
+                      workspaceId: String,
                       createdDate: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute],
@@ -140,7 +140,7 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Seq[String])
 
-case class WorkspacePermissionsPair(workspaceName: WorkspaceName,
+case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
 sealed trait Attribute
