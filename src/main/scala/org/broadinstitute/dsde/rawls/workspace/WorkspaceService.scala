@@ -535,12 +535,30 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
+  def saveAndValidateMCExpressions(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): ValidatedMethodConfiguration = {
+    containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
+
+    val parser = new ExpressionParser
+
+    def parseAndPartition(m: Map[String, AttributeString]) = {
+      val parsed = m mapValues { attr => parser.parseAttributeExpr(attr.value) }
+      ( parsed collect { case (key, Success(_)) => key } toSeq,
+        parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
+    }
+    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs)
+    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs)
+
+    ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
+  }
+
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")
-          case None => RequestCompleteWithLocation((StatusCodes.Created, containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)), methodConfiguration.path(workspaceName))
+          case None =>
+            val validatedMethodConfiguration = saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn)
+            RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
         }
       }
     }
@@ -573,8 +591,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-          case Some(_) =>
-            RequestComplete(containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn))
+          case Some(_) => RequestComplete(saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn))
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }
@@ -625,8 +642,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
         case None =>
           val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
-          val targetMethodConfig = containerDAO.methodConfigurationDAO.save(workspaceContext, target, txn)
-          RequestCompleteWithLocation((StatusCodes.Created, targetMethodConfig), targetMethodConfig.path(dest.workspaceName))
+          val validatedTarget = saveAndValidateMCExpressions(workspaceContext, target, txn)
+          RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName))
       }
     }
 
