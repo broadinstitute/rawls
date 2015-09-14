@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.gremlin.java.GremlinPipeline
 import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 
