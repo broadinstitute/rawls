@@ -145,17 +145,17 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       Map("p1" -> AttributeString("prereq")),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
-      MethodRepoConfiguration("ns", "meth1", "1"),
-      MethodRepoMethod("ns-config", "meth1", "1")
+      MethodRepoConfiguration("ns", "meth1", 1),
+      MethodRepoMethod("ns-config", "meth1", 1)
     )
 
-    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", "1"), MethodRepoMethod(wsName.namespace, "method-a", "1"))
-    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoConfiguration("ns", "meth1", "1"), MethodRepoMethod("ns-config", "meth1", "1"))
+    val methodConfig2 = MethodConfiguration("dsde", "testConfig2", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoConfiguration(wsName.namespace+"-config", "method-a-config", 1), MethodRepoMethod(wsName.namespace, "method-a", 1))
+    val methodConfig3 = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo"), "param2"-> AttributeString("foo2")), Map("out" -> AttributeString("bar")), MethodRepoConfiguration("ns", "meth1", 1), MethodRepoMethod("ns-config", "meth1", 1))
 
-    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.type")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
-    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", "1"), MethodRepoMethod("dsde", "three_step", "1"))
+    val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.type")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", 1), MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", 1), MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigNotAllSamples = MethodConfiguration("dsde", "NotAllSamplesMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.tumortype")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", 1), MethodRepoMethod("dsde", "three_step", 1))
+    val methodConfigAttrTypeMixup = MethodConfiguration("dsde", "AttrTypeMixupMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.confused")), outputs=Map.empty, MethodRepoConfiguration("dsde-config", "three_step", 1), MethodRepoMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
@@ -165,10 +165,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
     val uniqueMethodConfigName = UUID.randomUUID.toString
     val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
-    val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", newMethodConfigName)
-    val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", "1", methodConfigName)
-    val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", "1", methodConfigName)
-    val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", "1", methodConfigName)
+    val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", 1, newMethodConfigName)
+    val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", 1, methodConfigName)
+    val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
+    val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
 
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))

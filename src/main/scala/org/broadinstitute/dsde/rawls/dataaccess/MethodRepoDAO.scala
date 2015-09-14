@@ -7,6 +7,6 @@ import spray.http.HttpCookie
  * @author tsharpe
  */
 trait MethodRepoDAO {
-  def getMethodConfig( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity]
-  def getMethod( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity]
+  def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Option[AgoraEntity]
+  def getMethod( namespace: String, name: String, version: Int, userInfo: UserInfo ): Option[AgoraEntity]
 }

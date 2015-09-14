@@ -89,7 +89,7 @@ case class EntityCopyDefinition(
 case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
-                   methodVersion: String
+                   methodVersion: Int
                    ) extends DomainObject {
   def idField = "methodName"
 }
@@ -97,7 +97,7 @@ case class MethodRepoMethod(
 case class MethodRepoConfiguration(
                    methodConfigNamespace: String,
                    methodConfigName: String,
-                   methodConfigVersion: String
+                   methodConfigVersion: Int
                    ) extends DomainObject {
   def idField = "methodConfigName"
 }
@@ -129,7 +129,7 @@ case class MethodConfigurationShort(
 case class MethodRepoConfigurationQuery(
                                          methodRepoNamespace: String,
                                          methodRepoName: String,
-                                         methodRepoSnapshotId: String,
+                                         methodRepoSnapshotId: Int,
                                          destination: MethodConfigurationName
                                          )
 

@@ -27,11 +27,11 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorS
     }
   }
 
-  override def getMethodConfig( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity] = {
+  override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Option[AgoraEntity] = {
     getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
   }
 
-  override def getMethod( namespace: String, name: String, version: String, userInfo: UserInfo ): Option[AgoraEntity] = {
+  override def getMethod( namespace: String, name: String, version: Int, userInfo: UserInfo ): Option[AgoraEntity] = {
     getAgoraEntity(s"${methodRepoServiceURL}/methods/${namespace}/${name}/${version}",userInfo)
   }
 }

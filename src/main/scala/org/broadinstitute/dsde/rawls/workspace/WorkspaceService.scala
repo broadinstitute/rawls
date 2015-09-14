@@ -876,7 +876,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: String, userInfo: UserInfo)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
+  private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => PerRequestMessage): PerRequestMessage = {
     // TODO add Method to model instead of exposing AgoraEntity?
     methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo) match {
       case None => RequestComplete(http.StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")

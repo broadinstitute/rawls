@@ -73,7 +73,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", "1"), MethodRepoMethod(testData.wsName.namespace, "method-a", "1"))
+      MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", 1), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -270,7 +270,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   }
 
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
-    val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", "1", testData.methodConfigName)
+    val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", 1, testData.methodConfigName)
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -311,20 +311,20 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   }
 
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
-    val method = MethodRepoMethod("dsde","three_step","1")
+    val method = MethodRepoMethod("dsde","three_step",1)
     Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
           Map("three_step.ps.procs"->AttributeString("expression"),"three_step.cgrep.count"->AttributeString("expression"), "three_step.wc.count"->AttributeString("expression")),
-          MethodRepoConfiguration("none","none","none"),MethodRepoMethod("dsde","three_step","1"))
+          MethodRepoConfiguration("none","none",0),MethodRepoMethod("dsde","three_step",1))
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
       }
   }
 
   it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step","2").toJson.toString)) ~>
+    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step",2).toJson.toString)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }

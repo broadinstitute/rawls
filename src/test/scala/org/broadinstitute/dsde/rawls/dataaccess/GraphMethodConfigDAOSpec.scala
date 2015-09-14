@@ -21,8 +21,8 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
           Map("input.expression" -> AttributeString("this..wont.parse")),
           Map("output.expression" -> AttributeString("output.expr")),
           Map("prereq.expression" -> AttributeString("prereq.expr")),
-          MethodRepoConfiguration("ns", "meth2", "2"),
-          MethodRepoMethod("ns-config", "meth2", "2")
+          MethodRepoConfiguration("ns", "meth2", 2),
+          MethodRepoMethod("ns-config", "meth2", 2)
         )
 
         new GraphMethodConfigurationDAO().save(context, methodConfig2, txn)
