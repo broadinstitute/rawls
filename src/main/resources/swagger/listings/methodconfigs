@@ -352,7 +352,7 @@
 	}, {
 	    "path": "/methodconfigs/template",
 	    "operations": [{
-	        "method": "Post",
+	        "method": "Get",
 	        "summary": "Create a template for a method configuration from a method in the method repository",
 	        "notes": "",
 	        "type": "MethodConfiguration",
