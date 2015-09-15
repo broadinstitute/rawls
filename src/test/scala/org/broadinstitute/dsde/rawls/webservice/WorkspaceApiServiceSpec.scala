@@ -105,10 +105,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   class TestWorkspaces() extends TestData {
     val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "aBucket", testDate, "testUser", Map("a" -> AttributeString("x")) )
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "aBucket", testDate, "testUser", Map("b" -> AttributeString("y")) )
-    val workspaceReader = Workspace("ns", "reader", "aBucket", testDate, "testUser", Map("c" -> AttributeString("z")) )
-    val workspaceNoAccess = Workspace("ns", "noaccess", "aBucket", testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+    val workspaceOwner = Workspace("ns", "owner", "bucket1", testDate, "testUser", Map("a" -> AttributeString("x")) )
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "bucket2", testDate, "testUser", Map("b" -> AttributeString("y")) )
+    val workspaceReader = Workspace("ns", "reader", "bucket3", testDate, "testUser", Map("c" -> AttributeString("z")) )
+    val workspaceNoAccess = Workspace("ns", "noaccess", "bucket4", testDate, "testUser", Map("d" -> AttributeString("afterz")) )
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -217,7 +217,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
           ){
             responseAs[WorkspaceListResponse]
           }
@@ -258,9 +258,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.toWorkspaceName))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet
           }

@@ -16,7 +16,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val workspace2 = Workspace(
         namespace = testData.wsName.namespace,
         name = testData.wsName.name,
-        bucketName = "aBucket",
+        workspaceId = "aBucket",
         createdDate = DateTime.now(),
         createdBy = "Barack Obama",
         attributes = Map("workspace_attrib" -> AttributeString("foo"))
@@ -82,7 +82,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val dottyWorkspace = Workspace(
         namespace = testData.wsName.namespace,
         name = "badness",
-        bucketName = "badBucket",
+        workspaceId = "badBucket",
         createdDate = DateTime.now(),
         createdBy = "Mitt Romney",
         attributes = Map("dots.dots.more.dots" -> AttributeString("foo"))
@@ -99,7 +99,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val e = Workspace(
         namespace = testData.wsName.namespace,
         name = "badness",
-        bucketName = "badBucket",
+        workspaceId = "badBucket",
         createdDate = DateTime.now(),
         createdBy = "Mitt Romney",
         attributes = Map(reserved -> AttributeString("foo"))

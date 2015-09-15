@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 trait WorkspaceDAO {
   def save(workspace: Workspace, txn: RawlsTransaction): WorkspaceContext
   def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext]
+  def findById(workspaceId: String, txn: RawlsTransaction): Option[WorkspaceContext]
   def list(txn: RawlsTransaction): TraversableOnce[Workspace]
   def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean
 }

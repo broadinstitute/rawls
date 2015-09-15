@@ -405,7 +405,7 @@
 		"Workspace": {
 			"id": "Workspace",
 			"description": "",
-			"required": ["namespace", "name", "bucketName", "createdDate", "createdBy", "attributes"],
+			"required": ["namespace", "name", "workspaceId", "createdDate", "createdBy", "attributes"],
 			"properties": {
 				"namespace": {
 					"type": "string",
@@ -415,9 +415,9 @@
 					"type": "string",
 					"description": "The name of the workspace"
 				},
-				"bucketName": {
+				"workspaceId": {
 					"type": "string",
-					"description": "The bucket associated with the workspace"
+					"description": "A UUID associated with the workspace"
 				},
 				"createdDate": {
 					"type": "string",
