@@ -19,17 +19,17 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
   val wsns = "namespace"
   val wsname = UUID.randomUUID().toString
-  val methodConfig = MethodConfiguration(wsns, "testConfig", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), MethodRepoConfiguration("method-a-config", "dsde", "1"), MethodRepoMethod("method-a", "dsde", "1"))
+  val methodConfig = MethodConfiguration(wsns, "testConfig", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), MethodRepoConfiguration("method-a-config", "dsde", 1), MethodRepoMethod("method-a", "dsde", 1))
   val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, WorkspaceName(wsns, wsname))
 
   val workspace = WorkspaceRequest(wsns, wsname, Map.empty)
 
   val uniqueMethodConfigName = UUID.randomUUID.toString
   val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, WorkspaceName(wsns, wsname))
-  val methodRepoGood = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_good", "2", newMethodConfigName)
-  val methodRepoMissing = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_missing", "1", methodConfigName)
-  val methodRepoEmptyPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_empty_payload", "1", methodConfigName)
-  val methodRepoBadPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_bad_payload", "1", methodConfigName)
+  val methodRepoGood = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_good", 2, newMethodConfigName)
+  val methodRepoMissing = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_missing", 1, methodConfigName)
+  val methodRepoEmptyPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_empty_payload", 1, methodConfigName)
+  val methodRepoBadPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_bad_payload", 1, methodConfigName)
 
   val copyFromMethodRepoEndpoint = "/methodconfigs/copyFromMethodRepo"
 

@@ -91,6 +91,6 @@ object MethodConfigResolver {
     val nothing = AttributeString("expression")
     val inputs = for ( input <- workflow.inputs ) yield input.fqn.toString -> nothing
     val outputs = for ( output <- workflow.outputs ) yield output._1.toString -> nothing
-    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs,MethodRepoConfiguration("none","none","none"),methodRepoMethod)
+    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs,MethodRepoConfiguration("none","none",0),methodRepoMethod)
   }
 }

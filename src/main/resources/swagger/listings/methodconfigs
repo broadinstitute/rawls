@@ -504,7 +504,7 @@
 					"description": "The name of method config from method store"
 				},
 				"methodConfigVersion": {
-					"type": "string",
+					"type": "int",
 					"description": "The version of method config from method store"
 				}
 			}
@@ -523,7 +523,7 @@
 					"description": "The name of method from method store"
 				},
 				"methodVersion": {
-					"type": "string",
+					"type": "int",
 					"description": "The version of method from method store"
 				}
 			}
