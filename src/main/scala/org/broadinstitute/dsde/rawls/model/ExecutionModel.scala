@@ -112,14 +112,35 @@ case class SubmissionValidationValue(
 // the results of parsing each of the inputs for one entity
 case class SubmissionValidationEntityInputs(
   entityName: String,
-  inputResolutions: Seq[SubmissionValidationValue] // size of Seq in nInputs
+  inputResolutions: Seq[SubmissionValidationValue] // size of Seq is nInputs
 )
 
 // the results of parsing each input for each entity
 case class SubmissionValidationReport(
+  request: SubmissionRequest,
   header: SubmissionValidationHeader,
   validEntities: Seq[SubmissionValidationEntityInputs], // entities for which parsing all inputs succeeded
   invalidEntities: Seq[SubmissionValidationEntityInputs] // entities for which parsing at least 1 of the inputs failed
+)
+
+case class WorkflowReport(
+  workflowId: String,
+  status: WorkflowStatus,
+  statusLastChangedDate: DateTime,
+  entityName: String,
+  inputResolutions: Seq[SubmissionValidationValue] // size of Seq is nInputs
+)
+
+// the results of creating a submission
+case class SubmissionReport(
+  request: SubmissionRequest,
+  submissionId: String,
+  submissionDate: DateTime,
+  submitter: String,
+  status: SubmissionStatus,
+  header: SubmissionValidationHeader,
+  workflows: Seq[WorkflowReport],
+  notstarted: Seq[SubmissionValidationEntityInputs]
 )
 
 object ExecutionJsonSupport extends JsonSupport {
@@ -170,7 +191,11 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionValidationEntityInputsFormat = jsonFormat2(SubmissionValidationEntityInputs)
 
-  implicit val SubmissionValidationReportFormat = jsonFormat3(SubmissionValidationReport)
+  implicit val SubmissionValidationReportFormat = jsonFormat4(SubmissionValidationReport)
+
+  implicit val WorkflowReportFormat = jsonFormat5(WorkflowReport)
+
+  implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
 }
 
 trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>

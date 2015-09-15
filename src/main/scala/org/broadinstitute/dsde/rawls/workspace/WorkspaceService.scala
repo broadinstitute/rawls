@@ -8,11 +8,13 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceAccessLevelFormat, WorkspaceACLFormat, WorkspaceACLUpdateFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionValidationReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
@@ -683,38 +685,46 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): PerRequestMessage =
     withSubmissionParameters(workspaceName,submissionRequest) {
-      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
-        //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
-        val submissionId: String = UUID.randomUUID().toString
-        val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, submissionId, userInfo, txn))
-        val newSubmission = Submission(submissionId = submissionId,
-          submissionDate = DateTime.now(),
-          submitter = userInfo.userEmail,
-          methodConfigurationNamespace = methodConfig.namespace,
-          methodConfigurationName = methodConfig.name,
-          submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
-          workflows = submittedWorkflows collect { case Right(e) => e },
-          notstarted = submittedWorkflows collect { case Left(e) => e },
-          status = if (submittedWorkflows.forall(_.isLeft)) SubmissionStatuses.Done else SubmissionStatuses.Submitted)
+      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
-        if (newSubmission.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, newSubmission, userInfo)
+        val submissionId: String = UUID.randomUUID().toString
+
+        val submittedWorkflows = successes map { entityInputs =>
+          val methodProps = for ( (methodInput,entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined ) yield( methodInput.wdlName -> entityValue.value.get )
+          val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions(workspaceContext, submissionId), userInfo)
+          Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName))
         }
 
-        containerDAO.submissionDAO.save(workspaceContext, newSubmission, txn)
-        RequestComplete(StatusCodes.Created, newSubmission)
+        val failedWorkflows = failures.map { entityInputs =>
+          val errors = for( entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined ) yield( AttributeString(entityValue.error.get) )
+          WorkflowFailure(entityInputs.entityName,header.entityType,errors)
+        }
+
+        val submission = Submission(submissionId = submissionId,
+          submissionDate = DateTime.now(),
+          submitter = userInfo.userEmail,
+          methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
+          methodConfigurationName = submissionRequest.methodConfigurationName,
+          submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
+          workflows = submittedWorkflows,
+          notstarted = failedWorkflows,
+          status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
+        )
+
+        if (submission.status == SubmissionStatuses.Submitted) {
+          submissionSupervisor ! SubmissionStarted(workspaceName, submission, userInfo)
+        }
+
+        containerDAO.submissionDAO.save(workspaceContext, submission, txn)
+        val workflowReports = for ( (workflow,entityInputs) <- submittedWorkflows.zip(successes) )
+                   yield( WorkflowReport(workflow.workflowId,workflow.status,workflow.statusLastChangedDate,entityInputs.entityName,entityInputs.inputResolutions) )
+        RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest,submission.submissionId,submission.submissionDate,submission.submitter,submission.status,header,workflowReports,failures))
       }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): PerRequestMessage =
     withSubmissionParameters(workspaceName,submissionRequest) {
-      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
-        val methodConfigInputs = methodConfig.inputs.toSeq.map { case (wdlName, attr) => SubmissionValidationInput(wdlName, attr.value) }
-        val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-        val resolvedInputsPerEntity = jobEntities map { entity =>
-          SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,methodConfig,entity,wdl).values.toSeq)
-        }
-        val (succeeded, failed) = resolvedInputsPerEntity partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }
-        RequestComplete(StatusCodes.OK, SubmissionValidationReport(header, succeeded, failed))
+      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs]) =>
+        RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed))
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
@@ -953,16 +963,33 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
+  private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => PerRequestMessage): PerRequestMessage = {
+    // TODO add Method to model instead of exposing AgoraEntity?
+    val methodRepoMethod = methodConfig.methodRepoMethod
+    methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) match {
+      case None => RequestComplete(http.StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")
+      case Some(agoraEntity) => agoraEntity.payload match {
+        case None => RequestComplete(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")
+        case Some(wdl) => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
+          case Failure(exception) => RequestComplete(StatusCodes.BadRequest,exception.getMessage)
+          case Success(methodInputs) => op(wdl,methodInputs)
+        }
+      }
+    }
+  }
+
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-   ( op: (RawlsTransaction, WorkspaceContext, MethodConfiguration, AgoraEntity, String, Seq[Entity]) => PerRequestMessage): PerRequestMessage = {
+   ( op: (RawlsTransaction, WorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => PerRequestMessage): PerRequestMessage = {
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, txn) { methodConfig =>
-          withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { agoraEntity =>
-            withWdl(agoraEntity) { wdl =>
-              withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, txn) { jobEntities =>
-                op(txn, workspaceContext, methodConfig, agoraEntity, wdl, jobEntities)
-              }
+          withMethodInputs(methodConfig) { (wdl,methodInputs) =>
+            withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, txn) { jobEntities =>
+              val resolvedInputs = jobEntities map { entity => SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,methodInputs,entity)) }
+              val (succeeded, failed) = resolvedInputs partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }
+              val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+              val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+              op(txn, workspaceContext, wdl, header, succeeded, failed)
             }
           }
         }

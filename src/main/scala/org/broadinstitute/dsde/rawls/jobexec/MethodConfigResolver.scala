@@ -44,6 +44,36 @@ object MethodConfigResolver {
     evaluator.evalFinalAttribute(workspaceContext, rootEntity.entityType, rootEntity.name, expression)
   }
 
+  case class MethodInput(workflowInput: WorkflowInput, expression: String)
+
+  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Seq[MethodInput] = {
+    val agoraInputs = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map( input => input.fqn -> input ).toMap
+    val missingInputs = agoraInputs.filter{ case (fqn,workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
+    val extraInputs = methodConfig.inputs.filter{ case (name,expression) => !agoraInputs.contains(name) }.keys
+    if ( missingInputs.size > 0 || extraInputs.size > 0 ) {
+      val message =
+        if ( missingInputs.size > 0 )
+          if ( extraInputs.size > 0 )
+            "is missing definitions for these inputs: " + missingInputs.mkString(", ") + " and it has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
+          else
+            "is missing definitions for these inputs: " + missingInputs.mkString(", ")
+        else
+          "has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
+      throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} ${message}")
+    }
+    for ( (name,expression) <- methodConfig.inputs.toSeq ) yield MethodInput(agoraInputs.get(name).get,expression.value)
+  }
+
+  def resolveInputs(workspaceContext: WorkspaceContext, inputs: Seq[MethodInput], entity: Entity): Seq[SubmissionValidationValue] = {
+    val evaluator = new ExpressionEvaluator(new ExpressionParser)
+    inputs.map{ input =>
+      evaluator.evalFinalAttribute(workspaceContext,entity.entityType,entity.name,input.expression) match {
+        case Success(attributeSequence) => unpackResult(attributeSequence,input.workflowInput)
+        case Failure(regrets) => SubmissionValidationValue(None,Some(regrets.getMessage))
+      }
+    }
+  }
+
   /**
    * Try (1) evaluating inputs, and then (2) unpacking them against WDL.
    *
