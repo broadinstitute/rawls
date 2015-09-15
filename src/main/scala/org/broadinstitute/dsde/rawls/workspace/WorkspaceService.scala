@@ -719,8 +719,9 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     withSubmissionParameters(workspaceName,submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, agoraEntity: AgoraEntity, wdl: String, jobEntities: Seq[Entity]) =>
         //Attempt to resolve method inputs and submit the workflows to Cromwell, and build the submission status accordingly.
-        val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, userInfo, txn))
-        val newSubmission = Submission(submissionId = UUID.randomUUID().toString,
+        val submissionId: String = UUID.randomUUID().toString
+        val submittedWorkflows = jobEntities.map(e => submitWorkflow(workspaceContext, methodConfig, e, wdl, submissionId, userInfo, txn))
+        val newSubmission = Submission(submissionId = submissionId,
           submissionDate = DateTime.now(),
           submitter = userInfo.userEmail,
           methodConfigurationNamespace = methodConfig.namespace,
@@ -905,13 +906,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, userInfo: UserInfo, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
+  private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, submissionId: String, userInfo: UserInfo, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
     MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
       case Left(failures) => Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.map(AttributeString(_))))
       case Right(inputs) =>
-        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), userInfo)
+        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), workflowOptions(workspaceContext, submissionId), userInfo)
         Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType)))
     }
+  }
+
+  private def workflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Option[String] = {
+    import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make toJson work below
+    Option(ExecutionServiceWorkflowOptions(s"gs://${workspaceContext.workspace.bucketName}/${submissionId}").toJson.toString)
   }
 
   private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: WorkspaceContext, rootEntityType: String, txn: RawlsTransaction)(op: (Seq[Entity]) => PerRequestMessage): PerRequestMessage = {

@@ -19,12 +19,12 @@ import spray.httpx.SprayJsonSupport._
  */
 class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO {
 
-  override def submitWorkflow( wdl: String, inputs: String, userInfo: UserInfo ): ExecutionServiceStatus = {
+  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): ExecutionServiceStatus = {
     // TODO: how to get the version?
     val url = executionServiceURL+"/workflows/v1"
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
-    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs))
+    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs) ++ options.map("workflowOptions" -> _).toSeq)
     Await.result(pipeline(Post(url,formData)),Duration.Inf)
   }
 
