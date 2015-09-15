@@ -2,4 +2,4 @@
 
 set -e
 
-java -jar $(find /rawls | grep 'rawls.*\.jar')
+java -jar $(find /rawls -name 'rawls*.jar')
