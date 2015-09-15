@@ -176,11 +176,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"))
-    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
-    val (status, data) = rqComplete.response
+    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) { status }
     assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
-    val newSubmission = data.asInstanceOf[Submission]
     assertResult(Some("{\"jes_gcs_root\":\"gs://rawls-aBucket/" + newSubmission.submissionId + "\"}")) { mockExecSvc.submitOptions }
 
     val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
@@ -189,23 +188,22 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert( newSubmission.notstarted.size == 0 )
     assert( newSubmission.workflows.size == 1 )
 
-    checkSubmissionStatus(workspaceService, data.submissionId)
+    checkSubmissionStatus(workspaceService, newSubmission.submissionId)
   }
 
   it should "return a successful Submission when given an entity expression that evaluates to a set of entities" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset1", Some("this.samples"))
-    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
+    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
 
-    val (status, data) = rqComplete.response
+    val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) {
       status
     }
 
-    val newSubmission = data.asInstanceOf[Submission]
     assert( newSubmission.notstarted.size == 0 )
     assert( newSubmission.workflows.size == 3 )
 
-    checkSubmissionStatus(workspaceService, data.submissionId)
+    checkSubmissionStatus(workspaceService, newSubmission.submissionId)
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
@@ -219,32 +217,30 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   it should "return a successful Submission but no started workflows when given a method configuration with unparseable inputs" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "UnparseableMethodConfig", "Individual", "indiv1", Some("this.sset.samples"))
-    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
-    val (status, data) = rqComplete.response
+    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) {
       status
     }
-    val newSubmission = data.asInstanceOf[Submission]
 
     assert( newSubmission.notstarted.size == 3 )
     assert( newSubmission.workflows.size == 0 )
 
-    checkSubmissionStatus(workspaceService, data.submissionId)
+    checkSubmissionStatus(workspaceService, newSubmission.submissionId)
   }
 
   it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"))
-    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
-    val (status, data) = rqComplete.response
+    val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) {
       status
     }
-    val newSubmission = data.asInstanceOf[Submission]
 
     assert( newSubmission.notstarted.size == 1 )
     assert( newSubmission.workflows.size == 2 )
 
-    checkSubmissionStatus(workspaceService, data.submissionId)
+    checkSubmissionStatus(workspaceService, newSubmission.submissionId)
   }
 
   it should "400 when given an entity expression that evaluates to an entity of the wrong type" in withWorkspaceService { workspaceService =>

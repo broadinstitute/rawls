@@ -266,7 +266,7 @@
 			"id": "Submission",
 			"description": "",
 			"properties": {
-				"id": {
+				"submissionId": {
 					"type": "string",
 					"description": "SubmissionRequest unique identifier"
 				},
@@ -275,13 +275,9 @@
 					"format": "date-time",
 					"description": "SubmissionRequest date"
 				},
-				"workspaceNamespace": {
+				"submitter": {
 					"type": "string",
-					"description": "Workspace namespace"
-				},
-				"workspaceName": {
-					"type": "string",
-					"description": "Workspace name"
+					"description": "user that created the submission"
 				},
 				"methodConfigurationNamespace": {
 					"type": "string",
@@ -483,8 +479,12 @@
 		"SubmissionValidationReport": {
 			"id": "SubmissionValidationReport",
 			"description": "the results of parsing each input for each entity",
-			"required": ["header", "validEntities", "invalidEntities"],
+			"required": ["request", "header", "validEntities", "invalidEntities"],
 			"properties": {
+				"request": {
+					"$ref": "SubmissionRequest",
+					"description": "the request data"
+				},
 				"header": {
 					"$ref": "SubmissionValidationHeader",
 					"description": "common values for all entities"
@@ -497,6 +497,77 @@
 				"invalidEntities": {
 					"type": "array",
 					"description": "non-runnable entities",
+					"items": { "$ref": "SubmissionValidationEntityInputs" }
+				}
+			}
+		},
+		"WorkflowReport": {
+			"id": "WorkflowReport",
+			"description": "information on each workflow submitted",
+			"required": ["workflowId", "status", "statusLastChangedDate", "entityName", "inputResolutions"],
+			"properties": {
+				"workflowId": {
+					"type": "string",
+					"description": "uuid for workflow"
+				},
+				"status": {
+					"$ref": "WorkflowStatus",
+					"description": "workflow status"
+				},
+				"statusLastChangedDate": {
+					"type": "string",
+					"format": "date-time",
+					"description": "date and time of last status change"
+				},
+				"entityName": {
+					"type": "string",
+					"description": "name of entity"
+				},
+				"inputResolutions": {
+					"type": "array",
+					"description": "resolved values of the input expressions for the method",
+					"items": { "$ref": "SubmissionValidationEntityInputs" }
+				}
+			}
+		},
+		"SubmissionReport": {
+			"id": "SubmissionReport",
+			"description": "information on a submission",
+			"required": ["request", "submissionId", "submissionDate", "submitter", "status", "header", "workflows", "notstarted"],
+			"properties": {
+				"request": {
+					"$ref": "SubmissionRequest",
+					"description": "the request data"
+				},
+				"submissionId": {
+					"type": "string",
+					"description": "SubmissionRequest unique identifier"
+				},
+				"submissionDate": {
+					"type": "string",
+					"format": "date-time",
+					"description": "SubmissionRequest date"
+				},
+				"submitter": {
+					"type": "string",
+					"description": "user that created the submission"
+				},
+				"status": {
+					"$ref": "SubmissionStatus",
+					"description": "Status"
+				},
+				"header": {
+					"$ref": "SubmissionValidationHeader",
+					"description": "common values for all entities"
+				},
+				"workflows": {
+					"type": "array",
+					"description": "workflows initiated by this submission",
+					"items": { "$ref": "WorkflowReport" }
+				},
+				"notstarted": {
+					"type": "array",
+					"description": "entities that could not be used to start workflows",
 					"items": { "$ref": "SubmissionValidationEntityInputs" }
 				}
 			}
