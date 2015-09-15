@@ -114,14 +114,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit): Unit = {
+  def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit, execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
     withDataOp { dataSource =>
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         containerDAO,
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
         dataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)_
+      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, MockGoogleCloudStorageDAO, submissionSupervisor)_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
         testCode(workspaceService)
@@ -135,6 +135,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   def withWorkspaceService(testCode: WorkspaceService => Any): Unit = {
     withDataAndService(testCode, withDefaultTestDatabase)
+  }
+
+  def withWorkspaceServiceMockExecution(testCode: (MockExecutionServiceDAO) => (WorkspaceService) => Any): Unit = {
+    val execSvc = new MockExecutionServiceDAO()
+    withDataAndService(testCode(execSvc), withDefaultTestDatabase, execSvc)
   }
 
   def withSubmissionTestWorkspaceService(testCode: WorkspaceService => Any): Unit = {
@@ -169,15 +174,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceService { workspaceService =>
+  it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"))
     val rqComplete = workspaceService.createSubmission( testData.wsName, submissionRq ).asInstanceOf[RequestComplete[(StatusCode, Submission)]]
     val (status, data) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
-
+    assertResult(StatusCodes.Created) { status }
+    assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
     val newSubmission = data.asInstanceOf[Submission]
+    assertResult(Some("{\"jes_gcs_root\":\"gs://aBucket/" + newSubmission.submissionId + "\"}")) { mockExecSvc.submitOptions }
+
     val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
     assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
 
@@ -430,4 +435,30 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     assertResult(StatusCodes.NotFound) {status}
   }
+}
+
+class MockExecutionServiceDAO() extends ExecutionServiceDAO {
+  var submitWdl: String = null
+  var submitInput: String = null
+  var submitOptions: Option[String] = None
+
+  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): ExecutionServiceStatus = {
+    this.submitInput = inputs
+    this.submitWdl = wdl
+    this.submitOptions = options
+    ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted")
+  }
+
+  override def logs(id: String, userInfo: UserInfo): ExecutionServiceLogs = ExecutionServiceLogs(id,
+    Map("x" -> Seq(Map(
+      "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
+      "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt"))))
+
+  override def outputs(id: String, userInfo: UserInfo): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("foo" -> AttributeString("bar")))
+
+  override def abort(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, "Aborted")
+
+  override def status(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, "Submitted")
+
+  override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceValidation = ExecutionServiceValidation(true, "")
 }

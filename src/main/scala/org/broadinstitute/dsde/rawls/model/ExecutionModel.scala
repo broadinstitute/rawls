@@ -44,6 +44,8 @@ case class ExecutionServiceLogs(
  logs: Map[String, Seq[Map[String,String]]]
 )
 
+case class ExecutionServiceWorkflowOptions(jes_gcs_root: String)
+
 // Status of a successfully started workflow
 case class Workflow(
   workflowId: String,
@@ -147,6 +149,8 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val ExecutionServiceOutputsFormat = jsonFormat2(ExecutionServiceOutputs)
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
+
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat1(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
