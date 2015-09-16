@@ -177,7 +177,7 @@ class HttpGoogleCloudStorageDAO(
 
     val workspaceGroups = Option(groupsQuery.getGroups).getOrElse(List.empty[Group].asJava)
 
-    workspaceGroups.flatMap( group => fromGroupId(group.getId) ).toSeq
+    workspaceGroups.flatMap( group => fromGroupId(group.getEmail) ).toSeq
   }
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
@@ -241,10 +241,10 @@ class HttpGoogleCloudStorageDAO(
 
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
   def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
-    val pattern = "rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([A-Z]+)".r
+    val pattern = s"rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r
     Try{
       val pattern(workspaceId,accessLevelString) = groupId
-      WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevel.fromCanonicalString(accessLevelString))
+      WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevel.fromCanonicalString(accessLevelString.toUpperCase))
     }.toOption
   }
   private def toGroupName(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = s"rawls ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}"
