@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, Gra
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionRequestFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionReportFormat, SubmissionRequestFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -80,7 +80,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
-    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde-config","three_step",1), MethodRepoMethod("dsde","three_step",1))
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("three_step.cgrep.pattern"->AttributeString("String")), Map.empty, MethodRepoConfiguration("dsde-config","three_step",1), MethodRepoMethod("dsde","three_step",1))
     Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
@@ -107,7 +107,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
           assertResult(StatusCodes.Created) {
             status
           }
-          val submission = responseAs[Submission]
+          val submission = responseAs[SubmissionReport]
           Get(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions/${submission.submissionId}") ~>
                   sealRoute(services.submissionRoutes) ~>
             check {
