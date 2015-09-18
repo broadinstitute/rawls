@@ -36,7 +36,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
             HttpResponse(StatusCodes.NotFound)
           }
         }
-      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.0.24/")
+      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.1.1/")
     }
 
   def receive = runRoute(possibleRoutes)
