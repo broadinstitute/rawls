@@ -107,4 +107,5 @@ class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionS
 
   override def status(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
   override def abort(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
+  override def callLevelMetadata(id: String, userInfo: UserInfo): ExecutionMetadata = null
 }

@@ -294,6 +294,26 @@ class RemoteServicesMockServer(port:Int) {
             """.stripMargin)
           .withStatusCode(StatusCodes.Created.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/69d1d92f-3895-4a7b-880a-82535e9a096e/metadata")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
+              |  "status": "Unknown",
+              |  "submission": "2010-09-10T11:12:13.456Z",
+              |  "inputs": {},
+              |  "calls": {}
+              |}
+            """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
   }
 
   def stopServer = mockServer.stop()

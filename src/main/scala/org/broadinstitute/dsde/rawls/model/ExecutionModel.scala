@@ -143,6 +143,31 @@ case class SubmissionReport(
   notstarted: Seq[SubmissionValidationEntityInputs]
 )
 
+case class CallMetadata(
+  inputs: Map[String, String],
+  status: String,
+  outputs: Option[Map[String, String]],
+  start: Option[DateTime],
+  end: Option[DateTime],
+  jobid: Option[String],
+  rc: Option[Int],
+  backend: Option[String],
+  stdout: Option[String],
+  stderr: Option[String]
+)
+
+case class ExecutionMetadata
+(
+  id: String,
+  status: String,
+  submission: DateTime,
+  start: Option[DateTime],
+  end: Option[DateTime],
+  inputs: Map[String, String],
+  outputs: Option[Map[String, String]],
+  calls: Map[String, Seq[CallMetadata]]
+)
+
 object ExecutionJsonSupport extends JsonSupport {
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
@@ -196,6 +221,10 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowReportFormat = jsonFormat5(WorkflowReport)
 
   implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
+
+  implicit val CallMetadataFormat = jsonFormat10(CallMetadata)
+
+  implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
 }
 
 trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>
