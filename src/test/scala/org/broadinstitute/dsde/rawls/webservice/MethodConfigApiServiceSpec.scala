@@ -312,7 +312,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
 
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
     val method = MethodRepoMethod("dsde","three_step",1)
-    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
+    Get("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
@@ -324,7 +324,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   }
 
   it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step",2).toJson.toString)) ~>
+    Get("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step",2).toJson.toString)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }

@@ -78,7 +78,7 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
       }
     } ~
     path("methodconfigs" / "template") {
-      post {
+      get {
         entity(as[MethodRepoMethod]) { methodRepoMethod =>
           requestContext => perRequest(requestContext,
                                         WorkspaceService.props(workspaceServiceConstructor, userInfo),
