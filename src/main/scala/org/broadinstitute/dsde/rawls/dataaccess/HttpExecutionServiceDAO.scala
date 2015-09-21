@@ -43,6 +43,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit system: A
     Await.result(pipeline(Get(url)),Duration.Inf)
   }
 
+  override def callLevelMetadata(id: String, userInfo: UserInfo): ExecutionMetadata = {
+    val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
+    import system.dispatcher
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionMetadata]
+    Await.result(pipeline(Get(url)),Duration.Inf)
+  }
+
   override def outputs(id: String, userInfo: UserInfo): ExecutionServiceOutputs = {
     val url = executionServiceURL + s"/workflows/v1/${id}/outputs"
     import system.dispatcher

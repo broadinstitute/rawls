@@ -13,11 +13,13 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStar
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceAccessLevelFormat, WorkspaceACLFormat, WorkspaceACLUpdateFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.CallMetadataFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionMetadataFormat
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionValidationReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.AttributeConversions
@@ -85,7 +87,7 @@ object WorkspaceService {
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
-
+  case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
   }
@@ -136,6 +138,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case GetSubmissionStatus(workspaceName, submissionId) => context.parent ! getSubmissionStatus(workspaceName, submissionId)
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
+    case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => context.parent ! workflowMetadata(workspaceName, submissionId, workflowId)
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
@@ -806,6 +809,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
+  def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
+    dataSource inTransaction { txn =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
+        withSubmission(workspaceContext, submissionId, txn) { submission =>
+          withWorkflow(workspaceName, submission, workflowId) { workflow =>
+            RequestComplete(StatusCodes.OK, executionServiceDAO.callLevelMetadata(workflowId, userInfo))
+          }
+        }
+      }
+    }
+  }
 
   // helper methods
 

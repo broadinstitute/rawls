@@ -431,6 +431,18 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     assertResult(StatusCodes.NotFound) {status}
   }
+
+  "Getting workflow metadata" should "return 200" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowMetadata(
+      subTestData.wsName,
+      subTestData.submissionTestAbortGoodWorkflow.submissionId,
+      subTestData.existingWorkflowId)
+    val (status, data) = rqComplete.asInstanceOf[RequestComplete[(StatusCode, ExecutionMetadata)]].response
+
+    assertResult(StatusCodes.OK) {
+      status
+    }
+  }
 }
 
 class MockExecutionServiceDAO() extends ExecutionServiceDAO {
@@ -457,4 +469,6 @@ class MockExecutionServiceDAO() extends ExecutionServiceDAO {
   override def status(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, "Submitted")
 
   override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceValidation = ExecutionServiceValidation(true, "")
+
+  override def callLevelMetadata(id: String, userInfo: UserInfo): ExecutionMetadata = null
 }
