@@ -17,14 +17,16 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/Submission'
+            type: array
+            items:
+              $ref: '#/definitions/Submission'
         '404':
           description: Workspace not found
         '500':
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: List all submissions
       operationId: listSubmissions
       parameters:
@@ -56,7 +58,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: Create submission
       operationId: createSubmission
       parameters:
@@ -91,7 +93,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: Validate submission
       operationId: validateSubmission
       parameters:
@@ -117,14 +119,14 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/Submission'
+            $ref: '#/definitions/SubmissionReport'
         '404':
           description: Submission Not Found
         '500':
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: Monitor submission status
       operationId: getSubmissionStatus
       parameters:
@@ -155,7 +157,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: Abort submission
       operationId: abortSubmission
       parameters:
@@ -187,7 +189,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/submissions
+        - submissions
       summary: Get workflow outputs
       operationId: getWorkflowOutputs
       parameters:
@@ -226,7 +228,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: rename entity in a workspace
       operationId: renameEntity
       parameters:
@@ -269,7 +271,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: evaluate expression on an entity
       operationId: evaluateExpression
       parameters:
@@ -306,7 +308,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: list all entity types in a workspace
       operationId: list_entity_types
       parameters:
@@ -336,7 +338,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: Create entity in a workspace
       operationId: create_entity
       parameters:
@@ -362,14 +364,16 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/Entity'
+            type: array
+            items:
+              $ref: '#/definitions/Entity'
         '404':
           description: Workspace or entityType does not exist
         '500':
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: list all entities of given type in a workspace
       operationId: list_entities
       parameters:
@@ -401,7 +405,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: Get entity in a workspace
       operationId: get_entity
       parameters:
@@ -439,7 +443,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: Update entity in a workspace
       operationId: update_entity
       parameters:
@@ -481,7 +485,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: delete entity in a workspace
       operationId: delete_entity
       parameters:
@@ -520,7 +524,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: copy entities from one workspace into another workspace
       operationId: copy_entities
       parameters:
@@ -545,7 +549,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: batch upsert entities into a workspace
       operationId: batch_upsert_entities
       parameters:
@@ -564,7 +568,9 @@ paths:
           name: batchUpsertJson
           required: true
           schema:
-            $ref: '#/definitions/EntityUpdateDefinition'
+            type: array
+            items:
+              $ref: '#/definitions/EntityUpdateDefinition'
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
     post:
       responses:
@@ -580,7 +586,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/entities
+        - entities
       summary: batch update entities into a workspace. All referenced entities must already exist
       operationId: batch_update_entities
       parameters:
@@ -617,7 +623,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: Create Method configuration in a workspace
       operationId: create_method_configuration
       parameters:
@@ -642,14 +648,16 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/MethodConfiguration'
+            type: array
+            items:
+              $ref: '#/definitions/MethodConfiguration'
         '404':
           description: Workspace does not exist
         '500':
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: list method configurations in a workspace
       operationId: list_method_configurations
       parameters:
@@ -676,7 +684,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: get method configuration in a workspace
       operationId: get_method_configuration
       parameters:
@@ -712,7 +720,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: delete method configuration in a workspace
       operationId: delete_method_configuration
       parameters:
@@ -748,7 +756,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: Update method configuration in a workspace
       operationId: update_method_configuration
       parameters:
@@ -793,7 +801,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: rename method configuration in a workspace
       operationId: rename_method_config
       parameters:
@@ -840,7 +848,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: Copy method configuration in a workspace from another workspace
       operationId: copy_method_configuration
       parameters:
@@ -869,7 +877,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: Copy method configuration from the method repository
       operationId: copy_repo_configuration
       parameters:
@@ -892,7 +900,7 @@ paths:
           description: No such method
       description: ''
       tags:
-        - listings/methodconfigs
+        - methodconfigs
       summary: Create a template for a method configuration from a method in the method repository
       operationId: method_config_template
       parameters:
@@ -917,7 +925,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Lock workspace
       operationId: lockWorkspace
       parameters:
@@ -946,7 +954,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Unlock workspace
       operationId: unlockWorkspace
       parameters:
@@ -975,7 +983,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Get workspace ACL
       operationId: getACL
       parameters:
@@ -1001,7 +1009,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Update workspace ACL
       operationId: updateACL
       parameters:
@@ -1036,7 +1044,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Create/replace workspace
       operationId: create
       parameters:
@@ -1051,12 +1059,14 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/WorkspaceListResponse'
+            type: array
+            items:
+              $ref: '#/definitions/WorkspaceListResponse'
         '500':
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: List workspaces
       operationId: list
   '/workspaces/{workspaceNamespace}/{workspaceName}':
@@ -1074,7 +1084,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Update attributes of a workspace
       operationId: update_workspace
       parameters:
@@ -1106,7 +1116,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Get workspace
       operationId: list
       parameters:
@@ -1132,7 +1142,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Delete workspace
       operationId: delete_workspace
       parameters:
@@ -1149,8 +1159,6 @@ paths:
   '/workspaces/{workspaceNamespace}/{workspaceName}/clone':
     post:
       responses:
-        '200':
-          description: No response was specified
         '201':
           description: Successful Request
         '400':
@@ -1163,7 +1171,7 @@ paths:
           description: Rawls Internal Error
       description: ''
       tags:
-        - listings/workspaces
+        - workspaces
       summary: Clone workspace
       operationId: clone
       parameters:
@@ -1184,13 +1192,13 @@ paths:
           schema:
             $ref: '#/definitions/WorkspaceName'
 tags:
-  - name: listings/submissions
+  - name: submissions
     description: Submissions API
-  - name: listings/entities
+  - name: entities
     description: Entity manipulation API
-  - name: listings/methodconfigs
+  - name: methodconfigs
     description: Method Configuration manipulation API
-  - name: listings/workspaces
+  - name: workspaces
     description: Workspace manipulation API
 host: localhost
 basePath: /
@@ -1200,19 +1208,16 @@ definitions:
   Submission:
     description: ''
     properties:
-      id:
+      submissionId:
         type: string
         description: SubmissionRequest unique identifier
       submissionDate:
         type: string
         format: date-time
         description: SubmissionRequest date
-      workspaceNamespace:
+      submitter:
         type: string
-        description: Workspace namespace
-      workspaceName:
-        type: string
-        description: Workspace name
+        description: user that created the submission
       methodConfigurationNamespace:
         type: string
         description: Method configuration namespace
@@ -1238,12 +1243,14 @@ definitions:
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
+
   SubmissionStatus:
     description: ''
     properties:
       name:
         type: string
         description: submission status
+
   WorkflowFailure:
     description: ''
     properties:
@@ -1264,6 +1271,7 @@ definitions:
         description: List of errors starting this workflow
         items:
           type: string
+
   Workflow:
     description: ''
     properties:
@@ -1293,6 +1301,7 @@ definitions:
     properties:
       done:
         type: boolean
+
   SubmissionRequest:
     description: ''
     required:
@@ -1316,6 +1325,7 @@ definitions:
       expression:
         type: string
         description: Expression that resolves to one or more entities matching the entity type in the method configuration.
+
   SubmissionValidationInput:
     description: "method configuration input parameter, it's name and the associated expression from the method config"
     required:
@@ -1328,6 +1338,7 @@ definitions:
       expression:
         type: string
         description: expression for input
+
   SubmissionValidationHeader:
     description: common values for all the entities -- the entity type and the input descriptions
     required:
@@ -1342,6 +1353,7 @@ definitions:
         description: input descriptions
         items:
           $ref: '#/definitions/SubmissionValidationInput'
+
   SubmissionValidationValue:
     description: result of an expression parse for one of the inputs
     required: []
@@ -1352,6 +1364,7 @@ definitions:
       error:
         type: string
         description: parsing error(s)
+
   SubmissionValidationEntityInputs:
     description: the results of parsing each of the inputs for one entity
     required:
@@ -1366,9 +1379,11 @@ definitions:
         description: input resolution
         items:
           $ref: '#/definitions/SubmissionValidationValue'
+
   SubmissionValidationReport:
     description: the results of parsing each input for each entity
     required:
+      - request
       - header
       - validEntities
       - invalidEntities
@@ -1386,13 +1401,88 @@ definitions:
         description: non-runnable entities
         items:
           $ref: '#/definitions/SubmissionValidationEntityInputs'
+      request:
+        $ref: '#/definitions/SubmissionRequest'
+
   TaskOutput:
     description: Outputs from a single task in a workflow
     properties:
       logs:
-        $ref: '#/definitions/Map[string,string]'
+        $ref: ''
+        description: Map[String,String]
       outputs:
-        $ref: '#/definitions/Map[string,Attribute]'
+        $ref: ''
+        description: Map[String,String]
+
+  WorkflowReport:
+    description: information on each workflow submitted
+    required:
+      - workflowId
+      - status
+      - statusLastChangedData
+      - entityName
+    properties:
+      workflowId:
+        type: string
+        description: uuid for workflow
+      status:
+        type: string
+        description: workflow status
+      statusLastChangedDate:
+        type: string
+        format: date-time
+        description: data and time of last status change
+      entityName:
+        type: string
+        description: name of entity
+      inputResolutions:
+        type: array
+        description: resolved values of the input expressions for the method
+        items:
+          $ref: '#/definitions/SubmissionValidationEntityInputs'
+
+  SubmissionReport:
+    description: information on a submission
+    required:
+      - request
+      - submissionId
+      - submissionDate
+      - submitter
+      - status
+      - header
+      - workflows
+      - notstarted
+    properties:
+      request:
+        $ref: '#/definitions/SubmissionRequest'
+        description: the request data
+      submissionId:
+        type: string
+        description: SubmissionRequest unique identifier
+      submissionDate:
+        type: string
+        format: date-time
+        description: SubmissionRequest date
+      submitter:
+        type: string
+        description: user that created the submission
+      status:
+        type: string
+        description: status
+      header:
+        $ref: '#/definitions/SubmissionValidationHeader'
+        description: common values for all entities
+      workflows:
+        type: array
+        description: workflows initiated by this submission
+        items:
+          $ref: '#/definitions/WorkflowReport'
+      notstarted:
+        type: array
+        description: workflows that could not be used to start workflows
+        items:
+          $ref: '#/definitions/SubmissionValidationEntityInputs'
+
   WorkflowOutputs:
     description: Outputs and logs from all tasks in a workflow
     properties:
@@ -1404,6 +1494,7 @@ definitions:
       workflowId:
         type: string
         description: The id of this workflow
+
   WorkspaceName:
     description: ''
     required:
@@ -1416,6 +1507,7 @@ definitions:
       name:
         type: string
         description: The name of the workspace
+
   EntityName:
     description: ''
     required:
@@ -1424,6 +1516,7 @@ definitions:
       name:
         type: string
         description: The name of the entity
+
   EntityCopyDefinition:
     description: ''
     required:
@@ -1446,13 +1539,13 @@ definitions:
         description: Names of entities to copy
         items:
           type: string
+
   Entity:
     description: ''
     required:
       - name
       - entityType
       - attributes
-      - workspaceName
     properties:
       name:
         type: string
@@ -1461,10 +1554,9 @@ definitions:
         type: string
         description: The type of the entity
       attributes:
-        $ref: '#/definitions/Map[string,Attribute]'
-      workspaceName:
-        type: string
-        description: The name of the workspace
+        type: ''
+        description: Map[String,Attribute]
+
   AttributeUpdateOperation:
     description: ''
     properties:
@@ -1476,49 +1568,71 @@ definitions:
         $ref: '#/definitions/AddListMember'
       Example payload for RemoveListMember:
         $ref: '#/definitions/RemoveListMember'
+
   AddUpdateAttribute:
     description: ''
     required:
+      - op
       - attributeName
       - addUpdateAttribute
     properties:
+      op:
+        type: string
+        description: The operation to perform on the attribute
       attributeName:
         type: string
         description: The name of the attribute
       addUpdateAttribute:
-        $ref: '#/definitions/Attribute'
+        type: string
         description: The update attribute
+
   RemoveAttribute:
     description: ''
     required:
+      - op
       - attributeName
     properties:
+      op:
+        type: string
+        description: The operation to perform on the attribute
       attributeName:
         type: string
         description: The name of the attribute
+
   AddListMember:
     description: ''
     required:
+      - op
       - attributeListName
       - newMember
     properties:
+      op:
+        type: string
+        description: The operation to perform on the attribute
       attributeListName:
         type: string
         description: The name of the attribute list
       newMember:
-        $ref: '#/definitions/Attribute'
+        type: string
+        description: The attribute to add
+
   RemoveListMember:
     description: ''
     required:
+      - op
       - attributeListName
       - removeMember
     properties:
+      op:
+        type: string
+        description: The operation to perform on the attribute
       attributeListName:
         type: string
         description: The name of the attribute list
       removeMember:
-        $ref: '#/definitions/Attribute'
+        type: string
         description: The attribute to remove
+
   EntityUpdateDefinition:
     description: ''
     required:
@@ -1533,7 +1647,8 @@ definitions:
         type: string
         description: The type of the entity
       operations:
-        $ref: '#/definitions/Array[AttributeUpdateOperation]'
+        $ref: '#/definitions/AttributeUpdateOperation'
+
   MethodConfiguration:
     description: ''
     required:
@@ -1541,7 +1656,6 @@ definitions:
       - name
       - rootEntityType
       - inputs
-      - workspaceName
       - methodRepoMethod
     properties:
       namespace:
@@ -1554,20 +1668,18 @@ definitions:
         type: string
         description: The root entity type that the method will be running on
       prerequisites:
-        $ref: '#/definitions/Map[string,string]'
+        $ref: ''
       inputs:
-        $ref: '#/definitions/Map[string,string]'
-      workspaceName:
-        type: string
-        description: The workspace name
+        $ref: ''
       outputs:
-        $ref: '#/definitions/Map[string,string]'
+        $ref: ''
       methodRepoConfig:
         $ref: '#/definitions/MethodRepoConfiguration'
         description: The properties of the method configuration from the method store that this derived from
       methodRepoMethod:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
+
   MethodRepoConfigurationQuery:
     description: ''
     required:
@@ -1583,11 +1695,12 @@ definitions:
         type: string
         description: Method Repository Name
       methodRepoSnapshotId:
-        type: string
+        type: integer
         description: Method Repository Snapshot ID
       destination:
         $ref: '#/definitions/MethodConfigurationName'
         description: The destination for a copied method configuration
+
   MethodConfigurationNamePair:
     description: ''
     required:
@@ -1600,6 +1713,7 @@ definitions:
       destination:
         $ref: '#/definitions/MethodConfigurationName'
         description: The destination for a copied method configuration
+
   MethodConfigurationName:
     description: ''
     required:
@@ -1616,6 +1730,7 @@ definitions:
       workspaceName:
         $ref: '#/definitions/WorkspaceName'
         description: "This method configuration's owning workspace"
+
   MethodRepoConfiguration:
     description: ''
     required:
@@ -1630,8 +1745,9 @@ definitions:
         type: string
         description: The name of method config from method store
       methodConfigVersion:
-        type: string
+        type: integer
         description: The version of method config from method store
+
   MethodRepoMethod:
     description: ''
     required:
@@ -1646,15 +1762,18 @@ definitions:
         type: string
         description: The name of method from method store
       methodVersion:
-        type: string
+        type: integer
         description: The version of method from method store
+
   WorkspaceACL:
     description: ''
     required:
       - acl
     properties:
       acl:
-        $ref: '#/definitions/Map[string,WorkspaceAccessLevel]'
+        $ref: ''
+        description: Map[String,WorkspaceAccessLevel]
+
   WorkspaceACLUpdate:
     description: ''
     required:
@@ -1667,12 +1786,13 @@ definitions:
       accessLevel:
         $ref: '#/definitions/WorkspaceAccessLevel'
         description: The access level to grant to this user
+
   Workspace:
     description: ''
     required:
       - namespace
       - name
-      - bucketName
+      - workspaceId
       - createdDate
       - createdBy
       - attributes
@@ -1683,9 +1803,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
-      bucketName:
+      workspaceId:
         type: string
-        description: The bucket associated with the workspace
+        description: A UUID associated with the workspace
       createdDate:
         type: string
         format: date-time
@@ -1694,7 +1814,8 @@ definitions:
         type: string
         description: The user who created the workspace
       attributes:
-        $ref: '#/definitions/Map[string,Attribute]'
+        $ref: ''
+
   WorkspaceSubmissionStats:
     description: Statistics about submissions in a workspace
     required:
@@ -1711,6 +1832,7 @@ definitions:
       runningSubmissionsCount:
         type: integer
         description: Count of all the running submissions
+
   WorkspaceRequest:
     description: ''
     required:
@@ -1725,19 +1847,22 @@ definitions:
         type: string
         description: The name of the workspace
       attributes:
-        $ref: '#/definitions/Map[string,Attribute]'
+        $ref: ''
+
   WorkspaceAccessLevel:
     description: ''
     properties:
       workspaceAccessLevel:
-        type: integer
-        description: ''
+        type: string
+        description: 'Options: UNKNOWN, NO ACCESS, READER, WRITER, OWNER'
+
   Attribute:
     description: ''
     properties:
       value:
         type: string
         description: ''
+
   WorkspaceListResponse:
     description: ''
     properties:
@@ -1748,6 +1873,7 @@ definitions:
       workspaceSubmissionStats:
         $ref: '#/definitions/WorkspaceSubmissionStats'
       owners:
-        $ref: '#/definitions/Array[String]'
-
-
+        schema:
+          type: array
+          items:
+            type: string
