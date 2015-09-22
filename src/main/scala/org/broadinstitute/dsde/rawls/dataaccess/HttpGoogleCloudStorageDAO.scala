@@ -37,7 +37,7 @@ class HttpGoogleCloudStorageDAO(
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int) extends GoogleCloudStorageDAO {
+  deletedBucketCheckSeconds: Int) extends GoogleCloudStorageDAO with Retry {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -54,7 +54,8 @@ class HttpGoogleCloudStorageDAO(
   val system = akka.actor.ActorSystem("system")
 
   override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String): Unit = {
-    getStorage(getBucketCredential(userInfo)).buckets.insert(projectId, new Bucket().setName(getBucketName(workspaceId))).execute
+    val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId, new Bucket().setName(getBucketName(workspaceId)))
+    retry(inserter.execute,when500)
   }
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit = {
@@ -62,8 +63,8 @@ class HttpGoogleCloudStorageDAO(
     val bucketName = getBucketName(workspaceId)
     def bucketDeleteFn(): Unit = {
       val buckets = getStorage(getBucketCredential(userInfo)).buckets
-
-      Try(buckets.delete(bucketName).execute) match {
+      val deleter = buckets.delete(bucketName)
+      tryRetry(deleter.execute,when500) match {
         //Google returns 409 Conflict if the bucket isn't empty.
         case Failure(gjre: GoogleJsonResponseException) if gjre.getDetails.getCode == 409 =>
           //Google doesn't let you delete buckets that are full.
@@ -74,7 +75,8 @@ class HttpGoogleCloudStorageDAO(
             .setAction(new Action().setType("delete"))
             .setCondition(new Condition().setAge(0))
           val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
-          val bucket = buckets.get(bucketName).execute()
+          val fetcher = buckets.get(bucketName)
+          val bucket = retry(fetcher.execute,when500)
           bucket.setLifecycle(lifecycle)
 
           system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds)(bucketDeleteFn)
@@ -100,24 +102,28 @@ class HttpGoogleCloudStorageDAO(
       // create the group
       val groupId = toGroupId(bucketName, accessLevel)
       val group = new Group().setEmail(groupId).setName(toGroupName(workspaceName,accessLevel))
-      groups.insert(group).execute()
+      val inserter = groups.insert(group)
+      retry(inserter.execute,when500)
 
       // add group to ACL (using bucket owner's credential)
       val bucketAcl = new BucketAccessControl().setEntity(makeGroupEntityString(groupId)).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel)).setBucket(bucketName)
-      bucketAccessControls.insert(bucketName, bucketAcl).execute()
+      val aclInserter = bucketAccessControls.insert(bucketName, bucketAcl)
+      retry(aclInserter.execute,when500)
     }
 
     // add the owner -- may take up to 1 minute after groups are created
     // (see https://developers.google.com/admin-sdk/directory/v1/guides/manage-groups)
     val targetMember = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
-    groupDirectory.members.insert(toGroupId(bucketName, WorkspaceAccessLevel.Owner), targetMember).execute()
+    val inserter = groupDirectory.members.insert(toGroupId(bucketName, WorkspaceAccessLevel.Owner), targetMember)
+    retry(inserter.execute,when500)
   }
 
   override def deleteACLGroups(workspaceId: String): Unit = {
     val groups = getGroupDirectory.groups
     groupAccessLevelsAscending foreach { accessLevel =>
       val groupId = toGroupId(getBucketName(workspaceId), accessLevel)
-      groups.delete(groupId).execute()
+      val deleter = groups.delete(groupId)
+      retry(deleter.execute,when500)
     }
   }
 
@@ -127,7 +133,8 @@ class HttpGoogleCloudStorageDAO(
 
     // return the maximum access level for each user
     val aclMap = groupAccessLevelsAscending map { accessLevel: WorkspaceAccessLevel =>
-      val membersQuery = members.list(toGroupId(bucketName, accessLevel)).execute()
+      val fetcher = members.list(toGroupId(bucketName, accessLevel))
+      val membersQuery = retry(fetcher.execute,when500)
       // NB: if there are no members in this group, Google returns null instead of an empty list. fix that here.
       val membersList = Option(membersQuery.getMembers).getOrElse(List.empty[Member].asJava)
       membersList.map(_.getEmail -> accessLevel).toMap[String, WorkspaceAccessLevel]
@@ -152,7 +159,8 @@ class HttpGoogleCloudStorageDAO(
   override def getOwners(workspaceId: String): Seq[String] = {
     val members = getGroupDirectory.members
     //a workspace should always have an owner, but just in case for some reason it doesn't...
-    val ownersQuery = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevel.Owner)).execute()
+    val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevel.Owner))
+    val ownersQuery = retry(fetcher.execute,when500)
 
     Option(ownersQuery.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
   }
@@ -164,8 +172,11 @@ class HttpGoogleCloudStorageDAO(
     @tailrec
     def testLevel( levels: Seq[WorkspaceAccessLevel] ): WorkspaceAccessLevel = {
       if ( levels.isEmpty ) WorkspaceAccessLevel.NoAccess
-      else if ( Try(members.get(toGroupId(bucketName,levels.head),userId).execute()).isSuccess ) levels.head
-      else testLevel( levels.tail )
+      else {
+        val fetcher = members.get(toGroupId(bucketName,levels.head),userId)
+        if ( tryRetry(fetcher.execute,when500).isSuccess ) levels.head
+        else testLevel( levels.tail )
+      }
     }
 
     testLevel(groupAccessLevelsAscending.reverse)
@@ -173,7 +184,8 @@ class HttpGoogleCloudStorageDAO(
 
   override def getWorkspaces(userId: String): Seq[WorkspacePermissionsPair] = {
     val directory = getGroupDirectory
-    val groupsQuery = directory.groups().list().setUserKey(userId).execute()
+    val fetcher = directory.groups().list().setUserKey(userId)
+    val groupsQuery = retry(fetcher.execute,when500)
 
     val workspaceGroups = Option(groupsQuery.getGroups).getOrElse(List.empty[Group].asJava)
 
@@ -183,6 +195,12 @@ class HttpGoogleCloudStorageDAO(
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
   // these really should all be private, but we're opening up a few of these to allow integration testing
+  private def when500( throwable: Throwable ): Boolean = {
+    throwable match {
+      case gjre: GoogleJsonResponseException => gjre.getDetails.getCode/100 == 5
+      case _ => false
+    }
+  }
 
   private def updateUserAccess(userId: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Option[(String,String)] = {
     val members = directory.members
@@ -192,12 +210,16 @@ class HttpGoogleCloudStorageDAO(
     else {
       val bucketName = getBucketName(workspaceId)
       val member = new Member().setEmail(userId).setRole(groupMemberRole)
-      if ( currentAccessLevel >= WorkspaceAccessLevel.Read && Try(members.delete(toGroupId(bucketName,currentAccessLevel), userId).execute()).isFailure )
+      val deleter = members.delete(toGroupId(bucketName,currentAccessLevel), userId)
+      if ( currentAccessLevel >= WorkspaceAccessLevel.Read && tryRetry(deleter.execute,when500).isFailure )
         Option((userId,s"Failed to change permissions for $userId."))
-      else if ( targetAccessLevel >= WorkspaceAccessLevel.Read && Try(members.insert(toGroupId(bucketName,targetAccessLevel), member).execute()).isFailure )
-        Option((userId,s"Failed to change permissions for $userId. They have been dropped from the workspace. Please try re-adding them."))
-      else
-        None
+      else {
+        val inserter = members.insert(toGroupId(bucketName,targetAccessLevel), member)
+        if ( targetAccessLevel >= WorkspaceAccessLevel.Read && tryRetry(inserter.execute,when500).isFailure )
+          Option((userId,s"Failed to change permissions for $userId. They have been dropped from the workspace. Please try re-adding them."))
+        else
+          None
+      }
     }
   }
 
