@@ -126,6 +126,13 @@ case class MethodConfigurationShort(
   def idField = "name"
 }
 
+case class ValidatedMethodConfiguration(
+                                         methodConfiguration: MethodConfiguration,
+                                         validInputs: Seq[String],
+                                         invalidInputs: Map[String,String],
+                                         validOutputs: Seq[String],
+                                         invalidOutputs: Map[String,String])
+
 case class MethodRepoConfigurationQuery(
                                          methodRepoNamespace: String,
                                          methodRepoName: String,
@@ -209,5 +216,7 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
+
+  implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
 
 }

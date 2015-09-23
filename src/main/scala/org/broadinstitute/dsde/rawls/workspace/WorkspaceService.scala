@@ -1,42 +1,35 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.io.File
 import java.util.UUID
 
 import akka.actor.{ActorRef, Actor, Props}
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceAccessLevelFormat, WorkspaceACLFormat, WorkspaceACLUpdateFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.CallMetadataFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionMetadataFormat
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionValidationReportFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsFormat
-import org.broadinstitute.dsde.rawls.dataaccess.{MethodConfigurationDAO, EntityDAO, WorkspaceDAO}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.AttributeConversions
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, RequestCompleteWithHeaders, PerRequestMessage, RequestComplete}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, PerRequestMessage, RequestComplete}
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http
 import spray.http.Uri
-import spray.http.HttpHeaders.Location
-import spray.http.{StatusCodes, HttpCookie, HttpHeaders}
+import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.httpx.UnsuccessfulResponseException
 import spray.json._
-import spray.routing.RequestContext
 
 import scala.annotation.tailrec
 import scala.concurrent.Future
@@ -542,12 +535,30 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
+  def saveAndValidateMCExpressions(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): ValidatedMethodConfiguration = {
+    containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
+
+    val parser = new ExpressionParser
+
+    def parseAndPartition(m: Map[String, AttributeString]) = {
+      val parsed = m mapValues { attr => parser.parseAttributeExpr(attr.value) }
+      ( parsed collect { case (key, Success(_)) => key } toSeq,
+        parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
+    }
+    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs)
+    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs)
+
+    ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
+  }
+
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
           case Some(_) => RequestComplete(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")
-          case None => RequestCompleteWithLocation((StatusCodes.Created, containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)), methodConfiguration.path(workspaceName))
+          case None =>
+            val validatedMethodConfiguration = saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn)
+            RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
         }
       }
     }
@@ -580,8 +591,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-          case Some(_) =>
-            RequestComplete(containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn))
+          case Some(_) => RequestComplete(saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn))
           case None => RequestComplete(StatusCodes.NotFound)
         }
       }
@@ -632,8 +642,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
         case None =>
           val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
-          val targetMethodConfig = containerDAO.methodConfigurationDAO.save(workspaceContext, target, txn)
-          RequestCompleteWithLocation((StatusCodes.Created, targetMethodConfig), targetMethodConfig.path(dest.workspaceName))
+          val validatedTarget = saveAndValidateMCExpressions(workspaceContext, target, txn)
+          RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName))
       }
     }
 

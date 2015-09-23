@@ -74,7 +74,6 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
       MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", 1), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -92,6 +91,41 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           header("Location")
         }
       }
+  }
+
+  it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
+    val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
+    val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
+      MethodRepoConfiguration(testData.wsName.namespace+"_config", "method-a", 1), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+
+    val expectedSuccessInputs = Seq("good_in")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("good_out")
+    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
+          responseAs[ValidatedMethodConfiguration]
+        }
+        services.dataSource.inTransaction { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            // all inputs and outputs are saved, regardless of parsing errors
+            for ((key, value) <- inputs) assertResult(Option(value)) {
+              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get.inputs.get(key)
+            }
+            for ((key, value) <- outputs) assertResult(Option(value)) {
+              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get.outputs.get(key)
+            }
+          }
+        }
+      }
+
   }
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
@@ -191,12 +225,45 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         assertResult(modifiedMethodConfig) {
-          responseAs[MethodConfiguration]
+          responseAs[ValidatedMethodConfiguration].methodConfiguration
         }
         services.dataSource.inTransaction { txn =>
           withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(Option(AttributeString("foo2"))) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
+            }
+          }
+        }
+      }
+  }
+
+  it should "validate attribute syntax in update method configuration" in withTestDataApiServices { services =>
+    val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
+    val newOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
+
+    val expectedSuccessInputs = Seq("good_in")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("good_out")
+    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
+          responseAs[ValidatedMethodConfiguration]
+        }
+        services.dataSource.inTransaction { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            // all inputs and outputs are saved, regardless of parsing errors
+            for ((key, value) <- newInputs) assertResult(Option(value)) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get(key)
+            }
+            for ((key, value) <- newOutputs) assertResult(Option(value)) {
+              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.outputs.get(key)
             }
           }
         }
