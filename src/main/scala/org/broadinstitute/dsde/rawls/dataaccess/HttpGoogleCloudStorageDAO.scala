@@ -6,21 +6,19 @@ import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.client.util.store.FileDataStoreFactory
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
-import com.google.api.services.admin.directory.Directory._
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.compute.ComputeScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.{StorageScopes, Storage}
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl}
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -53,9 +51,62 @@ class HttpGoogleCloudStorageDAO(
 
   val system = akka.actor.ActorSystem("system")
 
-  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String): Unit = {
-    val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId, new Bucket().setName(getBucketName(workspaceId)))
-    retry(inserter.execute,when500)
+  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Unit = {
+    val bucketName = getBucketName(workspaceId)
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Read)) {
+      insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Write)) {
+        insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Owner)) {
+          val ownersGroupId = toGroupId(bucketName,WorkspaceAccessLevel.Owner)
+          val owner = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
+          val ownerInserter = directory.members.insert(ownersGroupId,owner)
+          retry(ownerInserter.execute,when500)
+
+          val readersEntity = makeGroupEntityString(toGroupId(bucketName,WorkspaceAccessLevel.Read))
+          val writersEntity = makeGroupEntityString(toGroupId(bucketName,WorkspaceAccessLevel.Write))
+          val ownersEntity = makeGroupEntityString(ownersGroupId)
+          val bucket = new Bucket().setName(bucketName).setAcl(List(
+              newBucketAccessControl(readersEntity,WorkspaceAccessLevel.Read),
+              newBucketAccessControl(writersEntity,WorkspaceAccessLevel.Write),
+              newBucketAccessControl(ownersEntity,WorkspaceAccessLevel.Owner)
+            )).setDefaultObjectAcl(List(
+              newObjectAccessControl(readersEntity,WorkspaceAccessLevel.Read),
+              // NB: writers have read access to objects -- there is no write access, objects are immutable
+              newObjectAccessControl(writersEntity,WorkspaceAccessLevel.Read/*sic!*/),
+              newObjectAccessControl(ownersEntity,WorkspaceAccessLevel.Owner)
+            ))
+          val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId,bucket)
+          retry(inserter.execute,when500)
+        }
+      }
+    }
+  }
+
+  private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
+    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(toGroupName(workspaceName,accessLevel))
+
+  private def newBucketAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
+    new BucketAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
+
+  private def newObjectAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
+    new ObjectAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
+
+  private def insertGroup(groups: Directory#Groups, group: Group)(op: => Unit) = {
+    val inserter = groups.insert(group)
+    tryRetry(inserter.execute,when500) match {
+      case Success(_) =>
+      case Failure(exc) => throw new RawlsException(s"Failed to create group ${group.getEmail}",exc)
+    }
+    Try(op) match {
+      case Success(_) =>
+      case Failure(exception) =>
+        val deleter = groups.delete(group.getEmail)
+        tryRetry(deleter.execute,when500) match {
+          case Success(_) => throw exception
+          case Failure(_) => throw new RawlsException("Additionally, failed to delete group ${group.getEmail} when cleaning up.", exception)
+        }
+    }
   }
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit = {
@@ -86,44 +137,31 @@ class HttpGoogleCloudStorageDAO(
         //Success is also fine, clearly.
       }
     }
-    //It's possible we just created this bucket and need to immediately delete it because something else
-    //has gone bad. In this case, the bucket will already be empty, so we should be able to immediately delete it.
-    bucketDeleteFn()
-  }
 
-  override def createACLGroups(userInfo: UserInfo, workspaceId: String, workspaceName: WorkspaceName): Unit = {
-    val bucketName = getBucketName(workspaceId)
-    val groupDirectory = getGroupDirectory
-    val groups = groupDirectory.groups
-    val bucketAccessControls = getStorage(getBucketCredential(userInfo)).bucketAccessControls
-
-    // ACLs are stored internally in three Google groups.
-    groupAccessLevelsAscending foreach { accessLevel =>
-      // create the group
-      val groupId = toGroupId(bucketName, accessLevel)
-      val group = new Group().setEmail(groupId).setName(toGroupName(workspaceName,accessLevel))
-      val inserter = groups.insert(group)
-      retry(inserter.execute,when500)
-
-      // add group to ACL (using bucket owner's credential)
-      val bucketAcl = new BucketAccessControl().setEntity(makeGroupEntityString(groupId)).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel)).setBucket(bucketName)
-      val aclInserter = bucketAccessControls.insert(bucketName, bucketAcl)
-      retry(aclInserter.execute,when500)
-    }
-
-    // add the owner -- may take up to 1 minute after groups are created
-    // (see https://developers.google.com/admin-sdk/directory/v1/guides/manage-groups)
-    val targetMember = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
-    val inserter = groupDirectory.members.insert(toGroupId(bucketName, WorkspaceAccessLevel.Owner), targetMember)
-    retry(inserter.execute,when500)
-  }
-
-  override def deleteACLGroups(workspaceId: String): Unit = {
     val groups = getGroupDirectory.groups
-    groupAccessLevelsAscending foreach { accessLevel =>
-      val groupId = toGroupId(getBucketName(workspaceId), accessLevel)
-      val deleter = groups.delete(groupId)
-      retry(deleter.execute,when500)
+    deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Read)) {
+      deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Write)) {
+        deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Owner)) {
+          // attempt to delete the group, scheduling future attempts if this one fails due to a 409
+          Try(bucketDeleteFn()) match {
+            case Success(_) =>
+            case Failure(exc) => throw new RawlsException("Failed to delete bucket ${bucketName}.", exc)
+          }
+        }
+      }
+    }
+  }
+
+  private def deleteGroup( groups: Directory#Groups, groupId: String)( op: => Unit ) = {
+    val deleter = groups.delete(groupId)
+    tryRetry(deleter.execute,when500) match {
+      case Success(_) => op
+      case Failure(exception) =>
+        val thisException = new RawlsException(s"Failed to delete group ${groupId}.", exception)
+        Try(op) match {
+          case Success(_) => throw thisException
+          case Failure(thatException) => throw new RawlsException(""+thisException.getMessage+"\nand\n"+thatException.getMessage,exception)
+        }
     }
   }
 

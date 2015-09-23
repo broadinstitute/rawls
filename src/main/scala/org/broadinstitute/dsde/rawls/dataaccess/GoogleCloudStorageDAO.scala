@@ -7,13 +7,9 @@ import scala.util.Try
 trait GoogleCloudStorageDAO {
 
   // returns a workspaceID
-  def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String): Unit
+  def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Unit
 
   def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit
-
-  def createACLGroups(userInfo: UserInfo, workspaceId: String, workspaceName: WorkspaceName): Unit
-
-  def deleteACLGroups(workspaceId: String): Unit
 
   def getACL(workspaceId: String): WorkspaceACL
 
