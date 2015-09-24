@@ -919,11 +919,34 @@ paths:
       operationId: copy_repo_configuration
       parameters:
         - in: body
-          description: Method Repository Query
-          name: methodRepoQuery
+          description: Import from Method Repository
+          name: methodRepoImport
           required: true
           schema:
-            $ref: '#/definitions/MethodRepoConfigurationQuery'
+            $ref: '#/definitions/MethodRepoConfigurationImport'
+  /methodconfigs/copyToMethodRepo:
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/AgoraEntity'
+        '404':
+          description: Source method configuration does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - methodconfigs
+      summary: Copy method configuration from workspace to the method repository
+      operationId: copy_configuration_to_repo
+      parameters:
+        - in: body
+          description: Export to Method Repository
+          name: methodRepoExport
+          required: true
+          schema:
+            $ref: '#/definitions/MethodRepoConfigurationExport'
   /methodconfigs/template:
     post:
       responses:
@@ -1717,7 +1740,7 @@ definitions:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
 
-  MethodRepoConfigurationQuery:
+  MethodRepoConfigurationImport:
     description: ''
     required:
       - methodRepoNamespace
@@ -1737,6 +1760,23 @@ definitions:
       destination:
         $ref: '#/definitions/MethodConfigurationName'
         description: The destination for a copied method configuration
+
+  MethodRepoConfigurationExport:
+    description: ''
+    required:
+      - methodRepoNamespace
+      - methodRepoName
+      - source
+    properties:
+      methodRepoNamespace:
+        type: string
+        description: Method Repository Namespace
+      methodRepoName:
+        type: string
+        description: Method Repository Name
+      source:
+        $ref: '#/definitions/MethodConfigurationName'
+        description: The source method configuration
 
   MethodConfigurationNamePair:
     description: ''
@@ -1909,10 +1949,9 @@ definitions:
       workspaceSubmissionStats:
         $ref: '#/definitions/WorkspaceSubmissionStats'
       owners:
-        schema:
-          type: array
-          items:
-            type: string
+        type: array
+        items:
+          type: string
   CallMetadata:
     description: Stuff you need to know about calls
     properties:
@@ -1980,3 +2019,26 @@ definitions:
         description: map from call names onto call metadata
         additionalProperties:
           $ref: '#/definitions/CallMetadata'
+  AgoraEntity:
+    description: response from Method Repo
+    properties:
+      namespace:
+        type: string
+      name:
+        type: string
+      snapshotId:
+        type: string
+      synopsis:
+        type: string
+      documentation:
+        type: string
+      owner:
+        type: string
+      createDate:
+        type: string
+      payload:
+        type: string
+      url:
+        type: string
+      entityType:
+        type: string
