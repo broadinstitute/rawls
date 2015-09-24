@@ -26,12 +26,15 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
   val uniqueMethodConfigName = UUID.randomUUID.toString
   val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, WorkspaceName(wsns, wsname))
-  val methodRepoGood = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_good", 2, newMethodConfigName)
-  val methodRepoMissing = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_missing", 1, methodConfigName)
-  val methodRepoEmptyPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_empty_payload", 1, methodConfigName)
-  val methodRepoBadPayload = MethodRepoConfigurationQuery("rawls_integration_testing", "rawls_test_bad_payload", 1, methodConfigName)
+  val methodRepoGood = MethodRepoConfigurationImport("rawls_integration_testing", "rawls_test_good", 2, newMethodConfigName)
+  val methodRepoMissing = MethodRepoConfigurationImport("rawls_integration_testing", "rawls_test_missing", 1, methodConfigName)
+  val methodRepoEmptyPayload = MethodRepoConfigurationImport("rawls_integration_testing", "rawls_test_empty_payload", 1, methodConfigName)
+  val methodRepoBadPayload = MethodRepoConfigurationImport("rawls_integration_testing", "rawls_test_bad_payload", 1, methodConfigName)
+
+  val export = MethodRepoConfigurationExport("rawls_integration_testing", uniqueMethodConfigName, newMethodConfigName)
 
   val copyFromMethodRepoEndpoint = "/methodconfigs/copyFromMethodRepo"
+  val copyToMethodRepoEndpoint = "/methodconfigs/copyToMethodRepo"
 
   "RemoteServicesSpec" should "copy a method config from the method repo" ignore {
     // need to init workspace
@@ -88,6 +91,17 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
           status
         }
       }
+
+    Post(copyToMethodRepoEndpoint, httpJson(export)) ~>
+      addSecurityHeaders ~>
+      sealRoute(methodConfigRoutes) ~>
+      check {
+        println(response.entity.asString)
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+
 
   }
 

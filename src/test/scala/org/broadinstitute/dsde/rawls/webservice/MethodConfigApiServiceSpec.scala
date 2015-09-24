@@ -317,6 +317,28 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
       }
   }
 
+  val copyToMethodRepo = "/methodconfigs/copyToMethodRepo"
+
+  it should "return 200 on copy method configuration to method repo" in withTestDataApiServices { services =>
+    Post(copyToMethodRepo, HttpEntity(ContentTypes.`application/json`, MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName).toJson.toString)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 on copy method configuration to method repo if config dne" in withTestDataApiServices { services =>
+    Post(copyToMethodRepo, HttpEntity(ContentTypes.`application/json`, MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName3).toJson.toString)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
   val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
 
   it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
@@ -337,7 +359,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
   }
 
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
-    val existingMethodConfigCopy = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", 1, testData.methodConfigName)
+    val existingMethodConfigCopy = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, testData.methodConfigName)
     Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
