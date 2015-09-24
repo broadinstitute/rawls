@@ -184,7 +184,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
           RequestComplete(containerDAO.workspaceDAO.save(updatedWorkspace, txn).workspace)
         } catch {
-          case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
+          case e: AttributeUpdateOperationException => {
+            txn.setRollbackOnly()
+            RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
+          }
         }
       }
     }
@@ -340,6 +343,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         if(errorMessages.isEmpty) {
           RequestComplete(StatusCodes.NoContent)
         } else {
+          txn.setRollbackOnly()
           RequestComplete(StatusCodes.BadRequest, errorMessages)
         }
       }
@@ -365,6 +369,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         if (errorMessages.isEmpty) {
           RequestComplete(StatusCodes.NoContent)
         } else {
+          txn.setRollbackOnly()
           RequestComplete(StatusCodes.BadRequest, errorMessages)
         }
       }
@@ -401,7 +406,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
             val updatedEntity = applyOperationsToEntity(entity, operations)
             RequestComplete(containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn))
           } catch {
-            case e: AttributeUpdateOperationException => RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
+            case e: AttributeUpdateOperationException => {
+              txn.setRollbackOnly()
+              RequestComplete(http.StatusCodes.BadRequest, s"in ${workspaceName}, ${e.getMessage}")
+            }
           }
         }
       }
@@ -438,7 +446,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           new ExpressionEvaluator(new ExpressionParser())
             .evalFinalAttribute(workspaceContext, entityType, entityName, expression) match {
             case Success(result) => RequestComplete(http.StatusCodes.OK, result)
-            case Failure(regret) => RequestComplete(http.StatusCodes.BadRequest, regret.getMessage)
+            case Failure(regret) => {
+              txn.setRollbackOnly()
+              RequestComplete(http.StatusCodes.BadRequest, regret.getMessage)
+            }
           }
         }
       }
