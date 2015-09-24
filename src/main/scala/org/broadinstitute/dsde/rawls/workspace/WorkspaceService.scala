@@ -170,7 +170,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         }
 
         gcsDAO.deleteBucket(userInfo, workspaceContext.workspace.workspaceId)
-        gcsDAO.deleteACLGroups(workspaceContext.workspace.workspaceId)
         containerDAO.workspaceDAO.delete(workspaceName, txn)
 
         RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)} will be deleted within 24h.")
@@ -844,25 +843,20 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)
                                      (op: (WorkspaceContext) => PerRequestMessage): PerRequestMessage = {
-    containerDAO.workspaceDAO.loadContext(workspaceRequest.toWorkspaceName, txn) match {
+    val workspaceName = workspaceRequest.toWorkspaceName
+    containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
       case Some(_) => PerRequest.RequestComplete(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")
       case None =>
         retry(2) {
           val workspaceId = UUID.randomUUID.toString
-          gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId)
+          gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId, workspaceName)
           workspaceId
         } match {
           case Failure(err) =>
-            RequestComplete(StatusCodes.Forbidden, s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
+            throw new RawlsException(s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}.",err)
           case Success(workspaceId) =>
-            Try(gcsDAO.createACLGroups(userInfo, workspaceId, workspaceRequest.toWorkspaceName)) match {
-              case Failure(err) =>
-                gcsDAO.deleteBucket(userInfo, workspaceId)
-                RequestComplete(StatusCodes.Forbidden, s"Unable to create groups for ${workspaceRequest.namespace}/${workspaceRequest.name}: " + err.getMessage)
-              case Success(_) =>
-                val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
-                op(containerDAO.workspaceDAO.save(workspace, txn))
-            }
+            val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
+            op(containerDAO.workspaceDAO.save(workspace, txn))
         }
     }
   }

@@ -22,13 +22,9 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
     }
   }
 
-  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String): Unit = {}
+  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Unit = {}
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit = {}
-
-  override def createACLGroups(userInfo: UserInfo, workspaceId: String, workspaceName: WorkspaceName): Unit = {}
-
-  override def deleteACLGroups(workspaceId: String): Unit = {}
 
   override def getACL(workspaceId: String): WorkspaceACL = {
     WorkspaceACL(mockPermissions)

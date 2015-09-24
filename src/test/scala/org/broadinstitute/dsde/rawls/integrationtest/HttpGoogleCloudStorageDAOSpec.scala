@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.util.UUID
+import scala.util.Try
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleCloudStorageDAO
 import org.broadinstitute.dsde.rawls.model._
@@ -26,24 +27,13 @@ class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with Integrat
   val testCreator = UserInfo(gcsDAO.clientSecrets.getDetails.get("sub_email").toString, OAuth2BearerToken("testtoken"), 123)
   val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123)
 
-  override def beforeAll: Unit = {
-    gcsDAO.createBucket(testCreator, testProject, testWorkspaceId)
-    gcsDAO.createACLGroups(testCreator, testWorkspaceId, testWorkspace)
-  }
-
-  override def afterAll: Unit = {
-    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
-
-    // make sure groups are destroyed
-    // (note that this is done already as part of the test, but just in case it fails prematurely...)
-    try { gcsDAO.deleteACLGroups(testWorkspaceId) }
-    catch { case e: GoogleJsonResponseException => /* do nothing */ }
-
-    // delete bucket (can be done directly, since there's nothing in it)
-    gcsDAO.deleteBucket(testCreator, testWorkspaceId)
+  override def afterAll() = {
+    Try(gcsDAO.deleteBucket(testCreator,testWorkspaceId)) // one last-gasp attempt at cleaning up
   }
 
   "HttpGoogleCloudStorageDAO" should "do all of the things" in {
+    gcsDAO.createBucket(testCreator, testProject, testWorkspaceId, testWorkspace)
+
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
     // if this does not throw an exception, then the bucket exists
@@ -84,8 +74,8 @@ class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with Integrat
     val groupName = gcsDAO.toGroupId(testBucket, WorkspaceAccessLevel.Owner)
     gcsDAO.fromGroupId(groupName) should be (Some(WorkspacePermissionsPair(testWorkspaceId, WorkspaceAccessLevel.Owner)))
 
-    // tear down the ACL. confirm that the corresponding groups are deleted
-    gcsDAO.deleteACLGroups(testWorkspaceId)
+    // delete the bucket. confirm that the corresponding groups are deleted
+    gcsDAO.deleteBucket(testCreator, testWorkspaceId)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerGroup).execute() }
