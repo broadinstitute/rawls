@@ -168,6 +168,13 @@ case class ExecutionMetadata
   calls: Map[String, Seq[CallMetadata]]
 )
 
+case class ActiveSubmission
+(
+  workspaceNamespace: String,
+  workspaceName: String,
+  submission: Submission
+)
+
 object ExecutionJsonSupport extends JsonSupport {
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
@@ -225,6 +232,8 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val CallMetadataFormat = jsonFormat10(CallMetadata)
 
   implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
+
+  implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 }
 
 trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>

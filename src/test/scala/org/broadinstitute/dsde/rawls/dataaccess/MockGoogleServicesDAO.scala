@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessL
 import WorkspaceACLJsonSupport._
 import spray.json._
 
-object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
+object MockGoogleServicesDAO extends GoogleServicesDAO {
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
     "test@broadinstitute.org" -> WorkspaceAccessLevel.Owner,
@@ -18,7 +18,7 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
 
   private def getAccessLevelOrDieTrying(userId: String) = {
     mockPermissions get userId getOrElse {
-      throw new RuntimeException(s"Need to add ${userId} to MockGoogleCloudStorageDAO.mockPermissions map")
+      throw new RuntimeException(s"Need to add ${userId} to MockGoogleServicesDAO.mockPermissions map")
     }
   }
 
@@ -47,4 +47,14 @@ object MockGoogleCloudStorageDAO extends GoogleCloudStorageDAO {
   }
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
+
+  val adminList = scala.collection.mutable.Set("test_token")
+
+  override def isAdmin(userId: String): Boolean = { adminList.contains(userId) }
+
+  override def addAdmin(userId: String): Unit = { adminList += userId }
+
+  override def deleteAdmin(userId: String): Unit = { adminList -= userId }
+
+  override def listAdmins(): Seq[String] = { adminList.toSeq }
 }

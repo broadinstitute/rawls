@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStar
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionMetadataFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionFormat
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.SubmissionReportFormat
@@ -82,15 +83,23 @@ object WorkspaceService {
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
+
+  case object ListAdmins extends WorkspaceServiceMessage
+  case class IsAdmin(userId: String) extends WorkspaceServiceMessage
+  case class AddAdmin(userId: String) extends WorkspaceServiceMessage
+  case class DeleteAdmin(userId: String) extends WorkspaceServiceMessage
+  case object ListAllActiveSubmissions extends WorkspaceServiceMessage
+  case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
+
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
+  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleCloudStorageDAO, submissionSupervisor : ActorRef) extends Actor {
+class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef) extends Actor {
 
   override def receive = {
     case CreateWorkspace(workspace) => context.parent ! createWorkspace(workspace)
@@ -134,6 +143,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case AbortSubmission(workspaceName, submissionId) => context.parent ! abortSubmission(workspaceName, submissionId)
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => context.parent ! workflowOutputs(workspaceName, submissionId, workflowId)
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => context.parent ! workflowMetadata(workspaceName, submissionId, workflowId)
+
+    case ListAdmins => context.parent ! listAdmins()
+    case IsAdmin(userId) => context.parent ! isAdmin(userId)
+    case AddAdmin(userId) => context.parent ! addAdmin(userId)
+    case DeleteAdmin(userId) => context.parent ! deleteAdmin(userId)
+    case ListAllActiveSubmissions => context.parent ! listAllActiveSubmissions()
+    case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => context.parent ! adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): PerRequestMessage =
@@ -775,35 +791,39 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  def abortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
+  def abortSubmission(workspaceName: WorkspaceName, submissionId: String): PerRequestMessage = {
     dataSource inTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
-          withSubmission(workspaceContext, submissionId, txn) { submission =>
-
-            val aborts = submission.workflows.map( wf =>
-              Try(executionServiceDAO.abort(wf.workflowId, userInfo)) match {
-                case Success(_) => Success(wf.workflowId)
-                //NOTE: Cromwell returns 403 Forbidden if you try to abort a workflow that's already in a terminal
-                //status. This is fine for our purposes, so we turn it into a Success.
-                case Failure(ure:UnsuccessfulResponseException) if ure.response.status == StatusCodes.Forbidden => Success(wf.workflowId)
-                case Failure(regret) => Failure(regret)
-              }
-            )
-
-            if (aborts.count(_.isFailure) == 0) {
-              RequestComplete(StatusCodes.NoContent)
-            } else {
-              //Not entirely sure what to do with bad responses; am aggregating them under a 500 for now.
-              //Possible responses:
-              //400 - malformed workflow ID (how'd we end up with that in our DB?)
-              //404 - unknown workflow ID (uh oh)
-              //500 - cromwell ISE
-              RequestComplete(StatusCodes.InternalServerError, aborts.collect({case Failure(regret) => regret.getMessage}).toJson.toString )
-            }
-          }
-        }
+        abortSubmission(workspaceContext, submissionId, txn)
       }
     }
+  }
+
+  private def abortSubmission( workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction ): PerRequestMessage = {
+    withSubmission(workspaceContext, submissionId, txn) { submission =>
+
+      val aborts = submission.workflows.map( wf =>
+        Try(executionServiceDAO.abort(wf.workflowId, userInfo)) match {
+          case Success(_) => Success(wf.workflowId)
+          //NOTE: Cromwell returns 403 Forbidden if you try to abort a workflow that's already in a terminal
+          //status. This is fine for our purposes, so we turn it into a Success.
+          case Failure(ure:UnsuccessfulResponseException) if ure.response.status == StatusCodes.Forbidden => Success(wf.workflowId)
+          case Failure(regret) => Failure(regret)
+        }
+      )
+
+      if (aborts.count(_.isFailure) == 0) {
+        RequestComplete(StatusCodes.NoContent)
+      } else {
+        //Not entirely sure what to do with bad responses; am aggregating them under a 500 for now.
+        //Possible responses:
+        //400 - malformed workflow ID (how'd we end up with that in our DB?)
+        //404 - unknown workflow ID (uh oh)
+        //500 - cromwell ISE
+        RequestComplete(StatusCodes.InternalServerError, aborts.collect({case Failure(regret) => regret.getMessage}).toJson.toString )
+      }
+    }
+  }
 
   /**
    * Munges together the output of Cromwell's /outputs and /logs endpoints, grouping them by task name */
@@ -851,6 +871,67 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           withWorkflow(workspaceName, submission, workflowId) { workflow =>
             RequestComplete(StatusCodes.OK, executionServiceDAO.callLevelMetadata(workflowId, userInfo))
           }
+        }
+      }
+    }
+  }
+
+  def listAdmins() = {
+    asAdmin {
+      Try(gcsDAO.listAdmins) match {
+        case Failure(exception) => throw new RawlsException("Unable to list admins.",exception)
+        case Success(users) => RequestComplete(StatusCodes.OK,users)
+      }
+    }
+  }
+
+  def isAdmin(userId: String) = {
+    asAdmin {
+      if ( tryIsAdmin(userId) ) RequestComplete(StatusCodes.OK,s"${userId} is an admin.")
+      else RequestComplete(StatusCodes.NotFound,s"${userId} is not an admin.")
+    }
+  }
+
+  def addAdmin(userId: String) = {
+    asAdmin {
+      if ( tryIsAdmin(userId) ) RequestComplete(StatusCodes.OK,s"${userId} was already an admin.")
+      else {
+        Try(gcsDAO.addAdmin(userId)) match {
+          case Failure(exception) => throw new RawlsException("Unable to add admin.", exception)
+          case Success(_) => RequestComplete(StatusCodes.Created, s"${userId} is now an admin.")
+        }
+      }
+    }
+  }
+
+  def deleteAdmin(userId: String) = {
+    asAdmin {
+      if ( !tryIsAdmin(userId) ) RequestComplete(StatusCodes.NotFound,s"${userId} is not an admin.")
+      else {
+        Try(gcsDAO.deleteAdmin(userId)) match {
+          case Failure(exception) => throw new RawlsException("Unable to delete admin.", exception)
+          case Success(_) => RequestComplete(StatusCodes.OK, s"${userId} is no longer an admin.")
+        }
+      }
+    }
+  }
+
+  def listAllActiveSubmissions() = {
+    asAdmin {
+      dataSource inTransaction { txn =>
+        Try(containerDAO.submissionDAO.listAllActiveSubmissions(txn)) match {
+          case Failure(exception) => throw new RawlsException("Unable to fetch list of active submissions.",exception)
+          case Success(submissions) => RequestComplete(StatusCodes.OK,submissions.toList)
+        }
+      }
+    }
+  }
+
+  def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
+    asAdmin {
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          abortSubmission(workspaceContext, submissionId, txn)
         }
       }
     }
@@ -915,6 +996,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def requireOwnerIgnoreLock(workspace: Workspace)(op: => PerRequestMessage): PerRequestMessage = {
     requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevel.Owner)(op)
+  }
+
+  private def tryIsAdmin(userId: String): Boolean = {
+    Try(gcsDAO.isAdmin(userId)) match {
+      case Failure(exception) => throw new RawlsException("Unable to query for admin status.", exception)
+      case Success(isAdmin) => isAdmin
+    }
+  }
+
+  private def asAdmin(op: => PerRequestMessage): PerRequestMessage = {
+    if ( !tryIsAdmin(userInfo.userEmail) ) RequestComplete(http.StatusCodes.Forbidden)
+    else op
   }
 
   private def withEntity(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => PerRequestMessage): PerRequestMessage = {

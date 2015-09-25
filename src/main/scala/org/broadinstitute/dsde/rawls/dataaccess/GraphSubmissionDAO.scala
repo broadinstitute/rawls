@@ -1,10 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.{Direction, Graph, Vertex}
-import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, WorkflowFailure, Submission, Workflow}
+import org.broadinstitute.dsde.rawls.model.{Submission, Workflow, ActiveSubmission}
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -95,6 +93,14 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
         case None => false
       }
     }
+
+  override def listAllActiveSubmissions(txn: RawlsTransaction): Seq[ActiveSubmission] = {
+    txn withGraph { db =>
+      getAllActiveSubmissions(db).map{
+        case (workspaceName,submissionVertex) =>
+          ActiveSubmission(workspaceName.namespace,workspaceName.name,loadObject[Submission](submissionVertex))}.toSeq
+    }
+  }
 
   private def fromVertex(workspaceContext: WorkspaceContext, vertex: Vertex): Submission = {
     loadObject[Submission](vertex)

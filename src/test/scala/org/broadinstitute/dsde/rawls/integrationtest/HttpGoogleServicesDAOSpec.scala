@@ -3,13 +3,13 @@ package org.broadinstitute.dsde.rawls.integrationtest
 import java.util.UUID
 import scala.util.Try
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleCloudStorageDAO
+import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
 import spray.http.OAuth2BearerToken
 
-class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll {
-  val gcsDAO = new HttpGoogleCloudStorageDAO(
+class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll {
+  val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
     gcsConfig.getString("secrets"),
     gcsConfig.getString("pathToP12"),
@@ -31,7 +31,7 @@ class HttpGoogleCloudStorageDAOSpec extends FlatSpec with Matchers with Integrat
     Try(gcsDAO.deleteBucket(testCreator,testWorkspaceId)) // one last-gasp attempt at cleaning up
   }
 
-  "HttpGoogleCloudStorageDAO" should "do all of the things" in {
+  "HttpGoogleServicesDAO" should "do all of the things" in {
     gcsDAO.createBucket(testCreator, testProject, testWorkspaceId, testWorkspace)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)

@@ -235,6 +235,10 @@ trait GraphDAO {
     workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(submissionEdge)).filter(hasPropertyValue("submissionId", submissionId))
   }
 
+  def allActiveSubmissionsPipeline(db: Graph) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Submission)).filter(hasPropertyValue("status",SubmissionStatuses.Submitted.toString))
+  }
+
   // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
@@ -255,6 +259,14 @@ trait GraphDAO {
 
   def getSubmissionVertex(workspaceContext: WorkspaceContext, submissionId: String) = {
     getSinglePipelineResult(submissionPipeline(workspaceContext, submissionId))
+  }
+
+  def getAllActiveSubmissions(db: Graph) = {
+    allActiveSubmissionsPipeline(db).iterator.map { submissionVertex =>
+      val workspaceVertex = submissionVertex.getVertices(Direction.IN,EdgeSchema.Own.toLabel(submissionEdge)).head
+      val workspaceName = WorkspaceName(workspaceVertex.getProperty[String]("namespace"), workspaceVertex.getProperty[String]("name"))
+      (workspaceName, submissionVertex)
+    }
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {

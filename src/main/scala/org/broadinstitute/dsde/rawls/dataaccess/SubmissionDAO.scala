@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Submission, Workflow}
+import org.broadinstitute.dsde.rawls.model.{ActiveSubmission, Submission, Workflow}
 
 /**
  * @author tsharpe
@@ -19,6 +19,8 @@ trait SubmissionDAO {
   def delete(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Boolean
 
   def update(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction): Submission
+
+  def listAllActiveSubmissions(txn: RawlsTransaction): Seq[ActiveSubmission]
 }
 
 trait WorkflowDAO {
