@@ -248,15 +248,23 @@ class HttpGoogleCloudStorageDAO(
     else {
       val bucketName = getBucketName(workspaceId)
       val member = new Member().setEmail(userId).setRole(groupMemberRole)
-      val deleter = members.delete(toGroupId(bucketName,currentAccessLevel), userId)
+      val currentGroupId = toGroupId(bucketName,currentAccessLevel)
+      val deleter = members.delete(currentGroupId, userId)
+      val inserter = members.insert(toGroupId(bucketName,targetAccessLevel), member)
+      val simpleFailure = Option((userId,s"Failed to change permissions for $userId."))
       if ( currentAccessLevel >= WorkspaceAccessLevel.Read && tryRetry(deleter.execute,when500).isFailure )
-        Option((userId,s"Failed to change permissions for $userId."))
-      else {
-        val inserter = members.insert(toGroupId(bucketName,targetAccessLevel), member)
-        if ( targetAccessLevel >= WorkspaceAccessLevel.Read && tryRetry(inserter.execute,when500).isFailure )
-          Option((userId,s"Failed to change permissions for $userId. They have been dropped from the workspace. Please try re-adding them."))
-        else
-          None
+        simpleFailure
+      else if ( targetAccessLevel < WorkspaceAccessLevel.Read || tryRetry(inserter.execute,when500).isSuccess )
+        None
+      else if ( currentAccessLevel < WorkspaceAccessLevel.Read )
+        simpleFailure
+      else
+      {
+        val restoreInserter = members.insert(currentGroupId, member)
+        tryRetry(restoreInserter.execute,when500) match {
+          case Success(_) => simpleFailure
+          case Failure(_) => Option((userId,s"Failed to change permissions for $userId. They no longer have any access to the workspace. Please try re-adding them."))
+        }
       }
     }
   }
