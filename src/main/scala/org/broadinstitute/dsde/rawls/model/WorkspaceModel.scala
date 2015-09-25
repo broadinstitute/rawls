@@ -133,11 +133,17 @@ case class ValidatedMethodConfiguration(
                                          validOutputs: Seq[String],
                                          invalidOutputs: Map[String,String])
 
-case class MethodRepoConfigurationQuery(
+case class MethodRepoConfigurationImport(
                                          methodRepoNamespace: String,
                                          methodRepoName: String,
                                          methodRepoSnapshotId: Int,
                                          destination: MethodConfigurationName
+                                         )
+
+case class MethodRepoConfigurationExport(
+                                         methodRepoNamespace: String,
+                                         methodRepoName: String,
+                                         source: MethodConfigurationName
                                          )
 
 case class ConflictingEntities(conflicts: Seq[String])
@@ -207,7 +213,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodConfigurationShortFormat = jsonFormat5(MethodConfigurationShort)
 
-  implicit val MethodRepoConfigurationQueryFormat = jsonFormat4(MethodRepoConfigurationQuery)
+  implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
+
+  implicit val MethodRepoConfigurationExportFormat = jsonFormat3(MethodRepoConfigurationExport)
 
   implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 

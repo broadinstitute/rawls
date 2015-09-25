@@ -49,6 +49,17 @@ class RemoteServicesMockServer(port:Int) {
 
     mockServer.when(
       request()
+        .withMethod("POST")
+        .withPath(copyMethodConfigPath)
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(goodResult.toJson.prettyPrint)
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
         .withMethod("GET")
         .withPath(copyMethodConfigPath + "/workspace_test/rawls_test_good/1")
     ).respond(

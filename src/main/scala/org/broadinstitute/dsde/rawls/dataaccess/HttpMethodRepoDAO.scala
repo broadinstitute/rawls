@@ -1,16 +1,17 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import org.broadinstitute.dsde.rawls.model.{UserInfo, AgoraEntity}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.util.{Success,Failure,Try}
 import spray.httpx.UnsuccessfulResponseException
 import spray.client.pipelining._
-import spray.http.{StatusCodes, HttpCookie}
-import spray.http.HttpHeaders.Cookie
+import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
+import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 /**
  * @author tsharpe
@@ -27,6 +28,15 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorS
     }
   }
 
+  private def postAgoraEntity( url: String, agoraEntity: AgoraEntity, userInfo: UserInfo ): AgoraEntity = {
+    import system.dispatcher
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[AgoraEntity]
+    tryRetry(Await.result(pipeline(Post(url, agoraEntity)),Duration.Inf),when500) match {
+      case Success(resultEntity) => resultEntity
+      case Failure(exception) => throw exception
+    }
+  }
+
   override def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Option[AgoraEntity] = {
     getAgoraEntity(s"${methodRepoServiceURL}/configurations/${namespace}/${name}/${version}",userInfo)
   }
@@ -37,9 +47,19 @@ class HttpMethodRepoDAO( methodRepoServiceURL: String )( implicit system: ActorS
 
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
-      case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue/100 == 5
-      case ure: spray.httpx.UnsuccessfulResponseException => ure.response.status.intValue/100 == 5
+      case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue / 100 == 5
+      case ure: spray.httpx.UnsuccessfulResponseException => ure.response.status.intValue / 100 == 5
       case _ => false
     }
+  }
+
+  override def postMethodConfig( namespace: String, name: String, methodConfiguration: MethodConfiguration, userInfo: UserInfo ): AgoraEntity = {
+    val agoraEntity = AgoraEntity(
+      namespace = Option(namespace),
+      name = Option(name),
+      payload = Option(methodConfiguration.toJson.toString),
+      entityType = Option(AgoraEntityType.Configuration)
+    )
+    postAgoraEntity(s"${methodRepoServiceURL}/configurations", agoraEntity, userInfo)
   }
 }

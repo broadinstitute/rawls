@@ -70,7 +70,8 @@ object WorkspaceService {
   case class DeleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class RenameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) extends WorkspaceServiceMessage
   case class CopyMethodConfiguration(methodConfigNamePair: MethodConfigurationNamePair) extends WorkspaceServiceMessage
-  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationQuery) extends WorkspaceServiceMessage
+  case class CopyMethodConfigurationFromMethodRepo(query: MethodRepoConfigurationImport) extends WorkspaceServiceMessage
+  case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
 
@@ -122,6 +123,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case UpdateMethodConfiguration(workspaceName, methodConfiguration) => context.parent ! updateMethodConfiguration(workspaceName, methodConfiguration)
     case CopyMethodConfiguration(methodConfigNamePair) => context.parent ! copyMethodConfiguration(methodConfigNamePair)
     case CopyMethodConfigurationFromMethodRepo(query) => context.parent ! copyMethodConfigurationFromMethodRepo(query)
+    case CopyMethodConfigurationToMethodRepo(query) => context.parent ! copyMethodConfigurationToMethodRepo(query)
     case ListMethodConfigurations(workspaceName) => context.parent ! listMethodConfigurations(workspaceName)
     case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => context.parent ! createMethodConfigurationTemplate(methodRepoMethod)
 
@@ -615,7 +617,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationQuery): PerRequestMessage =
+  def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): PerRequestMessage =
     dataSource inTransaction { txn =>
       methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) match {
         case None => RequestComplete(StatusCodes.NotFound)
@@ -634,6 +636,19 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           }
       }
     }
+
+  def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): PerRequestMessage = dataSource inTransaction { txn =>
+    withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
+      withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, txn) { methodConfig =>
+        import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+        RequestComplete(methodRepoDAO.postMethodConfig(
+          methodRepoQuery.methodRepoNamespace,
+          methodRepoQuery.methodRepoName,
+          methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace, name = methodRepoQuery.methodRepoName),
+          userInfo))
+      }
+    }
+  }
 
   private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, txn: RawlsTransaction) =
     withWorkspaceContextAndPermissions(dest.workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>

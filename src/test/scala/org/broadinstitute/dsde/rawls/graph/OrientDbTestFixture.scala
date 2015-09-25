@@ -165,10 +165,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
     val uniqueMethodConfigName = UUID.randomUUID.toString
     val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
-    val methodRepoGood = MethodRepoConfigurationQuery("workspace_test", "rawls_test_good", 1, newMethodConfigName)
-    val methodRepoMissing = MethodRepoConfigurationQuery("workspace_test", "rawls_test_missing", 1, methodConfigName)
-    val methodRepoEmptyPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
-    val methodRepoBadPayload = MethodRepoConfigurationQuery("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
+    val methodRepoGood = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, newMethodConfigName)
+    val methodRepoMissing = MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, methodConfigName)
+    val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
+    val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
 
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
     val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))

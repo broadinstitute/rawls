@@ -20,9 +20,6 @@ trait IntegrationTestConfig {
   val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
   val executionServiceServer = executionServiceConfig.getString("server")
 
-  val openAmConfig = jenkinsConf.withFallback(etcConf).getConfig("openam")
-  // TODO populate fields here instead of RawlsOpenAmConfig
-
   val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
 
   val integrationConfig = jenkinsConf.withFallback(etcConf).getConfig("integration")
