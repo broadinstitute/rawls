@@ -67,11 +67,11 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     }
   }
 
-  "AdminApi" should "return 200 when checking for the seeded user" in withTestDataApiServices { services =>
+  "AdminApi" should "return 204 when checking for the seeded user" in withTestDataApiServices { services =>
     Get(s"/admin/users/test_token") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
   }
 
@@ -100,19 +100,19 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
   }
 
-  it should "return 200 when adding an existing user to the admin list" in withTestDataApiServices { services =>
+  it should "return 204 when adding an existing user to the admin list" in withTestDataApiServices { services =>
     Put(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
   }
 
-  it should "return 200 when checking on the new admin user" in withTestDataApiServices { services =>
+  it should "return 204 when checking on the new admin user" in withTestDataApiServices { services =>
     Get(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
   }
 
@@ -125,11 +125,11 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
   }
 
-  it should "return 200 when removing an existing user from the admin list" in withTestDataApiServices { services =>
+  it should "return 204 when removing an existing user from the admin list" in withTestDataApiServices { services =>
     Delete(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
   }
 
@@ -173,7 +173,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     Delete(s"/admin/users/test_token") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.NoContent) { status }
       }
     Get(s"/admin/users") ~>
       sealRoute(services.adminRoutes) ~>

@@ -39,7 +39,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     txn withGraph { db =>
       getWorkspaceVertex(db, workspaceId) map { vertex =>
         WorkspaceContext(loadObject[Workspace](vertex), vertex)
-    }
+      }
   }
 
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>

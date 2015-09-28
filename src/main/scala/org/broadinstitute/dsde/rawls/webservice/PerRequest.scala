@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.actor.Status.Failure
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
@@ -46,6 +47,10 @@ trait PerRequest extends Actor {
     case RequestCompleteWithHeaders_(response, headers, marshaller) => complete(response, headers:_*)(marshaller)
     case RequestCompleteWithLocation_(response, location, marshaller) => complete(response, HttpHeaders.Location(r.request.uri.copy(path = Uri.Path(location))))(marshaller)
     case ReceiveTimeout => complete(GatewayTimeout)
+    case Failure(t) =>
+      // failed Futures will end up in this case
+      handleException(t)
+      stop(self)
     case x =>
       system.log.error("Unsupported response message sent to PreRequest actor: " + Option(x).getOrElse("null").toString)
       complete(InternalServerError)
@@ -83,16 +88,20 @@ trait PerRequest extends Actor {
   override val supervisorStrategy =
     OneForOneStrategy() {
       case e => {
-        system.log.error(e, "error processing request: " + r.request.uri)
-        import spray.httpx.SprayJsonSupport._
-        val code = e match {
-          case e: RawlsExceptionWithStatusCode => e.getCode
-          case _ => InternalServerError
-        }
-        r.complete(code, new RawlsServerError(e))
+        handleException(e)
         Stop
       }
     }
+
+  def handleException(e: Throwable): Unit = {
+    system.log.error(e, "error processing request: " + r.request.uri)
+    import spray.httpx.SprayJsonSupport._
+    val code = e match {
+      case e: RawlsExceptionWithStatusCode => e.getCode
+      case _ => InternalServerError
+    }
+    r.complete(code, new RawlsServerError(e))
+  }
 
   case class RawlsServerError(exception: String, message: String, stack: Array[String], cause: Option[RawlsServerError]) {
     def this(t: Throwable) = {

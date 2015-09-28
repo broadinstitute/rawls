@@ -38,7 +38,7 @@ paths:
   '/admin/users/{userId}':
     get:
       responses:
-        '200':
+        '204':
           description: Yes, user is an admin
         '403':
           description: You must be an admin to check for other admins
@@ -64,7 +64,7 @@ paths:
             - profile
     put:
       responses:
-        '200':
+        '204':
           description: User was already an admin
         '201':
           description: User is now an admin
@@ -90,7 +90,7 @@ paths:
             - profile
     delete:
       responses:
-        '200':
+        '204':
           description: User is no longer an admin
         '403':
           description: You must be an admin to delete another admin

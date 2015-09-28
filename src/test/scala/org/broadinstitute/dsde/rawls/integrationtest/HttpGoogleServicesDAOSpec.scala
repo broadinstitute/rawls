@@ -1,6 +1,10 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.util.UUID
+import akka.actor.ActorSystem
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.Try
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO
@@ -9,6 +13,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
 import spray.http.OAuth2BearerToken
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll {
+  implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
     gcsConfig.getString("secrets"),
@@ -59,8 +64,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val ownerResource = directory.groups.get(ownerGroup).execute()
 
     // check that the creator is an owner, and that getACL is consistent
-    gcsDAO.getMaximumAccessLevel(testCreator.userEmail, testWorkspaceId) should be (WorkspaceAccessLevel.Owner)
-    gcsDAO.getACL(testWorkspaceId).acl should be (Map(testCreator -> WorkspaceAccessLevel.Owner))
+    Await.result(gcsDAO.getMaximumAccessLevel(testCreator.userEmail, testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevel.Owner)
+    Await.result(gcsDAO.getACL(testWorkspaceId), Duration.Inf).acl should be (Map(testCreator -> WorkspaceAccessLevel.Owner))
 
     // try adding a user, changing their access, then revoking it
     gcsDAO.updateACL(testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.Read)))

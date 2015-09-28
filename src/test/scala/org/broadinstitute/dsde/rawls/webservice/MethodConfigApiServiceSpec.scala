@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import akka.actor.PoisonPill
+import akka.actor.{Props, Actor, PoisonPill}
+import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -17,7 +18,9 @@ import spray.json._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.util.{Try, Failure, Success}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -25,7 +28,7 @@ import scala.concurrent.duration._
 class MethodConfigApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+  implicit val routeTestTimeout = RouteTestTimeout(500.seconds)
 
   def actorRefFactory = system
 
@@ -290,7 +293,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/blah/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(ValidatedMethodConfiguration(foo, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {

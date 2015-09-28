@@ -2,9 +2,14 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.StringReader
 
+import akka.actor.{ActorSystem, ActorContext}
+import org.broadinstitute.dsde.rawls.util.FutureSupport
+
 import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
+import scala.concurrent.Future
+import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -27,6 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model._
 
 import spray.http.StatusCodes
+import scala.concurrent.ExecutionContext.Implicits.global
 
 // Seq[String] -> Collection<String>
 
@@ -37,7 +43,7 @@ class HttpGoogleServicesDAO(
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int) extends GoogleServicesDAO with Retry {
+  deletedBucketCheckSeconds: Int)( implicit val system: ActorSystem ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -51,38 +57,81 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
 
-  val system = akka.actor.ActorSystem("system")
-
-  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Unit = {
+  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = {
     val bucketName = getBucketName(workspaceId)
     val directory = getGroupDirectory
     val groups = directory.groups
-    insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Read)) {
-      insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Write)) {
-        insertGroup(groups,newGroup(bucketName,workspaceName,WorkspaceAccessLevel.Owner)) {
-          val ownersGroupId = toGroupId(bucketName,WorkspaceAccessLevel.Owner)
-          val owner = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
-          val ownerInserter = directory.members.insert(ownersGroupId,owner)
-          retry(ownerInserter.execute,when500)
 
-          val readersEntity = makeGroupEntityString(toGroupId(bucketName,WorkspaceAccessLevel.Read))
-          val writersEntity = makeGroupEntityString(toGroupId(bucketName,WorkspaceAccessLevel.Write))
-          val ownersEntity = makeGroupEntityString(ownersGroupId)
-          val bucket = new Bucket().setName(bucketName).setAcl(List(
-              newBucketAccessControl(readersEntity,WorkspaceAccessLevel.Read),
-              newBucketAccessControl(writersEntity,WorkspaceAccessLevel.Write),
-              newBucketAccessControl(ownersEntity,WorkspaceAccessLevel.Owner)
-            )).setDefaultObjectAcl(List(
-              newObjectAccessControl(readersEntity,WorkspaceAccessLevel.Read),
-              // NB: writers have read access to objects -- there is no write access, objects are immutable
-              newObjectAccessControl(writersEntity,WorkspaceAccessLevel.Read/*sic!*/),
-              newObjectAccessControl(ownersEntity,WorkspaceAccessLevel.Owner)
-            ))
-          val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId,bucket)
-          retry(inserter.execute,when500)
+    // tries to delete all groups expected to have been created whether they actually were or not
+    def rollbackGroups(t: Throwable): Throwable = {
+      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
+        Future {
+          val inserter = groups.delete(newGroup(bucketName, workspaceName, accessLevel).getEmail)
+          blocking {
+            inserter.execute
+          }
+        }
+      }
+      t
+    }
+
+    def insertGroups(workspaceName: WorkspaceName, bucketName: String): Future[Seq[Try[Group]]] = {
+      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
+        toFutureTry(retry(when500) {
+          () => Future {
+            val inserter = groups.insert(newGroup(bucketName, workspaceName, accessLevel))
+            blocking {
+              inserter.execute
+            }
+          }
+        })
+      }
+    }
+
+    def assertSuccessfulGroupInserts: (Seq[Try[Group]]) => Future[Seq[Group]] = { tryGroups =>
+      Future {
+        tryGroups map {
+          _ match {
+            case Success(g) => g
+            case Failure(t) => throw t
+          }
         }
       }
     }
+
+    def insertOwnerMember: (Seq[Group]) => Future[Member] = { _ =>
+      retry(when500) {
+        () => Future {
+          val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevel.Owner)
+          val owner = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
+          val ownerInserter = directory.members.insert(ownersGroupId, owner)
+          blocking {
+            ownerInserter.execute
+          }
+        }
+      }
+    }
+
+    def insertBucket: (Member) => Future[Unit] = { _ =>
+      retry(when500) {
+        () => Future {
+          val bucketAcls = groupAccessLevelsAscending.map(ac => newBucketAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), ac))
+          val defaultObjectAcls = groupAccessLevelsAscending.map(ac => {
+            // NB: writers have read access to objects -- there is no write access, objects are immutable
+            newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), if (ac == WorkspaceAccessLevel.Owner) WorkspaceAccessLevel.Owner else WorkspaceAccessLevel.Read)
+          })
+
+          val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
+          val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId, bucket)
+          blocking {
+            inserter.execute
+          }
+        }
+      }
+    }
+
+    val doItAll = insertGroups(workspaceName, bucketName) flatMap assertSuccessfulGroupInserts flatMap insertOwnerMember flatMap insertBucket
+    doItAll.transform(f => f, rollbackGroups)
   }
 
   private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
@@ -94,32 +143,16 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
     new ObjectAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
 
-  private def insertGroup(groups: Directory#Groups, group: Group)(op: => Unit) = {
-    val inserter = groups.insert(group)
-    tryRetry(inserter.execute,when500) match {
-      case Success(_) =>
-      case Failure(exc) => throw new RawlsException(s"Failed to create group ${group.getEmail}",exc)
-    }
-    Try(op) match {
-      case Success(_) =>
-      case Failure(exception) =>
-        val deleter = groups.delete(group.getEmail)
-        tryRetry(deleter.execute,when500) match {
-          case Success(_) => throw exception
-          case Failure(_) => throw new RawlsException("Additionally, failed to delete group ${group.getEmail} when cleaning up.", exception)
-        }
-    }
-  }
-
-  override def deleteBucket(userInfo: UserInfo, workspaceId: String): Unit = {
-    import system.dispatcher
+  override def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any] = {
     val bucketName = getBucketName(workspaceId)
-    def bucketDeleteFn(): Unit = {
+    def bucketDeleteFn(): Future[Any] = {
       val buckets = getStorage(getBucketCredential(userInfo)).buckets
       val deleter = buckets.delete(bucketName)
-      tryRetry(deleter.execute,when500) match {
+      retry(when500)(() => Future {
+        blocking { deleter.execute }
+      }) recover {
         //Google returns 409 Conflict if the bucket isn't empty.
-        case Failure(gjre: GoogleJsonResponseException) if gjre.getDetails.getCode == 409 =>
+        case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == 409 =>
           //Google doesn't let you delete buckets that are full.
           //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
           //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
@@ -129,58 +162,55 @@ class HttpGoogleServicesDAO(
             .setCondition(new Condition().setAge(0))
           val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
           val fetcher = buckets.get(bucketName)
-          val bucket = retry(fetcher.execute,when500)
-          bucket.setLifecycle(lifecycle)
+          val bucketFuture = retry(when500)(() => Future { blocking { fetcher.execute } })
+          bucketFuture.map(bucket => bucket.setLifecycle(lifecycle))
 
           system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds)(bucketDeleteFn)
         case _ =>
         //TODO: I am entirely unsure what other cases might want to be handled here.
         //404 means the bucket is already gone, which is fine.
-        //Success is also fine, clearly.
       }
     }
 
     val groups = getGroupDirectory.groups
-    deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Read)) {
-      deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Write)) {
-        deleteGroup(groups,toGroupId(bucketName,WorkspaceAccessLevel.Owner)) {
-          // attempt to delete the group, scheduling future attempts if this one fails due to a 409
-          Try(bucketDeleteFn()) match {
-            case Success(_) =>
-            case Failure(exc) => throw new RawlsException("Failed to delete bucket ${bucketName}.", exc)
+
+    def deleteGroups(bucketName: String): Future[Seq[Unit]] = {
+      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
+        retry[Unit](when500) {
+          () => Future {
+            blocking {
+              groups.delete(toGroupId(bucketName, accessLevel)).execute()
+            }
           }
         }
       }
     }
+
+    deleteGroups(bucketName) flatMap { _ => bucketDeleteFn() }
   }
 
-  private def deleteGroup( groups: Directory#Groups, groupId: String)( op: => Unit ) = {
-    val deleter = groups.delete(groupId)
-    tryRetry(deleter.execute,when500) match {
-      case Success(_) => op
-      case Failure(exception) =>
-        val thisException = new RawlsException(s"Failed to delete group ${groupId}.", exception)
-        Try(op) match {
-          case Success(_) => throw thisException
-          case Failure(thatException) => throw new RawlsException(""+thisException.getMessage+"\nand\n"+thatException.getMessage,exception)
-        }
-    }
-  }
-
-  override def getACL(workspaceId: String): WorkspaceACL = {
+  override def getACL(workspaceId: String): Future[WorkspaceACL] = {
     val bucketName = getBucketName(workspaceId)
     val members = getGroupDirectory.members
 
     // return the maximum access level for each user
-    val aclMap = groupAccessLevelsAscending map { accessLevel: WorkspaceAccessLevel =>
+    val aclMap = Future.traverse(groupAccessLevelsAscending) { accessLevel: WorkspaceAccessLevel =>
       val fetcher = members.list(toGroupId(bucketName, accessLevel))
-      val membersQuery = retry(fetcher.execute,when500)
-      // NB: if there are no members in this group, Google returns null instead of an empty list. fix that here.
-      val membersList = Option(membersQuery.getMembers).getOrElse(List.empty[Member].asJava)
-      membersList.map(_.getEmail -> accessLevel).toMap[String, WorkspaceAccessLevel]
-    } reduceRight(_ ++ _) // note that the reduction must go left-to-right so that higher access levels override lower ones
+      val membersQuery = retry(when500)(() => Future {
+        blocking {
+          fetcher.execute
+        }
+      }) map { membersResult =>
+        // NB: if there are no members in this group, Google returns null instead of an empty list. fix that here.
+        Option(membersResult.getMembers).getOrElse(List.empty[Member].asJava)
+      }
 
-    WorkspaceACL(aclMap)
+      membersQuery.map(membersResult => membersResult.map(_.getEmail -> accessLevel).toMap)
+    }
+
+    aclMap map { acls =>
+      WorkspaceACL(acls.reduceRight(_ ++ _)) // note that the reduction must go left-to-right so that higher access levels override lower ones
+    }
   }
 
   /**
@@ -188,80 +218,94 @@ class HttpGoogleServicesDAO(
    *
    * @return a map from userId to error message (an empty map means everything was successful)
    */
-  override def updateACL(workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Map[String, String] = {
+  override def updateACL(workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]] = {
     val directory = getGroupDirectory
 
     // make map to eliminate redundant instructions for a single user (last one in the sequence for a given user wins)
     val updateMap = aclUpdates.map{ workspaceACLUpdate => workspaceACLUpdate.userId -> workspaceACLUpdate.accessLevel }.toMap
-    updateMap.flatMap{ case (userId,accessLevel) => updateUserAccess(userId,accessLevel,workspaceId,directory) }
+
+    val updates = Future.traverse(updateMap) { case (userId,accessLevel) => updateUserAccess(userId,accessLevel,workspaceId,directory) }
+    updates map { updateResult =>
+      updateResult.collect {
+        case Some((userId, error)) => (userId -> error)
+      }.toMap
+    }
   }
 
-  override def getOwners(workspaceId: String): Seq[String] = {
+  override def getOwners(workspaceId: String): Future[Seq[String]] = {
     val members = getGroupDirectory.members
     //a workspace should always have an owner, but just in case for some reason it doesn't...
     val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevel.Owner))
-    val ownersQuery = retry(fetcher.execute,when500)
+    val ownersQuery = retry(when500) (() => Future {
+      blocking { fetcher.execute }
+    })
 
-    Option(ownersQuery.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
+    ownersQuery map { queryResults =>
+      Option(queryResults.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
+    }
   }
 
-  override def getMaximumAccessLevel(userId: String, workspaceId: String): WorkspaceAccessLevel = {
+  override def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel] = {
     val bucketName = getBucketName(workspaceId)
     val members = getGroupDirectory.members
 
-    @tailrec
-    def testLevel( levels: Seq[WorkspaceAccessLevel] ): WorkspaceAccessLevel = {
-      if ( levels.isEmpty ) WorkspaceAccessLevel.NoAccess
-      else {
-        val fetcher = members.get(toGroupId(bucketName,levels.head),userId)
-        if ( tryRetry(fetcher.execute,when500).isSuccess ) levels.head
-        else testLevel( levels.tail )
+    Future.traverse(groupAccessLevelsAscending) { accessLevel =>
+      retry(when500) { () =>
+        Future {
+          blocking { members.get(toGroupId(bucketName, accessLevel), userId).execute() }
+          accessLevel
+        }
+      } recover {
+        case t => WorkspaceAccessLevel.NoAccess
       }
+    } map { userAccessLevels =>
+      userAccessLevels.sorted.last
     }
-
-    testLevel(groupAccessLevelsAscending.reverse)
   }
 
-  override def getWorkspaces(userId: String): Seq[WorkspacePermissionsPair] = {
+  override def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]] = {
     val directory = getGroupDirectory
     val fetcher = directory.groups().list().setUserKey(userId)
-    val groupsQuery = retry(fetcher.execute,when500)
+    val groupsQuery = retry(when500)(() => Future {
+      blocking { fetcher.execute }
+    })
 
-    val workspaceGroups = Option(groupsQuery.getGroups).getOrElse(List.empty[Group].asJava)
-
-    workspaceGroups.flatMap( group => fromGroupId(group.getEmail) ).toSeq
+    groupsQuery map { groupsResult =>
+      val workspaceGroups = Option(groupsResult.getGroups).getOrElse(List.empty[Group].asJava)
+      workspaceGroups.flatMap( group => fromGroupId(group.getEmail) ).toSeq
+    }
   }
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
-  override def isAdmin(userId: String): Boolean = {
+  override def isAdmin(userId: String): Future[Boolean] = {
     val query = getGroupDirectory.members.get(adminGroupName,userId)
-    tryRetry(query.execute,when500) match {
-      case Success(_) => true
-      case Failure(exception) =>
-        exception match {
-          case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == StatusCodes.NotFound => false
-          case _ => throw exception
-        }
+    retry(when500)(() => Future {
+      blocking { query.execute }
+      true
+    }) recover {
+        case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == StatusCodes.NotFound => false
     }
   }
 
-  override def addAdmin(userId: String): Unit = {
+  override def addAdmin(userId: String): Future[Unit] = {
     val member = new Member().setEmail(userId).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(adminGroupName,member)
-    retry(inserter.execute,when500)
+    retry(when500)(() => Future { blocking { inserter.execute } })
   }
 
-  override def deleteAdmin(userId: String): Unit = {
+  override def deleteAdmin(userId: String): Future[Unit] = {
     val deleter = getGroupDirectory.members.delete(adminGroupName,userId)
-    retry(deleter.execute,when500)
+    retry(when500)(() => Future { blocking { deleter.execute } })
   }
 
-  override def listAdmins(): Seq[String] = {
+  override def listAdmins(): Future[Seq[String]] = {
     val fetcher = getGroupDirectory.members.list(adminGroupName)
-    Option(retry(fetcher.execute,when500).getMembers) match {
-      case None => Seq.empty
-      case Some(list) => list.map(_.getEmail)
+    retry(when500)(() => Future { blocking { fetcher.execute.getMembers } }) map { result =>
+      Option(result) match {
+        case None => Seq.empty
+        case Some(list) => list.map(_.getEmail)
+      }
     }
   }
 
@@ -273,30 +317,66 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def updateUserAccess(userId: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Option[(String,String)] = {
+  private def updateUserAccess(userId: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Future[Option[(String,String)]] = {
     val members = directory.members
-    val currentAccessLevel = getMaximumAccessLevel(userId, workspaceId)
-    if ( currentAccessLevel == targetAccessLevel )
-      None
-    else {
-      val bucketName = getBucketName(workspaceId)
-      val member = new Member().setEmail(userId).setRole(groupMemberRole)
-      val currentGroupId = toGroupId(bucketName,currentAccessLevel)
-      val deleter = members.delete(currentGroupId, userId)
-      val inserter = members.insert(toGroupId(bucketName,targetAccessLevel), member)
-      val simpleFailure = Option((userId,s"Failed to change permissions for $userId."))
-      if ( currentAccessLevel >= WorkspaceAccessLevel.Read && tryRetry(deleter.execute,when500).isFailure )
-        simpleFailure
-      else if ( targetAccessLevel < WorkspaceAccessLevel.Read || tryRetry(inserter.execute,when500).isSuccess )
-        None
-      else if ( currentAccessLevel < WorkspaceAccessLevel.Read )
-        simpleFailure
-      else
-      {
-        val restoreInserter = members.insert(currentGroupId, member)
-        tryRetry(restoreInserter.execute,when500) match {
-          case Success(_) => simpleFailure
-          case Failure(_) => Option((userId,s"Failed to change permissions for $userId. They no longer have any access to the workspace. Please try re-adding them."))
+    getMaximumAccessLevel(userId, workspaceId) flatMap { currentAccessLevel =>
+      if ( currentAccessLevel == targetAccessLevel )
+        Future.successful(None)
+      else {
+        val bucketName = getBucketName(workspaceId)
+        val member = new Member().setEmail(userId).setRole(groupMemberRole)
+        val currentGroupId = toGroupId(bucketName,currentAccessLevel)
+        val deleter = members.delete(currentGroupId, userId)
+        val targetGroupId: String = toGroupId(bucketName, targetAccessLevel)
+        val inserter = members.insert(targetGroupId, member)
+        val simpleFailure = Option((userId,s"Failed to change permissions for $userId."))
+
+        val deleteFuture: Future[Option[(String, String)]] = if (currentAccessLevel >= WorkspaceAccessLevel.Read) {
+          retry(when500) { () =>
+            Future {
+              deleter.execute()
+              None
+            }
+          }
+        } else {
+          Future.successful(None)
+        } recover {
+          case t => simpleFailure
+        }
+
+        val insertFuture: Future[Option[(String, String)]] = if (targetAccessLevel >= WorkspaceAccessLevel.Read) {
+          retry(when500) { () =>
+            Future {
+              blocking { inserter.execute() }
+              None
+            }
+          }
+        } else {
+          Future.successful(None)
+        } recover {
+          case t => simpleFailure
+        }
+
+        val results = for (deleteResult <- deleteFuture; insertResult <- insertFuture) yield (deleteResult, insertResult)
+        results.flatMap { case (deleteResult, insertResult) =>
+          (deleteResult, insertResult) match {
+            case (None, Some(_)) => // delete ok, but insert failed => restore access
+              val restoreInserter = members.insert(currentGroupId, member)
+              retry(when500) { () =>
+                Future {
+                  blocking { restoreInserter.execute }
+                  simpleFailure
+                } recover {
+                  case t => Option((userId, s"Failed to change permissions for $userId. They no longer have any access to the workspace. Please try re-adding them."))
+                }
+              }
+
+            case (Some(_), None) => // delete failed, insert ok => there is an extra entry, cleanup seems pointless as the delete was already in a retry
+              Future.successful(Option((userId, s"Successfully granted $userId $targetAccessLevel access but failed to remove $currentAccessLevel, this may result in inconsistent behavior, please try removing the user (may take more than 1 try) and readding")))
+
+            case (Some(_), Some(_)) => Future.successful(simpleFailure) // both failed => no cleanup
+            case (None, None) => Future.successful(None) // both successful, yay!
+          }
         }
       }
     }
