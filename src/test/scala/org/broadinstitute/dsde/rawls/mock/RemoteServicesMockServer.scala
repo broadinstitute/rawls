@@ -227,6 +227,66 @@ class RemoteServicesMockServer(port:Int) {
     mockServer.when(
       request()
         .withMethod("POST")
+        .withPath("/workflows/v1/workflowA/abort")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "workflowA",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/workflowB/abort")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "workflowB",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/workflowC/abort")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "workflowC",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath("/workflows/v1/workflowD/abort")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """{
+    "id": "workflowD",
+    "status": "Aborted"
+}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("POST")
          // already_terminal_workflow
         .withPath("/workflows/v1/45def17d-40c2-44cc-89bf-9e77bc2c8778/abort")
     ).respond(

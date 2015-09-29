@@ -63,7 +63,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleCloudStorageDAO, submissionSupervisor)_
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleServicesDAO, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -217,7 +217,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
           ){
             responseAs[WorkspaceListResponse]
           }
@@ -258,9 +258,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleCloudStorageDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet
           }

@@ -26,16 +26,18 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceACLUpdate,WorkspaceAccessLe
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model._
 
+import spray.http.StatusCodes
+
 // Seq[String] -> Collection<String>
 
-class HttpGoogleCloudStorageDAO(
+class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
   clientSecretsJson: String,
   p12File: String,
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int) extends GoogleCloudStorageDAO with Retry {
+  deletedBucketCheckSeconds: Int) extends GoogleServicesDAO with Retry {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -232,6 +234,37 @@ class HttpGoogleCloudStorageDAO(
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
+  override def isAdmin(userId: String): Boolean = {
+    val query = getGroupDirectory.members.get(adminGroupName,userId)
+    tryRetry(query.execute,when500) match {
+      case Success(_) => true
+      case Failure(exception) =>
+        exception match {
+          case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == StatusCodes.NotFound => false
+          case _ => throw exception
+        }
+    }
+  }
+
+  override def addAdmin(userId: String): Unit = {
+    val member = new Member().setEmail(userId).setRole(groupMemberRole)
+    val inserter = getGroupDirectory.members.insert(adminGroupName,member)
+    retry(inserter.execute,when500)
+  }
+
+  override def deleteAdmin(userId: String): Unit = {
+    val deleter = getGroupDirectory.members.delete(adminGroupName,userId)
+    retry(deleter.execute,when500)
+  }
+
+  override def listAdmins(): Seq[String] = {
+    val fetcher = getGroupDirectory.members.list(adminGroupName)
+    Option(retry(fetcher.execute,when500).getMembers) match {
+      case None => Seq.empty
+      case Some(list) => list.map(_.getEmail)
+    }
+  }
+
   // these really should all be private, but we're opening up a few of these to allow integration testing
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
@@ -307,6 +340,7 @@ class HttpGoogleCloudStorageDAO(
       .build()
   }
 
+  def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
   def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
     val pattern = s"rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r

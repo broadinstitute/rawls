@@ -21,11 +21,11 @@ object RawlsApiServiceActor {
 
 class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
-  with StandardUserInfoDirectives {
+  with AdminApiService with StandardUserInfoDirectives {
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~
+  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~ adminRoutes ~
     get {
       pathPrefix("swagger") {
         pathEnd {

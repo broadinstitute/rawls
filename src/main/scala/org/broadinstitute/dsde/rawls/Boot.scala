@@ -34,7 +34,7 @@ object Boot extends App {
     dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     val gcsConfig = conf.getConfig("gcs")
-    val gcsDAO = new HttpGoogleCloudStorageDAO(
+    val gcsDAO = new HttpGoogleServicesDAO(
       false,
       gcsConfig.getString("secrets"),
       gcsConfig.getString("pathToP12"),
