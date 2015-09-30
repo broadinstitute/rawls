@@ -13,17 +13,18 @@ info:
 paths:
   '/admin/users':
     get:
-      '200':
-        description: Successful Request
-        schema:
-          type: array
-          description: list of admin users
-          items:
-            type: string
-      '403':
-        description: You must be an admin to list admins
-      '500':
-        description: Trouble talking to Google
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of admin users
+            items:
+              type: string
+        '403':
+          description: You must be an admin to list admins
+        '500':
+          description: Trouble talking to Google
       description: List all admins
       tags:
         - admin
@@ -31,14 +32,15 @@ paths:
       operationId: listAdmins
   '/admin/users/{userId}':
     get:
-      '200':
-        description: Yes, user is an admin
-      '403':
-        description: You must be an admin to check for other admins
-      '404':
-        description: No, user is not an admin
-      '500':
-        description: Trouble talking to Google
+      responses:
+        '200':
+          description: Yes, user is an admin
+        '403':
+          description: You must be an admin to check for other admins
+        '404':
+          description: No, user is not an admin
+        '500':
+          description: Trouble talking to Google
       description: Check whether a user is an admin
       tags:
         - admin
@@ -51,14 +53,15 @@ paths:
           required: true
           type: string
     put:
-      '200':
-        description: User was already an admin
-      '201':
-        description: User is now an admin
-      '403':
-        description: You must be an admin to add another admin
-      '500':
-        description: Trouble talking to Google
+      responses:
+        '200':
+          description: User was already an admin
+        '201':
+          description: User is now an admin
+        '403':
+          description: You must be an admin to add another admin
+        '500':
+          description: Trouble talking to Google
       description: Add an admin
       tags:
         - admin
@@ -71,14 +74,15 @@ paths:
           required: true
           type: string
     delete:
-      '200':
-        description: User is no longer an admin
-      '403':
-        description: You must be an admin to delete another admin
-      '404':
-        description: User is not an admin
-      '500':
-        description: Trouble talking to Google
+      responses:
+        '200':
+          description: User is no longer an admin
+        '403':
+          description: You must be an admin to delete another admin
+        '404':
+          description: User is not an admin
+        '500':
+          description: Trouble talking to Google
       description: Delete an admin
       tags:
         - admin
@@ -92,17 +96,17 @@ paths:
           type: string
   '/admin/submissions':
     get:
-      '200':
-        description: Successful Request
-        schema:
-          type: array
-          description: list of active submissions
-          items:
-            $ref: '#/definitions/ActiveSubmission'
-      '403':
-        description: You must be an admin to list active submissions
-      '500':
-        description: Trouble talking to Google
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ActiveSubmission'
+        '403':
+          description: You must be an admin to list active submissions
+        '500':
+          description: Trouble talking to Google
       description: List all active submissions in all workspaces
       tags:
         - admin
@@ -110,12 +114,13 @@ paths:
       operationId: listAllActiveSubmissions
   '/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
     delete:
-      '204':
-        description: Successful Request
-      '403':
-        description: You must be an admin to abort a submission
-      '500':
-        description: Trouble talking to Google or Cromwell
+      responses:
+        '204':
+          description: Successful Request
+        '403':
+          description: You must be an admin to abort a submission
+        '500':
+          description: Trouble talking to Google or Cromwell
       description: Administratively abort an active submission
       tags:
         - admin
@@ -171,7 +176,7 @@ paths:
         '200':
           description: No response was specified
           schema:
-            $ref: '#/definitions/Submission'
+            $ref: '#/definitions/SubmissionReport'
         '201':
           description: Successful Request
         '400':
@@ -245,7 +250,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/SubmissionReport'
+            $ref: '#/definitions/Submission'
         '404':
           description: Submission Not Found
         '500':
