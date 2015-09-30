@@ -94,14 +94,6 @@ case class MethodRepoMethod(
   def idField = "methodName"
 }
 
-case class MethodRepoConfiguration(
-                   methodConfigNamespace: String,
-                   methodConfigName: String,
-                   methodConfigVersion: Int
-                   ) extends DomainObject {
-  def idField = "methodConfigName"
-}
-
 case class MethodConfiguration(
                    namespace: String,
                    name: String,
@@ -109,10 +101,9 @@ case class MethodConfiguration(
                    prerequisites: Map[String, AttributeString],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
-                   methodRepoConfig:MethodRepoConfiguration,
                    methodRepoMethod:MethodRepoMethod
                    ) extends DomainObject {
-  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoConfig, methodRepoMethod, namespace)
+  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
   def idField = "name"
 }
@@ -120,7 +111,6 @@ case class MethodConfiguration(
 case class MethodConfigurationShort(
                                 name: String,
                                 rootEntityType: String,
-                                methodRepoConfig:MethodRepoConfiguration,
                                 methodRepoMethod:MethodRepoMethod,
                                 namespace: String) extends DomainObject {
   def idField = "name"
@@ -207,11 +197,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
-  implicit val MethodStoreConfigurationFormat = jsonFormat3(MethodRepoConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat7(MethodConfiguration)
 
-  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
-
-  implicit val MethodConfigurationShortFormat = jsonFormat5(MethodConfigurationShort)
+  implicit val MethodConfigurationShortFormat = jsonFormat4(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
 

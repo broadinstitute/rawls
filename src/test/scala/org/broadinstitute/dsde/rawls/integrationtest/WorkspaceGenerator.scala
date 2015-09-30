@@ -148,7 +148,6 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
-      MethodRepoConfiguration("bar", "baz", 1), // don't care about method details
       MethodRepoMethod("bar-config", "baz", 1)) // don't care about method config details
   }
 
@@ -170,7 +169,6 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       updateParameterSet(config.prerequisites, nDelete, nModify, nCreate),
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),
-      config.methodRepoConfig,
       config.methodRepoMethod
     )
   }

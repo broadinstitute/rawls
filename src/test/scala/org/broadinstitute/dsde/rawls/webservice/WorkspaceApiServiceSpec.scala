@@ -119,7 +119,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       AttributeEntityReference(sample3.entityType, sample3.name)
     ))))
 
-    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoConfiguration(writerWorkspaceName.namespace+"-config", "method-a-config", 1), MethodRepoMethod(writerWorkspaceName.namespace, "method-a", 1))
+    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(writerWorkspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, writerWorkspaceName)
     val submissionTemplate = createTestSubmission(workspaceWriter, methodConfig, sampleSet, Seq(sample1, sample2, sample3))
     val submissionSuccess = submissionTemplate.copy(
