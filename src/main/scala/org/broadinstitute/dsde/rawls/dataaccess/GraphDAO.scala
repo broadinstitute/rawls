@@ -25,7 +25,6 @@ object VertexSchema {
   val Workspace = vertexClassOf[org.broadinstitute.dsde.rawls.model.Workspace]
   val Entity = vertexClassOf[org.broadinstitute.dsde.rawls.model.Entity]
   val MethodConfig = vertexClassOf[org.broadinstitute.dsde.rawls.model.MethodConfiguration]
-  val MethodRepoConfig = vertexClassOf[org.broadinstitute.dsde.rawls.model.MethodRepoConfiguration]
   val MethodRepoMethod = vertexClassOf[org.broadinstitute.dsde.rawls.model.MethodRepoMethod]
   val Submission = vertexClassOf[org.broadinstitute.dsde.rawls.model.Submission]
   val Workflow = vertexClassOf[org.broadinstitute.dsde.rawls.model.Workflow]
@@ -34,7 +33,7 @@ object VertexSchema {
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, Map)
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, Map)
 
   def vertexClassOf[T: TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString

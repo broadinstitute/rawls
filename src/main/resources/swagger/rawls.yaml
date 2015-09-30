@@ -1879,9 +1879,6 @@ definitions:
         $ref: ''
       outputs:
         $ref: ''
-      methodRepoConfig:
-        $ref: '#/definitions/MethodRepoConfiguration'
-        description: The properties of the method configuration from the method store that this derived from
       methodRepoMethod:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
@@ -1953,22 +1950,6 @@ definitions:
       workspaceName:
         $ref: '#/definitions/WorkspaceName'
         description: 'This method configuration''s owning workspace'
-  MethodRepoConfiguration:
-    description: ''
-    required:
-      - methodConfigNamespace
-      - methodConfigName
-      - methodConfigVersion
-    properties:
-      methodConfigNamespace:
-        type: string
-        description: The namespace of method config from method store
-      methodConfigName:
-        type: string
-        description: The name of method config from method store
-      methodConfigVersion:
-        type: integer
-        description: The version of method config from method store
 
   MethodRepoMethod:
     description: ''
