@@ -247,8 +247,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     graph.shutdown()
   }
 
-  def withWorkspaceContext(workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => Any) = {
-    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException("WHAT THE F"))
+  def withWorkspaceContext[T](workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {
+    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException(s"Unable to load workspaceContext for ${workspace.toWorkspaceName}"))
     testCode(workspaceContext)
   }
 }

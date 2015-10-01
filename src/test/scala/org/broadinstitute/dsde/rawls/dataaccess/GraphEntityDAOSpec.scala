@@ -150,7 +150,11 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
           daoCycles.save(originalContext, c3, txn)
           daoCycles.cloneAllEntities(originalContext, cloneContext, txn)
 
-          assertResult(dao.listEntitiesAllTypes(originalContext, txn).toSet) {
+          val expectedEntities = Set(c1, c2, c3)
+          assertResult(expectedEntities) {
+            dao.listEntitiesAllTypes(originalContext, txn).toSet
+          }
+          assertResult(expectedEntities) {
             dao.listEntitiesAllTypes(cloneContext, txn).toSet
           }
         }
@@ -161,35 +165,52 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   it should "save updates to an existing entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>
-        // flip case / control and add property, remove a property
-        val pair1Updated = Entity("pair1", "Pair",
-          Map(
-            "isItAPair" -> AttributeBoolean(true),
-            "case" -> AttributeEntityReference("Sample", "sample2"),
-            "control" -> AttributeEntityReference("Sample", "sample1")))
-        dao.save(context, pair1Updated, txn)
         txn.withGraph { graph =>
-          val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
+          val numEdges = graph.getEdges.size
+          val numVerts = graph.getVertices.size
+
+          // flip case / control and add property, remove a property
+          val pair1Updated = Entity("pair1", "Pair",
+            Map(
+              "isItAPair" -> AttributeBoolean(true),
+              "case" -> AttributeEntityReference("Sample", "sample2"),
+              "control" -> AttributeEntityReference("Sample", "sample1")))
+          dao.save(context, pair1Updated, txn)
+
           assert {
+            val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
             fetched.getVertices(Direction.OUT).head.getPropertyKeys.contains("isItAPair")
           }
-          // TODO check edges?
-        }
 
-        val pair1UpdatedAgain = Entity("pair1", "Pair",
-          Map(
-            "case" -> AttributeEntityReference("Sample", "sample2"),
-            "control" -> AttributeEntityReference("Sample", "sample1")))
-        dao.save(context, pair1UpdatedAgain, txn)
-        txn.withGraph { graph =>
-          val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
+          //Make sure we haven't lost any edges or vertices in the process.
+          assertResult(numEdges) {
+            graph.getEdges.size
+          }
+          assertResult(numVerts) {
+            graph.getVertices.size
+          }
+
+          val pair1UpdatedAgain = Entity("pair1", "Pair",
+            Map(
+              "case" -> AttributeEntityReference("Sample", "sample2"),
+              "control" -> AttributeEntityReference("Sample", "sample1")))
+          dao.save(context, pair1UpdatedAgain, txn)
+
           assert {
+            val fetched = graph.getVertices("entityType", "Pair").filter(v => v.getProperty[String]("name") == "pair1").head
             !fetched.getPropertyKeys.contains("isItAPair")
+          }
+          assertResult(numEdges) {
+            graph.getEdges.size
+          }
+          assertResult(numVerts) {
+            graph.getVertices.size
           }
         }
       }
     }
   }
+
 
   it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
@@ -298,7 +319,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
-  val x1 = Entity("x1", "SampleSet", Map.empty)
+  val x1 = Entity("x1", "SampleSet", Map("child" -> AttributeEntityReference("SampleSet", "x2")))
+  var x2 = Entity("x2", "SampleSet", Map.empty)
 
   val workspace2 = Workspace(
     namespace = testData.wsName.namespace + "2",
@@ -314,20 +336,44 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       workspaceDAO.save(workspace2, txn)
       withWorkspaceContext(testData.workspace, txn) { context1 =>
         withWorkspaceContext(workspace2, txn) { context2 =>
+          dao.save(context2, x2, txn)
           dao.save(context2, x1, txn)
+          x2 = Entity("x2", "SampleSet", Map("child" -> AttributeEntityReference("SampleSet", "x1")))
+          dao.save(context2, x2, txn)
+
+          assert(dao.list(context2, "SampleSet", txn).toList.contains(x1))
+          assert(dao.list(context2, "SampleSet", txn).toList.contains(x2))
 
           // note: we're copying FROM workspace2 INTO workspace
           assertResult(Seq.empty) {
-            dao.getCopyConflicts(context1, Seq(x1), txn)
+            dao.getCopyConflicts(context1, Seq(x1, x2), txn)
           }
 
           assertResult(Seq.empty) {
-            dao.copyEntities(context2, context1, "SampleSet", Seq("x1"), txn)
+            dao.copyEntities(context2, context1, "SampleSet", Seq("x2"), txn)
           }
 
           //verify it was actually copied into the workspace
           assert(dao.list(context1, "SampleSet", txn).toList.contains(x1))
+          assert(dao.list(context1, "SampleSet", txn).toList.contains(x2))
         }
+      }
+    }
+  }
+
+  val y1 = Entity("y1", "SampleSet", Map("ref" -> AttributeEntityReference("SampleSet", "y2")))
+  var y2 = Entity("y2", "SampleSet", Map.empty)
+
+
+  it should "save an entity without attribute references and then save that entity again with attribute references" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        dao.save(context, y2, txn)
+        dao.save(context, y1, txn)
+        y2 = Entity("y2", "SampleSet", Map("ref" -> AttributeEntityReference("SampleSet", "y1")))
+        dao.save(context, y2, txn)
+
+        assert(dao.list(context, "SampleSet", txn).toList.contains(y1))
       }
     }
   }
