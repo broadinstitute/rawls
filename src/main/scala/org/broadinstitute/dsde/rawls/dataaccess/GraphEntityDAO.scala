@@ -57,7 +57,14 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
 
   override def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
     val entityTypes = getEntityTypes(workspaceContext, txn).map(et => EdgeSchema.Own.toLabel(et))
-    workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity)
+
+    //if entityTypes is empty, then the pipeline will freak out. if there are no entity types, there are no entities, so don't do anything else
+    entityTypes.size match {
+      case 0 => Seq.empty
+      case _ => {
+        workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity)
+      }
+    }
   }
 
   override def getEntitySubtrees(workspaceContext: WorkspaceContext, entityType: String, entityNames: Seq[String], txn: RawlsTransaction): Seq[Entity] = txn withGraph { db =>
@@ -100,6 +107,11 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def cloneEntities(destWorkspaceContext: WorkspaceContext, entities: Seq[Entity], txn: RawlsTransaction) = txn withGraph { db =>
-    entities.map( e => save(destWorkspaceContext, e, txn) )
+    //1. First save JUST the vertex for the entity without any attributes (references)
+    //References are preserved in saveSubObject, so we'll be able to be able to correctly save entities in reference cycles
+    entities.map(e => save(destWorkspaceContext, e.copy(attributes = Map.empty), txn))
+    //2. Re-save the entities, but this time with the attributes that were previously omitted
+    //Since all entities were already saved in step 1, we can now save the entities again with their references to other entities
+    entities.map(e => save(destWorkspaceContext, e, txn))
   }
 }
