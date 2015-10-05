@@ -39,9 +39,9 @@ object MethodConfigResolver {
     case _ => getSingleResult(mcSequence, wfInput.optional)
   }
 
-  private def evaluateResult(workspaceContext: WorkspaceContext, rootEntity: Entity, expression: String): Try[Seq[AttributeValue]] = {
+  private def evaluateResult(workspaceContext: WorkspaceContext, txn: RawlsTransaction, rootEntity: Entity, expression: String): Try[Seq[AttributeValue]] = {
     val evaluator = new ExpressionEvaluator(new ExpressionParser)
-    evaluator.evalFinalAttribute(workspaceContext, rootEntity.entityType, rootEntity.name, expression)
+    evaluator.evalFinalAttribute(workspaceContext, txn, rootEntity.entityType, rootEntity.name, expression)
   }
 
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
@@ -64,10 +64,10 @@ object MethodConfigResolver {
     for ( (name,expression) <- methodConfig.inputs.toSeq ) yield MethodInput(agoraInputs.get(name).get,expression.value)
   }
 
-  def resolveInputs(workspaceContext: WorkspaceContext, inputs: Seq[MethodInput], entity: Entity): Seq[SubmissionValidationValue] = {
+  def resolveInputs(workspaceContext: WorkspaceContext, txn: RawlsTransaction, inputs: Seq[MethodInput], entity: Entity): Seq[SubmissionValidationValue] = {
     val evaluator = new ExpressionEvaluator(new ExpressionParser)
     inputs.map{ input =>
-      evaluator.evalFinalAttribute(workspaceContext,entity.entityType,entity.name,input.expression) match {
+      evaluator.evalFinalAttribute(workspaceContext, txn, entity.entityType,entity.name,input.expression) match {
         case Success(attributeSequence) => unpackResult(attributeSequence,input.workflowInput)
         case Failure(regrets) => SubmissionValidationValue(None,Some(regrets.getMessage))
       }
@@ -79,11 +79,11 @@ object MethodConfigResolver {
    *
    * @return A map from input name to a SubmissionValidationValue containing a resolved value and / or error
    */
-  def resolveInputs(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Map[String, SubmissionValidationValue] = {
+  def resolveInputs(workspaceContext: WorkspaceContext, txn: RawlsTransaction, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Map[String, SubmissionValidationValue] = {
     NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs map { wfInput: WorkflowInput =>
       val result = methodConfig.inputs.get(wfInput.fqn) match {
         case Some(AttributeString(expression)) =>
-          evaluateResult(workspaceContext, entity, expression) match {
+          evaluateResult(workspaceContext, txn, entity, expression) match {
             case Success(mcSequence) => unpackResult(mcSequence, wfInput)
             case Failure(regret) => SubmissionValidationValue(None, Some(regret.getMessage))
           }
@@ -99,8 +99,8 @@ object MethodConfigResolver {
    * Try resolving inputs. If there are any failures, ONLY return the error messages.
    * Otherwise extract the resolved values (excluding empty / None values) and return those.
    */
-  def resolveInputsOrGatherErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Either[Seq[String], Map[String, Attribute]] = {
-    val (successes, failures) = resolveInputs(workspaceContext, methodConfig, entity, wdl) partition (_._2.error.isEmpty)
+  def resolveInputsOrGatherErrors(workspaceContext: WorkspaceContext, txn: RawlsTransaction, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Either[Seq[String], Map[String, Attribute]] = {
+    val (successes, failures) = resolveInputs(workspaceContext, txn, methodConfig, entity, wdl) partition (_._2.error.isEmpty)
     if (failures.nonEmpty) Left( failures collect { case (key, SubmissionValidationValue(_, Some(error))) => s"Error resolving ${key}: ${error}" } toSeq )
     else Right( successes collect { case (key, SubmissionValidationValue(Some(attribute), _)) => (key, attribute) } )
   }

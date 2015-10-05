@@ -45,25 +45,38 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  ignore should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
+  it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
+
+    println("moving to running")
 
     testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
     }
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        awaitCond(submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running), 15 seconds)
+    awaitCond({
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
+          println("checking...")
+          val wfs = submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows
+          wfs.map( wf => println( s"${wf.workflowId} ${wf.status}" ) )
+          wfs.forall(_.status == WorkflowStatuses.Running)
+        }
       }
-    }
+    }, 1500 seconds, 1 seconds)
+
+    println("moving to succeeded")
 
     testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
     }
 
-    expectMsgClass(15 seconds, classOf[Terminated])
+    println("terminated yet?")
+
+    expectMsgClass(1500 seconds, classOf[Terminated])
+
+    println("yup")
 
     dataSource inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>

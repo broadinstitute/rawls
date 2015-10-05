@@ -86,14 +86,17 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   }
 
   private def startWorkflowMonitorActors(): Unit = {
+    //FIXME I'm not sure this is right, since the submission object in this class never gets updated?
     submission.workflows.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
+    println(s"startWorkflowMonitorActor ${workflow.workflowId}")
     watch(actorOf(workflowMonitorProps(self, workspaceName, submission, workflow), workflow.workflowId))
   }
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
+    println(s"handleStatusChange ${workflow.workflowId} ${workflow.status}")
     val savedWorkflow = datasource inTransaction { txn =>
       val workspaceContext = getWorkspaceContext(workspaceName, txn)
       val saveOutputs = Try {
@@ -114,20 +117,24 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
     }
 
     if (savedWorkflow.status.isDone) {
+      println("checking sub status because we got a finished wf")
       checkSubmissionStatus()
     }
   }
 
   private def checkSubmissionStatus(): Unit = {
-    system.log.debug("polling workflow status, submission {}", submission.submissionId)
+    println("polling workflow status, submission", submission.submissionId)
     datasource inTransaction { txn =>
       val workspaceContext = getWorkspaceContext(workspaceName, txn)
       val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
         throw new RawlsException(s"submissions ${submission} does not exist")
       )
 
+      refreshedSubmission.workflows.map( wf => println(wf.workflowId, wf.status))
+
       if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
         containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
+        println("seems we're all done!")
         stop(self)
       }
     }
