@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.graph
 
 import java.util.logging.{LogManager, Logger}
 
-import com.orientechnologies.orient.core.config.OGlobalConfiguration
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
@@ -232,8 +231,6 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val dbName = UUID.randomUUID.toString
     val dataSource = DataSource("memory:"+dbName, "admin", "admin")
     val graph = new OrientGraph("memory:"+dbName)
-
-    OGlobalConfiguration.STORAGE_LOCK_TIMEOUT.setValue(50 * 60 * 1000)
 
     // do this twice to make sure it is idempotent
     VertexSchema.createVertexClasses(graph)

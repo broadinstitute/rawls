@@ -298,14 +298,8 @@ trait GraphDAO {
   def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Unit = {
     txn.withWriteLock(vertex) {
       //Serialize out each of the case class properties.
-      val propvals = getPropertiesAndValues(tpe, obj).toList
-      if( tpe == typeOf[Workflow] ) {
-        assert( propvals.exists({ case (tp, prop, value) => prop == "workflowEntity" }) )
-      }
-
-      propvals.foreach({
-        case (tp, prop, value) =>
-          saveProperty(tp, prop, value, vertex, wsc, graph, txn)
+      getPropertiesAndValues(tpe, obj).foreach({
+        case (tp, prop, value) => (tp, prop, value, vertex, wsc, graph, txn)
       })
     }
   }
@@ -335,7 +329,7 @@ trait GraphDAO {
           .map( e => ( e.getVertex(Direction.OUT), EdgeSchema.stripEdgeRelation(e.getLabel) ) ).toList
       }).flatten
 
-      removeProperty(propName, vertex, graph, domainObjectFilterFn(tpe, obj))
+      removeProperty(propName, vertex, graph, txn, domainObjectFilterFn(tpe, obj))
       val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
 
       //Restore vertex references.
@@ -344,7 +338,7 @@ trait GraphDAO {
       }
 
       addEdge(vertex, EdgeSchema.Own, propName, objVert)
-      saveObject(tpe, obj, objVert, wsc, graph)
+      saveObject(tpe, obj, objVert, wsc, graph, txn)
       objVert
     }
   }
@@ -519,11 +513,7 @@ trait GraphDAO {
   }
 
   private def loadAttributeRef(propName: String, vertex: Vertex, txn: RawlsTransaction): AttributeEntityReference = {
-    val refOpt = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).headOption
-    if( refOpt.isEmpty ) {
-      throw new RawlsException(s"Can't find attribute reference $propName on $vertex")
-    }
-    val refVtx = refOpt.get
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
     txn.withReadLock(refVtx) {
       AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
     }
@@ -607,7 +597,6 @@ trait GraphDAO {
         case EdgeSchema.Own =>
           val childVertex = e.getVertex(Direction.IN)
           removeOwnedChildVertices(childVertex, graph, txn)
-          println(s"removeProp $propName removing vertex $childVertex from $vertex -> ${e.getLabel}")
           graph.removeVertex(childVertex)
         case EdgeSchema.Ref =>
           println(s"removeProp $propName removing edge from $vertex to ${e.getVertex(Direction.OUT)}")
@@ -624,7 +613,6 @@ trait GraphDAO {
           case EdgeSchema.Own =>
             val childVertex = edge.getVertex(Direction.IN)
             removeOwnedChildVertices(childVertex, graph, txn)
-            println(s"removeChildVertices removing vertex $childVertex from $vertex -> ${edge.getLabel}")
             graph.removeVertex(childVertex)
           case EdgeSchema.Ref => //no-op
         }
