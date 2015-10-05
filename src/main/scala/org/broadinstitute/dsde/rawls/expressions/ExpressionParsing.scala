@@ -5,7 +5,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.pipes.branch.LoopPipe
-import org.broadinstitute.dsde.rawls.dataaccess.{EdgeSchema, WorkspaceContext, VertexSchema, GraphEntityDAO}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import scala.collection.JavaConversions._
 import scala.util.{Try, Failure, Success}
@@ -15,7 +15,7 @@ object ExpressionTypes {
   // to make a less verbose type
   type PipeType = GremlinPipeline[Vertex, Vertex]
 
-  case class ExpressionContext(workspaceContext: WorkspaceContext, rootType: String, rootName: String)
+  case class ExpressionContext(workspaceContext: WorkspaceContext, txn: RawlsTransaction, rootType: String, rootName: String)
 
   //A fully built query is just a list of functions that can be foldl'd.
   case class PipelineQuery(steps: List[PipeFunc], finalStep: FinalFunc)
@@ -229,14 +229,14 @@ class ExpressionParser extends JavaTokenParsers {
   //Takes a list of entities at the end of a pipeline and returns them in final format.
   private def outputEntityResult(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
     val dao = new GraphEntityDAO()
-    FinalResult( graphPipeline.toList.map( dao.loadEntity(_) ), "" )
+    FinalResult( graphPipeline.toList.map( dao.loadEntity(_, context.txn) ), "" )
   }
 }
 
 class ExpressionEvaluator(parser:ExpressionParser)  {
-  def evalFinalAttribute(workspaceContext: WorkspaceContext, rootType:String, rootName:String, expression:String):Try[Seq[AttributeValue]] = {
+  def evalFinalAttribute(workspaceContext: WorkspaceContext, txn: RawlsTransaction, rootType:String, rootName:String, expression:String):Try[Seq[AttributeValue]] = {
     parser.parseAttributeExpr(expression)
-      .flatMap( runPipe(ExpressionContext(workspaceContext, rootType, rootName), _) )
+      .flatMap( runPipe(ExpressionContext(workspaceContext, txn, rootType, rootName), _) )
       .flatMap( ls => Success(ls flatMap
         {
           case l: Seq[Any] => l map AttributeConversions.propertyToAttribute
@@ -245,9 +245,9 @@ class ExpressionEvaluator(parser:ExpressionParser)  {
         ))
   }
 
-  def evalFinalEntity(workspaceContext: WorkspaceContext, rootType:String, rootName:String, expression:String):Try[Seq[Entity]] = {
+  def evalFinalEntity(workspaceContext: WorkspaceContext, txn: RawlsTransaction, rootType:String, rootName:String, expression:String):Try[Seq[Entity]] = {
     parser.parseEntityExpr(expression)
-      .flatMap( runPipe(ExpressionContext(workspaceContext, rootType, rootName), _) )
+      .flatMap( runPipe(ExpressionContext(workspaceContext, txn, rootType, rootName), _) )
       .flatMap( ls => Success(ls.map(_.asInstanceOf[Entity])) )
   }
 

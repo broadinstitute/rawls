@@ -22,7 +22,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))
     // note that the vertex gets passed in twice (directly and through WorkspaceContext)
     val workspaceContext = WorkspaceContext(workspace, vertex)
-    saveObject[Workspace](workspace, vertex, workspaceContext, db)
+    saveObject[Workspace](workspace, vertex, workspaceContext, db, txn)
     workspaceContext
   }
 
@@ -31,25 +31,25 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
    */
   override def loadContext(workspaceName: WorkspaceName, txn: RawlsTransaction): Option[WorkspaceContext] = txn withGraph { db =>
     getWorkspaceVertex(db, workspaceName) map { vertex =>
-      WorkspaceContext(loadObject[Workspace](vertex), vertex)
+      WorkspaceContext(loadObject[Workspace](vertex, txn), vertex)
     }
   }
 
   override def findById(workspaceId: String, txn: RawlsTransaction): Option[WorkspaceContext] =
     txn withGraph { db =>
       getWorkspaceVertex(db, workspaceId) map { vertex =>
-        WorkspaceContext(loadObject[Workspace](vertex), vertex)
+        WorkspaceContext(loadObject[Workspace](vertex, txn), vertex)
     }
   }
 
   override def list(txn: RawlsTransaction): Seq[Workspace] = txn withGraph { db =>
-    new GremlinPipeline(db).V().filter(isWorkspace).transform((v:Vertex) => loadObject[Workspace](v)).toList.asScala
+    new GremlinPipeline(db).V().filter(isWorkspace).transform((v:Vertex) => loadObject[Workspace](v, txn)).toList.asScala
   }
 
   override def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean = txn withGraph { db =>
     getWorkspaceVertex(db, workspaceName) match {
       case Some(v) => {
-        removeObject(v, db)
+        removeObject(v, db, txn)
         true
       }
       case None => false

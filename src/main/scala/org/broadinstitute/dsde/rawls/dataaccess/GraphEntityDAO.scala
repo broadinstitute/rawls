@@ -14,8 +14,8 @@ import org.broadinstitute.dsde.rawls.model.AttributeConversions._
 
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 
-  def loadEntity(entity: Vertex) = {
-    loadObject[Entity](entity)
+  def loadEntity(entity: Vertex, txn: RawlsTransaction) = {
+    loadObject[Entity](entity, txn)
   }
 
   override def save(workspaceContext: WorkspaceContext, entity: Entity, txn: RawlsTransaction): Entity = txn withGraph { db =>
@@ -25,18 +25,18 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     entity.attributes.keys.foreach(validateUserDefinedString)
     entity.attributes.keys.foreach(validateAttributeName)
 
-    saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, workspaceContext, db )
+    saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, workspaceContext, db, txn )
     entity
   }
 
   override def get(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction): Option[Entity] = txn withGraph { db =>
-    getEntityVertex(workspaceContext, entityType, entityName).map(loadEntity)
+    getEntityVertex(workspaceContext, entityType, entityName).map(loadEntity(_, txn))
   }
 
   override def delete(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction) = txn withGraph { db =>
     getEntityVertex(workspaceContext, entityType, entityName) match {
       case Some(v) => {
-        removeObject(v, db)
+        removeObject(v, db, txn)
         true
       }
       case None => false
@@ -44,7 +44,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
   }
 
   override def list(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): TraversableOnce[Entity] = txn withGraph { db =>
-    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).iterator().map(loadEntity)
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).iterator().map(loadEntity(_, txn))
   }
 
   override def rename(workspaceContext: WorkspaceContext, entityType: String, entityName: String, newName: String, txn: RawlsTransaction) = txn withGraph { db =>
@@ -62,7 +62,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     entityTypes.size match {
       case 0 => Seq.empty
       case _ => {
-        workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity)
+        workspacePipeline(workspaceContext).out(entityTypes:_*).iterator().map(loadEntity(_, txn))
       }
     }
   }
@@ -76,8 +76,8 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
       override def compute(bundle: LoopPipe.LoopBundle[Vertex]): java.lang.Boolean = { true }
     }
 
-    val topLevelEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).iterator().map(loadEntity).toList
-    val remainingEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity).toList
+    val topLevelEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).iterator().map(loadEntity(_, txn)).toList
+    val remainingEntities = workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(nameFilter).as("outLoop").out().dedup().loop("outLoop", emitAll, emitAll).filter(isVertexOfClass(VertexSchema.Entity)).iterator().map(loadEntity(_, txn)).toList
     (topLevelEntities:::remainingEntities).distinct
   }
 

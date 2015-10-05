@@ -463,7 +463,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         txn withGraph { graph =>
           new ExpressionEvaluator(new ExpressionParser())
-            .evalFinalAttribute(workspaceContext, entityType, entityName, expression) match {
+            .evalFinalAttribute(workspaceContext, txn, entityType, entityName, expression) match {
             case Success(result) => RequestComplete(http.StatusCodes.OK, result)
             case Failure(regret) => {
               txn.setRollbackOnly()
@@ -732,7 +732,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
             withEntity(workspaceContext, entityType, entityName, txn) { entity =>
               withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
                 withWdl(method) { wdl =>
-                  MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
+                  MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, txn, methodConfig, entity, wdl) match {
                     case Left(failures) => RequestComplete(StatusCodes.OK, failures)
                     case Right(unpacked) =>
                       val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), userInfo)
@@ -1070,7 +1070,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, submissionId: String, userInfo: UserInfo, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
-    MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
+    MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, txn, methodConfig, entity, wdl) match {
       case Left(failures) => Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.map(AttributeString(_))))
       case Right(inputs) =>
         val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), workflowOptions(workspaceContext, submissionId), userInfo)
@@ -1099,7 +1099,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
               op(Seq(entity))
           }
       case Some(expression) =>
-        new ExpressionEvaluator(new ExpressionParser()).evalFinalEntity(workspaceContext, submissionRequest.entityType, submissionRequest.entityName, expression) match {
+        new ExpressionEvaluator(new ExpressionParser()).evalFinalEntity(workspaceContext, txn, submissionRequest.entityType, submissionRequest.entityName, expression) match {
           case Failure(regret) =>
             RequestComplete(StatusCodes.BadRequest, regret.getMessage)
           case Success(entities) =>
@@ -1138,7 +1138,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, txn) { methodConfig =>
           withMethodInputs(methodConfig) { (wdl,methodInputs) =>
             withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, txn) { jobEntities =>
-              val resolvedInputs = jobEntities map { entity => SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,methodInputs,entity)) }
+              val resolvedInputs = jobEntities map { entity => SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,txn,methodInputs,entity)) }
               val (succeeded, failed) = resolvedInputs partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }
               val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
               val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)

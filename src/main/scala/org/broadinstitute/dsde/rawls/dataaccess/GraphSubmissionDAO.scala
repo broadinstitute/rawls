@@ -54,26 +54,26 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
   /** get a submission by workspace and submissionId */
   override def get(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Option[Submission] =
     txn withGraph { db =>
-      getSubmissionVertex(workspaceContext, submissionId) map { loadObject[Submission] }
+      getSubmissionVertex(workspaceContext, submissionId) map { loadObject[Submission](_, txn) }
     }
 
   /** list all submissions in the workspace */
   override def list(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Submission] =
     txn withGraph { db =>
-      workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(submissionEdge)).transform((v: Vertex) => fromVertex(workspaceContext, v)).toList.asScala
+      workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(submissionEdge)).transform((v: Vertex) => fromVertex(workspaceContext, v, txn)).toList.asScala
     }
 
   /** create a submission (and its workflows) */
   override def save(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) =
     txn withGraph { db =>
-      saveSubObject[Submission](submissionEdge, submission, workspaceContext.workspaceVertex, workspaceContext, db )
+      saveSubObject[Submission](submissionEdge, submission, workspaceContext.workspaceVertex, workspaceContext, db, txn )
       submission
     }
 
   override def update(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) = {
     txn withGraph { db =>
       getSubmissionVertex(workspaceContext, submission.submissionId) match {
-        case Some(vertex) => saveObject[Submission](submission, vertex, workspaceContext, db)
+        case Some(vertex) => saveObject[Submission](submission, vertex, workspaceContext, db, txn)
         case None => throw new RawlsException("submission does not exist to be updated: " + submission)
       }
       submission
@@ -85,7 +85,7 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
     txn withGraph { db =>
       getSubmissionVertex(workspaceContext, submissionId) match {
         case Some(vertex) => {
-          removeObject(vertex, db)
+          removeObject(vertex, db, txn)
           true
         }
         case None => false
@@ -96,11 +96,11 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
     txn withGraph { db =>
       getAllActiveSubmissions(db).map{
         case (workspaceName,submissionVertex) =>
-          ActiveSubmission(workspaceName.namespace,workspaceName.name,loadObject[Submission](submissionVertex))}.toSeq
+          ActiveSubmission(workspaceName.namespace,workspaceName.name,loadObject[Submission](submissionVertex, txn))}.toSeq
     }
   }
 
-  private def fromVertex(workspaceContext: WorkspaceContext, vertex: Vertex): Submission = {
-    loadObject[Submission](vertex)
+  private def fromVertex(workspaceContext: WorkspaceContext, vertex: Vertex, txn: RawlsTransaction): Submission = {
+    loadObject[Submission](vertex, txn)
   }
 }

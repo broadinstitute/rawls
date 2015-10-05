@@ -100,13 +100,13 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
       dataSource.inTransaction { txn =>
         withWorkspaceContext(workspace, txn) { context =>
           // success cases
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configSampleSet, sampleSet, arrayWdl) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, txn, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, txn, configEvenBetter, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, txn, configSampleSet, sampleSet, arrayWdl) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
 
           // failure cases
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleMissingValue, littleWdl) should matchPattern { case Left(Seq(_)) => }
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configMissingExpr, sampleGood, littleWdl) should matchPattern { case Left(Seq(_)) => }
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, txn, configGood, sampleMissingValue, littleWdl) should matchPattern { case Left(Seq(_)) => }
+          MethodConfigResolver.resolveInputsOrGatherErrors(context, txn, configMissingExpr, sampleGood, littleWdl) should matchPattern { case Left(Seq(_)) => }
         }
       }
     }

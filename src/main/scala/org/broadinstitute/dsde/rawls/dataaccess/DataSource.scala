@@ -2,10 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.tinkerpop.blueprints.Graph
+import com.tinkerpop.blueprints.{Element, Graph}
 import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
-import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
+import com.tinkerpop.blueprints.impls.orient.{OrientElement, OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
+
+import scala.collection.mutable
 
 import scala.util.{Failure, Success, Try}
 
@@ -60,6 +62,67 @@ class DataSource(graphFactory: OrientGraphFactory) extends LazyLogging {
 }
 
 class RawlsTransaction(graph: OrientGraph, dataSource: DataSource) {
+
+  var readLocks:mutable.Map[Element, Int] = mutable.Map[Element, Int]().withDefaultValue(0)
+  var writeLocks:mutable.Map[Element, Int] = mutable.Map[Element, Int]().withDefaultValue(0)
+
+  /**
+   * Lock handling. Ensures that we don't try to get multiple locks on this elem within the same txn.
+   */
+  def acquireReadLock(elem: Element) = {
+    assert( writeLocks(elem) == 0, s"Attempting to acquire read lock on $elem which already has a write lock" )
+    if( readLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].lock(false)
+    }
+    readLocks(elem) += 1
+  }
+
+  def releaseReadLock(elem: Element) = {
+    assert(readLocks(elem) > 0, s"Attempting to release nonexistent read lock on $elem")
+    readLocks(elem) -= 1
+    if( readLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].unlock()
+    }
+  }
+
+  def acquireWriteLock(elem: Element) = {
+    assert( readLocks(elem) == 0, s"Attempting to acquire write lock on $elem which already has a read lock" )
+    if( writeLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].lock(true)
+    }
+    writeLocks(elem) += 1
+  }
+
+  def releaseWriteLock(elem: Element) = {
+    assert(writeLocks(elem) > 0, s"Attempting to release nonexistent write lock on $elem")
+    writeLocks(elem) -= 1
+    if( writeLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].unlock()
+    }
+  }
+
+  def withWriteLock[T](elem: Element) (op: => T): T = {
+    acquireWriteLock(elem)
+    val ret = op
+    releaseWriteLock(elem)
+    ret
+  }
+
+  def withReadLock[T](elem: Element) (op: => T): T = {
+    acquireReadLock(elem)
+    val ret = op
+    releaseReadLock(elem)
+    ret
+  }
+
+  def isReadLocked(elem: Element): Boolean = {
+    readLocks(elem) > 0
+  }
+
+  def isWriteLocked(elem: Element): Boolean = {
+    writeLocks(elem) > 0
+  }
+
   def withGraph[T](f: Graph => T) = f(graph)
 
   /**

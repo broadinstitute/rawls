@@ -291,15 +291,17 @@ trait GraphDAO {
   def getTypeParams(tpe: Type) = tpe.asInstanceOf[TypeRefApi].args
 
   //SAVE METHODS
-  def saveObject[T <: DomainObject :TypeTag :ClassTag](obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
-    saveObject(typeOf[T], obj, vertex, wsc, graph)
+  def saveObject[T <: DomainObject :TypeTag :ClassTag](obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Unit = {
+    saveObject(typeOf[T], obj, vertex, wsc, graph, txn)
   }
 
-  def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
-    //Serialize out each of the case class properties.
-    getPropertiesAndValues(tpe, obj).foreach({
-      case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph)
-    })
+  def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Unit = {
+    txn.withWriteLock(vertex) {
+      //Serialize out each of the case class properties.
+      getPropertiesAndValues(tpe, obj).foreach({
+        case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph, txn)
+      })
+    }
   }
 
   private def getDomainObjectIdField(tpe: Type, obj: DomainObject): String = {
@@ -312,45 +314,49 @@ trait GraphDAO {
     getDomainObjectIdField(tpe, obj) == vertex.getProperty(obj.idField)
   }
 
-  def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
-    saveSubObject(typeOf[T], propName, obj, vertex, wsc, graph)
+  def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Vertex = {
+    saveSubObject(typeOf[T], propName, obj, vertex, wsc, graph, txn)
   }
 
-  def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
-    //Preserve references into this vertex. List of (vertex, edgeLabel).
-    val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
-      .filter( subV => domainObjectFilterFn(tpe, obj)(subV) ) //only our actual object
-      .map({ subObj =>
-      subObj.getEdges(Direction.IN)
-        .filter( e => EdgeSchema.getEdgeRelation(e.getLabel) == EdgeSchema.Ref )
-        .map( e => ( e.getVertex(Direction.OUT), EdgeSchema.stripEdgeRelation(e.getLabel) ) ).toList
-    }).flatten
+  def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Vertex = {
+    txn.withWriteLock(vertex) {
+      //Preserve references into this vertex. List of (vertex, edgeLabel).
+      val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
+        .filter( subV => domainObjectFilterFn(tpe, obj)(subV) ) //only our actual object
+        .map({ subObj =>
+        subObj.getEdges(Direction.IN)
+          .filter( e => EdgeSchema.getEdgeRelation(e.getLabel) == EdgeSchema.Ref )
+          .map( e => ( e.getVertex(Direction.OUT), EdgeSchema.stripEdgeRelation(e.getLabel) ) ).toList
+      }).flatten
 
-    removeProperty(propName, vertex, graph, domainObjectFilterFn(tpe, obj))
-    val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
+      removeProperty(propName, vertex, graph, txn, domainObjectFilterFn(tpe, obj))
+      val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
 
-    //Restore vertex references.
-    referencers.map { case (refVtx, label) =>
-      addEdge(refVtx, EdgeSchema.Ref, label, objVert )
+      //Restore vertex references.
+      referencers.map { case (refVtx, label) =>
+        addEdge(refVtx, EdgeSchema.Ref, label, objVert )
+      }
+
+      addEdge(vertex, EdgeSchema.Own, propName, objVert)
+      saveObject(tpe, obj, objVert, wsc, graph, txn)
+      objVert
     }
-
-    addEdge(vertex, EdgeSchema.Own, propName, objVert)
-    saveObject(tpe, obj, objVert, wsc, graph)
-    objVert
   }
 
-  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Unit = {
     val mapDummy = addVertex(graph, VertexSchema.Map)
-    addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
+    txn.withWriteLock(mapDummy) {
+      addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
 
-    map.map {case (key, value) =>
-      saveProperty( valuesType, key, value, mapDummy, wsc, graph )
+      map.map { case (key, value) =>
+        saveProperty(valuesType, key, value, mapDummy, wsc, graph, txn)
+      }
     }
   }
 
-  private def saveOpt(containedType: Type, propName: String, opt: Option[Any], vertex: Vertex, wsc:WorkspaceContext, graph:Graph): Unit = {
+  private def saveOpt(containedType: Type, propName: String, opt: Option[Any], vertex: Vertex, wsc:WorkspaceContext, graph:Graph, txn: RawlsTransaction): Unit = {
     opt match {
-      case Some(v) => saveProperty(containedType, propName, v, vertex, wsc, graph)
+      case Some(v) => saveProperty(containedType, propName, v, vertex, wsc, graph, txn)
       case None => //done, already removed
     }
   }
@@ -362,47 +368,48 @@ trait GraphDAO {
     addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }
 
-  private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
-    removeProperty(propName, vertex, graph) //remove any previously defined value
+  private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: WorkspaceContext, graph: Graph, txn: RawlsTransaction): Unit = {
+    assert( txn.isWriteLocked(vertex), s"saveProperty on vertex $vertex does not have write lock!" )
+    removeProperty(propName, vertex, graph, txn) //remove any previously defined value
     (tpe, valToSave) match {
 
       //Basic types. TODO: More of these?
-      case (_, value:String)  => vertex.setProperty(propName, value)
-      case (_, value:Int)     => vertex.setProperty(propName, value)
-      case (_, value:Boolean) => vertex.setProperty(propName, value)
-      case (_, value:DateTime)=> vertex.setProperty(propName, value.toDate)
+      case (_, value: String) => vertex.setProperty(propName, value)
+      case (_, value: Int) => vertex.setProperty(propName, value)
+      case (_, value: Boolean) => vertex.setProperty(propName, value)
+      case (_, value: DateTime) => vertex.setProperty(propName, value.toDate)
 
       //Attributes.
 
       //Throw an exception if we attempt to save AttributeNull, since a nonexistent property and a null-valued property are indistinguishable
       case (_, AttributeNull) => throw new RawlsException(s"Attempting to save $propName as AttributeNull; this is illegal")
-      case (_, value:AttributeValue) => vertex.setProperty(propName, AttributeConversions.attributeToProperty(value))
-      case (_, value:AttributeEntityReference) => saveAttributeRef(value, propName, vertex, wsc, graph)
-      case (_, value:AttributeValueList) => saveProperty(typeOf[Seq[AttributeValue]], propName, value.list, vertex, wsc, graph)
-      case (_, value:AttributeEntityReferenceList) => saveProperty(typeOf[Seq[AttributeEntityReference]], propName, value.list, vertex, wsc, graph)
+      case (_, value: AttributeValue) => vertex.setProperty(propName, AttributeConversions.attributeToProperty(value))
+      case (_, value: AttributeEntityReference) => saveAttributeRef(value, propName, vertex, wsc, graph)
+      case (_, value: AttributeValueList) => saveProperty(typeOf[Seq[AttributeValue]], propName, value.list, vertex, wsc, graph, txn)
+      case (_, value: AttributeEntityReferenceList) => saveProperty(typeOf[Seq[AttributeEntityReference]], propName, value.list, vertex, wsc, graph, txn)
 
       //set the values type to Any, but it's irrelevant as the map is empty so no values will be serialized
-      case (_, AttributeEmptyList) => saveMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+      case (_, AttributeEmptyList) => saveMap(typeOf[Any], propName, Map.empty[String, Any], vertex, wsc, graph, txn)
 
       //Enums.
-      case (_, value:RawlsEnumeration[_]) => vertex.setProperty(propName, value.toString)
+      case (_, value: RawlsEnumeration[_]) => vertex.setProperty(propName, value.toString)
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
       //Watch out for type erasure! Ha ha ha ha ha. Ugh.
-      case (_, seq:Seq[_]) => saveMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+      case (_, seq: Seq[_]) => saveMap(getTypeParams(tpe).head, propName, seq.zipWithIndex.map({ case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph, txn)
+      case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap(getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph, txn)
 
-      case (_, map:Map[String,_])  => saveMap( getTypeParams(tpe).last, propName, map, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Map[String,_]] => saveMap( getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph)
+      case (_, map: Map[String, _]) => saveMap(getTypeParams(tpe).last, propName, map, vertex, wsc, graph, txn)
+      case (tp, _) if tp <:< typeOf[Map[String, _]] => saveMap(getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph, txn)
 
-      case (_, value:Option[_]) => saveOpt(getTypeParams(tpe).head, propName, value, vertex, wsc, graph)
-      case (tp, None) if tp <:< typeOf[Option[Any]] => saveOpt(getTypeParams(tp).head, propName, None, vertex, wsc, graph)
+      case (_, value: Option[_]) => saveOpt(getTypeParams(tpe).head, propName, value, vertex, wsc, graph, txn)
+      case (tp, None) if tp <:< typeOf[Option[Any]] => saveOpt(getTypeParams(tp).head, propName, None, vertex, wsc, graph, txn)
 
       //Everything else (including enum types).
-      case (tp, value:DomainObject) => saveSubObject(tp, propName, value, vertex, wsc, graph)
+      case (tp, value: DomainObject) => saveSubObject(tp, propName, value, vertex, wsc, graph, txn)
 
       //The Forbidden Zone
-      case (_, value:WorkspaceName) => throw new RawlsException("WorkspaceName is not a supported attribute type.")
+      case (_, value: WorkspaceName) => throw new RawlsException("WorkspaceName is not a supported attribute type.")
 
       //What the hell is this? Run awaaaaay!
       case (tp, value) => throw new RawlsException(s"Error saving property $propName with value ${value.toString}: unknown type ${tpe.toString}")
@@ -410,50 +417,53 @@ trait GraphDAO {
   }
 
   //LOAD METHODS
-  def loadObject[T: TypeTag](vertex: Vertex): T = {
-    loadObject(typeOf[T], vertex).asInstanceOf[T]
+  def loadObject[T: TypeTag](vertex: Vertex, txn: RawlsTransaction): T = {
+    loadObject(typeOf[T], vertex, txn).asInstanceOf[T]
   }
 
-  def loadObject(tpe: Type, vertex: Vertex): Any = {
-    val classT = tpe.typeSymbol.asClass
-    val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
-    val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
-    val ctorMirror = classMirror.reflectConstructor(ctor)
+  def loadObject(tpe: Type, vertex: Vertex, txn: RawlsTransaction): Any = {
+    txn.withReadLock(vertex) {
+      val classT = tpe.typeSymbol.asClass
+      val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
+      val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
+      val ctorMirror = classMirror.reflectConstructor(ctor)
 
-    val parameters = getCtorProperties(tpe).map({
-      case (tp, prop) =>
-        loadProperty(tp, prop, vertex)
-    }).toSeq
+      val parameters = getCtorProperties(tpe).map({
+        case (tp, prop) =>
+          loadProperty(tp, prop, vertex, txn)
+      }).toSeq
 
-    ctorMirror(parameters: _*)
+      ctorMirror(parameters: _*)
+    }
   }
 
-  def loadSubObject(tpe: Type, propName: String, vertex: Vertex): Any = {
+  def loadSubObject(tpe: Type, propName: String, vertex: Vertex, txn: RawlsTransaction): Any = {
     val subVert = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     subVert.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
-    loadObject(tpe, subVert)
+    loadObject(tpe, subVert, txn)
   }
 
-  private def loadMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
-
+  private def loadMap(valuesType: Type, propName: String, vertex: Vertex, txn: RawlsTransaction): Map[String, Any] = {
     val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
 
-    getVertexKeys(mapDummy).map({ key =>
-      (key, loadProperty(valuesType, key, mapDummy))
-    }).toMap
+    txn.withReadLock(mapDummy) {
+      getVertexKeys(mapDummy).map({ key =>
+        (key, loadProperty(valuesType, key, mapDummy, txn))
+      }).toMap
+    }
   }
 
-  private def loadOpt(containedType: Type, propName: String, vertex: Vertex): Option[Any] = {
+  private def loadOpt(containedType: Type, propName: String, vertex: Vertex, txn: RawlsTransaction): Option[Any] = {
     getVertexKeys(vertex).contains(propName) match {
-      case true => Option(loadProperty(containedType, propName, vertex))
+      case true => Option(loadProperty(containedType, propName, vertex, txn))
       case false => None
     }
   }
 
   //We've determined that propName is one of AttributeEntityReferenceList, AttributeValueList, AttributeEmptyList
   //Figure out which one and load it!
-  private def loadMysteriouslyTypedAttributeList(propName: String, myVertex: Vertex, mapVertex: Vertex): Attribute = {
+  private def loadMysteriouslyTypedAttributeList(propName: String, myVertex: Vertex, mapVertex: Vertex, txn: RawlsTransaction): Attribute = {
     //Peek at the map vertex for the list type.
     val (propKeys, edgeKeys) = getVertexKeysTuple(mapVertex)
 
@@ -462,11 +472,11 @@ trait GraphDAO {
     } else if ( propKeys.size > 0 ) {
       assert(edgeKeys.size == 0, "Mysteriously typed AttributeList vertex has both property and edge keys!")
       AttributeValueList(
-        loadProperty(typeOf[Seq[AttributeValue]], propName, myVertex)
+        loadProperty(typeOf[Seq[AttributeValue]], propName, myVertex, txn)
           .asInstanceOf[Seq[AttributeValue]] )
     } else {
       AttributeEntityReferenceList(
-        loadProperty( typeOf[Seq[AttributeEntityReference]], propName, myVertex )
+        loadProperty( typeOf[Seq[AttributeEntityReference]], propName, myVertex, txn )
           .asInstanceOf[Seq[AttributeEntityReference]] )
     }
   }
@@ -479,10 +489,10 @@ trait GraphDAO {
    * @param vertex The map dummy vertex this property lives on.
    * @return A nicely typed Attribute.
    */
-  private def loadMysteriouslyTypedAttribute(propName: String, vertex: Vertex): Attribute = {
+  private def loadMysteriouslyTypedAttribute(propName: String, vertex: Vertex, txn: RawlsTransaction): Attribute = {
     val vertexProp = Option(vertex.getProperty(propName))
     vertexProp match {
-      case Some(value) => loadProperty(ru.typeOf[AttributeValue], propName, vertex).asInstanceOf[AttributeValue]
+      case Some(value) => loadProperty(ru.typeOf[AttributeValue], propName, vertex, txn).asInstanceOf[AttributeValue]
       case None =>
         val refEdges = vertex.getEdges(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).toSeq
         val ownEdges = vertex.getEdges(Direction.OUT, EdgeSchema.Own.toLabel(propName)).toSeq
@@ -494,21 +504,23 @@ trait GraphDAO {
         if( refEdges.size == 1 ) {
           //The only place we currently have references is AttributeEntityRefs.
           assert(getVertexClass(refEdges.head.getVertex(Direction.IN)).equalsIgnoreCase(VertexSchema.Entity))
-          loadProperty(ru.typeOf[AttributeEntityReference], propName, vertex).asInstanceOf[AttributeEntityReference]
+          loadProperty(ru.typeOf[AttributeEntityReference], propName, vertex, txn).asInstanceOf[AttributeEntityReference]
         } else {
           //It's either an AttributeEntityReferenceList, an AttributeValueList, or an AttributeEmptyList
-          loadMysteriouslyTypedAttributeList(propName, vertex, ownEdges.head.getVertex(Direction.IN))
+          loadMysteriouslyTypedAttributeList(propName, vertex, ownEdges.head.getVertex(Direction.IN), txn)
         }
     }
   }
 
-  private def loadAttributeRef(propName: String, vertex: Vertex): AttributeEntityReference = {
+  private def loadAttributeRef(propName: String, vertex: Vertex, txn: RawlsTransaction): AttributeEntityReference = {
     val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
-    AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
+    txn.withReadLock(refVtx) {
+      AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
+    }
   }
 
-  private def loadAttributeList[T](propName: String, vertex: Vertex): Seq[T] = {
-    loadProperty(typeOf[Seq[AttributeValue]], propName, vertex).asInstanceOf[Seq[T]]
+  private def loadAttributeList[T](propName: String, vertex: Vertex, txn: RawlsTransaction): Seq[T] = {
+    loadProperty(typeOf[Seq[AttributeValue]], propName, vertex, txn).asInstanceOf[Seq[T]]
   }
 
   //type <:< RawlsEnumeration[_] seems to work inconsistently, so use this as a workaround
@@ -525,7 +537,8 @@ trait GraphDAO {
     m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[RawlsEnumeration[_]]
   }
 
-  private def loadProperty(tpe: Type, propName: String, vertex: Vertex): Any = {
+  private def loadProperty(tpe: Type, propName: String, vertex: Vertex, txn: RawlsTransaction): Any = {
+    assert( txn.isReadLocked(vertex), s"loadProperty on vertex $vertex does not have read lock!" )
     tpe match {
       //Basic types. TODO: More of these?
       case tp if tp =:= typeOf[String]  => vertex.getProperty(propName)
@@ -536,21 +549,21 @@ trait GraphDAO {
 
       //Attributes.
       case tp if tp <:< typeOf[AttributeValue] => AttributeConversions.propertyToAttribute(vertex.getProperty(propName))
-      case tp if tp <:< typeOf[AttributeEntityReference] => loadAttributeRef(propName, vertex)
-      case tp if tp <:< typeOf[AttributeValueList] => AttributeValueList(loadAttributeList[AttributeValue](propName, vertex))
-      case tp if tp <:< typeOf[AttributeEntityReferenceList] => AttributeEntityReferenceList(loadAttributeList[AttributeEntityReference](propName, vertex))
-      case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex)
+      case tp if tp <:< typeOf[AttributeEntityReference] => loadAttributeRef(propName, vertex, txn)
+      case tp if tp <:< typeOf[AttributeValueList] => AttributeValueList(loadAttributeList[AttributeValue](propName, vertex, txn))
+      case tp if tp <:< typeOf[AttributeEntityReferenceList] => AttributeEntityReferenceList(loadAttributeList[AttributeEntityReference](propName, vertex, txn))
+      case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex, txn)
 
       //Enums.
       case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
-      case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
-      case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex)
-      case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
+      case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex, txn).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex, txn)
+      case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex, txn)
 
       //Everything else.
-      case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex)
+      case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex, txn)
 
       //The Forbidden Zone
       case tp if tp <:< typeOf[WorkspaceName] => throw new RawlsException("WorkspaceName is not a supported attribute type.")
@@ -561,14 +574,17 @@ trait GraphDAO {
   }
 
   //REMOVE METHODS
-  def removeObject(vertex: Vertex, graph: Graph): Unit = {
-    removeOwnedChildVertices(vertex, graph)
-    vertex.remove()
+  def removeObject(vertex: Vertex, graph: Graph, txn: RawlsTransaction): Unit = {
+    txn.withWriteLock(vertex) {
+      removeOwnedChildVertices(vertex, graph, txn)
+      vertex.remove()
+    }
   }
 
   //Removes the named property from the vertex.
   //The vertexFilterFn provides an additional check on target vertices to see if they should be deleted.
-  private def removeProperty(propName: String, vertex: Vertex, graph: Graph, vertexFilterFn: (Vertex => Boolean) = {v => true} ) = {
+  private def removeProperty(propName: String, vertex: Vertex, graph: Graph, txn: RawlsTransaction, vertexFilterFn: (Vertex => Boolean) = {v => true} ) = {
+    assert( txn.isWriteLocked(vertex), s"removeProperty on vertex $vertex does not have write lock!" )
     //Remove the property set directly on the vertex...
     vertex.removeProperty(propName)
 
@@ -580,9 +596,8 @@ trait GraphDAO {
         //We need to recursively delete sub-objects that we own.
         case EdgeSchema.Own =>
           val childVertex = e.getVertex(Direction.IN)
-          removeOwnedChildVertices(childVertex, graph)
+          removeOwnedChildVertices(childVertex, graph, txn)
           graph.removeVertex(childVertex)
-          //No need to delete the edge as deleting the vertex makes it vanish.
         case EdgeSchema.Ref =>
           graph.removeEdge(e)
       }
@@ -590,14 +605,16 @@ trait GraphDAO {
   }
 
   //Recursively wipes all linked vertices following ownership chain.
-  private def removeOwnedChildVertices( vertex: Vertex, graph: Graph ): Unit = {
-    vertex.getEdges(Direction.OUT).map { edge =>
-      EdgeSchema.getEdgeRelation(edge.getLabel) match {
-        case EdgeSchema.Own =>
-          val childVertex = edge.getVertex(Direction.IN)
-          removeOwnedChildVertices(childVertex, graph)
-          graph.removeVertex(childVertex)
-        case EdgeSchema.Ref => //no-op
+  private def removeOwnedChildVertices( vertex: Vertex, graph: Graph, txn: RawlsTransaction ): Unit = {
+    txn.withWriteLock(vertex) {
+      vertex.getEdges(Direction.OUT).map { edge =>
+        EdgeSchema.getEdgeRelation(edge.getLabel) match {
+          case EdgeSchema.Own =>
+            val childVertex = edge.getVertex(Direction.IN)
+            removeOwnedChildVertices(childVertex, graph, txn)
+            graph.removeVertex(childVertex)
+          case EdgeSchema.Ref => //no-op
+        }
       }
     }
   }
