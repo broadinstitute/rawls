@@ -299,7 +299,7 @@ trait GraphDAO {
     txn.withWriteLock(vertex) {
       //Serialize out each of the case class properties.
       getPropertiesAndValues(tpe, obj).foreach({
-        case (tp, prop, value) => (tp, prop, value, vertex, wsc, graph, txn)
+        case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph, txn)
       })
     }
   }
@@ -599,7 +599,6 @@ trait GraphDAO {
           removeOwnedChildVertices(childVertex, graph, txn)
           graph.removeVertex(childVertex)
         case EdgeSchema.Ref =>
-          println(s"removeProp $propName removing edge from $vertex to ${e.getVertex(Direction.OUT)}")
           graph.removeEdge(e)
       }
     }
