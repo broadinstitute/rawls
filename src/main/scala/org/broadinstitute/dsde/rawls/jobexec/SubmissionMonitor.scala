@@ -68,7 +68,7 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       system.log.debug("submission monitor timeout, submission {}", submission.submissionId)
       checkSubmissionStatus()
     case Terminated(monitor) =>
-      system.log.debug("workflow monitor terminated, submission {}, actor ", submission.submissionId, monitor)
+      system.log.debug("workflow monitor terminated, submission {}, actor {}", submission.submissionId, monitor)
       handleTerminatedMonitor(submission.submissionId, monitor.path.name)
   }
 

@@ -25,13 +25,11 @@ class GraphWorkflowDAO(graphSubmissionDAO: GraphSubmissionDAO) extends WorkflowD
   /** update a workflow */
   override def update(workspaceContext: WorkspaceContext, submissionId: String, workflow: Workflow, txn: RawlsTransaction): Workflow =
     txn withGraph { db =>
-      //workflows.updated( index, newval )
-      graphSubmissionDAO.get(workspaceContext, submissionId, txn).flatMap { submission =>
+      graphSubmissionDAO.get(workspaceContext, submissionId, txn).foreach { submission =>
         submission.workflows.indexWhere( wf => wf.workflowId == workflow.workflowId ) match {
           case -1 => throw new RawlsException(s"workflow does not exist: ${workflow}")
           case idx =>
             graphSubmissionDAO.update(workspaceContext, submission.copy(workflows = submission.workflows.updated(idx, workflow)), txn)
-            Some(workflow)
         }
       }
       workflow
