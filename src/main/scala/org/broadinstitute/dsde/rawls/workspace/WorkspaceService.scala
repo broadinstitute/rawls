@@ -75,6 +75,7 @@ object WorkspaceService {
   case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
+  case class GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
 
   case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
@@ -135,6 +136,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     case CopyMethodConfigurationToMethodRepo(query) => context.parent ! copyMethodConfigurationToMethodRepo(query)
     case ListMethodConfigurations(workspaceName) => context.parent ! listMethodConfigurations(workspaceName)
     case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => context.parent ! createMethodConfigurationTemplate(methodRepoMethod)
+    case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => context.parent ! getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)
 
     case ListSubmissions(workspaceName) => context.parent ! listSubmissions(workspaceName)
     case CreateSubmission(workspaceName, submission) => context.parent ! createSubmission(workspaceName, submission)
@@ -566,6 +568,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def saveAndValidateMCExpressions(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): ValidatedMethodConfiguration = {
     containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
 
+    validateMCExpressions(methodConfiguration)
+  }
+
+  def validateMCExpressions(methodConfiguration: MethodConfiguration): ValidatedMethodConfiguration = {
     val parser = new ExpressionParser
 
     def parseAndPartition(m: Map[String, AttributeString]) = {
@@ -577,6 +583,16 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs)
 
     ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
+  }
+
+  def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): PerRequestMessage = {
+    dataSource inTransaction { txn =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
+          PerRequest.RequestComplete(validateMCExpressions(methodConfig))
+        }
+      }
+    }
   }
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): PerRequestMessage =
