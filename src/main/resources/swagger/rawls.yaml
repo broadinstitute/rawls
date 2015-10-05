@@ -780,7 +780,7 @@ paths:
         '200':
           description: No response was specified
           schema:
-            $ref: '#/definitions/MethodConfiguration'
+            $ref: '#/definitions/ValidatedMethodConfiguration'
         '201':
           description: Successful Request
         '404':
@@ -839,6 +839,43 @@ paths:
           name: workspaceName
           required: true
           type: string
+  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
+      get:
+        responses:
+          '200':
+            description: Successful Request
+            schema:
+              $ref: '#/definitions/ValidatedMethodConfiguration'
+          '404':
+            description: Workspace or Method Configuration does not exist
+          '500':
+            description: Rawls Internal Error
+        description: ''
+        tags:
+          - methodconfigs
+        summary: get syntax validation information for a method configuration
+        operationId: validate_method_configuration
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+          - in: path
+            description: Method Configuration Namespace
+            name: configNamespace
+            required: true
+            type: string
+          - in: path
+            description: Method Configuration Name
+            name: configName
+            required: true
+            type: string
   '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
     get:
       responses:
@@ -917,7 +954,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            $ref: '#/definitions/MethodConfiguration'
+            $ref: '#/definitions/ValidatedMethodConfiguration'
         '404':
           description: Workspace or method configuration does not exists
         '500':
@@ -1882,6 +1919,30 @@ definitions:
       methodRepoMethod:
         $ref: '#/definitions/MethodRepoMethod'
         description: The properties of the method from the method store that this config is associated with
+
+  ValidatedMethodConfiguration:
+    description: ''
+    required:
+      -methodConfiguration
+      -validInputs
+      -invalidInputs
+      -validOutputs
+      -invalidOutputs
+    properties:
+      validInputs:
+        type: array
+        items:
+          type: string
+      invalidInputs:
+        $ref: ''
+      validOutputs:
+        type: array
+        items:
+          type: string
+      invalidOutputs:
+        $ref: ''
+      methodConfiguration:
+        $ref: '#/definitions/MethodConfiguration'
 
   MethodRepoConfigurationImport:
     description: ''

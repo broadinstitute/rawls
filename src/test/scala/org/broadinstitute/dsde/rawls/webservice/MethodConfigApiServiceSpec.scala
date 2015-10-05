@@ -270,6 +270,35 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
       }
   }
 
+  it should "get syntax validation information for a method configuration" in withTestDataApiServices { services =>
+    val theInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
+    val theOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
+
+    val expectedSuccessInputs = Seq("good_in")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
+    val expectedSuccessOutputs = Seq("good_out")
+    val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
+
+    val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
+
+    services.dataSource.inTransaction { txn =>
+      withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+        methodConfigDAO.save(workspaceContext, foo, txn)
+      }
+    }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/blah/validate") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(ValidatedMethodConfiguration(foo, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
+          responseAs[ValidatedMethodConfiguration]
+        }
+      }
+  }
+
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, testData.methodConfig.toJson.toString())) ~>
       sealRoute(services.methodConfigRoutes) ~>
