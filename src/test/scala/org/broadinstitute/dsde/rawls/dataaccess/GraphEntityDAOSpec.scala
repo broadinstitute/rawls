@@ -35,7 +35,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   class BugTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", Map.empty)
+    val workspace = new Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map("aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")))
@@ -117,7 +117,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       val workspaceOriginal = Workspace(
         namespace = testData.wsName.namespace + "Original",
         name = testData.wsName.name + "Original",
-        workspaceId = "aBucket",
+        workspaceId = "aWorkspaceId",
+        bucketName = "aBucket",
         createdDate = DateTime.now(),
         createdBy = "Joe Biden",
         Map.empty
@@ -126,7 +127,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       val workspaceClone = Workspace(
         namespace = testData.wsName.namespace + "Clone",
         name = testData.wsName.name + "Clone",
-        workspaceId = "anotherBucket",
+        workspaceId = "anotherWorkspaceId",
+        bucketName = "anotherBucket",
         createdDate = DateTime.now(),
         createdBy = "Joe Biden",
         Map.empty
@@ -325,7 +327,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   val workspace2 = Workspace(
     namespace = testData.wsName.namespace + "2",
     name = testData.wsName.name + "2",
-    workspaceId = "aBucket",
+    workspaceId = "aWorkspaceId",
+    bucketName = "aBucket",
     createdDate = DateTime.now(),
     createdBy = "Joe Biden",
     Map.empty

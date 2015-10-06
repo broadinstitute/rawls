@@ -44,7 +44,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   class SubmissionTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
 
     val sample1 = Entity("sample1", "Sample",
       Map("type" -> AttributeString("normal")))
@@ -180,7 +180,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) { status }
     assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
-    assertResult(Some("{\"jes_gcs_root\":\"gs://rawls-aBucket/" + newSubmission.submissionId + "\"}")) { mockExecSvc.submitOptions }
+    assertResult(Some("{\"jes_gcs_root\":\"gs://rawls-aWorkspaceId/" + newSubmission.submissionId + "\"}")) { mockExecSvc.submitOptions }
 
     val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
     assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test

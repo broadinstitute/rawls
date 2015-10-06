@@ -60,7 +60,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class EmptyWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -69,7 +69,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class LockedWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute](), isLocked = true )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute](), isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -85,7 +85,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       "empty" -> AttributeEmptyList,
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
-    val workspace = Workspace(wsName.namespace, wsName.name, "aBucket", DateTime.now, "testUser", wsAttrs)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", wsAttrs)
 
     val sample1 = Entity("sample1", "Sample",
       Map(

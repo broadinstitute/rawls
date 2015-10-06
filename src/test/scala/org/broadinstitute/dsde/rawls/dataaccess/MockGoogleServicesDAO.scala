@@ -40,9 +40,9 @@ object MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def getWorkspaces(userId: String): Seq[WorkspacePermissionsPair] = {
     Seq(
-      WorkspacePermissionsPair("bucket1", WorkspaceAccessLevel.Owner),
-      WorkspacePermissionsPair("bucket2", WorkspaceAccessLevel.Write),
-      WorkspacePermissionsPair("bucket3", WorkspaceAccessLevel.Read)
+      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevel.Owner),
+      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevel.Write),
+      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevel.Read)
     )
   }
 

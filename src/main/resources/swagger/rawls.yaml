@@ -2295,6 +2295,7 @@ definitions:
       - namespace
       - name
       - workspaceId
+      - bucketName
       - createdDate
       - createdBy
       - attributes
@@ -2308,6 +2309,9 @@ definitions:
       workspaceId:
         type: string
         description: A UUID associated with the workspace
+      bucketName:
+        type: string
+        description: The name of the bucket associated with the workspace
       createdDate:
         type: string
         format: date-time
