@@ -40,7 +40,7 @@ object Boot extends App {
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       gcsConfig.getString("secrets"),
-      gcsConfig.getString("pathToP12"),
+      gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
       gcsConfig.getString("appName"),

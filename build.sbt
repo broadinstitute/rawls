@@ -104,3 +104,7 @@ testOptions in Test += Tests.Setup(classLoader =>
     .getMethod("getLogger", classLoader.loadClass("java.lang.String"))
     .invoke(null, "ROOT")
 )
+
+val buildSettings = Defaults.defaultSettings ++ Seq(
+  javaOptions += "-Xmx2G"
+)
