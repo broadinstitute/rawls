@@ -66,9 +66,9 @@ class HttpGoogleServicesDAO(
     def rollbackGroups(t: Throwable): Throwable = {
       Future.traverse(groupAccessLevelsAscending) { accessLevel =>
         Future {
-          val inserter = groups.delete(newGroup(bucketName, workspaceName, accessLevel).getEmail)
+          val deleter = groups.delete(newGroup(bucketName, workspaceName, accessLevel).getEmail)
           blocking {
-            inserter.execute
+            deleter.execute
           }
         }
       }
@@ -88,18 +88,7 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def assertSuccessfulGroupInserts: (Seq[Try[Group]]) => Future[Seq[Group]] = { tryGroups =>
-      Future {
-        tryGroups map {
-          _ match {
-            case Success(g) => g
-            case Failure(t) => throw t
-          }
-        }
-      }
-    }
-
-    def insertOwnerMember: (Seq[Group]) => Future[Member] = { _ =>
+    def insertOwnerMember: (Seq[Try[Group]]) => Future[Member] = { _ =>
       retry(when500) {
         () => Future {
           val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevel.Owner)
@@ -130,7 +119,7 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    val doItAll = insertGroups(workspaceName, bucketName) flatMap assertSuccessfulGroupInserts flatMap insertOwnerMember flatMap insertBucket
+    val doItAll = insertGroups(workspaceName, bucketName) flatMap assertSuccessfulTries flatMap insertOwnerMember flatMap insertBucket
     doItAll.transform(f => f, rollbackGroups)
   }
 

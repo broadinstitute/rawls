@@ -16,5 +16,18 @@ trait FutureSupport {
    * @tparam T
    * @return
    */
-  implicit def toFutureTry[T](f: Future[T]): Future[Try[T]] = f map(Success(_)) recover { case t => Failure(t) }
+  def toFutureTry[T](f: Future[T]): Future[Try[T]] = f map(Success(_)) recover { case t => Failure(t) }
+
+  /**
+   * Returns a failed future if any of the input tries have failed, otherwise returns the input in a successful Future
+   * @tparam T
+   * @return
+   */
+  def assertSuccessfulTries[T]: (Seq[Try[T]]) => Future[Seq[Try[T]]] = { tries =>
+    val failures = tries.collect{ case Failure(t) => t }
+    if (failures.isEmpty) Future.successful(tries) else Future.failed(failures.head)
+  }
+
+
 }
+
