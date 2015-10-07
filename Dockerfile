@@ -3,6 +3,7 @@ FROM phusion/baseimage
 
 # Rawls' default port
 EXPOSE 8080
+EXPOSE 5050
 
 # Use baseimage's init system.
 CMD ["/sbin/my_init"]
