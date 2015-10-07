@@ -10,6 +10,7 @@ import spray.http.MediaTypes._
 import spray.http.{HttpResponse, StatusCodes}
 import spray.routing.Directive.pimpApply
 import spray.routing._
+import spray.http.StatusCodes._
 
 import scala.reflect.runtime.universe._
 
@@ -25,7 +26,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~ adminRoutes ~
+  def possibleRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~ adminRoutes ~
     get {
       pathPrefix("swagger") {
         pathEnd {

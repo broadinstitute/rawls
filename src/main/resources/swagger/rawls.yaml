@@ -30,6 +30,11 @@ paths:
         - admin
       summary: list admins
       operationId: listAdmins
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/admin/users/{userId}':
     get:
       responses:
@@ -52,6 +57,11 @@ paths:
           name: userId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     put:
       responses:
         '200':
@@ -73,6 +83,11 @@ paths:
           name: userId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       responses:
         '200':
@@ -94,6 +109,11 @@ paths:
           name: userId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/admin/submissions':
     get:
       responses:
@@ -112,6 +132,11 @@ paths:
         - admin
       summary: list active submissions
       operationId: listAllActiveSubmissions
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
     delete:
       responses:
@@ -142,6 +167,11 @@ paths:
           name: submissionId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
@@ -171,6 +201,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     post:
       responses:
         '200':
@@ -209,6 +244,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/SubmissionRequest'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
     post:
       responses:
@@ -244,6 +284,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/SubmissionRequest'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
     get:
       responses:
@@ -276,6 +321,11 @@ paths:
           name: submissionId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       responses:
         '200':
@@ -307,6 +357,11 @@ paths:
           name: submissionId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
     get:
       responses:
@@ -344,6 +399,11 @@ paths:
           name: workflowId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}':
     get:
       responses:
@@ -381,6 +441,11 @@ paths:
           name: workflowId
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
     post:
       responses:
@@ -426,6 +491,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/EntityName'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
     post:
       responses:
@@ -463,6 +533,11 @@ paths:
           name: entityName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities':
     get:
       responses:
@@ -490,6 +565,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     post:
       responses:
         '200':
@@ -526,6 +606,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/Entity'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
     get:
       responses:
@@ -560,6 +645,11 @@ paths:
           name: entityType
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
     get:
       responses:
@@ -597,6 +687,11 @@ paths:
           name: entityName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     patch:
       responses:
         '200':
@@ -641,6 +736,11 @@ paths:
           required: false
           schema:
             $ref: '#/definitions/AttributeUpdateOperation'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       responses:
         '200':
@@ -677,6 +777,11 @@ paths:
           name: entityName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /workspaces/entities/copy:
     post:
       responses:
@@ -702,6 +807,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/EntityCopyDefinition'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
     post:
       responses:
@@ -739,6 +849,11 @@ paths:
             type: array
             items:
               $ref: '#/definitions/EntityUpdateDefinition'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
     post:
       responses:
@@ -774,6 +889,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/EntityUpdateDefinition'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
     post:
       responses:
@@ -811,6 +931,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodConfiguration'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     get:
       responses:
         '200':
@@ -839,43 +964,53 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
-      get:
-        responses:
-          '200':
-            description: Successful Request
-            schema:
-              $ref: '#/definitions/ValidatedMethodConfiguration'
-          '404':
-            description: Workspace or Method Configuration does not exist
-          '500':
-            description: Rawls Internal Error
-        description: ''
-        tags:
-          - methodconfigs
-        summary: get syntax validation information for a method configuration
-        operationId: validate_method_configuration
-        parameters:
-          - in: path
-            description: Workspace Namespace
-            name: workspaceNamespace
-            required: true
-            type: string
-          - in: path
-            description: Workspace Name
-            name: workspaceName
-            required: true
-            type: string
-          - in: path
-            description: Method Configuration Namespace
-            name: configNamespace
-            required: true
-            type: string
-          - in: path
-            description: Method Configuration Name
-            name: configName
-            required: true
-            type: string
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/ValidatedMethodConfiguration'
+        '404':
+          description: Workspace or Method Configuration does not exist
+        '500':
+          description: Rawls Internal Error
+      description: ''
+      tags:
+        - methodconfigs
+      summary: get syntax validation information for a method configuration
+      operationId: validate_method_configuration
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Namespace
+          name: configNamespace
+          required: true
+          type: string
+        - in: path
+          description: Method Configuration Name
+          name: configName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
     get:
       responses:
@@ -913,6 +1048,11 @@ paths:
           name: configName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       responses:
         '200':
@@ -949,6 +1089,11 @@ paths:
           name: configName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     put:
       responses:
         '200':
@@ -991,6 +1136,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodConfiguration'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
     post:
       responses:
@@ -1036,6 +1186,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodConfigurationName'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /methodconfigs/copy:
     post:
       responses:
@@ -1063,6 +1218,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodConfigurationNamePair'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /methodconfigs/copyFromMethodRepo:
     post:
       responses:
@@ -1092,6 +1252,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodRepoConfigurationImport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /methodconfigs/copyToMethodRepo:
     post:
       responses:
@@ -1115,6 +1280,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodRepoConfigurationExport'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /methodconfigs/template:
     post:
       responses:
@@ -1138,6 +1308,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/MethodRepoMethod'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
@@ -1167,6 +1342,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
     put:
       responses:
@@ -1196,6 +1376,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/acl':
     get:
       responses:
@@ -1225,6 +1410,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     patch:
       responses:
         '200':
@@ -1257,6 +1447,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/WorkspaceACLUpdate'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /workspaces:
     post:
       responses:
@@ -1282,6 +1477,12 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/WorkspaceRequest'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/devstorage.full_control
     get:
       responses:
         '200':
@@ -1297,6 +1498,11 @@ paths:
         - workspaces
       summary: List workspaces
       operationId: list
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}':
     patch:
       responses:
@@ -1332,6 +1538,11 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/AttributeUpdateOperation'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     get:
       responses:
         '200':
@@ -1358,6 +1569,11 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
     delete:
       responses:
         '200':
@@ -1384,6 +1600,12 @@ paths:
           name: workspaceName
           required: true
           type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/devstorage.full_control
   '/workspaces/{workspaceNamespace}/{workspaceName}/clone':
     post:
       responses:
@@ -1419,6 +1641,13 @@ paths:
           required: true
           schema:
             $ref: '#/definitions/WorkspaceName'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/devstorage.full_control
+
 tags:
   - name: admin
     description: Administrative API
@@ -1430,10 +1659,19 @@ tags:
     description: Method Configuration manipulation API
   - name: workspaces
     description: Workspace manipulation API
-host: localhost
 basePath: /
 schemes:
   - http
+securityDefinitions:
+  authorization:
+    type: oauth2
+    authorizationUrl: 'https://accounts.google.com/o/oauth2/auth'
+    flow: implicit
+    scopes:
+      openid: open id authorization
+      email: email authorization
+      profile: profile authorization
+      https://www.googleapis.com/auth/devstorage.full_control: storage authorization
 definitions:
   Submission:
     description: ''
