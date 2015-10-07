@@ -978,7 +978,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           case Failure(err) =>
             throw new RawlsException(s"Unable to create bucket for ${workspaceRequest.namespace}/${workspaceRequest.name}.",err)
           case Success(workspaceId) =>
-            val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
+            val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
             op(containerDAO.workspaceDAO.save(workspace, txn))
         }
     }

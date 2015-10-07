@@ -41,6 +41,7 @@ case class Workspace (
                       namespace: String,
                       name: String,
                       workspaceId: String,
+                      bucketName: String,
                       createdDate: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute],
@@ -185,7 +186,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat7(Workspace)
+  implicit val WorkspaceFormat = jsonFormat8(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
