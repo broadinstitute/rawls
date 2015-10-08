@@ -252,6 +252,7 @@ class ExpressionEvaluator(parser:ExpressionParser)  {
   }
 
   def runPipe(expressionContext: ExpressionContext, pipe:PipelineQuery):Try[Seq[Any]] = {
+    expressionContext.workspaceContext.graph.makeActive()
     val gremlin = new PipeType(expressionContext.workspaceContext.workspaceVertex)
 
     //Build the gremlin pipeline up to the penultimate step.
