@@ -131,7 +131,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
         assertResult(1) {
-          responseAs[Array[String]].length
+          responseAs[ErrorReport].causes.length
         }
       }
   }
@@ -182,7 +182,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
         assertResult(1) {
-          responseAs[Array[String]].length
+          responseAs[ErrorReport].causes.length
         }
       }
   }
@@ -196,7 +196,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
         assertResult(1) {
-          responseAs[Array[String]].length
+          responseAs[ErrorReport].causes.length
         }
       }
   }

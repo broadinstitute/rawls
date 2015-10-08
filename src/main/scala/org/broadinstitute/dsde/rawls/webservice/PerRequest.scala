@@ -4,7 +4,7 @@ import akka.actor.Status.Failure
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
-import org.broadinstitute.dsde.rawls.model.JsonSupport
+import org.broadinstitute.dsde.rawls.model.ErrorReport
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
@@ -66,24 +66,19 @@ trait PerRequest extends Actor {
   private def complete[T](response: T, headers: HttpHeader*)(implicit marshaller: ToResponseMarshaller[T]): Unit = {
     //if the body of the response is a string, we need to wrap it in a RawlsMessage that can be marshaled to and from json
     response match {
-      case (statusCode: StatusCode, message: String) => {
+      case (statusCode: StatusCode, message: String) =>
         val newResponse = (statusCode, RawlsMessage(message))
         //we need to explicitly set the implicit marshaller here, otherwise it uses the implicit marshaller above
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
         stop(self)
-      }
-      case _ => {
+      case errorReport: ErrorReport =>
+        val newResponse = (errorReport.statusCode.getOrElse(StatusCodes.InternalServerError), errorReport)
+        r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, ErrorReportFormat))
+      case _ =>
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
         stop(self)
-      }
     }
   }
-
-  object MyJsonProtocol extends DefaultJsonProtocol {
-    implicit val jsonParentWithChildren: RootJsonFormat[RawlsServerError] =
-      rootFormat(lazyFormat(jsonFormat(RawlsServerError, "exception", "message", "stack", "cause")))
-  }
-  import MyJsonProtocol._
 
   override val supervisorStrategy =
     OneForOneStrategy() {
@@ -100,13 +95,7 @@ trait PerRequest extends Actor {
       case e: RawlsExceptionWithStatusCode => e.getCode
       case _ => InternalServerError
     }
-    r.complete(code, new RawlsServerError(new RawlsException(s"Exception processing $message", e)))
-  }
-
-  case class RawlsServerError(exception: String, message: String, stack: Array[String], cause: Option[RawlsServerError]) {
-    def this(t: Throwable) = {
-      this(t.getClass.getName, Option(t.getMessage).getOrElse("null"), t.getStackTrace.map(_.toString), Option(t.getCause).map(new RawlsServerError(_)))
-    }
+    r.complete(code, ErrorReport(e,code))
   }
 }
 

@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
-import org.broadinstitute.dsde.rawls.model.{WorkspacePermissionsPair, UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspacePermissionsPair, UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
+import spray.http.StatusCodes
 import scala.concurrent.Future
-import scala.util.Try
 
 trait GoogleServicesDAO {
 
@@ -14,7 +15,7 @@ trait GoogleServicesDAO {
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
 
-  def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]]
+  def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]]
 
   def getOwners(workspaceId: String): Future[Seq[String]]
 
@@ -31,4 +32,17 @@ trait GoogleServicesDAO {
   def deleteAdmin(userId: String): Future[Unit]
 
   def listAdmins(): Future[Seq[String]]
+
+  def toErrorReport(throwable: Throwable) = {
+    val SOURCE = "google"
+    throwable match {
+      case gjre: GoogleJsonResponseException =>
+        val statusCode =
+          if ( gjre.getDetails == null ) None
+          else StatusCodes.getForKey(gjre.getDetails.getCode)
+        ErrorReport(SOURCE,ErrorReport.message(gjre),statusCode,ErrorReport.causes(gjre),Seq.empty)
+      case _ =>
+        ErrorReport(SOURCE,ErrorReport.message(throwable),None,ErrorReport.causes(throwable),throwable.getStackTrace)
+    }
+  }
 }

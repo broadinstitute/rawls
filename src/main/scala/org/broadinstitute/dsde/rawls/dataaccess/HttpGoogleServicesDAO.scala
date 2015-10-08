@@ -206,28 +206,17 @@ class HttpGoogleServicesDAO(
    *
    * @return a map from userId to error message (an empty map means everything was successful)
    */
-  override def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]] = {
+  override def updateACL(currentUserId: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]] = {
     val directory = getGroupDirectory
 
     // make map to eliminate redundant instructions for a single user (last one in the sequence for a given user wins)
     val updateMap = aclUpdates.map{ workspaceACLUpdate => workspaceACLUpdate.userId -> workspaceACLUpdate.accessLevel }.toMap
-
-    val updates = Future.traverse(updateMap) {
-      case (userId,accessLevel) => {
-        if(userId.toLowerCase.equals(userEmail.toLowerCase)) {
-          getMaximumAccessLevel(userId, workspaceId) flatMap { currentAccessLevel =>
-            if (currentAccessLevel != accessLevel)
-              Future.successful(Option((userId, s"Failed to change permissions for $userId. You cannot change your own permissions.")))
-            else updateUserAccess(userId, accessLevel, workspaceId, directory)
-          }
-        }
-        else updateUserAccess(userId, accessLevel, workspaceId, directory)
-      }
-    }
-    updates map { updateResult =>
-      updateResult.collect {
-        case Some((userId, error)) => (userId -> error)
-      }.toMap
+    val futureReports = Future.traverse(updateMap){ case (userId,accessLevel) =>
+        updateUserAccess(currentUserId,userId,accessLevel,workspaceId,directory)
+    }.map(_.collect{case Some(errorReport)=>errorReport})
+    futureReports.map { reports =>
+      if (reports.isEmpty) None
+      else Some(reports.toSeq)
     }
   }
 
@@ -316,65 +305,56 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def updateUserAccess(userId: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Future[Option[(String,String)]] = {
+  private def retryWhen500[T]( op: () => T ) = {
+    retry(when500)(()=>Future(blocking(op())))
+  }
+
+  private def updateUserAccess(currentUserId: String, userId: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Future[Option[ErrorReport]] = {
     val members = directory.members
     getMaximumAccessLevel(userId, workspaceId) flatMap { currentAccessLevel =>
       if ( currentAccessLevel == targetAccessLevel )
         Future.successful(None)
+      else if ( userId.toLowerCase.equals(currentUserId.toLowerCase) && currentAccessLevel != targetAccessLevel )
+        Future.successful(Option(ErrorReport(s"Failed to change permissions for $userId.  You cannot change your own permissions.",Seq.empty)))
       else {
         val bucketName = getBucketName(workspaceId)
         val member = new Member().setEmail(userId).setRole(groupMemberRole)
         val currentGroupId = toGroupId(bucketName,currentAccessLevel)
         val deleter = members.delete(currentGroupId, userId)
-        val targetGroupId: String = toGroupId(bucketName, targetAccessLevel)
+        val targetGroupId = toGroupId(bucketName, targetAccessLevel)
         val inserter = members.insert(targetGroupId, member)
-        val simpleFailure = Option((userId,s"Failed to change permissions for $userId."))
 
-        val deleteFuture: Future[Option[(String, String)]] = if (currentAccessLevel >= WorkspaceAccessLevel.Read) {
-          retry(when500) { () =>
-            Future {
-              deleter.execute()
-              None
-            }
-          }
-        } else {
-          Future.successful(None)
-        } recover {
-          case t => simpleFailure
-        }
+        val deleteFuture: Future[Option[Throwable]] =
+          if (currentAccessLevel < WorkspaceAccessLevel.Read)
+            Future.successful(None)
+          else
+            retryWhen500(()=>deleter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
 
-        val insertFuture: Future[Option[(String, String)]] = if (targetAccessLevel >= WorkspaceAccessLevel.Read) {
-          retry(when500) { () =>
-            Future {
-              blocking { inserter.execute() }
-              None
-            }
-          }
-        } else {
-          Future.successful(None)
-        } recover {
-          case t => simpleFailure
-        }
+        val insertFuture: Future[Option[Throwable]] =
+          if (targetAccessLevel < WorkspaceAccessLevel.Read)
+            Future.successful(None)
+          else
+            retryWhen500(()=>inserter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
 
-        val results = for (deleteResult <- deleteFuture; insertResult <- insertFuture) yield (deleteResult, insertResult)
-        results.flatMap { case (deleteResult, insertResult) =>
-          (deleteResult, insertResult) match {
-            case (None, Some(_)) => // delete ok, but insert failed => restore access
+        val badThing = s"Unable to change permissions for $userId from $currentAccessLevel to $targetAccessLevel access."
+        deleteFuture zip insertFuture flatMap { _ match {
+            case (None, None) => Future.successful(None) // delete and insert succeeded
+            case (None, Some(throwable)) => // delete ok, but insert failed: try to restore access
+              val cause = toErrorReport(throwable)
               val restoreInserter = members.insert(currentGroupId, member)
-              retry(when500) { () =>
-                Future {
-                  blocking { restoreInserter.execute }
-                  simpleFailure
-                } recover {
-                  case t => Option((userId, s"Failed to change permissions for $userId. They no longer have any access to the workspace. Please try re-adding them."))
-                }
+              retryWhen500(()=>restoreInserter.execute()).map{ _ =>
+                Some(ErrorReport(badThing, cause))}.recover{ case _ =>
+                Some(ErrorReport(s"$badThing They no longer have any access to the workspace. Please try re-adding them.", cause))
               }
-
-            case (Some(_), None) => // delete failed, insert ok => there is an extra entry, cleanup seems pointless as the delete was already in a retry
-              Future.successful(Option((userId, s"Successfully granted $userId $targetAccessLevel access but failed to remove $currentAccessLevel, this may result in inconsistent behavior, please try removing the user (may take more than 1 try) and readding")))
-
-            case (Some(_), Some(_)) => Future.successful(simpleFailure) // both failed => no cleanup
-            case (None, None) => Future.successful(None) // both successful, yay!
+            case (Some(throwable), None) => // delete failed, but insert succeeded -- user is now on two lists
+              val cause = toErrorReport(throwable)
+              val restoreDeleter = members.delete(targetGroupId, userId)
+              retryWhen500(()=>restoreDeleter.execute()).map{ _ =>
+                Some(ErrorReport(badThing, cause))}.recover { case _ =>
+                Some(ErrorReport(s"Successfully granted $userId $targetAccessLevel access, but failed to remove $currentAccessLevel access. This may result in inconsistent behavior, please try removing the user (may take more than 1 try) and re-adding.", cause))
+              }
+            case (Some(throwable1), Some(throwable2)) => // both operations failed
+              Future.successful(Some(ErrorReport(badThing,Seq(toErrorReport(throwable1),toErrorReport(throwable2)))))
           }
         }
       }
