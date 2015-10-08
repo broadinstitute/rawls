@@ -1,36 +1,34 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.actor.ActorSystem
+
 import scala.annotation.tailrec
+import scala.concurrent.Future
 import scala.util.{Try,Success,Failure}
+import scala.concurrent.duration._
+
+import akka.pattern._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
  * Created by tsharpe on 9/21/15.
  */
 trait Retry {
+  val system: ActorSystem
 
-  def retry[T](op: => T, pred: (Throwable) => Boolean = always): T = {
-    retry(backoffIntervals)(op,pred) match {
-      case Failure(exception) => throw exception
-      case Success(t) => t
-    }
+  def retry[T](pred: (Throwable) => Boolean = always)(op: () => Future[T]): Future[T] = {
+    retry(allBackoffIntervals)(op,pred)
   }
 
-  def tryRetry[T](op: => T, pred: (Throwable) => Boolean = always): Try[T] = {
-    retry(backoffIntervals)(op,pred)
-  }
-
-  @tailrec
-  private def retry[T](backoffIntervalMillis: Seq[Long])(op: => T, pred: (Throwable) => Boolean ): Try[T] = {
-    val result = Try(op)
-    if ( result.isSuccess || backoffIntervalMillis.isEmpty || !pred(result.failed.get) )
-      result
-    else {
-      Thread.sleep(backoffIntervalMillis.head)
-      retry(backoffIntervalMillis.tail)(op, pred)
+  private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: (Throwable) => Boolean ): Future[T] = {
+    op().recoverWith {
+      case t if pred(t) && !remainingBackoffIntervals.isEmpty => after(remainingBackoffIntervals.head, system.scheduler) {
+        retry(remainingBackoffIntervals.tail)(op, pred)
+      }
     }
   }
 
   private def always( throwable: Throwable ) = { true }
 
-  private val backoffIntervals = Seq(100L,1000L,3000L)
+  private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
 }

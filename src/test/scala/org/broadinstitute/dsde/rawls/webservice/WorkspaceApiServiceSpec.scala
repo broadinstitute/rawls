@@ -22,7 +22,7 @@ import spray.routing.Directives._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
 import scala.collection.immutable.HashMap
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
 /**
@@ -217,7 +217,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
           ){
             responseAs[WorkspaceListResponse]
           }
@@ -258,9 +258,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
         services.dataSource.inTransaction { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet
           }

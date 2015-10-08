@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 import akka.actor.{Terminated, ActorSystem}
@@ -13,6 +14,8 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
+
+import scala.util.Success
 
 /**
  * Created by dvoet on 6/30/15.
@@ -32,7 +35,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
     val workflow = Workflow("id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"))
     val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, userInfo)(testActor, testData.wsName, testData.submission1, workflow))
     intercept[RawlsException] {
-      monitorRef.underlyingActor.checkWorkflowStatus()
+      monitorRef.underlyingActor.updateWorkflowStatus(ExecutionServiceStatus(workflow.workflowId, "Succeeded"))
     }
     monitorRef.stop()
   }
@@ -54,9 +57,18 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
       val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, userInfo)(testActor, testData.wsName, testData.submission1, testData.submission1.workflows.head))
       watch(monitorRef)
       status match {
-        case WorkflowStatuses.Failed => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status, messages = testData.submission1.workflows.head.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None))
-        case WorkflowStatuses.Succeeded => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), Some(Map("output" -> AttributeString("foo")))))
-        case _ => expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None))
+        case WorkflowStatuses.Failed => fishForMessage(1 second) {
+          case x: SubmissionMonitor.WorkflowStatusChange if x == SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status, messages = testData.submission1.workflows.head.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None) => true
+          case _ => false
+        }
+        case WorkflowStatuses.Succeeded => fishForMessage(10 second) {
+          case x: SubmissionMonitor.WorkflowStatusChange if x == SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), Some(Map("output" -> AttributeString("foo")))) => true
+          case x => println(x); false
+        }
+        case _ => fishForMessage(1 second) {
+          case x: SubmissionMonitor.WorkflowStatusChange if x == SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = status), None) => true
+          case _ => false
+        }
       }
       fishForMessage(1 second) {
         case m: Terminated => true
@@ -99,13 +111,13 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
 }
 
 class WorkflowTestExecutionServiceDAO(workflowStatus: String) extends ExecutionServiceDAO {
-  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus("test_id", workflowStatus)
-  override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): ExecutionServiceValidation = ExecutionServiceValidation(true, "No errors")
+  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo) = Future.successful(ExecutionServiceStatus("test_id", workflowStatus))
+  override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo) = Future.successful(ExecutionServiceValidation(true, "No errors"))
 
-  override def outputs(id: String, userInfo: UserInfo): ExecutionServiceOutputs = ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo")))
-  override def logs(id: String, userInfo: UserInfo): ExecutionServiceLogs = ExecutionServiceLogs(id, Map("task1" -> Seq(Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar"))))
+  override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo"))))
+  override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id, Map("task1" -> Seq(Map("wf.t1.foo" -> "foo", "wf.t1.bar" -> "bar")))))
 
-  override def status(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
-  override def abort(id: String, userInfo: UserInfo): ExecutionServiceStatus = ExecutionServiceStatus(id, workflowStatus)
-  override def callLevelMetadata(id: String, userInfo: UserInfo): ExecutionMetadata = null
+  override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, workflowStatus))
+  override def abort(id: String, userInfo: UserInfo) = Future.successful(Success(ExecutionServiceStatus(id, workflowStatus)))
+  override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 }
