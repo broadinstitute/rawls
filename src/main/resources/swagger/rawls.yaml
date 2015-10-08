@@ -2388,9 +2388,12 @@ definitions:
       inputs:
         type: object
         description: map from input names onto resolved values
-      status:
+      executionStatus:
         type: string
         description: status of call
+      backendStatus:
+        type: string
+        description: status of the backend
       outputs:
         type: object
         description: map from output names to local files
@@ -2402,7 +2405,7 @@ definitions:
         type: string
         format: date-time
         description: ending time of call
-      jobid:
+      jobId:
         type: string
         description: unique ID of job
       returnCode:
@@ -2445,10 +2448,8 @@ definitions:
         type: object
         description: map of workflow output names onto local files
       calls:
-        type: object
         description: map from call names onto call metadata
-        additionalProperties:
-          $ref: '#/definitions/CallMetadata'
+        $ref: '#/definitions/CallMetadata'
   AgoraEntity:
     description: response from Method Repo
     properties:
