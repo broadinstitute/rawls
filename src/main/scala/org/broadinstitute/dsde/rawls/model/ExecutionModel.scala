@@ -145,13 +145,14 @@ case class SubmissionReport(
 
 case class CallMetadata(
   inputs: Map[String, String],
-  status: String,
+  executionStatus: String,
+  backend: Option[String],
+  backendStatus: Option[String],
   outputs: Option[Map[String, String]],
   start: Option[DateTime],
   end: Option[DateTime],
-  jobid: Option[String],
-  rc: Option[Int],
-  backend: Option[String],
+  jobId: Option[String],
+  returnCode: Option[Int],
   stdout: Option[String],
   stderr: Option[String]
 )
@@ -229,7 +230,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
 
-  implicit val CallMetadataFormat = jsonFormat10(CallMetadata)
+  implicit val CallMetadataFormat = jsonFormat11(CallMetadata)
 
   implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
 
