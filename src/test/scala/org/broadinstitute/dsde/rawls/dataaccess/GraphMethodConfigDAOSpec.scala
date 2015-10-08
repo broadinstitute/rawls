@@ -12,7 +12,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   "GraphMethodConfigDAO" should "save and get a method config" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         val methodConfig2 = MethodConfiguration(
           "ns",
           "config2",
@@ -35,7 +35,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   it should "overwrite method configs" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         val changed = testData.methodConfig.copy(rootEntityType = "goober")
         new GraphMethodConfigurationDAO().save(context, changed, txn)
         assertResult(Option(changed)) {
@@ -47,7 +47,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   it should "list method configs" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort)) {
           new GraphMethodConfigurationDAO().list(context, txn).toList
         }
@@ -57,7 +57,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   it should "rename method configs" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         val changed = testData.methodConfig.copy(name = "sample", rootEntityType = "Sample")
         new GraphMethodConfigurationDAO().rename(context, testData.methodConfig.namespace, testData.methodConfig.name, changed.name, txn)
 
@@ -73,7 +73,7 @@ class GraphMethodConfigDAOSpec extends FlatSpec with Matchers with OrientDbTestF
 
   it should "delete method configs" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         assertResult(Option("testConfig1")) {
           new GraphMethodConfigurationDAO().get(context, testData.methodConfig.namespace, "testConfig1", txn).map(_.name)
         }

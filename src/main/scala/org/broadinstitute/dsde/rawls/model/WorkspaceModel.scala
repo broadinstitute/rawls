@@ -56,6 +56,7 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
                                     runningSubmissionsCount: Int)
 
+
 case class EntityName(
                    name: String)
 

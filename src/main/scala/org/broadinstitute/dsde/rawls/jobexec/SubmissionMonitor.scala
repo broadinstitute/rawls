@@ -74,9 +74,11 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
 
   private def handleTerminatedMonitor(submissionId: String, workflowId: String): Unit = {
     val workflow = datasource inTransaction { txn =>
-      containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), submissionId, workflowId, txn).getOrElse(
-        throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
-      )
+      withWorkspaceContext(workspaceName, writeLock = false, txn) { workspaceContext =>
+        containerDAO.workflowDAO.get(workspaceContext, submissionId, workflowId, txn).getOrElse(
+          throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
+        )
+      }
     }
 
     if (!workflow.status.isDone) {
@@ -95,22 +97,23 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
     val savedWorkflow = datasource inTransaction { txn =>
-      val workspaceContext = getWorkspaceContext(workspaceName, txn)
-      val saveOutputs = Try {
-        workflowOutputsOption foreach { workflowOutputs =>
-          val entity = containerDAO.entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
-            throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
+      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+        val saveOutputs = Try {
+          workflowOutputsOption foreach { workflowOutputs =>
+            val entity = containerDAO.entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
+              throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
+            }
+            containerDAO.entityDAO.save(workspaceContext, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
           }
-          containerDAO.entityDAO.save(workspaceContext, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
         }
-      }
 
-      val workflowToSave = saveOutputs match {
-        case Success(_) => workflow
-        case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
-      }
+        val workflowToSave = saveOutputs match {
+          case Success(_) => workflow
+          case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
+        }
 
-      containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave.copy(statusLastChangedDate = DateTime.now), txn)
+        containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave.copy(statusLastChangedDate = DateTime.now), txn)
+      }
     }
 
     if (savedWorkflow.status.isDone) {
@@ -121,14 +124,15 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   private def checkSubmissionStatus(): Unit = {
     system.log.debug("polling workflow status, submission {}", submission.submissionId)
     datasource inTransaction { txn =>
-      val workspaceContext = getWorkspaceContext(workspaceName, txn)
-      val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
-        throw new RawlsException(s"submissions ${submission} does not exist")
-      )
+      withWorkspaceContext(workspaceName, writeLock = true, txn) { workspaceContext =>
+        val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
+          throw new RawlsException(s"submissions ${submission} does not exist")
+        )
 
-      if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
-        containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
-        stop(self)
+        if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
+          containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
+          stop(self)
+        }
       }
     }
   }
@@ -141,7 +145,13 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       }
     }
 
-  private def getWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction): WorkspaceContext = {
-    containerDAO.workspaceDAO.loadContext(workspaceName, txn).getOrElse(throw new RawlsException(s"workspace ${workspaceName} does not exist"))
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, writeLock: Boolean, txn: RawlsTransaction)(op: (WorkspaceContext) => T ) = {
+      containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
+        case None => throw new RawlsException(s"workspace ${workspaceName} does not exist")
+        case Some(workspaceContext) =>
+          txn.withLock(workspaceContext.workspaceVertex, writeLock) {
+            op(workspaceContext)
+          }
+      }
   }
 }

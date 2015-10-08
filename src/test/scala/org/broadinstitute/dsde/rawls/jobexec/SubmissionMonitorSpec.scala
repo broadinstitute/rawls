@@ -38,14 +38,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     expectMsgClass(15 seconds, classOf[Terminated])
     assertResult(true) {
       dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
+        withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
         }
       }
     }
   }
 
-  ignore should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
+  it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
@@ -53,11 +53,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
     }
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        awaitCond(submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running), 15 seconds)
+    awaitCond({
+      dataSource inTransaction { txn =>
+        withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
+          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
+        }
       }
-    }
+    }, 15 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
       system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
@@ -66,7 +68,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     expectMsgClass(15 seconds, classOf[Terminated])
 
     dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(true) {
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
         }
@@ -90,7 +92,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     expectMsgClass(15 seconds, classOf[Terminated])
 
     dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
           assertResult(WorkflowStatuses.Failed) {
             workflow.status

@@ -2,12 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.tinkerpop.blueprints.Graph
+import com.tinkerpop.blueprints.{Element, Graph}
 import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
-import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
+import com.tinkerpop.blueprints.impls.orient.{OrientElement, OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 
 import scala.concurrent.Future
+import scala.collection.concurrent.TrieMap
 import scala.util.{Failure, Success, Try}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -98,6 +99,83 @@ class DataSource(graphFactory: OrientGraphFactory) extends LazyLogging {
 
 class RawlsTransaction(val graph: OrientGraph, dataSource: DataSource) {
   private val rollbackOnly = new AtomicBoolean(false)
+
+  var readLocks = TrieMap[Element, Int]().withDefaultValue(0)
+  var writeLocks = TrieMap[Element, Int]().withDefaultValue(0)
+
+  /**
+   * Lock handling. Ensures that we don't try to get multiple locks on this elem within the same txn.
+   */
+  private def acquireReadLock(elem: Element) = {
+    if( writeLocks(elem) > 0 ) {
+      //Silently "upgrade" read locks to write locks if a write lock exists, since we already
+      //have exclusive access.
+      acquireWriteLock(elem)
+    } else {
+      if (readLocks(elem) == 0) {
+        elem.asInstanceOf[OrientElement].lock(false)
+      }
+      readLocks(elem) += 1
+    }
+  }
+
+  private def releaseReadLock(elem: Element) = {
+    if( writeLocks(elem) > 0 ) {
+      //Handle our read lock having been silently upgraded.
+      releaseWriteLock(elem)
+    } else {
+      assert(readLocks(elem) > 0, s"Attempting to release nonexistent read lock on $elem")
+      readLocks(elem) -= 1
+      if (readLocks(elem) == 0) {
+        elem.asInstanceOf[OrientElement].unlock()
+      }
+    }
+  }
+
+  private def acquireWriteLock(elem: Element) = {
+    assert( readLocks(elem) == 0, s"Attempting to acquire write lock on $elem which already has a read lock" )
+    if( writeLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].lock(true)
+    }
+    writeLocks(elem) += 1
+  }
+
+  private def releaseWriteLock(elem: Element) = {
+    assert(writeLocks(elem) > 0, s"Attempting to release nonexistent write lock on $elem")
+    writeLocks(elem) -= 1
+    if( writeLocks(elem) == 0 ) {
+      elem.asInstanceOf[OrientElement].unlock()
+    }
+  }
+
+  def withWriteLock[T](elem: Element) (op: => T): T = {
+    try {
+      acquireWriteLock(elem)
+      op
+    } finally {
+      releaseWriteLock(elem)
+    }
+  }
+
+  def withReadLock[T](elem: Element) (op: => T): T = {
+    try {
+      acquireReadLock(elem)
+      op
+    } finally {
+      releaseReadLock(elem)
+    }
+  }
+
+  def withLock[T](elem: Element, writeLock: Boolean)(op: => T): T = {
+    if( writeLock ) {
+      withWriteLock(elem)(op)
+    } else {
+      withReadLock(elem)(op)
+    }
+  }
+
+  def isReadLocked(elem: Element): Boolean = { readLocks(elem) > 0 }
+  def isWriteLocked(elem: Element): Boolean = { writeLocks(elem) > 0 }
 
   def withGraph[T](f: Graph => T) = {
     // because transactions are spanning threads we need to make sure the graph is active

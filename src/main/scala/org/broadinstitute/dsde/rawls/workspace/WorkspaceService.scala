@@ -166,7 +166,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      withWorkspaceContext(workspaceName, writeLock=false, txn) { workspaceContext =>
         gcsDAO.getMaximumAccessLevel(userInfo.userEmail,workspaceContext.workspace.workspaceId) flatMap { accessLevel =>
           if (accessLevel < WorkspaceAccessLevel.Read)
             Future.successful(RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
@@ -288,7 +288,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      withWorkspaceContext(workspaceName, writeLock=false, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           gcsDAO.getACL(workspaceContext.workspace.workspaceId) map { RequestComplete(_) }
         }
@@ -297,7 +297,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           for (updateErrors <- gcsDAO.updateACL(userInfo.userEmail, workspaceContext.workspace.workspaceId, aclUpdates)) yield {
             updateErrors.size match {
@@ -311,7 +311,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           Future {
             if ( !containerDAO.submissionDAO.list(workspaceContext,txn).forall(_.status.isDone) )
@@ -328,7 +328,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           Future {
             if ( workspaceContext.workspace.isLocked ) {
@@ -342,8 +342,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevel.Read, txn) { sourceWorkspaceContext =>
-        withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevel.Write, txn) { destWorkspaceContext =>
+      //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
+      //we can't upgrade a read lock to a write.
+      withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevel.Write, txn) { destWorkspaceContext =>
+        withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevel.Read, txn) { sourceWorkspaceContext =>
           Future {
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
@@ -709,33 +711,37 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
-        containerDAO.methodConfigurationDAO.get(workspaceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
-          case None => Future.successful(RequestComplete(StatusCodes.NotFound))
-          case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, txn)
+      withWorkspaceContextAndPermissions(mcnp.destination.workspaceName, WorkspaceAccessLevel.Write, txn) { destContext =>
+        withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevel.Read, txn) { sourceContext =>
+          containerDAO.methodConfigurationDAO.get(sourceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
+            case None => Future.successful(RequestComplete(StatusCodes.NotFound))
+            case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, txn)
+          }
         }
       }
     }
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
-      methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap { agoraEntityOption =>
-        agoraEntityOption match {
-          case None => Future.successful(RequestComplete(StatusCodes.NotFound))
-          case Some(entity) =>
-            try {
-              // if JSON parsing fails, catch below
-              val methodConfig = entity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
-              methodConfig match {
-                case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, txn)
-                case None => Future.successful(RequestComplete(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload"))
+      withWorkspaceContextAndPermissions( methodRepoQuery.destination.workspaceName, WorkspaceAccessLevel.Write, txn ) { destContext =>
+        methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap { agoraEntityOption =>
+          agoraEntityOption match {
+            case None => Future.successful(RequestComplete(StatusCodes.NotFound))
+            case Some(entity) =>
+              try {
+                // if JSON parsing fails, catch below
+                val methodConfig = entity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
+                methodConfig match {
+                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, txn)
+                  case None => Future.successful(RequestComplete(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload"))
+                }
               }
-            }
-            catch {
-              case e: Exception =>
-                val message = "Error parsing Method Repo response: " + e.getMessage
-                Future.successful(RequestComplete(StatusCodes.UnprocessableEntity, message))
-            }
+              catch {
+                case e: Exception =>
+                  val message = "Error parsing Method Repo response: " + e.getMessage
+                  Future.successful(RequestComplete(StatusCodes.UnprocessableEntity, message))
+              }
+          }
         }
       }
     }
@@ -753,16 +759,14 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, txn: RawlsTransaction) =
-    withWorkspaceContextAndPermissions(dest.workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
-      Future {
-        containerDAO.methodConfigurationDAO.get(workspaceContext, dest.namespace, dest.name, txn) match {
-          case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
-          case None =>
-            val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
-            val validatedTarget = saveAndValidateMCExpressions(workspaceContext, target, txn)
-            RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName))
-        }
+  private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, destContext: WorkspaceContext, txn: RawlsTransaction) =
+    Future {
+      containerDAO.methodConfigurationDAO.get(destContext, dest.namespace, dest.name, txn) match {
+        case Some(existingMethodConfig) => RequestComplete(StatusCodes.Conflict, existingMethodConfig)
+        case None =>
+          val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
+          val validatedTarget = saveAndValidateMCExpressions(destContext, target, txn)
+          RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName))
       }
     }
 
@@ -803,13 +807,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
                         RequestComplete(StatusCodes.OK, idation)
                     }
                   }
-                }
               }
             }
           }
         }
       }
     }
+  }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
@@ -1017,7 +1021,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
     asAdmin {
       dataSource inFutureTransaction { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+        withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, txn)
         }
       }
@@ -1044,15 +1048,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+    withWorkspaceContext(workspaceName, accessLevel >= WorkspaceAccessLevel.Write, txn) { workspaceContext =>
       requireAccess(workspaceContext.workspace, accessLevel) { op(workspaceContext) }
     }
   }
 
-  private def withWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]) = {
+  private def withWorkspaceContext(workspaceName: WorkspaceName, writeLock: Boolean, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]) = {
     containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
       case None => Future.successful(RequestComplete(http.StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
-      case Some(workspaceContext) => op(workspaceContext)
+      case Some(workspaceContext) =>
+        txn.withLock(workspaceContext.workspaceVertex, writeLock) {
+          op(workspaceContext)
+        }
     }
   }
 

@@ -26,7 +26,7 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
   def withTestWorkspace(testCode: (WorkspaceContext, RawlsTransaction) => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
       dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+        withWorkspaceContext(testData.workspace, writeLock = true, txn) { workspaceContext =>
           testCode(workspaceContext, txn)
         }
       }
