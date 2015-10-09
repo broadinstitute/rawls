@@ -1,11 +1,18 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
+import java.io.{File, StringReader}
 import java.util.concurrent.TimeUnit
 import java.util.logging.{LogManager, Logger}
 
 import akka.util.Timeout
+import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential, GoogleAuthorizationCodeTokenRequest}
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.services.compute.ComputeScopes
+import com.google.api.services.storage.StorageScopes
 import com.orientechnologies.orient.client.remote.OServerAdmin
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -17,10 +24,13 @@ import spray.json.{JsonWriter, _}
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.duration.FiniteDuration
+import scala.collection.JavaConversions._
 
 trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers with IntegrationTestConfig with StandardUserInfoDirectives {
   val timeoutDuration = new FiniteDuration(5, TimeUnit.SECONDS)
   implicit val timeout = Timeout(timeoutDuration)
+//  override implicit def executor = TestExecutionContext.testExecutionContext
+  implicit val executionContext = TestExecutionContext.testExecutionContext
 
   val containerDAO = GraphContainerDAO(
     new GraphWorkflowDAO(new GraphSubmissionDAO()),
@@ -30,10 +40,24 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     new GraphSubmissionDAO()
   )
 
+  val gcsDAO = new HttpGoogleServicesDAO(
+    true, // use service account to manage buckets
+    gcsConfig.getString("secrets"),
+    gcsConfig.getString("pathToP12"),
+    gcsConfig.getString("appsDomain"),
+    gcsConfig.getString("groupsPrefix"),
+    gcsConfig.getString("appName"),
+    gcsConfig.getInt("deletedBucketCheckSeconds")
+  )
+
   def addSecurityHeaders: RequestTransformer = {
-    addHeader(RawHeader("OIDC_access_token", "accesstoken")) ~>
-    addHeader(RawHeader("OIDC_access_token_expires", "123")) ~>
-    addHeader(RawHeader("OIDC_CLAIM_email", "foo@bar.com"))
+
+    val googleCred = gcsDAO.getBucketServiceAccountCredential
+    googleCred.refreshToken()
+
+    addHeader(RawHeader("OIDC_access_token", googleCred.getAccessToken)) ~>
+    addHeader(RawHeader("OIDC_CLAIM_expires_in", String.valueOf(googleCred.getExpiresInSeconds))) ~>
+    addHeader(RawHeader("OIDC_CLAIM_email", gcsDAO.clientSecrets.getDetails.get("client_email").toString))
   }
 
   // convenience methods - TODO add these to unit tests too?
@@ -53,9 +77,6 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
 
     dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
-
-    // NB: use mock DAO for the base, we'll test the real GCS stuff in its own spec
-    val gcsDAO = MockGoogleServicesDAO
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,

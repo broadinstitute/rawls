@@ -9,8 +9,10 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing._
 
+import scala.concurrent.ExecutionContext
+
 trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
-  lazy private implicit val executionContext = actorRefFactory.dispatcher
+  implicit val executionContext: ExecutionContext
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
   val adminRoutes = requireUserInfo() { userInfo =>

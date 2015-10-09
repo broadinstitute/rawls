@@ -15,6 +15,7 @@ import spray.httpx.SprayJsonSupport
 import spray.json.DefaultJsonProtocol._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /**
@@ -37,7 +38,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends AdminApiService with MockUserInfoDirectives {
+  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends AdminApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(

@@ -12,19 +12,19 @@ import spray.routing.Directive.pimpApply
 import spray.routing._
 import spray.http.StatusCodes._
 
+import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService): Props = {
+  def props(workspaceServiceConstructor: UserInfo => WorkspaceService)(implicit executionContext: ExecutionContext): Props = {
     Props(new RawlsApiServiceActor(workspaceServiceConstructor))
   }
 }
 
-class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService) extends Actor
+class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService)(implicit val executionContext: ExecutionContext) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
   with AdminApiService with StandardUserInfoDirectives {
 
-  implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
   def possibleRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~ adminRoutes ~
     get {

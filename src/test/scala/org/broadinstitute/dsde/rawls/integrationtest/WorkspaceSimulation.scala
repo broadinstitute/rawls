@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceSimulation._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -64,7 +65,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
 
   val params = if (integrationRunFullLoadTest) fullSimulation else liteSimulation
 
-  val gen = new WorkspaceGenerator("foo", System.currentTimeMillis().toString())
+  val gen = new WorkspaceGenerator("broad-dsde-dev", System.currentTimeMillis().toString())
 
   "WorkspaceSimulation" should "create a workspace" in {
     val postWorkspaceTimer = new Timer("Post workspace")
@@ -72,7 +73,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     postWorkspaceTimer.timedOperation {
       Post(s"/workspaces", httpJson(gen.workspace)) ~>
         addSecurityHeaders ~> sealRoute(workspaceRoutes) ~>
-        check { assertResult(StatusCodes.Created) {status} }
+        check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
     }
 
     postWorkspaceTimer.printElapsed
@@ -87,7 +88,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-          check { assertResult(StatusCodes.Created) {status} }
+          check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
       }
     }
 
@@ -96,7 +97,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       postEntitiesTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pair)) ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-          check {assertResult(StatusCodes.Created) {status}}
+          check {assertResult(StatusCodes.Created, response.entity.asString) {status}}
       }
     }
 
@@ -110,7 +111,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sampleSet)) ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-          check { assertResult(StatusCodes.Created) {status} }
+          check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
       }
     }
 
@@ -119,7 +120,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       postEntitySetTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(pairSet)) ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-          check { assertResult(StatusCodes.Created) {status} }
+          check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
       }
     }
 
@@ -133,7 +134,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       postMethodConfigTimer.timedOperation {
         Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs", httpJson(methodConfig)) ~>
           addSecurityHeaders ~> sealRoute(methodConfigRoutes) ~>
-          check { assertResult(StatusCodes.Created) {status} }
+          check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
       }
     }
 
@@ -145,7 +146,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     listMethodConfigTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs") ~>
         addSecurityHeaders ~> sealRoute(methodConfigRoutes) ~>
-        check { assertResult(StatusCodes.OK) {status} }
+        check { assertResult(StatusCodes.OK, response.entity.asString) {status} }
     }
 
     listMethodConfigTimer.printElapsed
@@ -160,7 +161,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}") ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
           check {
-            assertResult(StatusCodes.OK) {status}
+            assertResult(StatusCodes.OK, response.entity.asString) {status}
             responseAs[Entity]
           }
       }
@@ -173,7 +174,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       updateEntityTimer.timedOperation {
         Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/sample/${name}", httpJson(updateOps)) ~>
           addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-          check { assertResult(StatusCodes.OK) {status} }
+          check { assertResult(StatusCodes.OK, response.entity.asString) {status} }
       }
     }
 
@@ -190,7 +191,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
         Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}") ~>
           addSecurityHeaders ~> sealRoute(methodConfigRoutes) ~>
           check {
-            assertResult(StatusCodes.OK) {status}
+            assertResult(StatusCodes.OK, response.entity.asString) {status}
             responseAs[MethodConfiguration]
           }
       }
@@ -203,7 +204,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
       updateMethodConfigTimer.timedOperation {
         Put(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/methodconfigs/${gen.methodConfigNamespace}/${name}", httpJson(updatedConfig)) ~>
           addSecurityHeaders ~> sealRoute(methodConfigRoutes) ~>
-          check { assertResult(StatusCodes.OK) {status} }
+          check { assertResult(StatusCodes.OK, response.entity.asString) {status} }
       }
     }
 
@@ -221,7 +222,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     postEntityTimer.timedOperation {
       Post(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities", httpJson(sample)) ~>
         addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-        check { assertResult(StatusCodes.Created) {status} }
+        check { assertResult(StatusCodes.Created, response.entity.asString) {status} }
     }
     postEntityTimer.printElapsed
 
@@ -229,7 +230,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     getEntityTimer.timedOperation {
       Get(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
         addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-        check { assertResult(StatusCodes.OK) {status} }
+        check { assertResult(StatusCodes.OK, response.entity.asString) {status} }
     }
     getEntityTimer.printElapsed
 
@@ -244,7 +245,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     updateEntityTimer.timedOperation {
       Patch(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}", httpJson(sampleUpdates)) ~>
         addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-        check { assertResult(StatusCodes.OK) {status} }
+        check { assertResult(StatusCodes.OK, response.entity.asString) {status} }
     }
     updateEntityTimer.printElapsed
 
@@ -252,7 +253,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
     deleteEntityTimer.timedOperation {
       Delete(s"/workspaces/${gen.wn.namespace}/${gen.wn.name}/entities/${sample.entityType}/${sample.name}") ~>
         addSecurityHeaders ~> sealRoute(entityRoutes) ~>
-        check { assertResult(StatusCodes.NoContent) {status} }
+        check { assertResult(StatusCodes.NoContent, response.entity.asString) {status} }
     }
     deleteEntityTimer.printElapsed
   }

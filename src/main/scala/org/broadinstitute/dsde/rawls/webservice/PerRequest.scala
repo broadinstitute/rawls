@@ -100,7 +100,7 @@ trait PerRequest extends Actor {
       case e: RawlsExceptionWithStatusCode => e.getCode
       case _ => InternalServerError
     }
-    r.complete(code, new RawlsServerError(e))
+    r.complete(code, new RawlsServerError(new RawlsException(s"Exception processing $message", e)))
   }
 
   case class RawlsServerError(exception: String, message: String, stack: Array[String], cause: Option[RawlsServerError]) {

@@ -32,7 +32,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model._
 
 import spray.http.StatusCodes
-import scala.concurrent.ExecutionContext.Implicits.global
 
 // Seq[String] -> Collection<String>
 
@@ -43,7 +42,7 @@ class HttpGoogleServicesDAO(
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int)( implicit val system: ActorSystem ) extends GoogleServicesDAO with Retry with FutureSupport {
+  deletedBucketCheckSeconds: Int)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 

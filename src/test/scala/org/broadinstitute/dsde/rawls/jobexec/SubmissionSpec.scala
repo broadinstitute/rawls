@@ -18,6 +18,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{Future, Await}
 import scala.util.Success
 
+import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
+
 /**
  * Created with IntelliJ IDEA.
  * User: hussein

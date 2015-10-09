@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
  * Created by dvoet on 10/5/15.
@@ -16,14 +15,14 @@ trait FutureSupport {
    * @tparam T
    * @return
    */
-  def toFutureTry[T](f: Future[T]): Future[Try[T]] = f map(Success(_)) recover { case t => Failure(t) }
+  def toFutureTry[T](f: Future[T])(implicit executionContext: ExecutionContext): Future[Try[T]] = f map(Success(_)) recover { case t => Failure(t) }
 
   /**
    * Returns a failed future if any of the input tries have failed, otherwise returns the input in a successful Future
    * @tparam T
    * @return
    */
-  def assertSuccessfulTries[T]: (Seq[Try[T]]) => Future[Seq[Try[T]]] = { tries =>
+  def assertSuccessfulTries[T](implicit executionContext: ExecutionContext): (Seq[Try[T]]) => Future[Seq[Try[T]]] = { tries =>
     val failures = tries.collect{ case Failure(t) => t }
     if (failures.isEmpty) Future.successful(tries) else Future.failed(failures.head)
   }

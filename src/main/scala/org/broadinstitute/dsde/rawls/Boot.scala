@@ -19,6 +19,8 @@ import scala.concurrent.duration._
 import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+
 object Boot extends App {
 
   private def startup(): Unit = {
@@ -72,7 +74,6 @@ object Boot extends App {
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
-    import scala.concurrent.ExecutionContext.Implicits.global
     (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
       case Success(Http.CommandFailed(failure)) =>
         system.log.error("could not bind to port: " + failure.toString)
