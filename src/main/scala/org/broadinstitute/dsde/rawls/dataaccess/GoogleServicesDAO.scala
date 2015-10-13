@@ -14,7 +14,7 @@ trait GoogleServicesDAO {
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
 
-  def updateACL(workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]]
+  def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]]
 
   def getOwners(workspaceId: String): Future[Seq[String]]
 

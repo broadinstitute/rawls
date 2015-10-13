@@ -207,13 +207,20 @@ class HttpGoogleServicesDAO(
    *
    * @return a map from userId to error message (an empty map means everything was successful)
    */
-  override def updateACL(workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]] = {
+  override def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Map[String, String]] = {
     val directory = getGroupDirectory
 
     // make map to eliminate redundant instructions for a single user (last one in the sequence for a given user wins)
     val updateMap = aclUpdates.map{ workspaceACLUpdate => workspaceACLUpdate.userId -> workspaceACLUpdate.accessLevel }.toMap
 
-    val updates = Future.traverse(updateMap) { case (userId,accessLevel) => updateUserAccess(userId,accessLevel,workspaceId,directory) }
+    val updates = Future.traverse(updateMap) {
+      case (userId,accessLevel) => {
+        if(userId.toLowerCase.equals(userEmail.toLowerCase)) {
+          Future.successful(Option((userId, s"Failed to change permissions for $userId. You cannot change your own permissions.")))
+        }
+        else updateUserAccess(userId, accessLevel, workspaceId, directory)
+      }
+    }
     updates map { updateResult =>
       updateResult.collect {
         case Some((userId, error)) => (userId -> error)

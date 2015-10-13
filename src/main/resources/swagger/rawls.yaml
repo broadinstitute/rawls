@@ -1446,7 +1446,9 @@ paths:
           name: aclUpdates
           required: true
           schema:
-            $ref: '#/definitions/WorkspaceACLUpdate'
+            type: array
+            items:
+              $ref: '#/definitions/WorkspaceACLUpdate'
       security:
         - authorization:
             - openid
@@ -2286,8 +2288,8 @@ definitions:
         type: string
         description: ID of the user whose permissions will be changed
       accessLevel:
-        $ref: '#/definitions/WorkspaceAccessLevel'
-        description: The access level to grant to this user
+        type: string
+        description: The access level to grant to this user (OWNER, READER, WRITER, NO ACCESS)
 
   Workspace:
     description: ''
@@ -2354,13 +2356,6 @@ definitions:
         description: The name of the workspace
       attributes:
         $ref: ''
-
-  WorkspaceAccessLevel:
-    description: ''
-    properties:
-      workspaceAccessLevel:
-        type: string
-        description: 'Options: UNKNOWN, NO ACCESS, READER, WRITER, OWNER'
 
   Attribute:
     description: ''

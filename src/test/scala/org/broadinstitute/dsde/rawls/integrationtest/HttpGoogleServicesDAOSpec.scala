@@ -68,11 +68,11 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(gcsDAO.getACL(testWorkspaceId), Duration.Inf).acl should be (Map(testCreator -> WorkspaceAccessLevel.Owner))
 
     // try adding a user, changing their access, then revoking it
-    gcsDAO.updateACL(testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.Read)))
+    gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.Read)))
     gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId) should be (WorkspaceAccessLevel.Read)
-    gcsDAO.updateACL(testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.Write)))
+    gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.Write)))
     gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId) should be (WorkspaceAccessLevel.Write)
-    gcsDAO.updateACL(testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.NoAccess)))
+    gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevel.NoAccess)))
     gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId) should be (WorkspaceAccessLevel.NoAccess)
 
     // check that we can properly deconstruct group names
