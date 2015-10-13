@@ -299,7 +299,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     dataSource inFutureTransaction { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
-          for (updateErrors <- gcsDAO.updateACL(workspaceContext.workspace.workspaceId, aclUpdates)) yield {
+          for (updateErrors <- gcsDAO.updateACL(userInfo.userEmail, workspaceContext.workspace.workspaceId, aclUpdates)) yield {
             updateErrors.size match {
               case 0 => RequestComplete(StatusCodes.OK)
               case _ => RequestComplete(StatusCodes.Conflict, updateErrors)
