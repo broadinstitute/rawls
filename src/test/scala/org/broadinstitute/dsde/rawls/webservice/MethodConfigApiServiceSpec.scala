@@ -84,7 +84,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(newMethodConfig) {
               methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get
             }
@@ -117,7 +117,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           responseAs[ValidatedMethodConfiguration]
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             // all inputs and outputs are saved, regardless of parsing errors
             for ((key, value) <- inputs) assertResult(Option(value)) {
               methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get.inputs.get(key)
@@ -149,7 +149,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(true) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "testConfig2_changed", txn).isDefined
             }
@@ -169,7 +169,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(true) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
             }
@@ -189,7 +189,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(None) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn)
             }
@@ -207,7 +207,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
         }
 
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(true) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
             }
@@ -231,7 +231,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           responseAs[ValidatedMethodConfiguration].methodConfiguration
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult(Option(AttributeString("foo2"))) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
             }
@@ -260,7 +260,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           responseAs[ValidatedMethodConfiguration]
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             // all inputs and outputs are saved, regardless of parsing errors
             for ((key, value) <- newInputs) assertResult(Option(value)) {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get(key)
@@ -285,7 +285,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
     val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
     services.dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { workspaceContext =>
         methodConfigDAO.save(workspaceContext, foo, txn)
       }
     }
@@ -320,7 +320,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult("testConfig1") {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
             }
@@ -381,7 +381,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             assertResult("testConfig1") {
               methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
             }
@@ -470,7 +470,7 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           status
         }
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
             val configs = methodConfigDAO.list(workspaceContext, txn).toSet
             assertResult(configs) {
               responseAs[Array[MethodConfigurationShort]].toSet

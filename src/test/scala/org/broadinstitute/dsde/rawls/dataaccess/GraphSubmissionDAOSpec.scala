@@ -21,7 +21,7 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
   def withSubmissionData(testCode: (WorkspaceContext, RawlsTransaction) => Any):Unit = {
     withDefaultTestDatabase { dataSource =>
       dataSource.inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
+        withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
           testCode(context, txn)
         }
       }

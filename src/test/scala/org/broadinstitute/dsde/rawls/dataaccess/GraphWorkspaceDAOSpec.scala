@@ -108,7 +108,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         attributes = Map(reserved -> AttributeString("foo"))
       )
       dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
+        withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
           intercept[RawlsException] { workspaceDAO.save(e, txn) }
         }
       }

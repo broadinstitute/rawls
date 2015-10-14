@@ -180,7 +180,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, txn) { context =>
+      withWorkspaceContext(workspace, writeLock = true, txn) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, aliquot2, txn)
         entityDAO.save(context, sample1, txn)
@@ -247,8 +247,10 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     graph.shutdown()
   }
 
-  def withWorkspaceContext[T](workspace: Workspace, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {
+  def withWorkspaceContext[T](workspace: Workspace, writeLock: Boolean, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {
     val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException(s"Unable to load workspaceContext for ${workspace.toWorkspaceName}"))
-    testCode(workspaceContext)
+    txn.withLock(workspaceContext.workspaceVertex, writeLock) {
+      testCode(workspaceContext)
+    }
   }
 }

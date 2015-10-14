@@ -149,7 +149,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       workspaceDAO.save(workspaceReader, txn)
       workspaceDAO.save(workspaceNoAccess, txn)
 
-      withWorkspaceContext(workspaceWriter, txn) { ctx =>
+      withWorkspaceContext(workspaceWriter, writeLock = true, txn) { ctx =>
         entityDAO.save(ctx, sample1, txn)
         entityDAO.save(ctx, sample2, txn)
         entityDAO.save(ctx, sample3, txn)
@@ -338,11 +338,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
+          withWorkspaceContext(testData.workspace, writeLock = false, txn) { sourceWorkspaceContext =>
             val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy, txn).get.workspace
             assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
-            withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
+            withWorkspaceContext(copiedWorkspace, writeLock = false, txn) { copiedWorkspaceContext =>
               //Name, namespace, creation date, and owner might change, so this is all that remains.
               assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
                 entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet

@@ -15,7 +15,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   "GraphEntityDAO" should "get entity types" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(Set("PairSet", "Individual", "Sample", "Aliquot", "SampleSet", "Pair")) {
           dao.getEntityTypes(context, txn).toSet
         }
@@ -25,7 +25,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "list all entities of all entity types" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
           dao.listEntitiesAllTypes(context, txn).toSet
         }
@@ -44,7 +44,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
     override def save(txn: RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, txn) { context =>
+      withWorkspaceContext(workspace, writeLock = true, txn) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, sample1, txn)
       }
@@ -54,7 +54,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabase(new BugTestData) { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(bugData.workspace, txn) { context =>
+      withWorkspaceContext(bugData.workspace, writeLock = false, txn) { context =>
         assertResult(Some(bugData.sample1)) {
           dao.get(context, "Sample", "sample1", txn)
         }
@@ -64,7 +64,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "get an entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(Some(testData.pair1)) {
           dao.get(context, "Pair", "pair1", txn)
         }
@@ -80,7 +80,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "return None when an entity does not exist" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(None) {
           dao.get(context, "pair", "fnord", txn)
         }
@@ -93,7 +93,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "save a new entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         val pair2 = Entity("pair2", "Pair",
           Map(
             "case" -> AttributeEntityReference("Sample", "sample3"),
@@ -141,8 +141,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       workspaceDaoOriginal.save(workspaceOriginal, txn)
       workspaceDaoClone.save(workspaceClone, txn)
 
-      withWorkspaceContext(workspaceOriginal, txn) { originalContext =>
-        withWorkspaceContext(workspaceClone, txn) { cloneContext =>
+      withWorkspaceContext(workspaceOriginal, writeLock = true, txn) { originalContext =>
+        withWorkspaceContext(workspaceClone, writeLock = true, txn) { cloneContext =>
           daoCycles.save(originalContext, c3, txn)
           daoCycles.save(originalContext, c2, txn)
           daoCycles.save(originalContext, c1, txn)
@@ -166,7 +166,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "save updates to an existing entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         txn.withGraph { graph =>
           val numEdges = graph.getEdges.size
           val numVerts = graph.getVertices.size
@@ -216,7 +216,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeEntityReference("sample", "notTheSampleYoureLookingFor")))
         intercept[RawlsException] {
           dao.save(context, baz, txn)
@@ -227,7 +227,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "delete an entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         dao.delete(context, "Pair", "pair2", txn)
         assert {
           txn.withGraph { graph =>
@@ -240,7 +240,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "list entities" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7)) {
           dao.list(context, "Sample", txn).toSet
         }
@@ -250,7 +250,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "add cycles to entity graph" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         val sample1Copy = Entity("sample1", "Sample",
           Map(
             "type" -> AttributeString("normal"),
@@ -293,7 +293,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "rename an entity" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         dao.rename(context, "Pair", "pair1", "amazingPair", txn)
         txn.withGraph { graph =>
           val pairNames = graph.getVertices("entityType", "Pair").map(_.getProperty[String]("name")).toList
@@ -313,7 +313,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
    */
   it should "get entity subtrees from a list of entities" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
         assertResult(Set(testData.sset3, testData.sample1, testData.sset2, testData.aliquot1, testData.sample6, testData.sset1, testData.sample2, testData.sample3, testData.sample5)) {
           dao.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"), txn).toSet
         }
@@ -337,8 +337,8 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   it should "copy entities without a conflict" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
       workspaceDAO.save(workspace2, txn)
-      withWorkspaceContext(testData.workspace, txn) { context1 =>
-        withWorkspaceContext(workspace2, txn) { context2 =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context1 =>
+        withWorkspaceContext(workspace2, writeLock = true, txn) { context2 =>
           dao.save(context2, x2, txn)
           dao.save(context2, x1, txn)
           x2 = Entity("x2", "SampleSet", Map("child" -> AttributeEntityReference("SampleSet", "x1")))
@@ -370,7 +370,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "save an entity without attribute references and then save that entity again with attribute references" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         dao.save(context, y2, txn)
         dao.save(context, y1, txn)
         y2 = Entity("y2", "SampleSet", Map("ref" -> AttributeEntityReference("SampleSet", "y1")))
@@ -384,7 +384,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   it should "copy entities with a conflict" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         assertResult(Set(testData.sample1)) {
           dao.getCopyConflicts(context, Seq(testData.sample1), txn).toSet
         }
@@ -404,7 +404,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
     val dottyAttr = Entity("dottyAttr", "Sample", Map("foo.bar" -> AttributeBoolean(true)))
     dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
+      withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
         intercept[RawlsException] { dao.save(context, dottyName, txn) }
         intercept[RawlsException] { dao.save(context, dottyType, txn) }
         intercept[RawlsException] { dao.save(context, dottyAttr, txn) }
@@ -416,7 +416,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { dataSource =>
       val e = Entity("test_sample", "Sample", Map(reserved -> AttributeString("foo")))
       dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
+        withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
           intercept[RawlsException] { dao.save(context, e, txn) }
         }
       }

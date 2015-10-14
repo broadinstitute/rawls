@@ -51,7 +51,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
       dataSource.inTransaction { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, txn) { context =>
+          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.aliquot2, txn)
             entityDAO.save(context, testData.sample1, txn)
@@ -69,7 +69,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
           val wsVerts = graph.getVertices.toList.size
-          withWorkspaceContext(workspace, txn) { context =>
+          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.aliquot2, txn)
 
@@ -87,7 +87,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
       dataSource.inTransaction { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, txn) { context =>
+          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.sample1, txn)
             entityDAO.save(context, testData.sample2, txn)
@@ -112,7 +112,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
       dataSource.inTransaction { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, txn) { context =>
+          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
             val wsVerts = graph.getVertices.toList.size
 
             methodConfigDAO.save(context, testData.methodConfig, txn)
