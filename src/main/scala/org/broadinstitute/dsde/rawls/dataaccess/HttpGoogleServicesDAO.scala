@@ -216,7 +216,11 @@ class HttpGoogleServicesDAO(
     val updates = Future.traverse(updateMap) {
       case (userId,accessLevel) => {
         if(userId.toLowerCase.equals(userEmail.toLowerCase)) {
-          Future.successful(Option((userId, s"Failed to change permissions for $userId. You cannot change your own permissions.")))
+          getMaximumAccessLevel(userId, workspaceId) flatMap { currentAccessLevel =>
+            if (currentAccessLevel != accessLevel)
+              Future.successful(Option((userId, s"Failed to change permissions for $userId. You cannot change your own permissions.")))
+            else updateUserAccess(userId, accessLevel, workspaceId, directory)
+          }
         }
         else updateUserAccess(userId, accessLevel, workspaceId, directory)
       }
