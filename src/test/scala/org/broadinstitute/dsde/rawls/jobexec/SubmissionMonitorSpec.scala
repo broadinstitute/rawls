@@ -62,7 +62,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }, 15 seconds)
 
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("test" -> AttributeString(workflow.workflowId)))), testActor)
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("this.test" -> AttributeString(workflow.workflowId)))), testActor)
     }
 
     expectMsgClass(15 seconds, classOf[Terminated])
@@ -120,6 +120,55 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  it should "update attributes on entities" in withDefaultTestDatabase { dataSource =>
+    //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    watch(monitorRef)
+
+    testData.submissionUpdateEntity.workflows.foreach { workflow =>
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(
+        SubmissionMonitor.WorkflowStatusChange(
+          workflow.copy(status = WorkflowStatuses.Succeeded, messages = Seq()),
+          Some(Map("this.myAttribute" -> AttributeString("foo")))), testActor)
+    }
+
+    expectMsgClass(15 seconds, classOf[Terminated])
+
+    dataSource inTransaction { txn =>
+      withWorkspaceContext(testData.workspace, writeLock=false, txn) { wsCtx =>
+        val entity = entityDAO.get(
+          wsCtx,
+          testData.submissionUpdateEntity.submissionEntity.entityType,
+          testData.submissionUpdateEntity.submissionEntity.entityName,
+          txn).get
+        assertResult(AttributeString("foo")) {
+          entity.attributes("myAttribute")
+        }
+      }
+    }
+  }
+
+  it should "update attributes on workspaces" in withDefaultTestDatabase { dataSource =>
+    //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    watch(monitorRef)
+
+    testData.submissionUpdateWorkspace.workflows.foreach { workflow =>
+      system.actorSelection(monitorRef.path / workflow.workflowId).tell(
+        SubmissionMonitor.WorkflowStatusChange(
+          workflow.copy(status = WorkflowStatuses.Succeeded, messages = Seq()),
+          Some(Map("workspace.myAttribute" -> AttributeString("foo")))), testActor)
+    }
+
+    expectMsgClass(15 seconds, classOf[Terminated])
+
+    dataSource inTransaction { txn =>
+      val workspace = workspaceDAO.loadContext(testData.wsName, txn).get.workspace
+      assertResult(AttributeString("foo")) {
+        workspace.attributes("myAttribute")
+      }
+    }
+  }
 }
 
 object TestActor {
