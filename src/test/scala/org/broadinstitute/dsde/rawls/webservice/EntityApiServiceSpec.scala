@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.PoisonPill
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -18,6 +19,7 @@ import spray.json._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 /**
@@ -42,7 +44,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
+  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(

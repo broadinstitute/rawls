@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
 import spray.http.StatusCodes
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService {

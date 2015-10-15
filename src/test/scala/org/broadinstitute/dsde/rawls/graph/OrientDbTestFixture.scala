@@ -16,6 +16,7 @@ import spray.httpx.SprayJsonSupport
 import SprayJsonSupport._
 import WorkspaceJsonSupport._
 
+import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 
 trait OrientDbTestFixture extends BeforeAndAfterAll {
   this : org.scalatest.BeforeAndAfterAll with org.scalatest.Suite =>
@@ -230,21 +231,25 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   def withCustomTestDatabase(data:TestData)(testCode:DataSource => Any):Unit = {
     val dbName = UUID.randomUUID.toString
     val dataSource = DataSource("memory:"+dbName, "admin", "admin")
-    val graph = new OrientGraph("memory:"+dbName)
+    try {
+      val graph = new OrientGraph("memory:"+dbName)
 
-    // do this twice to make sure it is idempotent
-    VertexSchema.createVertexClasses(graph)
-    VertexSchema.createVertexClasses(graph)
+      // do this twice to make sure it is idempotent
+      VertexSchema.createVertexClasses(graph)
+      VertexSchema.createVertexClasses(graph)
 
-    // save the data inside a transaction to cause data to be committed
-    dataSource inTransaction { txn =>
-      data.save(txn)
+      // save the data inside a transaction to cause data to be committed
+      dataSource inTransaction { txn =>
+        data.save(txn)
+      }
+
+      testCode(dataSource)
+      graph.rollback()
+      graph.drop()
+      graph.shutdown()
+    } catch {
+      case t: Throwable => t.printStackTrace; throw t
     }
-
-    testCode(dataSource)
-    graph.rollback()
-    graph.drop()
-    graph.shutdown()
   }
 
   def withWorkspaceContext[T](workspace: Workspace, writeLock: Boolean, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {

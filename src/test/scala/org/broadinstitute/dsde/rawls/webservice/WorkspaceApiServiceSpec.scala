@@ -55,7 +55,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
-  case class TestApiService(dataSource: DataSource, user: String) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
+  case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(

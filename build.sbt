@@ -19,6 +19,7 @@ resolvers += "artifactory-snapshots" at artifactory + "libs-snapshot"
 libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
+  val orientV = "2.0.8"
   Seq(
     "com.gettyimages" %% "spray-swagger" % "0.5.0",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
@@ -33,10 +34,10 @@ libraryDependencies ++= {
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
-    "com.orientechnologies" % "orientdb-core" % "2.0.8",
-    "com.orientechnologies" % "orientdb-graphdb" % "2.0.8",
-    "com.orientechnologies" % "orientdb-server" % "2.0.8",
-    "com.orientechnologies" % "orientdb-client" % "2.0.8",
+    "com.orientechnologies" % "orientdb-core" % orientV,
+    "com.orientechnologies" % "orientdb-graphdb" % orientV,
+    "com.orientechnologies" % "orientdb-server" % orientV,
+    "com.orientechnologies" % "orientdb-client" % orientV,
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     "rhino" % "js" % "1.7R2",

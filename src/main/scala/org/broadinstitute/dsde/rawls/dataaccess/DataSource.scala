@@ -2,25 +2,27 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import com.tinkerpop.blueprints.{Element, Graph}
+import com.tinkerpop.blueprints.Element
+import com.tinkerpop.blueprints.impls.orient.OrientElement
+import com.orientechnologies.orient.core.exception.OConcurrentModificationException
+import com.tinkerpop.blueprints.Graph
 import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
-import com.tinkerpop.blueprints.impls.orient.{OrientElement, OrientGraph, OrientGraphFactory}
+import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 
-import scala.concurrent.Future
 import scala.collection.concurrent.TrieMap
-import scala.util.{Failure, Success, Try}
-
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 
 object DataSource {
-  def apply(url: String, user: String, password: String, minPoolSize: Int, maxPoolSize: Int) = {
+  def apply(url: String, user: String, password: String, minPoolSize: Int, maxPoolSize: Int)(implicit executionContext: ExecutionContext) = {
     val factory: OrientGraphFactory = createFactory(url, user, password)
-    factory.setupPool(minPoolSize, maxPoolSize)
+// db pooling disabled: https://broadinstitute.atlassian.net/browse/DSDEEPB-1589
+//    factory.setupPool(minPoolSize, maxPoolSize)
     new DataSource(factory)
   }
 
-  def apply(url: String, user: String, password: String) = {
+  def apply(url: String, user: String, password: String)(implicit executionContext: ExecutionContext) = {
     val factory: OrientGraphFactory = createFactory(url, user, password)
     new DataSource(factory)
   }
@@ -35,7 +37,7 @@ object DataSource {
   }
 }
 
-class DataSource(graphFactory: OrientGraphFactory) extends LazyLogging {
+class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: ExecutionContext) extends LazyLogging {
   def inTransaction[T](f: RawlsTransaction => T): T = {
     val graph = graphFactory.getTx
     try {
@@ -65,9 +67,21 @@ class DataSource(graphFactory: OrientGraphFactory) extends LazyLogging {
     val resultFuture = f(txn)
 
     resultFuture.transform( { result =>
-      completeTransaction(txn)
+      graph.makeActive()
+      try {
+        completeTransaction(txn)
+      } catch {
+        case t: OConcurrentModificationException =>
+          import scala.collection.JavaConversions._
+          val v = graph.getVertex(t.getRid)
+          val props = v.getPropertyKeys.map(k => k -> v.getProperty(k)).toMap
+          throw new RawlsException(s"concurrent modification exception modifying ${props}", t)
+        case t: Throwable =>
+          throw t
+      }
       result
     }, { throwable =>
+      graph.makeActive()
       completeTransactionOnException(graph)
       throwable
     })

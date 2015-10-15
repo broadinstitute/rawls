@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.scalatest.{Matchers, FlatSpec}
 import scala.collection.JavaConversions._
 
+import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
+
 /**
  * Created by dvoet on 5/19/15.
  */

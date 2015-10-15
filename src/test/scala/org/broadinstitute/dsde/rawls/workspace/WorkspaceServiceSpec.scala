@@ -15,6 +15,8 @@ import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{StatusCodes, ContentTypes, HttpEntity, HttpCookie}
 import spray.testkit.ScalatestRouteTest
 
+import scala.concurrent.ExecutionContext
+
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
@@ -29,7 +31,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Map.empty
   )
 
-  case class TestApiService(dataSource: DataSource) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
+  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()

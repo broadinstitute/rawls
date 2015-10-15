@@ -35,10 +35,8 @@ import spray.httpx.UnsuccessfulResponseException
 import spray.json._
 
 import scala.annotation.tailrec
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-
-import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
  * Created by dvoet on 4/27/15.
@@ -100,11 +98,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo) =
+  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef) extends Actor {
+class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit executionContext: ExecutionContext) extends Actor {
   override def receive = {
     case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to context.parent
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to context.parent
@@ -186,7 +184,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource inFutureTransaction { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Owner, txn) { workspaceContext =>
-        import scala.concurrent.ExecutionContext.Implicits.global
         //Attempt to abort any running workflows so they don't write any more to the bucket.
         //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
         //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the

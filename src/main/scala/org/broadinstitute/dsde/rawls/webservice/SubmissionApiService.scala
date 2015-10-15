@@ -7,11 +7,13 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.httpx.SprayJsonSupport._
 import spray.routing._
 
+import scala.concurrent.ExecutionContext
+
 /**
  * Created by dvoet on 6/4/15.
  */
 trait SubmissionApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
-  lazy private implicit val executionContext = actorRefFactory.dispatcher
+  implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
