@@ -26,7 +26,9 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
 
   implicit def executionContext = actorRefFactory.dispatcher
   def actorRefFactory = context
-  def possibleRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ swaggerRoute ~ adminRoutes ~
+  def possibleRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes
+
+  val swaggerRoute = {
     get {
       pathPrefix("swagger") {
         pathEnd {
@@ -39,8 +41,14 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
         }
       } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.1.1/")
     }
+  }
 
-  def receive = runRoute(possibleRoutes)
+  def receive = runRoute(
+    swaggerRoute ~
+    pathPrefix("api") {
+      possibleRoutes
+    }
+  )
 }
 
 trait RootRawlsApiService extends HttpService {
@@ -48,14 +56,6 @@ trait RootRawlsApiService extends HttpService {
     path("headers") {
       get {
         requestContext => requestContext.complete(requestContext.request.headers.mkString(",\n"))
-      }
-    }
-  }
-  def docsPath: String = "api-docs" //path to swagger's endpoint
-  def swaggerRoute = {
-    get {
-      path(docsPath / "listings" / Segment) { (listing) =>
-        getFromResource("swagger/listings/" + listing)
       }
     }
   }

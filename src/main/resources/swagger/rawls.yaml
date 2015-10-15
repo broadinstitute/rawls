@@ -10,6 +10,9 @@ info:
     name: BSD
     url: 'http://opensource.org/licenses/BSD-3-Clause'
   termsOfService: 'http://www.github.com/broadinstitute/rawls'
+
+basePath: /api
+
 paths:
   '/admin/users':
     get:
@@ -1661,7 +1664,7 @@ tags:
     description: Method Configuration manipulation API
   - name: workspaces
     description: Workspace manipulation API
-basePath: /
+
 schemes:
   - http
 securityDefinitions:
