@@ -47,7 +47,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   class SubmissionTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute]() )
 
     val sample1 = Entity("sample1", "Sample",
       Map("type" -> AttributeString("normal")))

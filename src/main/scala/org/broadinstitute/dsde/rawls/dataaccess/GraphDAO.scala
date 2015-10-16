@@ -300,6 +300,7 @@ trait GraphDAO {
     getPropertiesAndValues(tpe, obj).foreach({
       case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph)
     })
+    saveProperty(typeOf[DateTime], "lastModified", DateTime.now, wsc.workspaceVertex, wsc, graph)
   }
 
   private def getDomainObjectIdField(tpe: Type, obj: DomainObject): String = {

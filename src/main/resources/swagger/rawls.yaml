@@ -2638,6 +2638,10 @@ definitions:
         type: string
         format: date-time
         description: 'The date the workspace was created in yyyy-MM-ddTHH:mm:ss.SSSZZ format'
+      lastModified:
+        type: string
+        format: date-time
+        description: 'The date the workspace was last modified in yyyy-MM-ddTHH:mm:ss.SSSZZ format'
       createdBy:
         type: string
         description: The user who created the workspace

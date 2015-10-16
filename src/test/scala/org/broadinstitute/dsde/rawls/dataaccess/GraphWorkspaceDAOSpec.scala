@@ -18,7 +18,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         name = testData.wsName.name,
         workspaceId = "aWorkspaceId",
         bucketName = "aBucket",
-        createdDate = DateTime.now(),
+        createdDate = testDate,
+        lastModified = testDate,
         createdBy = "Barack Obama",
         attributes = Map("workspace_attrib" -> AttributeString("foo"))
       )
@@ -45,8 +46,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
 
   it should "load a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      assertResult(Some(testData.workspace)) {
-        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace )
+      assertResult(Some(testData.workspace.copy(lastModified = testDate))) {
+        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace.copy(lastModified = testDate) )
       }
     }
   }
@@ -62,18 +63,21 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     }
   }
 
+  //what is a "short" workspace and why is this test the exact same as "load a workspace" from 2 tests above?
   it should "load the short version of a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
-      assertResult(Some(testData.workspace)) {
-        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace )
+      assertResult(Some(testData.workspace.copy(lastModified = testDate))) {
+        workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace.copy(lastModified = testDate) )
       }
     }
   }
 
   it should "show workspace in list" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction { txn =>
+      //we need to use a default time because we have no idea when the workspace was actually last modified, so the assert would fail otherwise
+      val dateTime = DateTime.now
       assert {
-        workspaceDAO.list(txn).contains(testData.workspace)
+        workspaceDAO.list(txn).map(ws => ws.copy(lastModified = dateTime)).contains(testData.workspace.copy(lastModified = dateTime))
       }
     }
   }
@@ -85,7 +89,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         name = "badness",
         workspaceId = "badWorkspaceId",
         bucketName = "badBucket",
-        createdDate = DateTime.now(),
+        createdDate = testDate,
+        lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map("dots.dots.more.dots" -> AttributeString("foo"))
       )
@@ -96,6 +101,19 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     }
   }
 
+  it should "change lastModified date on a workspace after altering it" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction { txn =>
+      val beforeUpdate = workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn).get.workspace.lastModified
+      workspaceDAO.save(testData.workspace.copy(attributes = testData.wsAttrs), txn)
+
+      Thread.sleep(10) //travis is blazing fast, so sleep to prevent it from saving and updating workspaces at the same moment
+
+      val afterUpdate = workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn).get.workspace.lastModified
+
+      assert(afterUpdate.getMillis > beforeUpdate.getMillis)
+    }
+  }
+
   Attributable.reservedAttributeNames.foreach { reserved =>
     it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { dataSource =>
       val e = Workspace(
@@ -103,7 +121,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         name = "badness",
         workspaceId = "badWorkspaceId",
         bucketName = "badBucket",
-        createdDate = DateTime.now(),
+        createdDate = testDate,
+        lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map(reserved -> AttributeString("foo"))
       )
