@@ -78,6 +78,16 @@ class ExpressionParser extends JavaTokenParsers {
     }
   }
 
+  //Parser for output expressions: this.attribute or workspace.attribute (no entity references in the middle)
+  private def outputExpression: Parser[PipelineQuery] = {
+    rootDot ~ valueAttribute ^^ {
+      case root ~ attr => PipelineQuery(List(root), attr)
+    } |
+      workspaceDot ~ valueAttribute ^^ {
+        case workspace ~ attr => PipelineQuery(List(workspace), attr)
+      }
+  }
+
   //Parser for expressions ending in an attribute that's a reference to another entity
   private def entityExpression: Parser[PipelineQuery] = {
     root ^^ {
@@ -119,6 +129,10 @@ class ExpressionParser extends JavaTokenParsers {
 
   def parseAttributeExpr(expression: String) = {
     parse(expression, attributeExpression)
+  }
+
+  def parseOutputExpr(expression: String) = {
+    parse(expression, outputExpression)
   }
 
   def parseEntityExpr(expression: String) = {
