@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.joda.time.DateTime
+import spray.http.StatusCode
+import spray.json._
 
 object Attributable {
   val reservedAttributeNames = Set("name", "entityType")
@@ -148,6 +149,41 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
+case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement])
+
+object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],Seq[StackTraceElement]) => ErrorReport) {
+  val SOURCE = "rawls"
+
+  def apply(statusCode: StatusCode, message: String): ErrorReport =
+    new ErrorReport(SOURCE,message,Option(statusCode),Seq.empty,Seq.empty)
+
+  def apply(statusCode: StatusCode, message: String, cause: ErrorReport): ErrorReport =
+    new ErrorReport(SOURCE,message,Option(statusCode),Seq(cause),Seq.empty)
+
+  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport]): ErrorReport =
+    new ErrorReport(SOURCE,message,Option(statusCode),causes,Seq.empty)
+
+  def apply(throwable: Throwable): ErrorReport =
+    new ErrorReport(SOURCE,message(throwable),None,causes(throwable),throwable.getStackTrace)
+
+  def apply(throwable: Throwable, statusCode: StatusCode): ErrorReport =
+    new ErrorReport(SOURCE,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace)
+
+  def apply(message: String, cause: ErrorReport) =
+    new ErrorReport(SOURCE,message,None,Seq(cause),Seq.empty)
+
+  def apply(message: String, causes: Seq[ErrorReport]) =
+    new ErrorReport(SOURCE,message,None,causes,Seq.empty)
+
+  def message(throwable: Throwable) = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
+  def causes(throwable: Throwable): Array[ErrorReport] = causeThrowables(throwable).map(ErrorReport(_))
+  private def causeThrowables(throwable: Throwable) = {
+    if (throwable.getSuppressed.nonEmpty || throwable.getCause == null) throwable.getSuppressed
+    else Array(throwable.getCause)
+  }
+}
+
+
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
 
@@ -217,4 +253,34 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
 
+  implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
+    override def write(code: StatusCode): JsValue = JsNumber(code.intValue)
+
+    override def read(json: JsValue): StatusCode = json match {
+      case JsNumber(n) => n.intValue
+      case _ => throw new DeserializationException("unexpected json type")
+    }
+  }
+
+  implicit object StackTraceElementFormat extends RootJsonFormat[StackTraceElement] {
+    val CLASS_NAME = "className"
+    val METHOD_NAME = "methodName"
+    val FILE_NAME = "fileName"
+    val LINE_NUMBER = "lineNumber"
+
+    def write(stackTraceElement: StackTraceElement) =
+      JsObject( CLASS_NAME -> JsString(stackTraceElement.getClassName),
+                METHOD_NAME -> JsString(stackTraceElement.getMethodName),
+                FILE_NAME -> JsString(stackTraceElement.getFileName),
+                LINE_NUMBER -> JsNumber(stackTraceElement.getLineNumber) )
+
+    def read(json: JsValue) =
+      json.asJsObject.getFields(CLASS_NAME,METHOD_NAME,FILE_NAME,LINE_NUMBER) match {
+        case Seq(JsString(className), JsString(methodName), JsString(fileName), JsNumber(lineNumber)) =>
+          new StackTraceElement(className,methodName,fileName,lineNumber.toInt)
+        case _ => throw new DeserializationException("unable to deserialize StackTraceElement")
+      }
+  }
+
+  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport,"source","message","statusCode","causes","stackTrace")))
 }

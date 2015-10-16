@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.joda.time.DateTime
 import spray.http
 
