@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import com.tinkerpop.blueprints.Element
 import com.tinkerpop.blueprints.impls.orient.OrientElement
@@ -114,69 +115,32 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
 class RawlsTransaction(val graph: OrientGraph, dataSource: DataSource) {
   private val rollbackOnly = new AtomicBoolean(false)
 
-  var readLocks = TrieMap[Element, Int]().withDefaultValue(0)
-  var writeLocks = TrieMap[Element, Int]().withDefaultValue(0)
-
   /**
-   * Lock handling. Ensures that we don't try to get multiple locks on this elem within the same txn.
+   * We have to use JVM locks because Orient refuses to lock remote databases
    */
-  private def acquireReadLock(elem: Element) = {
-    if( writeLocks(elem) > 0 ) {
-      //Silently "upgrade" read locks to write locks if a write lock exists, since we already
-      //have exclusive access.
-      acquireWriteLock(elem)
-    } else {
-      if (readLocks(elem) == 0) {
-        elem.asInstanceOf[OrientElement].lock(false)
-      }
-      readLocks(elem) += 1
-    }
-  }
+  var elemLocks = TrieMap[Element, ReentrantReadWriteLock]()
 
-  private def releaseReadLock(elem: Element) = {
-    if( writeLocks(elem) > 0 ) {
-      //Handle our read lock having been silently upgraded.
-      releaseWriteLock(elem)
-    } else {
-      assert(readLocks(elem) > 0, s"Attempting to release nonexistent read lock on $elem")
-      readLocks(elem) -= 1
-      if (readLocks(elem) == 0) {
-        elem.asInstanceOf[OrientElement].unlock()
-      }
-    }
-  }
-
-  private def acquireWriteLock(elem: Element) = {
-    assert( readLocks(elem) == 0, s"Attempting to acquire write lock on $elem which already has a read lock" )
-    if( writeLocks(elem) == 0 ) {
-      elem.asInstanceOf[OrientElement].lock(true)
-    }
-    writeLocks(elem) += 1
-  }
-
-  private def releaseWriteLock(elem: Element) = {
-    assert(writeLocks(elem) > 0, s"Attempting to release nonexistent write lock on $elem")
-    writeLocks(elem) -= 1
-    if( writeLocks(elem) == 0 ) {
-      elem.asInstanceOf[OrientElement].unlock()
-    }
+  private def getElemLock(elem: Element): ReentrantReadWriteLock = {
+    elemLocks.getOrElseUpdate(elem, new ReentrantReadWriteLock())
   }
 
   def withWriteLock[T](elem: Element) (op: => T): T = {
+    val wl = getElemLock(elem).writeLock()
     try {
-      acquireWriteLock(elem)
+      wl.lock()
       op
     } finally {
-      releaseWriteLock(elem)
+      wl.unlock()
     }
   }
 
   def withReadLock[T](elem: Element) (op: => T): T = {
+    val rl = getElemLock(elem).readLock()
     try {
-      acquireReadLock(elem)
+      rl.lock()
       op
     } finally {
-      releaseReadLock(elem)
+      rl.unlock()
     }
   }
 
@@ -187,9 +151,6 @@ class RawlsTransaction(val graph: OrientGraph, dataSource: DataSource) {
       withReadLock(elem)(op)
     }
   }
-
-  def isReadLocked(elem: Element): Boolean = { readLocks(elem) > 0 }
-  def isWriteLocked(elem: Element): Boolean = { writeLocks(elem) > 0 }
 
   def withGraph[T](f: Graph => T) = {
     // because transactions are spanning threads we need to make sure the graph is active
