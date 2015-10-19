@@ -619,13 +619,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def validateMCExpressions(methodConfiguration: MethodConfiguration): ValidatedMethodConfiguration = {
     val parser = new ExpressionParser
 
-    def parseAndPartition(m: Map[String, AttributeString]) = {
-      val parsed = m mapValues { attr => parser.parseAttributeExpr(attr.value) }
+    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[ExpressionTypes.PipelineQuery] ) = {
+      val parsed = m mapValues { attr => parseFunc(attr.value) }
       ( parsed collect { case (key, Success(_)) => key } toSeq,
         parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
     }
-    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs)
-    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs)
+    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs, parser.parseAttributeExpr)
+    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, parser.parseOutputExpr)
 
     ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
   }
