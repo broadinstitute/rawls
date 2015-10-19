@@ -99,10 +99,21 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
         val saveOutputs = Try {
           workflowOutputsOption foreach { workflowOutputs =>
+
+            //Partition outputs by whether their attributes are entity attributes (begin with "this.") or workspace ones (implicitly; begin with "workspace.")
+            //This assumption (that it's either "this." or "workspace.") will be guaranteed by checking of the method config when it's imported; see DSDEEPB-1603.
+            //Yes I know this is a var but it's more terse this way.
+            var (entityAttributes, workspaceAttributes) = workflowOutputs.partition({ case (k, v) => k.startsWith("this.") })
+            entityAttributes = entityAttributes.map({ case (k, v) => (k.stripPrefix("this."), v) })
+            workspaceAttributes = workspaceAttributes.map({ case (k, v) => (k.stripPrefix("workspace."), v) })
+
             val entity = containerDAO.entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
               throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
             }
-            containerDAO.entityDAO.save(workspaceContext, entity.copy(attributes = entity.attributes ++ workflowOutputs), txn)
+
+            //Update entity and workspace with expression values.
+            containerDAO.entityDAO.save(workspaceContext, entity.copy(attributes = entity.attributes ++ entityAttributes), txn)
+            containerDAO.workspaceDAO.save(workspaceContext.workspace.copy(attributes = workspaceContext.workspace.attributes ++ workspaceAttributes), txn)
           }
         }
 

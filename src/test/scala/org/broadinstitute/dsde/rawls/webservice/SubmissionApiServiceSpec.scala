@@ -176,7 +176,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2)) {
+        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2, testData.submissionUpdateEntity, testData.submissionUpdateWorkspace)) {
           responseAs[List[Submission]]
         }
       }
