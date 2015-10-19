@@ -5,6 +5,9 @@ import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
 
+import scala.reflect.runtime.universe._
+import scala.reflect.runtime.{universe=>ru}
+
 object Attributable {
   val reservedAttributeNames = Set("name", "entityType")
 }
@@ -15,8 +18,14 @@ trait Attributable {
 }
 
 trait DomainObject {
-  //the name of a field on this object that uniquely identifies it relative to any graph siblings
-  def idField: String
+  //the names of the fields on this object that uniquely identify it relative to any graph siblings
+  def idFields: Seq[String]
+
+  def getFieldValue(tpe: Type, field: String): String = {
+    val mirror = ru.runtimeMirror(this.getClass.getClassLoader)
+    val idFieldSym = tpe.decl(ru.TermName(field)).asMethod
+    mirror.reflect(this).reflectField(idFieldSym).get.asInstanceOf[String]
+  }
 }
 
 /**
@@ -51,7 +60,7 @@ case class Workspace(
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
-  def idField = "name"
+  def idFields = Seq("name")
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -69,7 +78,7 @@ case class Entity(
                    ) extends Attributable with DomainObject {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
-  def idField = "name"
+  def idFields = Seq("name")
 }
 
 case class MethodConfigurationName(
@@ -95,7 +104,7 @@ case class MethodRepoMethod(
                    methodName: String,
                    methodVersion: Int
                    ) extends DomainObject {
-  def idField = "methodName"
+  def idFields = Seq("methodName")
 }
 
 case class MethodConfiguration(
@@ -109,7 +118,7 @@ case class MethodConfiguration(
                    ) extends DomainObject {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
-  def idField = "name"
+  def idFields = Seq("name", "namespace")
 }
 
 case class MethodConfigurationShort(
@@ -117,7 +126,7 @@ case class MethodConfigurationShort(
                                 rootEntityType: String,
                                 methodRepoMethod:MethodRepoMethod,
                                 namespace: String) extends DomainObject {
-  def idField = "name"
+  def idFields = Seq("name")
 }
 
 case class ValidatedMethodConfiguration(
