@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithStatusCode
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import org.joda.time.DateTime
-import spray.http.StatusCode
+import spray.http.{StatusCodes, StatusCode}
 import spray.json._
 
 import com.tinkerpop.blueprints.Vertex
@@ -20,17 +21,22 @@ trait Attributable {
 
 trait DomainObject {
   //the name of a field on this object that uniquely identifies it relative to any graph siblings
-  protected def idField: String
+  protected def idField: Option[String]
 
   // a function to uniquely identify this object relative to any graph siblings
   // by default, it checks the idField for equality
   def idFilterFn(tpe: Type)(vertex: Vertex): Boolean = {
-    getDomainObjectIdValue(tpe, this) == vertex.getProperty(this.idField)
+    this.idField match {
+      case Some(id) => getDomainObjectIdValue(tpe, this) == vertex.getProperty(id)
+      case None => throw new RawlsExceptionWithStatusCode(
+        message = "Code Error: DomainObject of type %s requires a custom idFilterFn".format(tpe),
+        statusCode = StatusCodes.InternalServerError)
+    }
   }
 
   private def getDomainObjectIdValue(tpe: Type, obj: DomainObject): String = {
     val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-    val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
+    val idFieldSym = tpe.decl(ru.TermName(obj.idField.get)).asMethod
     mirror.reflect(obj).reflectField(idFieldSym).get.asInstanceOf[String]
   }
 }
@@ -67,7 +73,7 @@ case class Workspace(
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
-  def idField = "name"
+  def idField = Option("name")
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -85,7 +91,7 @@ case class Entity(
                    ) extends Attributable with DomainObject {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
-  def idField = "name"
+  def idField = Option("name")
 }
 
 case class MethodConfigurationName(
@@ -111,7 +117,7 @@ case class MethodRepoMethod(
                    methodName: String,
                    methodVersion: Int
                    ) extends DomainObject {
-  def idField = "methodName"
+  def idField = Option("methodName")
 }
 
 case class MethodConfiguration(
@@ -127,11 +133,10 @@ case class MethodConfiguration(
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
 
   // a custom idFilterFn is required because two fields are necessary to identify
-  def idField = "N/A"
+  def idField = None
   override def idFilterFn(tpe: Type)(vertex: Vertex): Boolean = {
     namespace == vertex.getProperty("namespace") && name == vertex.getProperty("name")
   }
-
 }
 
 case class MethodConfigurationShort(
@@ -139,7 +144,7 @@ case class MethodConfigurationShort(
                                 rootEntityType: String,
                                 methodRepoMethod:MethodRepoMethod,
                                 namespace: String) extends DomainObject {
-  def idField = "name"
+  def idField = Option("name")
 }
 
 case class ValidatedMethodConfiguration(

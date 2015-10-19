@@ -54,7 +54,7 @@ case class Workflow(
   workflowEntity: AttributeEntityReference,
   messages: Seq[AttributeString] = Seq.empty
 ) extends DomainObject {
-  def idField = "workflowId"
+  def idField = Option("workflowId")
 }
 
 // Encapsulating errors for workflows that failed to start
@@ -63,7 +63,7 @@ case class WorkflowFailure(
   entityType: String,
   errors: Seq[AttributeString]
 ) extends DomainObject {
-  def idField = "entityName"
+  def idField = Option("entityName")
 }
 
 case class TaskOutput(
@@ -88,7 +88,7 @@ case class Submission(
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
 ) extends DomainObject {
-  def idField = "submissionId"
+  def idField = Option("submissionId")
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
