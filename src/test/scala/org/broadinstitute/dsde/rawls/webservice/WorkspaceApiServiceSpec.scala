@@ -105,10 +105,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   class TestWorkspaces() extends TestData {
     val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, "testUser", Map("a" -> AttributeString("x")) )
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, "testUser", Map("b" -> AttributeString("y")) )
-    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, "testUser", Map("c" -> AttributeString("z")) )
-    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")) )
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")) )
+    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")) )
+    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")) )
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -215,11 +215,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.OK) {
           status
         }
+        val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
-          ){
-            responseAs[WorkspaceListResponse]
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            ){
+              val response = responseAs[WorkspaceListResponse]
+              WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
           }
         }
       }
@@ -256,13 +258,14 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.OK) {
           status
         }
+        val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter, WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader, WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
           )) {
-            responseAs[Array[WorkspaceListResponse]].toSet
+            responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
           }
         }
       }

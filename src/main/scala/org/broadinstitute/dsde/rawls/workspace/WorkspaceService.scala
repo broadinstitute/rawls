@@ -1043,7 +1043,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       case None =>
         val workspaceId = UUID.randomUUID.toString
         gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
-          val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), DateTime.now, userInfo.userEmail, workspaceRequest.attributes)
+          val currentDate = DateTime.now
+          val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), currentDate, currentDate, userInfo.userEmail, workspaceRequest.attributes)
           op(containerDAO.workspaceDAO.save(workspace, txn))
         }
     }
