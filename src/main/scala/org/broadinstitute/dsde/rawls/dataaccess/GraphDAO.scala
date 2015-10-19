@@ -303,14 +303,9 @@ trait GraphDAO {
     saveProperty(typeOf[DateTime], "lastModified", DateTime.now, wsc.workspaceVertex, wsc, graph)
   }
 
-  private def getDomainObjectIdField(tpe: Type, obj: DomainObject): String = {
-    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-    val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
-    mirror.reflect(obj).reflectField(idFieldSym).get.asInstanceOf[String]
-  }
-
+  // a function to uniquely identify a graph object relative to siblings, by checking the idFields for equality
   private def domainObjectFilterFn(tpe: Type, obj: DomainObject)(vertex: Vertex): Boolean = {
-    getDomainObjectIdField(tpe, obj) == vertex.getProperty(obj.idField)
+    obj.idFields.forall { field => obj.getFieldValue(tpe, field) == vertex.getProperty(field) }
   }
 
   def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
@@ -320,7 +315,7 @@ trait GraphDAO {
   def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
     //Preserve references into this vertex. List of (vertex, edgeLabel).
     val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
-      .filter( subV => domainObjectFilterFn(tpe, obj)(subV) ) //only our actual object
+      .filter( domainObjectFilterFn(tpe, obj) ) //only our actual object
       .map({ subObj =>
       subObj.getEdges(Direction.IN)
         .filter( e => EdgeSchema.getEdgeRelation(e.getLabel) == EdgeSchema.Ref )
