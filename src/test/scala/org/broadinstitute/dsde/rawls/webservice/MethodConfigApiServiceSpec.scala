@@ -128,7 +128,40 @@ class MethodConfigApiServiceSpec extends FlatSpec with HttpService with Scalates
           }
         }
       }
+  }
 
+  // DSDEEPB-1433
+  it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
+    val mc1 = MethodConfiguration("ws1", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+    val mc2 = MethodConfiguration("ws2", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+
+    create(mc1)
+    create(mc2)
+    get(mc1)
+    get(mc2)
+
+    def create(mc: MethodConfiguration) = {
+      Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, mc.toJson.toString())) ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+          assertResult(ValidatedMethodConfiguration(mc, Seq(), Map(), Seq(), Map())) {
+            responseAs[ValidatedMethodConfiguration]
+          }
+        }
+    }
+
+    def get(mc: MethodConfiguration) = {
+      Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${mc.namespace}/${mc.name}") ~>
+        sealRoute(services.methodConfigRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+    }
   }
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>

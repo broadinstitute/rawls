@@ -5,6 +5,10 @@ import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
 
+import com.tinkerpop.blueprints.Vertex
+import scala.reflect.runtime.universe._
+import scala.reflect.runtime.{universe=>ru}
+
 object Attributable {
   val reservedAttributeNames = Set("name", "entityType")
 }
@@ -16,7 +20,19 @@ trait Attributable {
 
 trait DomainObject {
   //the name of a field on this object that uniquely identifies it relative to any graph siblings
-  def idField: String
+  protected def idField: String
+
+  // a function to uniquely identify this object relative to any graph siblings
+  // by default, it checks the idField for equality
+  def idFilterFn(tpe: Type)(vertex: Vertex): Boolean = {
+    getDomainObjectIdValue(tpe, this) == vertex.getProperty(this.idField)
+  }
+
+  private def getDomainObjectIdValue(tpe: Type, obj: DomainObject): String = {
+    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
+    val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
+    mirror.reflect(obj).reflectField(idFieldSym).get.asInstanceOf[String]
+  }
 }
 
 /**
@@ -109,7 +125,13 @@ case class MethodConfiguration(
                    ) extends DomainObject {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
-  def idField = "name"
+
+  // a custom idFilterFn is required because two fields are necessary to identify
+  def idField = "N/A"
+  override def idFilterFn(tpe: Type)(vertex: Vertex): Boolean = {
+    namespace == vertex.getProperty("namespace") && name == vertex.getProperty("name")
+  }
+
 }
 
 case class MethodConfigurationShort(
