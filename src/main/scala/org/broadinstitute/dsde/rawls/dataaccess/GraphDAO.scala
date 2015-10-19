@@ -303,16 +303,6 @@ trait GraphDAO {
     saveProperty(typeOf[DateTime], "lastModified", DateTime.now, wsc.workspaceVertex, wsc, graph)
   }
 
-  private def getDomainObjectIdField(tpe: Type, obj: DomainObject): String = {
-    val mirror = ru.runtimeMirror(obj.getClass.getClassLoader)
-    val idFieldSym = tpe.decl(ru.TermName(obj.idField)).asMethod
-    mirror.reflect(obj).reflectField(idFieldSym).get.asInstanceOf[String]
-  }
-
-  private def domainObjectFilterFn(tpe: Type, obj: DomainObject)(vertex: Vertex): Boolean = {
-    getDomainObjectIdField(tpe, obj) == vertex.getProperty(obj.idField)
-  }
-
   def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
     saveSubObject(typeOf[T], propName, obj, vertex, wsc, graph)
   }
@@ -320,14 +310,14 @@ trait GraphDAO {
   def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
     //Preserve references into this vertex. List of (vertex, edgeLabel).
     val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
-      .filter( subV => domainObjectFilterFn(tpe, obj)(subV) ) //only our actual object
+      .filter( subV => obj.idFilterFn(tpe)(subV) ) //only our actual object
       .map({ subObj =>
       subObj.getEdges(Direction.IN)
         .filter( e => EdgeSchema.getEdgeRelation(e.getLabel) == EdgeSchema.Ref )
         .map( e => ( e.getVertex(Direction.OUT), EdgeSchema.stripEdgeRelation(e.getLabel) ) ).toList
     }).flatten
 
-    removeProperty(propName, vertex, graph, domainObjectFilterFn(tpe, obj))
+    removeProperty(propName, vertex, graph, obj.idFilterFn(tpe))
     val objVert = addVertex(graph, VertexSchema.vertexClassOf(tpe))
 
     //Restore vertex references.
