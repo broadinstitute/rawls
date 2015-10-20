@@ -90,7 +90,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
-      case gjre: GoogleJsonResponseException => gjre.getDetails.getCode/100 == 5
+      case gjre: GoogleJsonResponseException => gjre.getStatusCode/100 == 5
       case _ => false
     }
   }

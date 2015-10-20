@@ -140,7 +140,7 @@ class HttpGoogleServicesDAO(
         blocking { deleter.execute }
       }) recover {
         //Google returns 409 Conflict if the bucket isn't empty.
-        case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == 409 =>
+        case gjre: GoogleJsonResponseException if gjre.getStatusCode == 409 =>
           //Google doesn't let you delete buckets that are full.
           //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
           //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
@@ -272,7 +272,7 @@ class HttpGoogleServicesDAO(
       blocking { query.execute }
       true
     }) recover {
-        case gjre: GoogleJsonResponseException if gjre.getDetails.getCode == StatusCodes.NotFound => false
+        case gjre: GoogleJsonResponseException if gjre.getStatusCode == StatusCodes.NotFound => false
     }
   }
 
@@ -300,7 +300,7 @@ class HttpGoogleServicesDAO(
   // these really should all be private, but we're opening up a few of these to allow integration testing
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
-      case gjre: GoogleJsonResponseException => gjre.getDetails.getCode/100 == 5
+      case gjre: GoogleJsonResponseException => gjre.getStatusCode/100 == 5
       case _ => false
     }
   }
