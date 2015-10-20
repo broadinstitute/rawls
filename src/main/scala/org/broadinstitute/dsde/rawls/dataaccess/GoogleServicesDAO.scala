@@ -37,9 +37,7 @@ trait GoogleServicesDAO {
     val SOURCE = "google"
     throwable match {
       case gjre: GoogleJsonResponseException =>
-        val statusCode =
-          if ( gjre.getDetails == null ) None
-          else StatusCodes.getForKey(gjre.getDetails.getCode)
+        val statusCode = StatusCodes.getForKey(gjre.getStatusCode)
         ErrorReport(SOURCE,ErrorReport.message(gjre),statusCode,ErrorReport.causes(gjre),Seq.empty)
       case _ =>
         ErrorReport(SOURCE,ErrorReport.message(throwable),None,ErrorReport.causes(throwable),throwable.getStackTrace)
