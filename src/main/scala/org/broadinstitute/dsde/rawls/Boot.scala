@@ -33,7 +33,7 @@ object Boot extends App {
     val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
     val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
 
-    dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
+    dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     val gcsConfig = conf.getConfig("gcs")
     val gcsDAO = new HttpGoogleServicesDAO(

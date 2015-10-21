@@ -7,8 +7,11 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{Matchers, FlatSpecLike}
+import scala.collection.mutable.{Map=>MMap}
 import spray.http.HttpCookie
+import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.util.{Failure, Try, Success}
 
 /**
  * Created by dvoet on 7/1/15.
@@ -37,8 +40,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
     expectMsgClass(15 seconds, classOf[Terminated])
     assertResult(true) {
-      dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
+      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
         }
       }
@@ -46,29 +49,44 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
-    watch(monitorRef)
+	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+	  watch(monitorRef)
 
-    testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
-    }
+	  //We're gonna store actor references here because actorSelection isn't super reliable.
+	  val wfActors = MMap[String, ActorRef]()
 
-    awaitCond({
-      dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
+	  //Give the submission monitor a chance to spawn the workflow actors first
+	  testData.submission1.workflows.foreach { workflow =>
+      awaitCond({
+        val tr = Try(Await.result(system.actorSelection(monitorRef.path / workflow.workflowId).resolveOne(100 milliseconds), Duration.Inf))
+        tr.foreach { actorRef =>
+          wfActors(workflow.workflowId) = actorRef
+        }
+        tr.isSuccess
+      }, 250 milliseconds)
+	  }
+
+	  //Tell all the workflows to move to Running
+	  testData.submission1.workflows.foreach { workflow =>
+		  wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Running), None), testActor)
+	  }
+
+	  awaitCond({
+      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
         }
       }
-    }, 15 seconds)
+	  }, 15 seconds)
 
-    testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("this.test" -> AttributeString(workflow.workflowId)))), testActor)
-    }
+	  testData.submission1.workflows.foreach { workflow =>
+		  wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Succeeded), Option(Map("this.test" -> AttributeString(workflow.workflowId)))), testActor)
+	  }
 
-    expectMsgClass(15 seconds, classOf[Terminated])
+	  expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
         assertResult(true) {
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
         }
@@ -91,8 +109,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, writeLock = false, txn) { context =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
         submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
           assertResult(WorkflowStatuses.Failed) {
             workflow.status
@@ -125,8 +143,22 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
+    //We're gonna store actor references here because actorSelection isn't super reliable.
+    val wfActors = MMap[String, ActorRef]()
+
+    //Give the submission monitor a chance to spawn the workflow actors first
     testData.submissionUpdateEntity.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(
+      awaitCond({
+        val tr = Try(Await.result(system.actorSelection(monitorRef.path / workflow.workflowId).resolveOne(100 milliseconds), Duration.Inf))
+        tr.foreach { actorRef =>
+          wfActors(workflow.workflowId) = actorRef
+        }
+        tr.isSuccess
+      }, 250 milliseconds)
+    }
+
+    testData.submissionUpdateEntity.workflows.foreach { workflow =>
+      wfActors(workflow.workflowId).tell(
         SubmissionMonitor.WorkflowStatusChange(
           workflow.copy(status = WorkflowStatuses.Succeeded, messages = Seq()),
           Some(Map("this.myAttribute" -> AttributeString("foo")))), testActor)
@@ -134,8 +166,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, writeLock=false, txn) { wsCtx =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { wsCtx =>
         val entity = entityDAO.get(
           wsCtx,
           testData.submissionUpdateEntity.submissionEntity.entityType,
@@ -162,7 +194,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource inTransaction { txn =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
       val workspace = workspaceDAO.loadContext(testData.wsName, txn).get.workspace
       assertResult(AttributeString("foo")) {
         workspace.attributes("myAttribute")

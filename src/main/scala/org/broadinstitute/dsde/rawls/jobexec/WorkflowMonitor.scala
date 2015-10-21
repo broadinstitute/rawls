@@ -62,7 +62,7 @@ class WorkflowMonitor(parent: ActorRef,
     executionServiceDAO.status(workflow.workflowId, userInfo) pipeTo self
   }
 
-  def updateWorkflowStatus(statusResponse: ExecutionServiceStatus) = datasource inTransaction { txn =>
+  def updateWorkflowStatus(statusResponse: ExecutionServiceStatus) = datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
     val status = WorkflowStatuses.withName(statusResponse.status)
 
     val refreshedWorkflow = containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), submission.submissionId, workflow.workflowId, txn).getOrElse(
@@ -93,7 +93,7 @@ class WorkflowMonitor(parent: ActorRef,
     }
   }
 
-  def attachOutputs(outputsResponse: ExecutionServiceOutputs): Unit = datasource inTransaction { txn =>
+  def attachOutputs(outputsResponse: ExecutionServiceOutputs): Unit = datasource.inTransaction() { txn =>
     val workspaceContext = getWorkspaceContext(workspaceName, txn)
     val statusMessage = withMethodConfig(workspaceContext, txn) { methodConfig =>
       val outputs = outputsResponse.outputs

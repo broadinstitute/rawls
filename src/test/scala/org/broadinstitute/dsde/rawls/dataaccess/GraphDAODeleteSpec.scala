@@ -24,7 +24,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
 
   "Graph objects shouldn't leave stray vertices behind when they're deleted:" - {
     "Empty workspace" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
           workspaceDAO.delete(wsName, txn)
@@ -36,7 +36,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
     }
 
     "Workspace with value attributes and lists" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(wsWithAttributeVals, txn)
           workspaceDAO.delete(wsName, txn)
@@ -48,10 +48,10 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
     }
 
     "Workspace with some entities" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+          withWorkspaceContext(workspace, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.aliquot2, txn)
             entityDAO.save(context, testData.sample1, txn)
@@ -65,11 +65,11 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
     }
 
     "Deleting entities" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
           val wsVerts = graph.getVertices.toList.size
-          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+          withWorkspaceContext(workspace, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.aliquot2, txn)
 
@@ -84,10 +84,10 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
     }
 
     "Deleting submissions" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+          withWorkspaceContext(workspace, txn) { context =>
             entityDAO.save(context, testData.aliquot1, txn)
             entityDAO.save(context, testData.sample1, txn)
             entityDAO.save(context, testData.sample2, txn)
@@ -109,10 +109,10 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
     }
 
     "Deleting method configs" in withEmptyTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
+      dataSource.inTransaction(writeLocks=Set(workspace.toWorkspaceName)) { txn =>
         txn.withGraph { graph =>
           workspaceDAO.save(workspace, txn)
-          withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+          withWorkspaceContext(workspace, txn) { context =>
             val wsVerts = graph.getVertices.toList.size
 
             methodConfigDAO.save(context, testData.methodConfig, txn)

@@ -72,8 +72,8 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   }
 
   private def handleTerminatedMonitor(submissionId: String, workflowId: String): Unit = {
-    val workflow = datasource inTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock = false, txn) { workspaceContext =>
+    val workflow = datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         containerDAO.workflowDAO.get(workspaceContext, submissionId, workflowId, txn).getOrElse(
           throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
         )
@@ -95,8 +95,8 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   }
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
-    val savedWorkflow = datasource inTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+    val savedWorkflow = datasource.inTransaction(writeLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         val saveOutputs = Try {
           workflowOutputsOption foreach { workflowOutputs =>
 
@@ -133,8 +133,8 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
 
   private def checkSubmissionStatus(): Unit = {
     system.log.debug("polling workflow status, submission {}", submission.submissionId)
-    datasource inTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock = true, txn) { workspaceContext =>
+    datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
           throw new RawlsException(s"submissions ${submission} does not exist")
         )
@@ -155,13 +155,12 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       }
     }
 
-  private def withWorkspaceContext[T](workspaceName: WorkspaceName, writeLock: Boolean, txn: RawlsTransaction)(op: (WorkspaceContext) => T ) = {
-      containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
-        case None => throw new RawlsException(s"workspace ${workspaceName} does not exist")
-        case Some(workspaceContext) =>
-          txn.withLock(workspaceContext.workspaceVertex, writeLock) {
-            op(workspaceContext)
-          }
-      }
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (WorkspaceContext) => T ) = {
+    assert( txn.readLocks.contains(workspaceName) || txn.writeLocks.contains(workspaceName),
+      s"Attempting to use context on workspace $workspaceName but it's not read or write locked! Add it to inTransaction or inFutureTransaction")
+    containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
+      case None => throw new RawlsException(s"workspace ${workspaceName} does not exist")
+      case Some(workspaceContext) => op(workspaceContext)
+    }
   }
 }
