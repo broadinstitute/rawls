@@ -12,7 +12,7 @@ import scala.collection.JavaConversions._
 class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   "GraphWorkspaceDAO" should "save a new workspace" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       val workspace2 = Workspace(
         namespace = testData.wsName.namespace,
         name = testData.wsName.name,
@@ -38,14 +38,14 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "save updates to an existing workspace" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       // for now, just save the workspace again (making sure it doesn't crash)
       workspaceDAO.save(testData.workspace, txn)
     }
   }
 
   it should "load a workspace" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       assertResult(Some(testData.workspace.copy(lastModified = testDate))) {
         workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace.copy(lastModified = testDate) )
       }
@@ -53,7 +53,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "return None when a workspace does not exist" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       assertResult(None) {
         new GraphWorkspaceDAO().loadContext(WorkspaceName(testData.workspace.namespace, "fnord"), txn)
       }
@@ -65,7 +65,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
 
   //what is a "short" workspace and why is this test the exact same as "load a workspace" from 2 tests above?
   it should "load the short version of a workspace" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       assertResult(Some(testData.workspace.copy(lastModified = testDate))) {
         workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn) map( _.workspace.copy(lastModified = testDate) )
       }
@@ -73,7 +73,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "show workspace in list" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       //we need to use a default time because we have no idea when the workspace was actually last modified, so the assert would fail otherwise
       val dateTime = DateTime.now
       assert {
@@ -83,7 +83,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "fail when attempting to put dots in attribute keys" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       val dottyWorkspace = Workspace(
         namespace = testData.wsName.namespace,
         name = "badness",
@@ -102,7 +102,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
   }
 
   it should "change lastModified date on a workspace after altering it" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction { txn =>
+    dataSource.inTransaction() { txn =>
       val beforeUpdate = workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn).get.workspace.lastModified
       workspaceDAO.save(testData.workspace.copy(attributes = testData.wsAttrs), txn)
 
@@ -126,8 +126,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         createdBy = "Mitt Romney",
         attributes = Map(reserved -> AttributeString("foo"))
       )
-      dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, writeLock = true, txn) { context =>
+      dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
           intercept[RawlsException] { workspaceDAO.save(e, txn) }
         }
       }

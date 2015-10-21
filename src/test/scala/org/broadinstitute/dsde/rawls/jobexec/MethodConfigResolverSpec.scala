@@ -77,7 +77,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   class ConfigData extends TestData {
     override def save(txn: RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, sampleGood, txn)
         entityDAO.save(context, sampleMissingValue, txn)
         entityDAO.save(context, sampleSet, txn)
@@ -97,8 +97,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
 
   "MethodConfigResolver" should {
     "resolve method config inputs" in withConfigData { dataSource =>
-      dataSource.inTransaction { txn =>
-        withWorkspaceContext(workspace, writeLock = false, txn) { context =>
+      dataSource.inTransaction(readLocks=Set(workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(workspace, txn) { context =>
           // success cases
           MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
           MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))

@@ -13,20 +13,10 @@ import scala.util.Success
  * Created by abaumann on 5/21/15.
  */
 class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
-  def withTestData(testCode:Graph => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
-      dataSource.inTransaction { txn =>
-        txn.withGraph { graph =>
-          testCode(graph);
-        }
-      }
-    }
-  }
-
   def withTestWorkspace(testCode: (WorkspaceContext, RawlsTransaction) => Any): Unit = {
     withDefaultTestDatabase { dataSource =>
-      dataSource inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, writeLock = true, txn) { workspaceContext =>
+      dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
           testCode(workspaceContext, txn)
         }
       }

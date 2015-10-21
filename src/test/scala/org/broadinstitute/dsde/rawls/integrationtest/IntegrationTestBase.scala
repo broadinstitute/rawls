@@ -76,7 +76,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
 
-    dataSource.inTransaction { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
+    dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,

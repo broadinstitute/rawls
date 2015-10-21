@@ -95,8 +95,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
 
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(newSample) {
               entityDAO.get(workspaceContext, newSample.entityType, newSample.name, txn).get
             }
@@ -144,8 +144,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(Some(Entity("newSample", "Sample", Map("newAttribute" -> AttributeString("foo"))))) {
               entityDAO.get(workspaceContext, "Sample", "newSample", txn)
             }
@@ -163,8 +163,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar"))))) {
               entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
             }
@@ -209,8 +209,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar"))))) {
               entityDAO.get(workspaceContext, testData.sample1.entityType, testData.sample1.name, txn)
             }
@@ -227,8 +227,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
 
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(testData.sample2) {
               entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get
             }
@@ -248,8 +248,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
 
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             val entityTypes = entityDAO.getEntityTypes(workspaceContext, txn)
             assertResult(entityTypes) {
               responseAs[Array[String]]
@@ -267,8 +267,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
 
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             val samples = entityDAO.list(workspaceContext, testData.sample2.entityType, txn).toSet
             assertResult(samples) {
               responseAs[Array[Entity]].toSet
@@ -296,8 +296,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          services.dataSource.inTransaction { txn =>
-            withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+          services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+            withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
               entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("boo")
             }
           }
@@ -313,8 +313,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
           status
         }
         assertResult(None) {
-          services.dataSource.inTransaction { txn =>
-            withWorkspaceContext(testData.workspace, writeLock = true, txn) { workspaceContext =>
+          services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+            withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
               entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn).get.attributes.get("bar")
             }
           }
@@ -377,8 +377,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(true) {
               entityDAO.get(workspaceContext, testData.sample2.entityType, "s2_changed", txn).isDefined
             }
@@ -394,8 +394,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NotFound) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(None) {
               entityDAO.get(workspaceContext, testData.sample2.entityType, "s2_changed", txn)
             }
@@ -411,8 +411,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
             assertResult(None) {
               entityDAO.get(workspaceContext, testData.sample2.entityType, testData.sample2.name, txn)
             }
@@ -469,7 +469,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { txn =>
+        services.dataSource.inTransaction(readLocks=Set(workspace2Request.toWorkspaceName)) { txn =>
           assertResult(workspace2Request) {
             val ws = workspaceDAO.loadContext(workspace2Request.toWorkspaceName, txn).get.workspace
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
@@ -482,7 +482,7 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
             assertResult(StatusCodes.Created) {
               status
             }
-            services.dataSource.inTransaction { txn =>
+            services.dataSource.inTransaction(readLocks=Set(workspace2Name)) { txn =>
               val workspaceContext = workspaceDAO.loadContext(workspace2Name, txn).get
               assertResult(z1) {
                 entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
@@ -497,8 +497,8 @@ class EntityApiServiceSpec extends FlatSpec with HttpService with ScalatestRoute
                 assertResult(StatusCodes.Created) {
                   status
                 }
-                services.dataSource.inTransaction { txn =>
-                  withWorkspaceContext(testData.workspace, writeLock = false, txn) { workspaceContext =>
+                services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+                  withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
                     assertResult(z1) {
                       entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
                     }

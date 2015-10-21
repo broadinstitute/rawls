@@ -12,7 +12,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
 
   "DataSource" should "commit txn" in {
     val ds = DataSource("memory:DataSource", "admin", "admin")
-    ds inTransaction { txn =>
+    ds.inTransaction() { txn =>
       txn withGraph { graph =>
         val v = graph.addVertex(null)
         v.setProperty("foo", "bar")
@@ -20,7 +20,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
     }
 
     assertResult(List("bar")) {
-      ds inTransaction { txn =>
+      ds.inTransaction() { txn =>
         txn withGraph { graph =>
           val l = graph.getVertices("foo", "bar").toList
           l.map(_.getProperty("foo").asInstanceOf[String])
@@ -32,7 +32,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
   it should "rollback txn on exception" in {
     val ds = DataSource("memory:DataSource", "admin", "admin")
     intercept[RuntimeException] {
-      ds inTransaction { txn =>
+      ds.inTransaction() { txn =>
         txn withGraph { graph =>
           val v = graph.addVertex(null)
           v.setProperty("foo2", "bar")
@@ -42,7 +42,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
     }
 
     assertResult(List()) {
-      ds inTransaction { txn =>
+      ds.inTransaction() { txn =>
         txn withGraph { graph =>
           val l = graph.getVertices("foo2", "bar").toList
           l.map(_.getProperty("foo2").asInstanceOf[String])
@@ -53,7 +53,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
 
   it should "rollback txn on call to rollback" in {
     val ds = DataSource("memory:DataSource", "admin", "admin")
-    ds inTransaction { txn =>
+    ds.inTransaction() { txn =>
       txn withGraph { graph =>
         val v = graph.addVertex(null)
         v.setProperty("foo2", "bar")
@@ -65,7 +65,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
     }
 
     assertResult(List()) {
-      ds inTransaction { txn =>
+      ds.inTransaction() { txn =>
         txn withGraph { graph =>
           val l = graph.getVertices("foo2", "bar").toList
           l.map(_.getProperty("foo2").asInstanceOf[String])
@@ -73,7 +73,7 @@ class DataSourceSpec extends FlatSpec with Matchers {
       }
     }
     assertResult(List()) {
-      ds inTransaction { txn =>
+      ds.inTransaction() { txn =>
         txn withGraph { graph =>
           val l = graph.getVertices("foo3", "bar").toList
           l.map(_.getProperty("foo3").asInstanceOf[String])

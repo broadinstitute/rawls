@@ -105,7 +105,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, sample1, txn)
         submissionDAO.save(context, submissionTestAbortMissingWorkflow, txn)
         submissionDAO.save(context, submissionTestAbortMalformedWorkflow, txn)
