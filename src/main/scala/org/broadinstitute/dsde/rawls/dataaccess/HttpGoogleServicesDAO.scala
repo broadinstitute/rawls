@@ -16,7 +16,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
@@ -31,10 +31,8 @@ import com.google.api.services.storage.{StorageScopes, Storage}
 import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAccessControl, ObjectAccessControl}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.{WorkspaceACLUpdate,WorkspaceAccessLevel}
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 
 import spray.http.StatusCodes
 
@@ -162,7 +160,7 @@ class HttpGoogleServicesDAO(
   }
 
   private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
-    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(toGroupName(workspaceName,accessLevel))
+    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel))
 
   private def newBucketAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
     new BucketAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
@@ -507,6 +505,5 @@ class HttpGoogleServicesDAO(
       WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevel.fromCanonicalString(accessLevelString.toUpperCase))
     }.toOption
   }
-  private def toGroupName(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = s"rawls ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}"
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 }

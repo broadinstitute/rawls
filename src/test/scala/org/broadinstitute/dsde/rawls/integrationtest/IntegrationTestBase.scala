@@ -37,6 +37,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     new GraphWorkspaceDAO(),
     new GraphEntityDAO(),
     new GraphMethodConfigurationDAO(),
+    new GraphAuthDAO(),
     new GraphSubmissionDAO()
   )
 
