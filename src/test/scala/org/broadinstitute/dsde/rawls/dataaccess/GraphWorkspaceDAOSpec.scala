@@ -21,7 +21,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Barack Obama",
-        attributes = Map("workspace_attrib" -> AttributeString("foo"))
+        attributes = Map("workspace_attrib" -> AttributeString("foo")),
+        accessLevels = Map.empty
       )
 
       workspaceDAO.save(workspace2, txn)
@@ -92,7 +93,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Mitt Romney",
-        attributes = Map("dots.dots.more.dots" -> AttributeString("foo"))
+        attributes = Map("dots.dots.more.dots" -> AttributeString("foo")),
+        accessLevels = Map.empty
       )
 
       intercept[RawlsException] {
@@ -124,7 +126,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Mitt Romney",
-        attributes = Map(reserved -> AttributeString("foo"))
+        attributes = Map(reserved -> AttributeString("foo")),
+        accessLevels = Map.empty
       )
       dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
         withWorkspaceContext(testData.workspace, txn) { context =>
