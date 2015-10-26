@@ -29,11 +29,13 @@ object VertexSchema {
   val Submission = vertexClassOf[org.broadinstitute.dsde.rawls.model.Submission]
   val Workflow = vertexClassOf[org.broadinstitute.dsde.rawls.model.Workflow]
   val WorkflowFailure = vertexClassOf[org.broadinstitute.dsde.rawls.model.WorkflowFailure]
+  val User = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsUser]
+  val Group = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsGroup]
 
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, Map)
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, Map)
 
   def vertexClassOf[T: TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString
@@ -238,6 +240,14 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Submission)).filter(hasPropertyValue("status",SubmissionStatuses.Submitted.toString))
   }
 
+  def userPipeline(db: Graph, userSubjectId: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",userSubjectId))
+  }
+
+  def groupPipeline(db: Graph, groupName: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",groupName))
+  }
+
   // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
@@ -266,6 +276,14 @@ trait GraphDAO {
       val workspaceName = WorkspaceName(workspaceVertex.getProperty[String]("namespace"), workspaceVertex.getProperty[String]("name"))
       (workspaceName, submissionVertex)
     }
+  }
+
+  def getUserVertex(db: Graph, userSubjectId: String) = {
+    getSinglePipelineResult(userPipeline(db, userSubjectId))
+  }
+
+  def getGroupVertex(db: Graph, groupName: String) = {
+    getSinglePipelineResult(groupPipeline(db, groupName))
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
@@ -362,6 +380,18 @@ trait GraphDAO {
     addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }
 
+  private def saveUserRef(ref: RawlsUserRef, propName: String, vertex: Vertex, db: Graph): Unit =
+    getUserVertex(db, ref.userSubjectId) match {
+      case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
+      case None => throw new RawlsException("Cannot find User corresponding to " + ref.userSubjectId)
+    }
+
+  private def saveGroupRef(ref: RawlsGroupRef, propName: String, vertex: Vertex, db: Graph): Unit =
+    getGroupVertex(db, ref.groupName) match {
+      case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
+      case None => throw new RawlsException("Cannot find Group corresponding to " + ref.groupName)
+    }
+
   private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     removeProperty(propName, vertex, graph) //remove any previously defined value
     (tpe, valToSave) match {
@@ -383,6 +413,10 @@ trait GraphDAO {
 
       //set the values type to Any, but it's irrelevant as the map is empty so no values will be serialized
       case (_, AttributeEmptyList) => saveMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+
+      //UserAuthRef types.
+      case (_, value:RawlsUserRef) => saveUserRef(value, propName, vertex, graph)
+      case (_, value:RawlsGroupRef) => saveGroupRef(value, propName, vertex, graph)
 
       //Enums.
       case (_, value:RawlsEnumeration[_]) => vertex.setProperty(propName, value.toString)
@@ -510,6 +544,16 @@ trait GraphDAO {
     AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
   }
 
+  private def loadUserRef(propName: String, vertex: Vertex): RawlsUserRef = {
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
+    RawlsUserRef(refVtx.getProperty("userSubjectId"))
+  }
+
+  private def loadGroupRef(propName: String, vertex: Vertex): RawlsGroupRef = {
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
+    RawlsGroupRef(refVtx.getProperty("groupName"))
+  }
+
   private def loadAttributeList[T](propName: String, vertex: Vertex): Seq[T] = {
     loadProperty(typeOf[Seq[AttributeValue]], propName, vertex).asInstanceOf[Seq[T]]
   }
@@ -543,6 +587,10 @@ trait GraphDAO {
       case tp if tp <:< typeOf[AttributeValueList] => AttributeValueList(loadAttributeList[AttributeValue](propName, vertex))
       case tp if tp <:< typeOf[AttributeEntityReferenceList] => AttributeEntityReferenceList(loadAttributeList[AttributeEntityReference](propName, vertex))
       case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex)
+
+      //UserAuthRef types.
+      case tp if tp <:< typeOf[RawlsUserRef] => loadUserRef(propName, vertex)
+      case tp if tp <:< typeOf[RawlsGroupRef] => loadGroupRef(propName, vertex)
 
       //Enums.
       case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))

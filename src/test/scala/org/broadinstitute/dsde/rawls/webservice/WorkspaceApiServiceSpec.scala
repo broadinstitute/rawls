@@ -102,10 +102,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   class TestWorkspaces() extends TestData {
     val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")) )
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")) )
-    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")) )
-    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")), Map.empty)
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")), Map.empty)
+    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")), Map.empty)
+    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")), Map.empty)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)

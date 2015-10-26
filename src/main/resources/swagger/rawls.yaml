@@ -2621,6 +2621,7 @@ definitions:
       - createdDate
       - createdBy
       - attributes
+      - accessLevels
     properties:
       namespace:
         type: string
@@ -2647,6 +2648,13 @@ definitions:
         description: The user who created the workspace
       attributes:
         $ref: ''
+        description: Map[String, Attribute]
+      accessLevels:
+         $ref: ''
+         description: Map[String, RawlsGroupRef]
+      isLocked:
+        type: boolean
+        description: Can the Workspace currently be modified?
 
   WorkspaceSubmissionStats:
     description: Statistics about submissions in a workspace
