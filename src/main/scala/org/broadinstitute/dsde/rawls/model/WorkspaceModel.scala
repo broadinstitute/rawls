@@ -56,6 +56,7 @@ case class Workspace(
                       lastModified: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute],
+                      accessLevels: Map[String, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -233,7 +234,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat9(Workspace)
+  implicit val RawlsGroupRefFormat = UserAuthJsonSupport.RawlsGroupRefFormat
+
+  implicit val WorkspaceFormat = jsonFormat10(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 

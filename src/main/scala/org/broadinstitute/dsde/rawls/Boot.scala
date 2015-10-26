@@ -57,6 +57,7 @@ object Boot extends App {
       new GraphWorkspaceDAO(),
       new GraphEntityDAO(),
       new GraphMethodConfigurationDAO(),
+      new GraphAuthDAO(),
       new GraphSubmissionDAO()
     )
 

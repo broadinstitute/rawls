@@ -16,11 +16,11 @@ import org.broadinstitute.dsde.rawls.model._
  */
 class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture {
   val wsName = WorkspaceName("myNamespace", "myWorkspace")
-  val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty[String, Attribute] )
+  val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
   val wsWithAttributeVals = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser",
     Map(
       "str" -> AttributeString("str"), "num" -> AttributeNumber(4), "bool" -> AttributeBoolean(true),
-      "empty" -> AttributeEmptyList, "valueList" -> AttributeValueList(Seq(AttributeNumber(4), AttributeNumber(5))) ))
+      "empty" -> AttributeEmptyList, "valueList" -> AttributeValueList(Seq(AttributeNumber(4), AttributeNumber(5))) ), Map.empty)
 
   "Graph objects shouldn't leave stray vertices behind when they're deleted:" - {
     "Empty workspace" in withEmptyTestDatabase { dataSource =>
