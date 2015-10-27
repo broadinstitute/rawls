@@ -392,6 +392,9 @@ trait GraphDAO {
       case (_, seq:Seq[_]) => saveMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
       case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
 
+      case (_, set:Set[_]) => saveMap( getTypeParams(tpe).head, propName, set.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Set[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+
       case (_, map:Map[String,_])  => saveMap( getTypeParams(tpe).last, propName, map, vertex, wsc, graph)
       case (tp, _) if tp <:< typeOf[Map[String,_]] => saveMap( getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph)
 
@@ -546,6 +549,7 @@ trait GraphDAO {
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
       case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Set[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
       case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex)
       case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
 
