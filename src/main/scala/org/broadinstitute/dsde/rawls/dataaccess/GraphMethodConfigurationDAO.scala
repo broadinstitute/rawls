@@ -38,7 +38,7 @@ class GraphMethodConfigurationDAO extends MethodConfigurationDAO with GraphDAO {
 
   /** creates or replaces a method configuration */
   override def save(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): MethodConfiguration = txn withGraph { graph =>
-    saveSubObject[MethodConfiguration](methodConfigEdge, methodConfiguration, workspaceContext.workspaceVertex, workspaceContext, graph )
+    saveSubObject[MethodConfiguration](methodConfigEdge, methodConfiguration, workspaceContext.workspaceVertex, Some(workspaceContext), graph )
     methodConfiguration
   }
 }
