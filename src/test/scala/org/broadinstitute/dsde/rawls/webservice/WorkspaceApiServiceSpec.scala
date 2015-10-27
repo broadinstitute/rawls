@@ -51,7 +51,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
       // just return the cookie text as the common name
-      provide(UserInfo(user, OAuth2BearerToken("token"), 123, "Joe Biden", "123456789876543212345"))
+      provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212345"))
     }
   }
 

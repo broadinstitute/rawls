@@ -22,7 +22,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   this : org.scalatest.BeforeAndAfterAll with org.scalatest.Suite =>
 
   val testDate = new DateTime()
-  val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "Joe Biden", "123456789876543212345")
+  val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
 
   override def beforeAll: Unit = {
     // TODO find a better way to set the log level. Nothing else seems to work.

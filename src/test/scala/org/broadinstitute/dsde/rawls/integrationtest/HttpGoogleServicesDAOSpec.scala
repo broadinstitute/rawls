@@ -31,8 +31,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   val testBucket = gcsDAO.getBucketName(testWorkspaceId)
   val testWorkspace = WorkspaceName(testProject, "someName")
 
-  val testCreator = UserInfo(gcsDAO.clientSecrets.getDetails.get("client_email").toString, OAuth2BearerToken("testtoken"), 123, "Mitten Romney", "123456789876543212345")
-  val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123, "Joe Biden", "123456789876543212345")
+  val testCreator = UserInfo(gcsDAO.clientSecrets.getDetails.get("client_email").toString, OAuth2BearerToken("testtoken"), 123, "123456789876543212345")
+  val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123, "123456789876543212345")
 
   override def afterAll() = {
     Try(gcsDAO.deleteBucket(testCreator,testWorkspaceId)) // one last-gasp attempt at cleaning up
