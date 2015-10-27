@@ -58,7 +58,6 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     addHeader(RawHeader("OIDC_access_token", googleCred.getAccessToken)) ~>
     addHeader(RawHeader("OIDC_CLAIM_expires_in", String.valueOf(googleCred.getExpiresInSeconds))) ~>
     addHeader(RawHeader("OIDC_CLAIM_email", gcsDAO.clientSecrets.getDetails.get("client_email").toString)) ~>
-    addHeader(RawHeader("OIDC_CLAIM_name", "Integration Test")) ~>
     addHeader(RawHeader("OIDC_CLAIM_sub", "it_123456789876543212"))
   }
 
