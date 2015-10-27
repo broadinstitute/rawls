@@ -26,6 +26,24 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     super.afterAll
   }
 
+  //actorSelection isn't super reliable, so this function waits for workflow actors to spin up and returns a map from workflowId -> wfActor
+  private def waitForWorkflowActors(submission: Submission, subMonActor: TestActorRef[SubmissionMonitor]) = {
+    val wfActors = MMap[String, ActorRef]()
+
+    //Give the submission monitor a chance to spawn the workflow actors first
+    submission.workflows.foreach { workflow =>
+      awaitCond({
+        val tr = Try(Await.result(system.actorSelection(subMonActor.path / workflow.workflowId).resolveOne(100 milliseconds), Duration.Inf))
+        tr.foreach { actorRef =>
+          wfActors(workflow.workflowId) = actorRef
+        }
+        tr.isSuccess
+      }, 250 milliseconds)
+    }
+
+    wfActors
+  }
+
   "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(
       testData.wsName,
@@ -52,19 +70,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
 	  watch(monitorRef)
 
-	  //We're gonna store actor references here because actorSelection isn't super reliable.
-	  val wfActors = MMap[String, ActorRef]()
-
-	  //Give the submission monitor a chance to spawn the workflow actors first
-	  testData.submission1.workflows.foreach { workflow =>
-      awaitCond({
-        val tr = Try(Await.result(system.actorSelection(monitorRef.path / workflow.workflowId).resolveOne(100 milliseconds), Duration.Inf))
-        tr.foreach { actorRef =>
-          wfActors(workflow.workflowId) = actorRef
-        }
-        tr.isSuccess
-      }, 250 milliseconds)
-	  }
+	  val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
 
 	  //Tell all the workflows to move to Running
 	  testData.submission1.workflows.foreach { workflow =>
@@ -103,8 +109,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
+    val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
+
     testData.submission1.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString("message"))), None), testActor)
+      wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString("message"))), None), testActor)
     }
 
     expectMsgClass(15 seconds, classOf[Terminated])
@@ -128,13 +136,15 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
+    val wfActors = waitForWorkflowActors(testData.submissionTerminateTest, monitorRef)
+
     // set each workflow to one of the terminal statuses, there should be 4 of each
     assertResult(WorkflowStatuses.terminalStatuses.size) {
       testData.submissionTerminateTest.workflows.size
     }
 
     testData.submissionTerminateTest.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status), None), testActor)
+      wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status), None), testActor)
     }
   }
 
@@ -143,19 +153,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
-    //We're gonna store actor references here because actorSelection isn't super reliable.
-    val wfActors = MMap[String, ActorRef]()
-
-    //Give the submission monitor a chance to spawn the workflow actors first
-    testData.submissionUpdateEntity.workflows.foreach { workflow =>
-      awaitCond({
-        val tr = Try(Await.result(system.actorSelection(monitorRef.path / workflow.workflowId).resolveOne(100 milliseconds), Duration.Inf))
-        tr.foreach { actorRef =>
-          wfActors(workflow.workflowId) = actorRef
-        }
-        tr.isSuccess
-      }, 250 milliseconds)
-    }
+    val wfActors = waitForWorkflowActors(testData.submissionUpdateEntity, monitorRef)
 
     testData.submissionUpdateEntity.workflows.foreach { workflow =>
       wfActors(workflow.workflowId).tell(
@@ -185,8 +183,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
+    val wfActors = waitForWorkflowActors(testData.submissionUpdateWorkspace, monitorRef)
+
     testData.submissionUpdateWorkspace.workflows.foreach { workflow =>
-      system.actorSelection(monitorRef.path / workflow.workflowId).tell(
+      wfActors(workflow.workflowId).tell(
         SubmissionMonitor.WorkflowStatusChange(
           workflow.copy(status = WorkflowStatuses.Succeeded, messages = Seq()),
           Some(Map("workspace.myAttribute" -> AttributeString("foo")))), testActor)
