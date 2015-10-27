@@ -23,7 +23,7 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
     val vertex = getWorkspaceVertex(db, workspace.toWorkspaceName).getOrElse(addVertex(db, VertexSchema.Workspace))
     // note that the vertex gets passed in twice (directly and through WorkspaceContext)
     val workspaceContext = WorkspaceContext(workspace, vertex)
-    saveObject[Workspace](workspace, vertex, workspaceContext, db)
+    saveObject[Workspace](workspace, vertex, Some(workspaceContext), db)
     WorkspaceContext(loadContext(workspace.toWorkspaceName, txn).get.workspace, vertex)
   }
 
