@@ -197,7 +197,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, writeLock = true, txn) { context =>
+      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, aliquot2, txn)
         entityDAO.save(context, sample1, txn)
@@ -257,7 +257,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       VertexSchema.createVertexClasses(graph)
 
       // save the data inside a transaction to cause data to be committed
-      dataSource inTransaction { txn =>
+      dataSource.inTransaction() { txn =>
         data.save(txn)
       }
 
@@ -270,10 +270,15 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     }
   }
 
-  def withWorkspaceContext[T](workspace: Workspace, writeLock: Boolean, txn: RawlsTransaction)(testCode: WorkspaceContext => T) = {
-    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException(s"Unable to load workspaceContext for ${workspace.toWorkspaceName}"))
-    txn.withLock(workspaceContext.workspaceVertex, writeLock) {
-      testCode(workspaceContext)
+  /**
+   * Only set bSkipLockCheck = true from fixture save calls.
+   */
+  def withWorkspaceContext[T](workspace: Workspace, txn: RawlsTransaction, bSkipLockCheck:Boolean=false)(testCode: WorkspaceContext => T) = {
+    if( !bSkipLockCheck ) {
+      assert( txn.readLocks.contains(workspace.toWorkspaceName) || txn.writeLocks.contains(workspace.toWorkspaceName),
+        s"Attempting to use context on workspace ${workspace.toWorkspaceName} but it's not read or write locked! Add it to inTransaction or inFutureTransaction")
     }
+    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException(s"Unable to load workspaceContext for ${workspace.toWorkspaceName}"))
+    testCode(workspaceContext)
   }
 }

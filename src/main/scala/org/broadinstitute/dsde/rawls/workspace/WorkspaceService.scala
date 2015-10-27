@@ -156,15 +156,15 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceRequest.toWorkspaceName)) { txn =>
       withNewWorkspaceContext(workspaceRequest, txn) { workspaceContext =>
         RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path)
       }
     }
 
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=false, txn) { workspaceContext =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         gcsDAO.getMaximumAccessLevel(userInfo.userEmail,workspaceContext.workspace.workspaceId) flatMap { accessLevel =>
           if (accessLevel < WorkspaceAccessLevel.Read)
             Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
@@ -182,7 +182,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Owner, txn) { workspaceContext =>
         //Attempt to abort any running workflows so they don't write any more to the bucket.
         //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
@@ -201,7 +201,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           try {
@@ -233,7 +233,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       } map { ownersAndPermissionsPairs =>
         for ((owners, permissionsPair) <- ownersAndPermissionsPairs) yield {
           // database query to get details
-          dataSource inTransaction { txn =>
+          dataSource.inTransaction() { txn =>
             containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn) match {
               case Some(workspaceContext) =>
                 Option(WorkspaceListResponse(permissionsPair.accessLevel,
@@ -269,7 +269,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(sourceWorkspaceName), writeLocks=Set(destWorkspaceName)) { txn =>
       withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevel.Read,txn) { sourceWorkspaceContext =>
         withNewWorkspaceContext(WorkspaceRequest(destWorkspaceName.namespace,destWorkspaceName.name,sourceWorkspaceContext.workspace.attributes),txn) { destWorkspaceContext =>
           containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
@@ -284,8 +284,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=false, txn) { workspaceContext =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           gcsDAO.getACL(workspaceContext.workspace.workspaceId) map { RequestComplete(StatusCodes.OK,_) }
         }
@@ -293,8 +293,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           gcsDAO.updateACL(userInfo.userEmail, workspaceContext.workspace.workspaceId, aclUpdates).map( _ match {
             case None => RequestComplete(StatusCodes.OK)
@@ -305,8 +305,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           Future {
             if ( !containerDAO.submissionDAO.list(workspaceContext,txn).forall(_.status.isDone) )
@@ -322,8 +322,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
-      withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace) {
           Future {
             if ( workspaceContext.workspace.isLocked ) {
@@ -336,7 +336,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(entityCopyDef.sourceWorkspace), writeLocks=Set(entityCopyDef.destinationWorkspace)) { txn =>
       //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
       //we can't upgrade a read lock to a write.
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevel.Write, txn) { destWorkspaceContext =>
@@ -363,7 +363,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           containerDAO.entityDAO.get(workspaceContext, entity.entityType, entity.name, txn) match {
@@ -375,7 +375,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           val results = entityUpdates.map { entityUpdate =>
@@ -404,7 +404,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           val results = entityUpdates.map { entityUpdate =>
@@ -432,21 +432,21 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         Future.successful(RequestComplete(StatusCodes.OK, containerDAO.entityDAO.getEntityTypes(workspaceContext, txn)))
       }
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         Future.successful(RequestComplete(StatusCodes.OK, containerDAO.entityDAO.list(workspaceContext, entityType, txn).toList))
       }
     }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
           Future.successful(PerRequest.RequestComplete(StatusCodes.OK, entity))
@@ -455,7 +455,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
           Future {
@@ -474,7 +474,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def deleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
           Future {
@@ -486,7 +486,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withEntity(workspaceContext, entityType, entityName, txn) { entity =>
           Future {
@@ -502,7 +502,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         Future {
           txn withGraph { graph =>
@@ -631,7 +631,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
           Future { PerRequest.RequestComplete(StatusCodes.OK, validateMCExpressions(methodConfig)) }
@@ -641,7 +641,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
@@ -655,7 +655,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def deleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
           Future {
@@ -667,7 +667,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfiguration =>
           Future {
@@ -683,7 +683,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         Future {
           containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
@@ -695,7 +695,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
           Future.successful(PerRequest.RequestComplete(StatusCodes.OK, methodConfig))
@@ -703,8 +703,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+  def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] = {
+    dataSource.inFutureTransaction(readLocks=Set(mcnp.source.workspaceName), writeLocks=Set(mcnp.destination.workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(mcnp.destination.workspaceName, WorkspaceAccessLevel.Write, txn) { destContext =>
         withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevel.Read, txn) { sourceContext =>
           containerDAO.methodConfigurationDAO.get(sourceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
@@ -714,9 +714,10 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         }
       }
     }
+  }
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(methodRepoQuery.destination.workspaceName)) { txn =>
       withWorkspaceContextAndPermissions( methodRepoQuery.destination.workspaceName, WorkspaceAccessLevel.Write, txn ) { destContext =>
         methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap { agoraEntityOption =>
           agoraEntityOption match {
@@ -739,15 +740,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = dataSource inFutureTransaction { txn =>
-    withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
-      withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, txn) { methodConfig =>
-        import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
-        methodRepoDAO.postMethodConfig(
-          methodRepoQuery.methodRepoNamespace,
-          methodRepoQuery.methodRepoName,
-          methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace, name = methodRepoQuery.methodRepoName),
-          userInfo) map { RequestComplete(StatusCodes.OK, _) }
+  def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
+    dataSource.inFutureTransaction(readLocks=Set(methodRepoQuery.source.workspaceName)) { txn =>
+      withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, txn) { methodConfig =>
+          import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+          methodRepoDAO.postMethodConfig(
+            methodRepoQuery.methodRepoNamespace,
+            methodRepoQuery.methodRepoName,
+            methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace, name = methodRepoQuery.methodRepoName),
+            userInfo) map { RequestComplete(StatusCodes.OK, _) }
+        }
       }
     }
   }
@@ -764,7 +767,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
         // to ensure it is evaluated within the transaction
@@ -786,7 +789,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def validateMethodConfig(workspaceName: WorkspaceName,
     methodConfigurationNamespace: String, methodConfigurationName: String,
     entityType: String, entityName: String, userInfo: UserInfo): Future[PerRequestMessage] = {
-      dataSource inFutureTransaction { txn =>
+      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
             withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
@@ -809,7 +812,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         Future.successful(RequestComplete(StatusCodes.OK, containerDAO.submissionDAO.list(workspaceContext, txn).toList))
       }
@@ -862,7 +865,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, txn) { submission =>
           Future.successful(RequestComplete(StatusCodes.OK, submission))
@@ -872,7 +875,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         abortSubmission(workspaceContext, submissionId, txn)
       }
@@ -926,7 +929,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   /**
    * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, txn) { submission =>
           withWorkflow(workspaceName, submission, workflowId) { workflow =>
@@ -951,7 +954,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Read, txn) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, txn) { submission =>
           withWorkflow(workspaceName, submission, workflowId) { workflow =>
@@ -1015,7 +1018,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def listAllActiveSubmissions() = {
     asAdmin {
-      dataSource inFutureTransaction { txn =>
+      dataSource.inFutureTransaction() { txn =>
         Future {
           RequestComplete(StatusCodes.OK, containerDAO.submissionDAO.listAllActiveSubmissions(txn).toList)
         }
@@ -1025,8 +1028,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
     asAdmin {
-      dataSource inFutureTransaction { txn =>
-        withWorkspaceContext(workspaceName, writeLock=true, txn) { workspaceContext =>
+      dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, txn)
         }
       }
@@ -1054,18 +1057,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    withWorkspaceContext(workspaceName, accessLevel >= WorkspaceAccessLevel.Write, txn) { workspaceContext =>
+    withWorkspaceContext(workspaceName, txn) { workspaceContext =>
       requireAccess(workspaceContext.workspace, accessLevel) { op(workspaceContext) }
     }
   }
 
-  private def withWorkspaceContext(workspaceName: WorkspaceName, writeLock: Boolean, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]) = {
+  private def withWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]) = {
+    assert( txn.readLocks.contains(workspaceName) || txn.writeLocks.contains(workspaceName),
+            s"Attempting to use context on workspace $workspaceName but it's not read or write locked! Add it to inTransaction or inFutureTransaction")
     containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
       case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-      case Some(workspaceContext) =>
-        txn.withLock(workspaceContext.workspaceVertex, writeLock) {
-          op(workspaceContext)
-        }
+      case Some(workspaceContext) => op(workspaceContext)
     }
   }
 
@@ -1208,7 +1210,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
    ( op: (RawlsTransaction, WorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource inFutureTransaction { txn =>
+    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevel.Write, txn) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, txn) { methodConfig =>
           withMethodInputs(methodConfig) { (wdl,methodInputs) =>

@@ -149,7 +149,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       workspaceDAO.save(workspaceReader, txn)
       workspaceDAO.save(workspaceNoAccess, txn)
 
-      withWorkspaceContext(workspaceWriter, writeLock = true, txn) { ctx =>
+      withWorkspaceContext(workspaceWriter, txn, bSkipLockCheck=true) { ctx =>
         entityDAO.save(ctx, sample1, txn)
         entityDAO.save(ctx, sample2, txn)
         entityDAO.save(ctx, sample3, txn)
@@ -192,7 +192,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { txn =>
+        services.dataSource.inTransaction() { txn =>
           assertResult(newWorkspace) {
             val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
@@ -216,7 +216,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction { txn =>
+        services.dataSource.inTransaction() { txn =>
           assertResult(
             WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
             ){
@@ -245,7 +245,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
       }
-      services.dataSource.inTransaction { txn =>
+      services.dataSource.inTransaction() { txn =>
         assertResult(None) {
           workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn)
         }
@@ -259,7 +259,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction { txn =>
+        services.dataSource.inTransaction() { txn =>
           assertResult(Set(
             WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
             WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
@@ -310,7 +310,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          services.dataSource.inTransaction { txn =>
+          services.dataSource.inTransaction() { txn =>
             workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
@@ -324,7 +324,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
 
         assertResult(None) {
-          services.dataSource.inTransaction { txn =>
+          services.dataSource.inTransaction() { txn =>
             workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
@@ -340,12 +340,12 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
 
-        services.dataSource.inTransaction { txn =>
-          withWorkspaceContext(testData.workspace, writeLock = false, txn) { sourceWorkspaceContext =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName), writeLocks=Set(workspaceCopy)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
             val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy, txn).get.workspace
             assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
-            withWorkspaceContext(copiedWorkspace, writeLock = false, txn) { copiedWorkspaceContext =>
+            withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
               //Name, namespace, creation date, and owner might change, so this is all that remains.
               assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
                 entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet

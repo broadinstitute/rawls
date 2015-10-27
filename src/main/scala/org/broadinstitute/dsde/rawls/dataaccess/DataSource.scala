@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
+import java.util.concurrent.locks.{Lock, StampedLock, ReadWriteLock, ReentrantReadWriteLock}
 
 import com.tinkerpop.blueprints.Element
 import com.tinkerpop.blueprints.impls.orient.OrientElement
@@ -11,11 +11,21 @@ import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 
 object DataSource {
+  /**
+   * We have to use JVM locks because Orient refuses to lock remote databases
+   */
+  var wsLocks = TrieMap[WorkspaceName, StampedLock]()
+
+  private def getLock(ws: WorkspaceName): StampedLock = {
+    wsLocks.getOrElseUpdate(ws, new StampedLock())
+  }
+
   def apply(url: String, user: String, password: String, minPoolSize: Int, maxPoolSize: Int)(implicit executionContext: ExecutionContext) = {
     val factory: OrientGraphFactory = createFactory(url, user, password)
 // db pooling disabled: https://broadinstitute.atlassian.net/browse/DSDEEPB-1589
@@ -39,11 +49,32 @@ object DataSource {
 }
 
 class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: ExecutionContext) extends LazyLogging {
-  def inTransaction[T](f: RawlsTransaction => T): T = {
+
+  private def lockTxn(txn: RawlsTransaction): Unit = {
+    txn.readLocks.foreach { readWs =>
+      DataSource.getLock(readWs).readLock()
+    }
+    txn.writeLocks.foreach { writeWs =>
+      DataSource.getLock(writeWs).writeLock()
+    }
+  }
+
+  private def unlockTxn(txn: RawlsTransaction): Unit = {
+    txn.writeLocks.foreach { writeWs =>
+      DataSource.getLock(writeWs).tryUnlockWrite()
+    }
+    txn.readLocks.foreach { readWs =>
+      DataSource.getLock(readWs).tryUnlockRead()
+    }
+  }
+
+  def inTransaction[T](readLocks: Set[WorkspaceName] = Set.empty[WorkspaceName],
+                       writeLocks: Set[WorkspaceName] = Set.empty[WorkspaceName])(f: RawlsTransaction => T): T = {
     val graph = graphFactory.getTx
+    graph.begin()
+    val txn: RawlsTransaction = new RawlsTransaction(graph, this, readLocks -- writeLocks, writeLocks )
     try {
-      graph.begin()
-      val txn: RawlsTransaction = new RawlsTransaction(graph, this)
+      lockTxn(txn)
       val result = f(txn)
       completeTransaction(txn)
       result
@@ -53,6 +84,7 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
         throw t
     } finally {
       graph.shutdown()
+      unlockTxn(txn)
     }
   }
 
@@ -61,10 +93,12 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
    * @param f
    * @tparam T
    */
-  def inFutureTransaction[T](f: RawlsTransaction => Future[T]): Future[T] = {
+  def inFutureTransaction[T](readLocks: Set[WorkspaceName] = Set.empty[WorkspaceName],
+                             writeLocks: Set[WorkspaceName] = Set.empty[WorkspaceName])(f: RawlsTransaction => Future[T]): Future[T] = {
     val graph = graphFactory.getTx
     graph.begin()
-    val txn: RawlsTransaction = new RawlsTransaction(graph, this)
+    val txn: RawlsTransaction = new RawlsTransaction(graph, this, readLocks -- writeLocks, writeLocks)
+    lockTxn(txn)
     val resultFuture = f(txn)
 
     resultFuture.transform( { result =>
@@ -79,11 +113,13 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
           throw new RawlsException(s"concurrent modification exception modifying ${props}", t)
         case t: Throwable =>
           throw t
+      } finally {
+        unlockTxn(txn)
       }
       result
     }, { throwable =>
       graph.makeActive()
-      completeTransactionOnException(graph)
+      completeTransactionOnException(graph, txn)
       throwable
     })
   }
@@ -101,56 +137,23 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
     }
   }
 
-  def completeTransactionOnException(graph: OrientGraph): Unit = {
+  def completeTransactionOnException(graph: OrientGraph, rawlsTransaction: RawlsTransaction): Unit = {
     try {
       graph.rollback()
     } finally {
       graph.shutdown()
+      unlockTxn(rawlsTransaction)
     }
   }
 
   def shutdown() = graphFactory.close()
 }
 
-class RawlsTransaction(val graph: OrientGraph, dataSource: DataSource) {
+class RawlsTransaction(val graph: OrientGraph,
+                       dataSource: DataSource,
+                       val readLocks: Set[WorkspaceName],
+                       val writeLocks: Set[WorkspaceName])(implicit executionContext: ExecutionContext) {
   private val rollbackOnly = new AtomicBoolean(false)
-
-  /**
-   * We have to use JVM locks because Orient refuses to lock remote databases
-   */
-  var elemLocks = TrieMap[Element, ReentrantReadWriteLock]()
-
-  private def getElemLock(elem: Element): ReentrantReadWriteLock = {
-    elemLocks.getOrElseUpdate(elem, new ReentrantReadWriteLock())
-  }
-
-  def withWriteLock[T](elem: Element) (op: => T): T = {
-    val wl = getElemLock(elem).writeLock()
-    try {
-      wl.lock()
-      op
-    } finally {
-      wl.unlock()
-    }
-  }
-
-  def withReadLock[T](elem: Element) (op: => T): T = {
-    val rl = getElemLock(elem).readLock()
-    try {
-      rl.lock()
-      op
-    } finally {
-      rl.unlock()
-    }
-  }
-
-  def withLock[T](elem: Element, writeLock: Boolean)(op: => T): T = {
-    if( writeLock ) {
-      withWriteLock(elem)(op)
-    } else {
-      withReadLock(elem)(op)
-    }
-  }
 
   def withGraph[T](f: Graph => T) = {
     // because transactions are spanning threads we need to make sure the graph is active
