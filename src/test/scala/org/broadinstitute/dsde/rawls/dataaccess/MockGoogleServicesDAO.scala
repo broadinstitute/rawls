@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import WorkspaceACLJsonSupport._
 import spray.json._
 import scala.concurrent.Future
+import scala.util.Try
 
 object MockGoogleServicesDAO extends GoogleServicesDAO {
 
@@ -55,4 +57,6 @@ object MockGoogleServicesDAO extends GoogleServicesDAO {
   override def deleteAdmin(userId: String): Future[Unit] = Future.successful(adminList -= userId)
 
   override def listAdmins(): Future[Seq[String]] = Future.successful(adminList.toSeq)
+
+  override def createProxyGroup(userInfo: UserInfo): Future[Unit] = Future.successful(Unit)
 }

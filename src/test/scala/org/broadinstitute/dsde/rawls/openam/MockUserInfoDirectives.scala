@@ -11,6 +11,6 @@ import scala.concurrent.{Future, ExecutionContext}
 trait MockUserInfoDirectives extends UserInfoDirectives {
   def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
     // just return the cookie text as the common name
-    provide(UserInfo("test_token", OAuth2BearerToken("token"), 123))
+    provide(UserInfo("test_token", OAuth2BearerToken("token"), 123, "Joe Biden", "123456789876543212345"))
   }
 }

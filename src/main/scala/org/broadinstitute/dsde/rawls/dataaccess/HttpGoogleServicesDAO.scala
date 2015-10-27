@@ -297,6 +297,19 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  def createProxyGroup(userInfo: UserInfo): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(userInfo)).setName(userInfo.userEmail))
+        blocking {
+          inserter.execute
+        }
+      }
+    }
+  }
+
   // these really should all be private, but we're opening up a few of these to allow integration testing
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
@@ -398,6 +411,9 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromP12File(new java.io.File(p12File))
       .build()
   }
+
+  def toProxyFromUser(userInfo: UserInfo) = s"PROXY_${userInfo.userSubjectId}@${appsDomain}"
+  def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 
   def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
