@@ -1920,6 +1920,55 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
+  '/user/refreshToken':
+    put:
+      responses:
+        '201':
+          description: Successful Request
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "store a user's refresh token"
+      tags:
+        - users
+      summary: Store refresh token
+      operationId: refreshToken
+      parameters:
+        - in: body
+          description: refresh token
+          name: refreshToken
+          required: true
+          schema:
+            $ref: '#/definitions/UserRefreshToken'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/user/refreshTokenDate':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+        '404':
+          description: There is no refresh token for the user
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "get the date the refresh token last updated"
+      tags:
+        - users
+      summary: Get refresh token date
+      operationId: refreshTokenDate
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
 
 tags:
   - name: admin
@@ -2792,3 +2841,14 @@ definitions:
         type: string
       entityType:
         type: string
+  UserRefreshToken:
+    description: payload to put a refresh token
+    properties:
+      refreshToken:
+        type: string
+  UserRefreshTokenDate:
+    description: date a refresh token was stored
+    properties:
+      refreshTokenUpdatedDate:
+        type: string
+        format: date-time

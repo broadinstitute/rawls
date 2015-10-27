@@ -63,7 +63,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleServicesDAO, submissionSupervisor)_
+    val gcsDao = new MockGoogleServicesDAO
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDao, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -218,7 +219,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
             ){
               val response = responseAs[WorkspaceListResponse]
               WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
@@ -261,9 +262,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(MockGoogleServicesDAO.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
           }
