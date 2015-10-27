@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspacePermissionsPair, UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
 import spray.http.StatusCodes
 import scala.concurrent.Future
+import scala.util.Try
 
 trait GoogleServicesDAO {
 
@@ -32,6 +34,8 @@ trait GoogleServicesDAO {
   def deleteAdmin(userId: String): Future[Unit]
 
   def listAdmins(): Future[Seq[String]]
+
+  def createProxyGroup(userInfo: UserInfo): Future[Unit]
 
   def toErrorReport(throwable: Throwable) = {
     val SOURCE = "google"
