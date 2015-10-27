@@ -291,16 +291,19 @@ trait GraphDAO {
   def getTypeParams(tpe: Type) = tpe.asInstanceOf[TypeRefApi].args
 
   //SAVE METHODS
-  def saveObject[T <: DomainObject :TypeTag :ClassTag](obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+  def saveObject[T <: DomainObject :TypeTag :ClassTag](obj: T, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     saveObject(typeOf[T], obj, vertex, wsc, graph)
   }
 
-  def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+  def saveObject(tpe: Type, obj: DomainObject, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     //Serialize out each of the case class properties.
     getPropertiesAndValues(tpe, obj).foreach({
       case (tp, prop, value) => saveProperty(tp, prop, value, vertex, wsc, graph)
     })
-    saveProperty(typeOf[DateTime], "lastModified", DateTime.now, wsc.workspaceVertex, wsc, graph)
+
+    if( wsc.isDefined ) {
+      saveProperty(typeOf[DateTime], "lastModified", DateTime.now, wsc.get.workspaceVertex, wsc, graph)
+    }
   }
 
   // a function to uniquely identify a graph object relative to siblings, by checking the idFields for equality
@@ -308,11 +311,11 @@ trait GraphDAO {
     obj.idFields.forall { field => obj.getFieldValue(tpe, field) == vertex.getProperty(field) }
   }
 
-  def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
+  def saveSubObject[T <: DomainObject :TypeTag :ClassTag](propName: String, obj: T, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Vertex = {
     saveSubObject(typeOf[T], propName, obj, vertex, wsc, graph)
   }
 
-  def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Vertex = {
+  def saveSubObject(tpe: Type, propName: String, obj: DomainObject, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Vertex = {
     //Preserve references into this vertex. List of (vertex, edgeLabel).
     val referencers = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName)
       .filter( domainObjectFilterFn(tpe, obj) ) //only our actual object
@@ -335,7 +338,7 @@ trait GraphDAO {
     objVert
   }
 
-  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     val mapDummy = addVertex(graph, VertexSchema.Map)
     addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
 
@@ -344,21 +347,22 @@ trait GraphDAO {
     }
   }
 
-  private def saveOpt(containedType: Type, propName: String, opt: Option[Any], vertex: Vertex, wsc:WorkspaceContext, graph:Graph): Unit = {
+  private def saveOpt(containedType: Type, propName: String, opt: Option[Any], vertex: Vertex, wsc:Option[WorkspaceContext], graph:Graph): Unit = {
     opt match {
       case Some(v) => saveProperty(containedType, propName, v, vertex, wsc, graph)
       case None => //done, already removed
     }
   }
 
-  private def saveAttributeRef(ref: AttributeEntityReference, propName: String, vertex: Vertex, wsc: WorkspaceContext, graph:Graph): Unit = {
-    val entityVertex = getEntityVertex(wsc, ref.entityType, ref.entityName).getOrElse {
-      throw new RawlsException(s"${wsc.workspace.namespace}/${wsc.workspace.name}/${ref.entityType}/${ref.entityName} does not exist")
+  private def saveAttributeRef(ref: AttributeEntityReference, propName: String, vertex: Vertex, wsc: Option[WorkspaceContext], graph:Graph): Unit = {
+    assert( wsc.isDefined, s"Can't saveAttributeRef $ref with no WorkspaceContext!" )
+    val entityVertex = getEntityVertex(wsc.get, ref.entityType, ref.entityName).getOrElse {
+      throw new RawlsException(s"${wsc.get.workspace.namespace}/${wsc.get.workspace.name}/${ref.entityType}/${ref.entityName} does not exist")
     }
     addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }
 
-  private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: WorkspaceContext, graph: Graph): Unit = {
+  private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     removeProperty(propName, vertex, graph) //remove any previously defined value
     (tpe, valToSave) match {
 

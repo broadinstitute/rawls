@@ -25,7 +25,7 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     entity.attributes.keys.foreach(validateUserDefinedString)
     entity.attributes.keys.foreach(validateAttributeName)
 
-    saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, workspaceContext, db )
+    saveSubObject[Entity](entity.entityType, entity, workspaceContext.workspaceVertex, Some(workspaceContext), db )
     entity
   }
 

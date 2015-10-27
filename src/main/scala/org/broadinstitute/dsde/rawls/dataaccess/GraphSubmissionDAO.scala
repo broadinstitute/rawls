@@ -66,14 +66,14 @@ class GraphSubmissionDAO extends SubmissionDAO with GraphDAO {
   /** create a submission (and its workflows) */
   override def save(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) =
     txn withGraph { db =>
-      saveSubObject[Submission](submissionEdge, submission, workspaceContext.workspaceVertex, workspaceContext, db )
+      saveSubObject[Submission](submissionEdge, submission, workspaceContext.workspaceVertex, Some(workspaceContext), db )
       submission
     }
 
   override def update(workspaceContext: WorkspaceContext, submission: Submission, txn: RawlsTransaction) = {
     txn withGraph { db =>
       getSubmissionVertex(workspaceContext, submission.submissionId) match {
-        case Some(vertex) => saveObject[Submission](submission, vertex, workspaceContext, db)
+        case Some(vertex) => saveObject[Submission](submission, vertex, Some(workspaceContext), db)
         case None => throw new RawlsException("submission does not exist to be updated: " + submission)
       }
       submission
