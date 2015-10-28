@@ -11,10 +11,6 @@ import spray.http.OAuth2BearerToken
 import scala.collection.immutable.HashMap
 import org.scalatest.BeforeAndAfterAll
 import java.util.UUID
-import spray.json._
-import spray.httpx.SprayJsonSupport
-import SprayJsonSupport._
-import WorkspaceJsonSupport._
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 

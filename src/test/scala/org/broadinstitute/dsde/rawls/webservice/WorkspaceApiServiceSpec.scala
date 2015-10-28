@@ -3,25 +3,22 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.{UserInfoDirectives, MockUserInfoDirectives}
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpHeaders.Cookie
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import spray.routing.Directives._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
-import scala.collection.immutable.HashMap
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
