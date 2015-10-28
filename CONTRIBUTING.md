@@ -7,7 +7,6 @@ Add the following to your main PR comment
 - [ ] **Submitter**: Review code comments; remove done TODOs, create stories for remaining TODOs
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
 - [ ] **Submitter**: Add description or comments on the PR explaining the hows/whys (if not obvious)
-- [ ] **Submitter**: **Assign PR to** ![](http://i.imgur.com/9dLzbPd.png)
 - [ ] Tell ![](http://i.imgur.com/9dLzbPd.png) that the PR exists if he wants to look at it
 - [ ] Anoint a lead reviewer (LR). **Assign PR to LR**
 - [ ] **LR**: Initial review by LR and others.
@@ -18,7 +17,8 @@ Add the following to your main PR comment
   * Submitter rebases to develop again if necessary
   * Submitter makes further commits. DO NOT SQUASH. **Reassign to LR** for further feedback
 - [ ] ![](http://i.imgur.com/9dLzbPd.png) sign off
-- [ ] **LR**: sign off, **assign to submitter** to finalize
+- [ ] **LR** sign off
+- [ ] **Assign to submitter** to finalize
 - [ ] **Submitter**: Squash commits, rebase if necessary
 - [ ] **Submitter**: Verify all tests go green, including CI tests
 - [ ] **Submitter**: Merge to develop 
