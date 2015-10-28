@@ -48,6 +48,14 @@ object WorkspaceAccessLevels {
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${s}]")
     }
   }
+
+  def max(a: WorkspaceAccessLevel, b: WorkspaceAccessLevel): WorkspaceAccessLevel = {
+    if( a <= b ) {
+      b
+    } else {
+      a
+    }
+  }
 }
 
 object WorkspaceACLJsonSupport extends JsonSupport {
