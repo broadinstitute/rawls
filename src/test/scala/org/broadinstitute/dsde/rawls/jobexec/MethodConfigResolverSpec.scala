@@ -4,9 +4,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import org.scalatest.{WordSpecLike, Matchers, FlatSpec}
-
-import scala.util.{Failure, Success}
+import org.scalatest.{WordSpecLike, Matchers}
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbTestFixture {
   val littleWdl =

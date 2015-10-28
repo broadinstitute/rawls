@@ -1,13 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{Matchers, FlatSpec}
-import scala.collection.immutable.HashMap
-import scala.util.Try
 
 /**
  * @author tsharpe
