@@ -4,6 +4,7 @@ import com.tinkerpop.blueprints.{Vertex, Graph, Direction}
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.OAuth2BearerToken
@@ -229,4 +230,83 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
+  it should "return the ACL for a user in a workspace" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val user = RawlsUser("obama@whitehouse.gov")
+      val group = RawlsGroup("TopSecret", Set(user), Set.empty)
+
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(group, txn)
+
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult( WorkspaceAccessLevels.Owner ) {
+        authDAO.getMaximumAccessLevel(user.userSubjectId, workspace.workspaceId, txn)
+      }
+    }
+  }
+
+  it should "choose the maximum access level for a user with multiple ACLs in a workspace" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = RawlsUser("obama@whitehouse.gov")
+      val group = RawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = RawlsGroup("NotSoSecret", Set(obama), Set.empty)
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult( WorkspaceAccessLevels.Owner ) {
+        authDAO.getMaximumAccessLevel(obama.userSubjectId, workspace.workspaceId, txn)
+      }
+    }
+  }
+
+  it should "return NoAccess when a user isn't associated with a workspace" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = RawlsUser("obama@whitehouse.gov")
+      val snowden = RawlsUser("snowden@iminurfiles.lol")
+      val group = RawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = RawlsGroup("NotSoSecret", Set(obama), Set.empty)
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveUser(snowden, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult(WorkspaceAccessLevels.NoAccess) {
+        authDAO.getMaximumAccessLevel(snowden.userSubjectId, workspace.workspaceId, txn)
+      }
+    }
+  }
+
+  it should "find ACLs for users in subgroups" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val user = RawlsUser("obama@whitehouse.gov")
+      val group2 = RawlsGroup("TotallySuperSecret", Set(user), Set.empty)
+      val group = RawlsGroup("TopSecret", Set.empty, Set(group2))
+
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(group2, txn)
+      authDAO.saveGroup(group, txn)
+
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult( WorkspaceAccessLevels.Owner ) {
+        authDAO.getMaximumAccessLevel(user.userSubjectId, workspace.workspaceId, txn)
+      }
+    }
+  }
 }
