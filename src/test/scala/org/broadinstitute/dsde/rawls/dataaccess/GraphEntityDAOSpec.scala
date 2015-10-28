@@ -8,7 +8,6 @@ import org.joda.time.DateTime
 import org.scalatest.{Matchers, FlatSpec}
 
 import scala.collection.JavaConversions._
-import scala.collection.immutable.HashMap
 
 class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   lazy val dao: GraphEntityDAO = new GraphEntityDAO()
