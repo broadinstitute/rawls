@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.{StatusCodes, ContentTypes, HttpEntity, HttpCookie}
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.ExecutionContext
@@ -29,6 +28,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     DateTime.now().withMillis(0),
     DateTime.now().withMillis(0),
     "test",
+    Map.empty,
     Map.empty
   )
 

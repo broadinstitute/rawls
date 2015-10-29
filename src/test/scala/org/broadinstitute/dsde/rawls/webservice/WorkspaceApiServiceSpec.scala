@@ -3,25 +3,22 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.{UserInfoDirectives, MockUserInfoDirectives}
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpHeaders.Cookie
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import spray.routing.Directives._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
-import scala.collection.immutable.HashMap
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
@@ -105,10 +102,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   class TestWorkspaces() extends TestData {
     val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")) )
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")) )
-    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")) )
-    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")), Map.empty)
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")), Map.empty)
+    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")), Map.empty)
+    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")), Map.empty)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)

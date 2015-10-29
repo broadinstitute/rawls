@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
-import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 
 import scala.concurrent.{Future, Await}
@@ -47,7 +46,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   class SubmissionTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
 
     val sample1 = Entity("sample1", "Sample",
       Map("type" -> AttributeString("normal")))

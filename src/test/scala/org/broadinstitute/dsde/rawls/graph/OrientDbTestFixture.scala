@@ -8,13 +8,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
 import spray.http.OAuth2BearerToken
-import scala.collection.immutable.HashMap
 import org.scalatest.BeforeAndAfterAll
 import java.util.UUID
-import spray.json._
-import spray.httpx.SprayJsonSupport
-import SprayJsonSupport._
-import WorkspaceJsonSupport._
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 
@@ -35,6 +30,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
   lazy val methodConfigDAO = new GraphMethodConfigurationDAO()
+  lazy val authDAO = new GraphAuthDAO()
   lazy val submissionDAO = new GraphSubmissionDAO()
 
   val containerDAO = GraphContainerDAO(
@@ -42,6 +38,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     workspaceDAO,
     entityDAO,
     methodConfigDAO,
+    authDAO,
     submissionDAO
   )
 
@@ -61,7 +58,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class EmptyWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -70,7 +67,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class LockedWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute](), isLocked = true )
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
       workspaceDAO.save(workspace, txn)
@@ -86,7 +83,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       "empty" -> AttributeEmptyList,
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
 
     val sample1 = Entity("sample1", "Sample",
       Map(
