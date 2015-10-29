@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 
 class GraphAuthDAO extends AuthDAO with GraphDAO {
@@ -25,21 +26,21 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     }
   }
 
-  override def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[String, RawlsGroupRef] = {
+  override def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
     val user = RawlsUser(userInfo.userSubjectId)
     saveUser(user, txn)
 
     // add user to Owner group only
-    val oGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevel.Owner), Set(user), Set.empty)
-    val wGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevel.Write), Set.empty, Set.empty)
-    val rGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevel.Read), Set.empty, Set.empty)
+    val oGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Owner), Set(user), Set.empty)
+    val wGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Write), Set.empty, Set.empty)
+    val rGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Read), Set.empty, Set.empty)
     createGroup(oGroup, txn)
     createGroup(wGroup, txn)
     createGroup(rGroup, txn)
 
     Map(
-      WorkspaceAccessLevel.Owner.toString -> oGroup,
-      WorkspaceAccessLevel.Write.toString -> wGroup,
-      WorkspaceAccessLevel.Read.toString -> rGroup)
+      WorkspaceAccessLevels.Owner -> oGroup,
+      WorkspaceAccessLevels.Write -> wGroup,
+      WorkspaceAccessLevels.Read -> rGroup)
   }
 }
