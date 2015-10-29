@@ -216,7 +216,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
             ){
               val response = responseAs[WorkspaceListResponse]
               WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
@@ -259,9 +259,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevels.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
           }
