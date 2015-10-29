@@ -14,7 +14,7 @@ import spray.http.StatusCodes
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.collection.Map
+import scala.collection.{immutable, Map}
 import scala.reflect.ClassTag
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe._
@@ -356,12 +356,21 @@ trait GraphDAO {
     objVert
   }
 
-  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
+  private def saveStringMap( valuesType: Type, propName: String, map: Map[_, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     val mapDummy = addVertex(graph, VertexSchema.Map)
     addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
 
     map.map {case (key, value) =>
-      saveProperty( valuesType, key, value, mapDummy, wsc, graph )
+      saveProperty( valuesType, key.asInstanceOf[String], value, mapDummy, wsc, graph )
+    }
+  }
+
+  private def saveRawlsEnumMap( valuesType: Type, propName: String, map: Map[_, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
+    val mapDummy = addVertex(graph, VertexSchema.Map)
+    addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
+
+    map.map {case (key, value) =>
+      saveProperty( valuesType, key.asInstanceOf[RawlsEnumeration[_]].toString, value, mapDummy, wsc, graph )
     }
   }
 
@@ -412,7 +421,7 @@ trait GraphDAO {
       case (_, value:AttributeEntityReferenceList) => saveProperty(typeOf[Seq[AttributeEntityReference]], propName, value.list, vertex, wsc, graph)
 
       //set the values type to Any, but it's irrelevant as the map is empty so no values will be serialized
-      case (_, AttributeEmptyList) => saveMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+      case (_, AttributeEmptyList) => saveStringMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
 
       //UserAuthRef types.
       case (_, value:RawlsUserRef) => saveUserRef(value, propName, vertex, graph)
@@ -423,14 +432,14 @@ trait GraphDAO {
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
       //Watch out for type erasure! Ha ha ha ha ha. Ugh.
-      case (_, seq:Seq[_]) => saveMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+      case (_, seq:Seq[_]) => saveStringMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Seq[_]] => saveStringMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
 
-      case (_, set:Set[_]) => saveMap( getTypeParams(tpe).head, propName, set.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Set[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+      case (_, set:Set[_]) => saveStringMap( getTypeParams(tpe).head, propName, set.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Set[_]] => saveStringMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
 
-      case (_, map:Map[String,_])  => saveMap( getTypeParams(tpe).last, propName, map, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Map[String,_]] => saveMap( getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph)
+      case (tp, map) if tp <:< typeOf[Map[String,_]] => saveStringMap( getTypeParams(tpe).last, propName, map.asInstanceOf[Map[String, _]], vertex, wsc, graph)
+      case (tp, map) if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tpe).head) => saveRawlsEnumMap( getTypeParams(tpe).last, propName, map.asInstanceOf[Map[RawlsEnumeration[_],_]], vertex, wsc, graph)
 
       case (_, value:Option[_]) => saveOpt(getTypeParams(tpe).head, propName, value, vertex, wsc, graph)
       case (tp, None) if tp <:< typeOf[Option[Any]] => saveOpt(getTypeParams(tp).head, propName, None, vertex, wsc, graph)
@@ -471,13 +480,21 @@ trait GraphDAO {
     loadObject(tpe, subVert)
   }
 
-  private def loadMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
-
+  private def loadStringMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
     val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
 
     getVertexKeys(mapDummy).map({ key =>
       (key, loadProperty(valuesType, key, mapDummy))
+    }).toMap
+  }
+
+  private def loadRawlsEnumMap[R <: RawlsEnumeration[R]](keyType: Type, valuesType: Type, propName: String, vertex: Vertex): Map[R, Any] = {
+    val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
+    mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+
+    getVertexKeys(mapDummy).map({ key =>
+      (enumWithName(keyType, key), loadProperty(valuesType, key, mapDummy))
     }).toMap
   }
 
@@ -565,11 +582,11 @@ trait GraphDAO {
 
   //Sneaky. The withName() method is defined in a sealed trait, so no way to instance it to call it.
   //Instead, we find a subclass of the enum type, instance that, and call withName() on it.
-  private def enumWithName(enumType: Type, enumStr: String): RawlsEnumeration[_] = {
+  private def enumWithName[R <: RawlsEnumeration[R]](enumType: Type, enumStr: String): R = {
     val m = ru.runtimeMirror(getClass.getClassLoader)
     val anEnumElemClass = enumType.typeSymbol.asClass.knownDirectSubclasses.head.asClass.toType
     val enumModuleMirror = m.staticModule(anEnumElemClass.typeSymbol.asClass.fullName)
-    m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[RawlsEnumeration[_]]
+    m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[R]
   }
 
   private def loadProperty(tpe: Type, propName: String, vertex: Vertex): Any = {
@@ -596,9 +613,12 @@ trait GraphDAO {
       case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
-      case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
-      case tp if tp <:< typeOf[Set[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
-      case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex)
+      case tp if tp <:< typeOf[Seq[Any]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Set[Any]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
+      case tp if tp <:< typeOf[Map[String,Any]] => loadStringMap(getTypeParams(tp).last, propName, vertex)
+
+      case tp if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tp).head) => loadRawlsEnumMap(getTypeParams(tp).head, getTypeParams(tp).last, propName, vertex)
+
       case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
 
       //Everything else.

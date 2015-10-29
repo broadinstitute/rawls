@@ -172,7 +172,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
         txn.withGraph { graph =>
           val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
 
-          Seq(WorkspaceAccessLevel.Owner, WorkspaceAccessLevel.Write, WorkspaceAccessLevel.Read) foreach { level =>
+          Seq(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Read) foreach { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
             val levelGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, level), Set.empty, Set.empty)
@@ -202,7 +202,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
         txn.withGraph { graph =>
           val vAccessLevels = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
-          val vOwnerGroup = authDAO.getVertices(vAccessLevels, Direction.OUT, EdgeSchema.Ref, WorkspaceAccessLevel.Owner.toString).head
+          val vOwnerGroup = authDAO.getVertices(vAccessLevels, Direction.OUT, EdgeSchema.Ref, WorkspaceAccessLevels.Owner.toString).head
           val vOwnerGroupUsers = authDAO.getVertices(vOwnerGroup, Direction.OUT, EdgeSchema.Own, "users").head
           val vOwnerGroupUser0 = authDAO.getVertices(vOwnerGroupUsers, Direction.OUT, EdgeSchema.Ref, "0").head
 

@@ -32,7 +32,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
 import spray.http.StatusCodes
 
@@ -53,7 +53,7 @@ class HttpGoogleServicesDAO(
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
-  val groupAccessLevelsAscending = Seq(WorkspaceAccessLevel.Read, WorkspaceAccessLevel.Write, WorkspaceAccessLevel.Owner)
+  val groupAccessLevelsAscending = Seq(WorkspaceAccessLevels.Read, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Owner)
 
   // modify these if we need more granular access in the future
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE)
@@ -127,7 +127,7 @@ class HttpGoogleServicesDAO(
     def insertOwnerMember: (Seq[Try[Group]]) => Future[Member] = { _ =>
       retry(when500) {
         () => Future {
-          val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevel.Owner)
+          val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevels.Owner)
           val owner = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
           val ownerInserter = directory.members.insert(ownersGroupId, owner)
           blocking {
@@ -143,7 +143,7 @@ class HttpGoogleServicesDAO(
           val bucketAcls = groupAccessLevelsAscending.map(ac => newBucketAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), ac))
           val defaultObjectAcls = groupAccessLevelsAscending.map(ac => {
             // NB: writers have read access to objects -- there is no write access, objects are immutable
-            newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), if (ac == WorkspaceAccessLevel.Owner) WorkspaceAccessLevel.Owner else WorkspaceAccessLevel.Read)
+            newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), if (ac == WorkspaceAccessLevels.Owner) WorkspaceAccessLevels.Owner else WorkspaceAccessLevels.Read)
           })
 
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
@@ -163,10 +163,10 @@ class HttpGoogleServicesDAO(
     new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel))
 
   private def newBucketAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
-    new BucketAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
+    new BucketAccessControl().setEntity(entity).setRole(accessLevel.toString)
 
   private def newObjectAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
-    new ObjectAccessControl().setEntity(entity).setRole(WorkspaceAccessLevel.toCanonicalString(accessLevel))
+    new ObjectAccessControl().setEntity(entity).setRole(accessLevel.toString)
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any] = {
     val bucketName = getBucketName(workspaceId)
@@ -260,7 +260,7 @@ class HttpGoogleServicesDAO(
   override def getOwners(workspaceId: String): Future[Seq[String]] = {
     val members = getGroupDirectory.members
     //a workspace should always have an owner, but just in case for some reason it doesn't...
-    val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevel.Owner))
+    val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevels.Owner))
     val ownersQuery = retry(when500) (() => Future {
       blocking { fetcher.execute }
     })
@@ -281,10 +281,10 @@ class HttpGoogleServicesDAO(
           accessLevel
         }
       } recover {
-        case t => WorkspaceAccessLevel.NoAccess
+        case t => WorkspaceAccessLevels.NoAccess
       }
     } map { userAccessLevels =>
-      userAccessLevels.sorted.last
+      userAccessLevels.sorted[WorkspaceAccessLevel].last
     }
   }
 
@@ -419,13 +419,13 @@ class HttpGoogleServicesDAO(
         val inserter = members.insert(targetGroupId, member)
 
         val deleteFuture: Future[Option[Throwable]] =
-          if (currentAccessLevel < WorkspaceAccessLevel.Read)
+          if (currentAccessLevel < WorkspaceAccessLevels.Read)
             Future.successful(None)
           else
             retryWhen500(()=>deleter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
 
         val insertFuture: Future[Option[Throwable]] =
-          if (targetAccessLevel < WorkspaceAccessLevel.Read)
+          if (targetAccessLevel < WorkspaceAccessLevels.Read)
             Future.successful(None)
           else
             retryWhen500(()=>inserter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
@@ -497,12 +497,12 @@ class HttpGoogleServicesDAO(
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 
   def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"
-  def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${WorkspaceAccessLevel.toCanonicalString(accessLevel)}@${appsDomain}"
+  def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"
   def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
     val pattern = s"rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r
     Try{
       val pattern(workspaceId,accessLevelString) = groupId
-      WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevel.fromCanonicalString(accessLevelString.toUpperCase))
+      WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevels.withName(accessLevelString.toUpperCase))
     }.toOption
   }
   def makeGroupEntityString(groupId: String) = s"group-$groupId"

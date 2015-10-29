@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import WorkspaceACLJsonSupport._
 import org.joda.time.DateTime
 import spray.json._
@@ -35,12 +35,12 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
   }
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
-    "test@broadinstitute.org" -> WorkspaceAccessLevel.Owner,
-    "test_token" -> WorkspaceAccessLevel.Owner,
-    "owner-access" -> WorkspaceAccessLevel.Owner,
-    "write-access" -> WorkspaceAccessLevel.Write,
-    "read-access" -> WorkspaceAccessLevel.Read,
-    "no-access" -> WorkspaceAccessLevel.NoAccess
+    "test@broadinstitute.org" -> WorkspaceAccessLevels.Owner,
+    "test_token" -> WorkspaceAccessLevels.Owner,
+    "owner-access" -> WorkspaceAccessLevels.Owner,
+    "write-access" -> WorkspaceAccessLevels.Write,
+    "read-access" -> WorkspaceAccessLevels.Read,
+    "no-access" -> WorkspaceAccessLevels.NoAccess
   )
 
   private def getAccessLevelOrDieTrying(userId: String) = {
@@ -57,15 +57,15 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]) = Future.successful(None)
 
-  override def getOwners(workspaceId: String) = Future.successful(mockPermissions.filter(_._2 == WorkspaceAccessLevel.Owner).keys.toSeq)
+  override def getOwners(workspaceId: String) = Future.successful(mockPermissions.filter(_._2 == WorkspaceAccessLevels.Owner).keys.toSeq)
 
   override def getMaximumAccessLevel(userId: String, workspaceId: String) = Future.successful(getAccessLevelOrDieTrying(userId))
 
   override def getWorkspaces(userId: String) = Future.successful(
     Seq(
-      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevel.Owner),
-      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevel.Write),
-      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevel.Read)
+      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevels.Owner),
+      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevels.Write),
+      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevels.Read)
     )
   )
 
