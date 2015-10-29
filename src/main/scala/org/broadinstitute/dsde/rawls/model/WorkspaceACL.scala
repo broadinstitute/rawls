@@ -1,27 +1,33 @@
 package org.broadinstitute.dsde.rawls.model
 
-import com.google.api.client.util.Value
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
-import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import spray.json._
 
 case class WorkspaceACL(acl: Map[String, WorkspaceAccessLevel])
 
 case class WorkspaceACLUpdate(userId: String, accessLevel: WorkspaceAccessLevel)
 
-object WorkspaceAccessLevel extends Enumeration {
-  type WorkspaceAccessLevel = Value
-  val UnknownUser = Value(0)
-  val NoAccess = Value(1)
-  val Read = Value(2)
-  val Write = Value(3)
-  val Owner = Value(4)
+object WorkspaceAccessLevels {
+  sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
+    private val ordering = Seq(UnknownUser, NoAccess, Read, Write, Owner)
+
+    def compare(that: WorkspaceAccessLevel) = { ordering.indexOf(this).compare(ordering.indexOf(that)) }
+
+    override def toString = WorkspaceAccessLevels.toString(this)
+    override def withName(name: String) = WorkspaceAccessLevels.withName(name)
+  }
+
+  case object UnknownUser extends WorkspaceAccessLevel
+  case object NoAccess extends WorkspaceAccessLevel
+  case object Read extends WorkspaceAccessLevel
+  case object Write extends WorkspaceAccessLevel
+  case object Owner extends WorkspaceAccessLevel
 
   // note that the canonical string must match the format for GCS ACL roles,
   // because we use it to set the role of entities in the ACL.
   // (see https://cloud.google.com/storage/docs/json_api/v1/bucketAccessControls)
-
-  def toCanonicalString(v: WorkspaceAccessLevel): String = {
+  def toString(v: WorkspaceAccessLevel): String = {
     v match {
       case Owner => "OWNER"
       case Write => "WRITER"
@@ -32,7 +38,7 @@ object WorkspaceAccessLevel extends Enumeration {
     }
   }
 
-  def fromCanonicalString(s: String): WorkspaceAccessLevel = {
+  def withName(s: String): WorkspaceAccessLevel = {
     s match {
       case "OWNER" => Owner
       case "WRITER" => Write
@@ -46,9 +52,9 @@ object WorkspaceAccessLevel extends Enumeration {
 
 object WorkspaceACLJsonSupport extends JsonSupport {
   implicit object WorkspaceAccessLevelFormat extends RootJsonFormat[WorkspaceAccessLevel] {
-    override def write(value: WorkspaceAccessLevel): JsValue = JsString(WorkspaceAccessLevel.toCanonicalString(value))
+    override def write(value: WorkspaceAccessLevel): JsValue = JsString(value.toString)
     override def read(json: JsValue): WorkspaceAccessLevel = json match {
-      case JsString(name) => WorkspaceAccessLevel.fromCanonicalString(name)
+      case JsString(name) => WorkspaceAccessLevels.withName(name)
       case x => throw new DeserializationException("invalid value: " + x)
     }
   }
