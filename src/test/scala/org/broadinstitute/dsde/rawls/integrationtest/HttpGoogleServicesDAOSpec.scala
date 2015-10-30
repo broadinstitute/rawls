@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.util.UUID
 import akka.actor.ActorSystem
+import org.joda.time.DateTime
 
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
@@ -23,7 +24,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("appsDomain"),
     gcsConfig.getString("groupsPrefix"),
     gcsConfig.getString("appName"),
-    gcsConfig.getInt("deletedBucketCheckSeconds")
+    gcsConfig.getInt("deletedBucketCheckSeconds"),
+    "broad-dsde-dev"
   )
 
   val testProject = "broad-dsde-dev"
@@ -86,6 +88,25 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerGroup).execute() }
+  }
+
+  it should "crud tokens" in {
+    val userInfo = UserInfo(null, null, 0, UUID.randomUUID().toString)
+    assertResult(None) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+    Await.result(gcsDAO.storeToken(userInfo, "testtoken"), Duration.Inf)
+    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    val storeTime = Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get
+
+    Thread.sleep(100)
+
+    Await.result(gcsDAO.storeToken(userInfo, "testtoken2"), Duration.Inf)
+    assertResult(Some("testtoken2")) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
+
+    Await.result(gcsDAO.deleteToken(userInfo), Duration.Inf)
+    assertResult(None) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

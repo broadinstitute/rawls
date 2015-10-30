@@ -43,7 +43,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
 
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleServicesDAO, submissionSupervisor)_
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

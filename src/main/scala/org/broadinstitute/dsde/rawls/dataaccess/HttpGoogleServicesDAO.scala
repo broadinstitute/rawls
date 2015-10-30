@@ -1,11 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.StringReader
+import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
+import java.util.Date
 
 import akka.actor.{ActorSystem, ActorContext}
+import com.google.api.client.http.{HttpResponseException, InputStreamContent}
+import com.google.api.client.util.DateTime
+import com.google.api.services.storage.model.BucketAccessControl.ProjectTeam
 import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.joda.time
 
-import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -20,10 +24,10 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.compute.ComputeScopes
-import com.google.api.services.storage.model.Bucket.Lifecycle
+import com.google.api.services.storage.model.Bucket.{Logging, Lifecycle}
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.{StorageScopes, Storage}
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl}
+import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAccessControl, ObjectAccessControl}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -32,6 +36,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
 import org.broadinstitute.dsde.rawls.model._
 
 import spray.http.StatusCodes
+
+import JavaConversions._
 
 // Seq[String] -> Collection<String>
 
@@ -42,7 +48,8 @@ class HttpGoogleServicesDAO(
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
+  deletedBucketCheckSeconds: Int,
+  serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -55,6 +62,35 @@ class HttpGoogleServicesDAO(
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
   val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
+  val tokenBucketName = "rawls-tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+
+  initTokenBucket()
+
+  private def initTokenBucket(): Unit = {
+    try {
+      getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
+    } catch {
+      case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue =>
+        val logBucket = new Bucket().
+          setName(tokenBucketName + "-logs")
+        val logInserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, logBucket)
+        logInserter.execute
+
+        // add cloud-storage-analytics@google.com as a writer so it can write logs
+        // do it as a separate call so bucket gets default permissions plus this one
+        getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(logBucket.getName, new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")).execute()
+
+        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientSecrets.getDetails.get("client_email").toString).setRole("OWNER"))
+        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientSecrets.getDetails.get("client_email").toString).setRole("OWNER"))
+        val bucket = new Bucket().
+          setName(tokenBucketName).
+          setAcl(bucketAcls).
+          setDefaultObjectAcl(defaultObjectAcls).
+          setLogging(new Logging().setLogBucket(logBucket.getName))
+        val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, bucket)
+        inserter.execute
+    }
+  }
 
   override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = {
     val bucketName = getBucketName(workspaceId)
@@ -308,6 +344,47 @@ class HttpGoogleServicesDAO(
         }
       }
     }
+  }
+
+  override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
+    retryWhen500(() => {
+      val so = new StorageObject().setName(userInfo.userSubjectId)
+      val media = new InputStreamContent("text/plain", new ByteArrayInputStream(refreshToken.getBytes))
+      val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
+      inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
+      inserter.execute()
+    } )
+  }
+
+  override def getToken(userInfo: UserInfo): Future[Option[String]] = {
+    retryWhen500(() => {
+      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userInfo.userSubjectId)
+      get.getMediaHttpDownloader().setDirectDownloadEnabled(true);
+      val tokenBytes = new ByteArrayOutputStream()
+      try {
+        get.executeMediaAndDownloadTo(tokenBytes)
+        Option(tokenBytes.toString)
+      } catch {
+        case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue => None
+      }
+    } )
+  }
+
+  override def getTokenDate(userInfo: UserInfo): Future[Option[time.DateTime]] = {
+    retryWhen500(() => {
+      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userInfo.userSubjectId)
+      try {
+        Option(new time.DateTime(get.execute().getUpdated.getValue))
+      } catch {
+        case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue => None
+      }
+    } )
+  }
+
+  override def deleteToken(userInfo: UserInfo): Future[Unit] = {
+    retryWhen500(() => {
+      getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, userInfo.userSubjectId).execute()
+    } )
   }
 
   // these really should all be private, but we're opening up a few of these to allow integration testing

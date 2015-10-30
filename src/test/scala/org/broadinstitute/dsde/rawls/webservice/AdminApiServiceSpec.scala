@@ -46,7 +46,9 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), MockGoogleServicesDAO, submissionSupervisor)_
+
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -102,6 +104,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 204 when adding an existing user to the admin list" in withTestDataApiServices { services =>
+    services.gcsDAO.addAdmin("bob")
     Put(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -110,6 +113,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 204 when checking on the new admin user" in withTestDataApiServices { services =>
+    services.gcsDAO.addAdmin("bob")
     Get(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -118,6 +122,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 200 and a two-member list when asked for the current list" in withTestDataApiServices { services =>
+    services.gcsDAO.addAdmin("bob")
+    services.gcsDAO.addAdmin("test_token")
     Get(s"/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -127,6 +133,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 204 when removing an existing user from the admin list" in withTestDataApiServices { services =>
+    services.gcsDAO.addAdmin("bob")
     Delete(s"/admin/users/bob") ~>
       sealRoute(services.adminRoutes) ~>
       check {

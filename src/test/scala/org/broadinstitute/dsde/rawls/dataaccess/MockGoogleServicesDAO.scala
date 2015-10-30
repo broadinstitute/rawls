@@ -4,12 +4,35 @@ import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
 import WorkspaceACLJsonSupport._
+import org.joda.time.DateTime
 import spray.json._
 import scala.concurrent.Future
 import scala.util.Try
 
-object MockGoogleServicesDAO extends GoogleServicesDAO {
+class MockGoogleServicesDAO extends GoogleServicesDAO {
 
+  private var token: String = null
+  private var tokenDate: DateTime = null
+
+  override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
+    this.token = refreshToken
+    this.tokenDate = DateTime.now
+    Future.successful(Unit)
+  }
+
+  override def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]] = {
+    Future.successful(Option(tokenDate))
+  }
+
+  override def deleteToken(userInfo: UserInfo): Future[Unit] = {
+    token = null
+    tokenDate = null
+    Future.successful(Unit)
+  }
+
+  override def getToken(userInfo: UserInfo): Future[Option[String]] = {
+    Future.successful(Option(token))
+  }
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
     "test@broadinstitute.org" -> WorkspaceAccessLevel.Owner,

@@ -11,6 +11,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
@@ -43,7 +44,8 @@ object Boot extends App {
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
       gcsConfig.getString("appName"),
-      gcsConfig.getInt("deletedBucketCheckSeconds")
+      gcsConfig.getInt("deletedBucketCheckSeconds"),
+      gcsConfig.getString("serviceProject")
     )
 
     system.registerOnTermination {
@@ -69,7 +71,8 @@ object Boot extends App {
                                                   containerDAO,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor)),
+                                                  gcsDAO, submissionSupervisor),
+                    UserService.constructor(dataSource, gcsDAO)),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
