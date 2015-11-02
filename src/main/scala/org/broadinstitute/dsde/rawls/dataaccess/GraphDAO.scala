@@ -613,13 +613,13 @@ trait GraphDAO {
       case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
-      case tp if tp <:< typeOf[Seq[Any]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
-      case tp if tp <:< typeOf[Set[Any]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
-      case tp if tp <:< typeOf[Map[String,Any]] => loadStringMap(getTypeParams(tp).last, propName, vertex)
+      case tp if tp <:< typeOf[Seq[_]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Set[_]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
+      case tp if tp <:< typeOf[Map[String,_]] => loadStringMap(getTypeParams(tp).last, propName, vertex)
 
       case tp if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tp).head) => loadRawlsEnumMap(getTypeParams(tp).head, getTypeParams(tp).last, propName, vertex)
 
-      case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
+      case tp if tp <:< typeOf[Option[_]] => loadOpt(tp, propName, vertex)
 
       //Everything else.
       case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex)
