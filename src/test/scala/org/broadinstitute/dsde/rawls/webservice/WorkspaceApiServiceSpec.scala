@@ -460,8 +460,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
-  it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "allow an owner-access user to update a workspace" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("a"): AttributeUpdateOperation).toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -470,8 +470,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser("write-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "allow a write-access user to update a workspace" in withTestWorkspacesApiServicesAndUser("write-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceWriter.namespace}/${testWorkspaces.workspaceWriter.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("b"): AttributeUpdateOperation).toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -480,8 +480,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser("read-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "not allow a read-access user to update a workspace" in withTestWorkspacesApiServicesAndUser("read-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceReader.namespace}/${testWorkspaces.workspaceReader.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("c"): AttributeUpdateOperation).toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -490,8 +490,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+  it should "not allow a no-access user to update a workspace" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceNoAccess.namespace}/${testWorkspaces.workspaceNoAccess.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("d"): AttributeUpdateOperation).toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -502,32 +502,32 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
-  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser("owner-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+  it should "allow an owner-access user to update an ACL" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
   }
 
-  it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser("write-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+  it should "not allow a write-access user to update an ACL" in withTestWorkspacesApiServicesAndUser("write-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceWriter.namespace}/${testWorkspaces.workspaceWriter.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
-  it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser("read-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+  it should "not allow a read-access user to update an ACL" in withTestWorkspacesApiServicesAndUser("read-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceReader.namespace}/${testWorkspaces.workspaceReader.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
-  it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+  it should "not allow a no-access user to update an ACL" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Patch(s"/workspaces/${testWorkspaces.workspaceNoAccess.namespace}/${testWorkspaces.workspaceNoAccess.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -608,25 +608,25 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a non-owner to lock or unlock the workspace" in withEmptyWorkspaceApiServices("write-access") { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"/workspaces/${testData.workspaceWriter.namespace}/${testData.workspaceWriter.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"/workspaces/${testData.workspaceWriter.namespace}/${testData.workspaceWriter.name}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
   }
 
-  it should "not allow a no-access user to infer the existence the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+  it should "not allow a no-access user to infer the existence of the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
+    Put(s"/workspaces/${testData.workspaceNoAccess.namespace}/${testData.workspaceNoAccess.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"/workspaces/${testData.workspaceNoAccess.namespace}/${testData.workspaceNoAccess.name}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
