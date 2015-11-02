@@ -21,6 +21,7 @@ import org.joda.time.DateTime
 import spray.http.Uri
 import spray.http.StatusCodes
 import spray.httpx.UnsuccessfulResponseException
+import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -279,11 +280,50 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       }
     }
 
+  def withRawlsUser[T](userRef: RawlsUserRef, txn: RawlsTransaction)(op: (RawlsUser) => T): T = {
+    containerDAO.authDAO.loadUser(userRef, txn) match {
+      case Some(user) => op(user)
+      case None => throw new RawlsException(s"Couldn't find user for userRef $userRef")
+    }
+  }
+
+  def withRawlsGroup[T](groupRef: RawlsGroupRef, txn: RawlsTransaction)(op: (RawlsGroup) => T): T = {
+    containerDAO.authDAO.loadGroup(groupRef, txn) match {
+      case Some(group) => op(group)
+      case None => throw new RawlsException(s"Couldn't find group for groupRef $groupRef")
+    }
+  }
+
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
-          gcsDAO.getACL(workspaceContext.workspace.workspaceId) map { RequestComplete(StatusCodes.OK,_) }
+          //Pull the ACLs from the workspace. Sort the keys by level, so that higher access levels overwrite lower ones.
+          //Build a map from user/group ID to associated access level.
+          val aclList: Map[String, WorkspaceAccessLevel] = workspaceContext.workspace.accessLevels.toSeq.sortBy(_._1)
+            .foldLeft(Map.empty[String, WorkspaceAccessLevel])({ case (currentMap, (level, groupRef)) =>
+            //groupRef = group representing this access level for the workspace
+            withRawlsGroup(groupRef, txn) { accessGroup =>
+
+              //pairs of user emails -> this access level
+              val userLevels = accessGroup.users.map {
+                withRawlsUser(_, txn) { user =>
+                  (user.userEmail.value, level)
+                }
+              }
+
+              //pairs of group emails -> this access level
+              val subgroupLevels = accessGroup.subGroups.map {
+                withRawlsGroup(_, txn) { subGroup =>
+                  (subGroup.groupEmail.value, level)
+                }
+              }
+
+              //fold 'em into the map
+              currentMap ++ userLevels ++ subgroupLevels
+            }
+          })
+          Future.successful( RequestComplete(StatusCodes.OK, aclList) )
         }
       }
     }
@@ -292,10 +332,49 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
-          gcsDAO.updateACL(userInfo.userEmail, workspaceContext.workspace.workspaceId, aclUpdates).map( _ match {
-            case None => RequestComplete(StatusCodes.OK)
-            case Some(reports) => RequestComplete(ErrorReport(StatusCodes.Conflict,"Unable to alter some ACLs in $workspaceName",reports))
-          } )
+
+          //collapse the acl updates list so there are no dupe emails, and convert to RawlsGroup/RawlsUser instances
+          val updateMap: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel] = aclUpdates
+            .map { case upd => (containerDAO.authDAO.loadFromEmail(upd.email, txn), upd.accessLevel) }
+            .collect { case (Some(userauth), level) => userauth -> level }.toMap
+
+          //make a list of all the refs we're going to update
+          val allTheRefs: Set[UserAuthRef] = updateMap.map {
+            case (Left(rawlsUser:RawlsUser), level) => RawlsUser.toRef(rawlsUser)
+            case (Right(rawlsGroup:RawlsGroup), level) => RawlsGroup.toRef(rawlsGroup)
+          }.toSet
+
+          val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
+          //go through the access level groups on the workspace and update them
+          workspaceContext.workspace.accessLevels.foreach { case (level, groupRef) =>
+            withRawlsGroup(groupRef, txn) { group =>
+              //remove existing records for users and groups in the acl update list
+              val users = group.users.filter( userRef => !allTheRefs.contains(userRef) )
+              val groups = group.subGroups.filter( groupRef => !allTheRefs.contains(groupRef) )
+
+              //generate the list of new references
+              val newusers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
+              val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+
+              containerDAO.authDAO.saveGroup(group.copy( users = users ++ newusers, subGroups = groups ++ newgroups ) ,txn)
+            }
+          }
+
+          val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
+              case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
+              case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
+            }).toSeq)
+            .map( email => ErrorReport( StatusCodes.NotFound, email ) )
+
+          gcsDAO.updateACL(userInfo, workspaceContext.workspace.workspaceId, updateMap).map({
+            case None =>
+              if (emailNotFoundReports.isEmpty) {
+                RequestComplete(StatusCodes.OK)
+              } else {
+                RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
+              }
+            case Some(reports) => RequestComplete( ErrorReport(StatusCodes.Conflict,s"Unable to alter some ACLs in $workspaceName",reports ++ emailNotFoundReports) )
+          })
         }
       }
     }

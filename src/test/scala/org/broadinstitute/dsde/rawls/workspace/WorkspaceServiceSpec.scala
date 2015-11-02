@@ -6,15 +6,19 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
+import spray.http.{StatusCodes, StatusCode, OAuth2BearerToken}
 import spray.testkit.ScalatestRouteTest
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
@@ -160,7 +164,128 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult(1) { shouldBeInvalid.invalidInputs.size }
     assertResult(2) { shouldBeInvalid.invalidOutputs.size }
   }
+
+  it should "retrieve ACLs" in withTestDataServices { services =>
+    services.dataSource.inTransaction() { txn =>
+      //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
+      //ACLs into the workspace manually.
+      val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+      val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+
+      containerDAO.authDAO.saveUser(user, txn)
+      containerDAO.authDAO.saveGroup(group, txn)
+
+      val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
+      val theOwnerGroup = containerDAO.authDAO.loadGroup(ownerGroupRef, txn).get
+      val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
+      containerDAO.authDAO.saveGroup(replacementOwnerGroup, txn)
+    }
+
+    val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]]
+    val (vStatus, vData) = vComplete.response
+
+    assertResult(StatusCodes.OK) {
+      vStatus
+    }
+
+    assertResult(Map(
+      "owner-access" -> WorkspaceAccessLevels.Owner,
+      "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
+      "group@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
+      "writer-access" -> WorkspaceAccessLevels.Write,
+      "reader-access" -> WorkspaceAccessLevels.Read)) {
+      vData
+    }
+  }
+
+  it should "patch ACLs" in withTestDataServices { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(user, txn)
+      containerDAO.authDAO.saveGroup(group, txn)
+    }
+
+    //add ACL
+    val aclAdd = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner), WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Read))
+    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd), Duration.Inf)
+      .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.OK, "Add ACL shouldn't error") {
+      aclAddResponse.response
+    }
+
+    //check result
+    val (_, addedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+    .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
+
+    assertResult(Map(
+      "owner-access" -> WorkspaceAccessLevels.Owner,
+      "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
+      "writer-access" -> WorkspaceAccessLevels.Write,
+      "reader-access" -> WorkspaceAccessLevels.Read,
+      "group@whitehouse.gov" -> WorkspaceAccessLevels.Read), "Add ACL should actually do so") {
+      addedACLs
+    }
+
+    //update ACL
+    val aclUpdates = Seq(WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Write))
+    val aclUpdateResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates), Duration.Inf)
+      .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.OK, "Update ACL shouldn't error") {
+      aclUpdateResponse.response
+    }
+
+    //check result
+    val (_, updatedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
+
+    assertResult(Map(
+      "owner-access" -> WorkspaceAccessLevels.Owner,
+      "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
+      "writer-access" -> WorkspaceAccessLevels.Write,
+      "reader-access" -> WorkspaceAccessLevels.Read,
+      "group@whitehouse.gov" -> WorkspaceAccessLevels.Write), "Update ACL should actually do so") {
+      updatedACLs
+    }
+
+    //remove ACL
+    val aclRemove = Seq(WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.NoAccess))
+    val aclRemoveResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove), Duration.Inf)
+      .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.OK, "Remove ACL shouldn't error") {
+      aclRemoveResponse.response
+    }
+
+    //check result
+    val (_, removedACLs) = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
+
+    assertResult(Map(
+      "owner-access" -> WorkspaceAccessLevels.Owner,
+      "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
+      "writer-access" -> WorkspaceAccessLevels.Write,
+      "reader-access" -> WorkspaceAccessLevels.Read), "Remove ACL should actually do so") {
+      removedACLs
+    }
+  }
+
+  it should "fail to patch ACLs if a user doesn't exist" in withTestDataServices { services =>
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(group, txn)
+    }
+
+    val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner), WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Read))
+    val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates), Duration.Inf)
+      .asInstanceOf[RequestComplete[ErrorReport]]
+
+    val vErrorReport = vComplete.response
+    assertResult(StatusCodes.NotFound) {
+      vErrorReport.statusCode.get
+    }
+  }
 }
-
-
-

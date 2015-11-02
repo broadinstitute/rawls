@@ -6,13 +6,13 @@ import spray.json._
 
 case class WorkspaceACL(acl: Map[String, WorkspaceAccessLevel])
 
-case class WorkspaceACLUpdate(userId: String, accessLevel: WorkspaceAccessLevel)
+case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel)
 
 object WorkspaceAccessLevels {
   sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
-    private val ordering = Seq(UnknownUser, NoAccess, Read, Write, Owner)
+    val all = Seq(UnknownUser, NoAccess, Read, Write, Owner)
 
-    def compare(that: WorkspaceAccessLevel) = { ordering.indexOf(this).compare(ordering.indexOf(that)) }
+    def compare(that: WorkspaceAccessLevel) = { all.indexOf(this).compare(all.indexOf(that)) }
 
     override def toString = WorkspaceAccessLevels.toString(this)
     override def withName(name: String) = WorkspaceAccessLevels.withName(name)
