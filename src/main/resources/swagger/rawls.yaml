@@ -1654,12 +1654,12 @@ paths:
       responses:
         '200':
           description: Successful Request
-        '400':
-          description: 'Can''t set ACL for workspace'
+        '404':
+          description: Workspace, user or group not found
           schema:
             $ref: '#/definitions/ErrorReport'
-        '404':
-          description: Workspace not found
+        '409':
+          description: 'Error altering some ACLs'
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -2744,15 +2744,15 @@ definitions:
   WorkspaceACLUpdate:
     description: ''
     required:
-      - userId
+      - email
       - accessLevel
     properties:
-      userId:
+      email:
         type: string
-        description: ID of the user whose permissions will be changed
+        description: email address of the user or group whose permissions will be changed
       accessLevel:
         type: string
-        description: The access level to grant to this user (OWNER, READER, WRITER, NO ACCESS)
+        description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
 
   Workspace:
     description: ''
