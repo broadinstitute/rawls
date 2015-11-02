@@ -193,6 +193,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         }
 
         gcsDAO.deleteBucket(userInfo, workspaceContext.workspace.workspaceId).map { _ =>
+          containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
           containerDAO.workspaceDAO.delete(workspaceName, txn)
 
           RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)} will be deleted within 24h.")

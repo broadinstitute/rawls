@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import scala.collection.JavaConversions._
 
 class GraphAuthDAO extends AuthDAO with GraphDAO {
+
   override def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser = txn withGraph { db =>
     val vertex = getUserVertex(db, rawlsUser.userSubjectId).getOrElse(addVertex(db, VertexSchema.User))
     saveObject[RawlsUser](rawlsUser, vertex, None, db)
@@ -23,6 +24,13 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     val vertex = getGroupVertex(db, rawlsGroup.groupName).getOrElse(addVertex(db, VertexSchema.Group))
     saveObject[RawlsGroup](rawlsGroup, vertex, None, db)
     rawlsGroup
+  }
+
+  override def deleteGroup(rawlsGroup: RawlsGroupRef, txn: RawlsTransaction) = txn withGraph { db =>
+    val vertex = getGroupVertex(db, rawlsGroup.groupName) match {
+      case None => throw new RawlsException("Cannot delete group %s from database because it does not exist".format(rawlsGroup.groupName))
+      case Some(vertex) => removeObject(vertex, db)
+    }
   }
 
   private def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>

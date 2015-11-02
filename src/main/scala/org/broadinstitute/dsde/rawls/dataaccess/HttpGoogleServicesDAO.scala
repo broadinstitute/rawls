@@ -51,8 +51,6 @@ class HttpGoogleServicesDAO(
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
-  val groupAccessLevelsAscending = Seq(WorkspaceAccessLevels.Read, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Owner)
-
   // modify these if we need more granular access in the future
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
