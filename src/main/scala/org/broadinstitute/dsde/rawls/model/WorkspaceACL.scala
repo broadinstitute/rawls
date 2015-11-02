@@ -24,6 +24,8 @@ object WorkspaceAccessLevels {
   case object Write extends WorkspaceAccessLevel
   case object Owner extends WorkspaceAccessLevel
 
+  val groupAccessLevelsAscending = Seq(Read, Write, Owner)
+
   // note that the canonical string must match the format for GCS ACL roles,
   // because we use it to set the role of entities in the ACL.
   // (see https://cloud.google.com/storage/docs/json_api/v1/bucketAccessControls)

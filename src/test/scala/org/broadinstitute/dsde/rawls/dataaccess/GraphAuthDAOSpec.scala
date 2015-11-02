@@ -53,6 +53,88 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
+  it should "delete a Group" in withDefaultTestDatabase { dataSource =>
+    val group1 = RawlsGroup("Group One", Set.empty, Set.empty)
+    val group2 = RawlsGroup("Group Two", Set.empty, Set.empty)
+
+    dataSource.inTransaction() { txn =>
+      authDAO.saveGroup(group1, txn)
+      authDAO.saveGroup(group2, txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        assert {
+          getMatchingGroupVertices(graph, group1).nonEmpty
+        }
+        assert {
+          getMatchingGroupVertices(graph, group2).nonEmpty
+        }
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        authDAO.deleteGroup(group1, txn)
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        assert {
+          getMatchingGroupVertices(graph, group1).isEmpty
+        }
+        assert {
+          getMatchingGroupVertices(graph, group2).nonEmpty
+        }
+      }
+    }
+  }
+
+  it should "not delete a non-existent group" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      intercept[RawlsException] {
+        authDAO.deleteGroup(RawlsGroupRef("none"), txn)
+      }
+    }
+  }
+
+  it should "not delete a group twice" in withDefaultTestDatabase { dataSource =>
+    val group = RawlsGroup("Group To Delete", Set.empty, Set.empty)
+
+    dataSource.inTransaction() { txn =>
+      authDAO.saveGroup(group, txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        assert {
+          getMatchingGroupVertices(graph, group).nonEmpty
+        }
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        authDAO.deleteGroup(group, txn)
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        assert {
+          getMatchingGroupVertices(graph, group).isEmpty
+        }
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      intercept[RawlsException] {
+        authDAO.deleteGroup(group, txn)
+      }
+    }
+  }
+
   it should "not save two copies of the same User" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       authDAO.saveUser(testUser, txn)
@@ -173,7 +255,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
         txn.withGraph { graph =>
           val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
 
-          Seq(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Read) foreach { level =>
+          WorkspaceAccessLevels.groupAccessLevelsAscending foreach { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
             val levelGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, level), Set.empty, Set.empty)
@@ -228,6 +310,72 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
         authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
       }
     }
+  }
+
+  it should "delete Workspace Access Groups" in withEmptyTestDatabase { dataSource =>
+    val context = dataSource.inTransaction() { txn =>
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels)
+      workspaceDAO.save(workspace, txn)
+    }
+
+    // first confirm the groups exist, and save them
+
+    val groups = dataSource.inTransaction() { txn =>
+      withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
+        txn.withGraph { graph =>
+          val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
+
+          WorkspaceAccessLevels.groupAccessLevelsAscending map { level =>
+            val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
+
+            val levelGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, level), Set.empty, Set.empty)
+            val levelVertices = getMatchingGroupVertices(graph, levelGroup)
+
+            assertResult(1) {
+              levelVertices.size
+            }
+            assert {
+              levelVertices.head == levelFromWs
+            }
+
+            levelGroup
+          }
+        }
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      authDAO.deleteWorkspaceAccessGroups(context.workspace, txn)
+    }
+
+    // then confirm they do not
+
+    dataSource.inTransaction() { txn =>
+      txn.withGraph { graph =>
+        assertResult(0) {
+          groups map { group =>
+            getMatchingGroupVertices(graph, group).size
+          } sum
+        }
+      }
+    }
+
+    // and also confirm that we have not left any stray vertices besides Workspace and User
+
+    dataSource.inTransaction() { txn =>
+      workspaceDAO.delete(context.workspace.toWorkspaceName, txn)
+
+      txn.withGraph { graph =>
+        val wsOwnerVertex = getMatchingUserVertices(graph, testUser).head
+        authDAO.removeObject(wsOwnerVertex, graph)
+
+        assertResult(0) {
+          graph.getVertices.toList.size
+        }
+      }
+    }
+
   }
 
   it should "return the ACL for a user in a workspace" in withDefaultTestDatabase { dataSource =>
