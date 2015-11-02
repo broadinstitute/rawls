@@ -61,26 +61,42 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class EmptyWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
+    val user = RawlsUser(userInfo)
+    val ownerGroup = makeRawlsGroup("testwsOwners", Set(user), Set.empty)
+    val readerGroup = makeRawlsGroup("testwsReaders", Set(user), Set.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup))
+    val workspaceReader = Workspace(wsName.namespace, wsName.name + "2", "aWorkspaceId2", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Read -> readerGroup))
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
       workspaceDAO.save(workspace, txn)
+      workspaceDAO.save(workspaceReader, txn)
     }
   }
 
   class LockedWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, isLocked = true )
+    val owner = RawlsUser(UserInfo("owner_access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val ownerGroup = makeRawlsGroup("testwsOwners", Set(owner), Set.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup), isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(owner, txn)
+      authDAO.saveGroup(ownerGroup, txn)
       workspaceDAO.save(workspace, txn)
     }
   }
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
-    val owner = RawlsUser(userInfo)
-    val ownerGroup = makeRawlsGroup("testwsOwners", Set(owner), Set.empty)
+    val user = RawlsUser(userInfo)
+    val ownerGroup = makeRawlsGroup("testwsOwners", Set(user), Set.empty)
+    val writerGroup = makeRawlsGroup("testwsWriters", Set(user), Set.empty)
 
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsAttrs = Map(
@@ -89,7 +105,13 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       "empty" -> AttributeEmptyList,
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(WorkspaceAccessLevels.Owner -> ownerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup))
+
+    val workspaceWriter = Workspace(wsName.namespace, wsName.name + "2", "aWorkspaceId2", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Write -> writerGroup))
+
+    val workspaceNoAccess = Workspace(wsName.namespace, wsName.name + "_noaccess", "aWorkspaceId3", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, isLocked = true)
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -199,9 +221,12 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
-      authDAO.saveUser(owner, txn)
+      authDAO.saveUser(user, txn)
       authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
       workspaceDAO.save(workspace, txn)
+      workspaceDAO.save(workspaceWriter, txn)
+      workspaceDAO.save(workspaceNoAccess, txn)
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, aliquot2, txn)
