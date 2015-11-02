@@ -48,7 +48,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     gcsConfig.getString("groupsPrefix"),
     gcsConfig.getString("appName"),
     gcsConfig.getInt("deletedBucketCheckSeconds"),
-    gcsConfig.getString("serviceProject")
+    gcsConfig.getString("serviceProject"),
+    gcsConfig.getString("tokenEncryptionKey")
   )
 
   def addSecurityHeaders: RequestTransformer = {

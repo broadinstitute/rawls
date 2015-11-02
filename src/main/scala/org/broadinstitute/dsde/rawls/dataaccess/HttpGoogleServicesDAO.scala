@@ -7,6 +7,7 @@ import akka.actor.{ActorSystem, ActorContext}
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import com.google.api.client.util.DateTime
 import com.google.api.services.storage.model.BucketAccessControl.ProjectTeam
+import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 
@@ -49,7 +50,8 @@ class HttpGoogleServicesDAO(
   groupsPrefix: String,
   appName: String,
   deletedBucketCheckSeconds: Int,
-  serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
+  serviceProject: String,
+  tokenEncryptionKey: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -63,6 +65,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
   val tokenBucketName = "rawls-tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+  val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   initTokenBucket()
 
@@ -349,7 +352,9 @@ class HttpGoogleServicesDAO(
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     retryWhen500(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId)
-      val media = new InputStreamContent("text/plain", new ByteArrayInputStream(refreshToken.getBytes))
+      val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
+      so.setMetadata(Map("iv" -> encryptedToken.base64Iv))
+      val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
       val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
       inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
       inserter.execute()
@@ -363,7 +368,8 @@ class HttpGoogleServicesDAO(
       val tokenBytes = new ByteArrayOutputStream()
       try {
         get.executeMediaAndDownloadTo(tokenBytes)
-        Option(tokenBytes.toString)
+        val so = get.execute()
+        Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
       } catch {
         case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue => None
       }
