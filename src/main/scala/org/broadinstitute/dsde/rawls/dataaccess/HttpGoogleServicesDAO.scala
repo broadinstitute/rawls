@@ -1,18 +1,16 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
-import java.util.Date
 
-import akka.actor.{ActorSystem, ActorContext}
+import akka.actor.ActorSystem
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
-import com.google.api.client.util.DateTime
-import com.google.api.services.storage.model.BucketAccessControl.ProjectTeam
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
+
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -35,10 +33,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
 import spray.http.StatusCodes
-
-import JavaConversions._
-
-// Seq[String] -> Collection<String>
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
