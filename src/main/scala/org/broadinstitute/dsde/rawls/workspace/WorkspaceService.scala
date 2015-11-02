@@ -165,6 +165,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+        //getWorkspaceOwners(workspaceName)
         gcsDAO.getMaximumAccessLevel(userInfo.userEmail,workspaceContext.workspace.workspaceId) flatMap { accessLevel =>
           if (accessLevel < WorkspaceAccessLevels.Read)
             Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
@@ -180,6 +181,18 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
         }
       }
     }
+
+  def getWorkspaceOwners(workspaceName: WorkspaceName): Seq[String] =
+    dataSource.inTransaction(readLocks=Set(workspaceName)) { txn =>
+      val ownerGroup = containerDAO.authDAO.loadGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Owner), txn)
+      val users = ownerGroup.users.map(u => gcsDAO.toUserFromProxy(gcsDAO.toProxyFromUser(u.userSubjectId)))
+      val subGroups = ownerGroup.subGroups.map(g => g.groupName)
+
+      println(users.mkString("\n"))
+      println(subGroups.mkString("\n"))
+
+      (users++subGroups).toSeq
+  }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
