@@ -169,7 +169,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           if (accessLevel < WorkspaceAccessLevels.Read)
             Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
-            val owners = getWorkspaceOwners(workspaceName)
+            val owners = getWorkspaceOwners(workspaceName).value.get.get
             val response = WorkspaceListResponse(accessLevel,
               workspaceContext.workspace,
               getWorkspaceSubmissionStats(workspaceContext, txn),
@@ -180,13 +180,13 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def getWorkspaceOwners(workspaceName: WorkspaceName): Seq[String] =
+  def getWorkspaceOwners(workspaceName: WorkspaceName): Future[Seq[String]] =
     dataSource.inTransaction(readLocks=Set(workspaceName)) { txn =>
       val ownerGroup = containerDAO.authDAO.loadGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Owner), txn)
       val users = ownerGroup.users.map(u => gcsDAO.toUserFromProxy(gcsDAO.toProxyFromUser(u.userSubjectId)))
       val subGroups = ownerGroup.subGroups.map(g => g.groupName)
 
-      (users++subGroups).toSeq
+      Future.successful((users++subGroups).toSeq)
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
@@ -225,45 +225,43 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       }
     }
 
-  def listWorkspaces(): Future[Unit] = { Future.successful(None) }
+  def listWorkspaces(): Future[PerRequestMessage] = {
+    // this one is a little special:
+    // 1 query to get the accessible workspace
+    // then for each result in parallel 1 query to get the owners and 1 query to get details out of the db
+    // last, join those parallel operations to a single result
 
-//  def listWorkspaces(): Future[PerRequestMessage] = {
-//    // this one is a little special:
-//    // 1 query to get the accessible workspace
-//    // then for each result in parallel 1 query to get the owners and 1 query to get details out of the db
-//    // last, join those parallel operations to a single result
-//
-//    // 1 query to gcsDAO to list all the workspaces
-//    val eventualResponses = gcsDAO.getWorkspaces(userInfo.userEmail).flatMap { permissionsPairs =>
-//
-//      // Future.sequence will do everything within in parallel per workspace then join them all
-//      Future.sequence(permissionsPairs map { permissionsPair =>
-//        // query to get owners
-//
-//        gcsDAO.getOwners(permissionsPair.workspaceId).zip(Future.successful(permissionsPair))
-//      } map { ownersAndPermissionsPairs =>
-//        for ((owners, permissionsPair) <- ownersAndPermissionsPairs) yield {
-//          // database query to get details
-//          dataSource.inTransaction() { txn =>
-//            containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn) match {
-//              case Some(workspaceContext) =>
-//                Option(WorkspaceListResponse(permissionsPair.accessLevel,
-//                  workspaceContext.workspace,
-//                  getWorkspaceSubmissionStats(workspaceContext, txn),
-//                  owners)
-//                )
-//              case None =>
-//                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
-//                None
-//            }
-//          }
-//        }
-//      })
-//    }
-//
-//    // collect the result
-//    eventualResponses map (r => RequestComplete(StatusCodes.OK, r.collect { case Some(x) => x }))
-//  }
+    // 1 query to gcsDAO to list all the workspaces
+    val eventualResponses = gcsDAO.getWorkspaces(userInfo.userEmail).flatMap { permissionsPairs =>
+
+      // Future.sequence will do everything within in parallel per workspace then join them all
+      Future.sequence(permissionsPairs map { permissionsPair =>
+        // query to get owners
+
+        getWorkspaceOwners(WorkspaceName("null", "null")).zip(Future.successful(permissionsPair))
+      } map { ownersAndPermissionsPairs =>
+        for ((owners, permissionsPair) <- ownersAndPermissionsPairs) yield {
+          // database query to get details
+          dataSource.inTransaction() { txn =>
+            containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn) match {
+              case Some(workspaceContext) =>
+                Option(WorkspaceListResponse(permissionsPair.accessLevel,
+                  workspaceContext.workspace,
+                  getWorkspaceSubmissionStats(workspaceContext, txn),
+                  owners)
+                )
+              case None =>
+                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
+                None
+            }
+          }
+        }
+      })
+    }
+
+    // collect the result
+    eventualResponses map (r => RequestComplete(StatusCodes.OK, r.collect { case Some(x) => x }))
+  }
 
   private def getWorkspaceSubmissionStats(workspaceContext: WorkspaceContext, txn: RawlsTransaction): WorkspaceSubmissionStats = {
     val submissions = containerDAO.submissionDAO.list(workspaceContext, txn)

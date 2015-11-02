@@ -272,7 +272,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]] = {
+  override def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]] = {
     val directory = getGroupDirectory
     val fetcher = directory.groups().list().setUserKey(userId)
     val groupsQuery = retry(when500)(() => Future {

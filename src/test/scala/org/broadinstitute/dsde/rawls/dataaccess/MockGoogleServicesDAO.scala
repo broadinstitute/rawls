@@ -59,13 +59,13 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def getMaximumAccessLevel(userId: String, workspaceId: String) = Future.successful(getAccessLevelOrDieTrying(userId))
 
-//  override def getWorkspaces(userId: String) = Future.successful(
-//    Seq(
-//      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevels.Owner),
-//      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevels.Write),
-//      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevels.Read)
-//    )
-//  )
+  override def getWorkspaces(userId: String) = Future.successful(
+    Seq(
+      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevels.Owner),
+      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevels.Write),
+      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevels.Read)
+    )
+  )
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
