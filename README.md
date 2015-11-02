@@ -14,17 +14,10 @@ $ cd rawls
 $ sbt clean compile test
 ```
 
-Running a local server (requires config settings to be defined in ```/etc/rawls.conf```):
-
-```
-$ sbt assembly
-$ java -jar target/scala-*/rawls-assembly-*.jar
-> (... should be running at localhost:8080 ...)
-```
-
 See the wiki for detailed documentation.
 
 ##Developer quick links:
 * Swagger UI: https://rawls-dev.broadinstitute.org
 * OrientDB UI: http://orientdb-dev.broadinstitute.org:2480
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
+* Running locally in docker https://github.com/broadinstitute/firecloud-environment
