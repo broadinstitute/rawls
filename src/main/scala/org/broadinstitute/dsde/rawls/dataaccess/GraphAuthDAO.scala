@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.util
-
 import com.tinkerpop.blueprints.{Direction, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.pipes.branch.LoopPipe

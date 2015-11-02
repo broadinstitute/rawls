@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import com.tinkerpop.blueprints.Graph
 import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, WorkspaceContext}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._

@@ -16,7 +16,6 @@ import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.ExecutionContext
 
-
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with OrientDbTestFixture {
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
