@@ -146,7 +146,7 @@ trait GraphDAO {
 
   /**
    * Returns the class of a vertex. */
-  private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
+  def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
 
   /**
    * Gets the properties of a vertex.
