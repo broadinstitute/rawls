@@ -8,6 +8,8 @@ trait AuthDAO {
 
   def saveGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup
 
+  def loadGroup(groupName: String, txn: RawlsTransaction): RawlsGroup
+
   def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef]
 
   def getMaximumAccessLevel(userSubjectId: String, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel

@@ -38,6 +38,9 @@ trait GoogleServicesDAO {
 
   def createProxyGroup(userInfo: UserInfo): Future[Unit]
 
+  def toProxyFromUser(userSubjectId: String): String
+  def toUserFromProxy(proxy: String): String
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(userInfo: UserInfo): Future[Option[String]]
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
