@@ -206,24 +206,24 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-//  it should "get a workspace" in withTestWorkspacesApiServices { services =>
-//    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val dateTime = org.joda.time.DateTime.now
-//        services.dataSource.inTransaction() { txn =>
-//          assertResult(
-//            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
-//            ){
-//              val response = responseAs[WorkspaceListResponse]
-//              WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
-//          }
-//        }
-//      }
-//  }
+  it should "get a workspace" in withTestWorkspacesApiServices { services =>
+    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val dateTime = org.joda.time.DateTime.now
+        services.dataSource.inTransaction() { txn =>
+          assertResult(
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            ){
+              val response = responseAs[WorkspaceListResponse]
+              WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
+          }
+        }
+      }
+  }
 
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x") ~>
@@ -250,24 +250,24 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-//  it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
-//      sealRoute(services.workspaceRoutes) ~>
-//      check {
-//        assertResult(StatusCodes.OK) {
-//          status
-//        }
-//        val dateTime = org.joda.time.DateTime.now
-//        services.dataSource.inTransaction() { txn =>
-//          assertResult(Set(
-//            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-//            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-//            WorkspaceListResponse(WorkspaceAccessLevels.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
-//          )) {
-//            responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
-//          }
-//        }
-//      }
-//  }
+  it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val dateTime = org.joda.time.DateTime.now
+        services.dataSource.inTransaction() { txn =>
+          assertResult(Set(
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
+            WorkspaceListResponse(WorkspaceAccessLevels.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+          )) {
+            responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
+          }
+        }
+      }
+  }
 
   it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
