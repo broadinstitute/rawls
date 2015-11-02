@@ -169,17 +169,25 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
           if (accessLevel < WorkspaceAccessLevels.Read)
             Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
           else {
-            gcsDAO.getOwners(workspaceContext.workspace.workspaceId) map { owners =>
-              val response = WorkspaceListResponse(accessLevel,
-                workspaceContext.workspace,
-                getWorkspaceSubmissionStats(workspaceContext, txn),
-                owners)
-              RequestComplete(StatusCodes.OK, response)
-            }
+            val owners = getWorkspaceOwners(workspaceName).value.get.get
+            val response = WorkspaceListResponse(accessLevel,
+              workspaceContext.workspace,
+              getWorkspaceSubmissionStats(workspaceContext, txn),
+              owners)
+            Future.successful(RequestComplete(StatusCodes.OK, response))
           }
         }
       }
     }
+
+  def getWorkspaceOwners(workspaceName: WorkspaceName): Future[Seq[String]] =
+    dataSource.inTransaction(readLocks=Set(workspaceName)) { txn =>
+      val ownerGroup = containerDAO.authDAO.loadGroup(UserAuth.toWorkspaceAccessGroupName(workspaceName, WorkspaceAccessLevels.Owner), txn)
+      val users = ownerGroup.users.map(u => gcsDAO.toUserFromProxy(gcsDAO.toProxyFromUser(u.userSubjectId)))
+      val subGroups = ownerGroup.subGroups.map(g => g.groupName)
+
+      Future.successful((users++subGroups).toSeq)
+  }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
@@ -229,7 +237,8 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       // Future.sequence will do everything within in parallel per workspace then join them all
       Future.sequence(permissionsPairs map { permissionsPair =>
         // query to get owners
-        gcsDAO.getOwners(permissionsPair.workspaceId).zip(Future.successful(permissionsPair))
+
+        getWorkspaceOwners(WorkspaceName("null", "null")).zip(Future.successful(permissionsPair))
       } map { ownersAndPermissionsPairs =>
         for ((owners, permissionsPair) <- ownersAndPermissionsPairs) yield {
           // database query to get details

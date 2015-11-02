@@ -20,8 +20,6 @@ trait GoogleServicesDAO {
 
   def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]]
 
-  def getOwners(workspaceId: String): Future[Seq[String]]
-
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 
   def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]]
@@ -37,6 +35,9 @@ trait GoogleServicesDAO {
   def listAdmins(): Future[Seq[String]]
 
   def createProxyGroup(userInfo: UserInfo): Future[Unit]
+
+  def toProxyFromUser(userSubjectId: String): String
+  def toUserFromProxy(proxy: String): String
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(userInfo: UserInfo): Future[Option[String]]

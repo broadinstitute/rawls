@@ -254,19 +254,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getOwners(workspaceId: String): Future[Seq[String]] = {
-    val members = getGroupDirectory.members
-    //a workspace should always have an owner, but just in case for some reason it doesn't...
-    val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevels.Owner))
-    val ownersQuery = retry(when500) (() => Future {
-      blocking { fetcher.execute }
-    })
-
-    ownersQuery map { queryResults =>
-      Option(queryResults.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
-    }
-  }
-
   override def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel] = {
     val bucketName = getBucketName(workspaceId)
     val members = getGroupDirectory.members
@@ -336,7 +323,7 @@ class HttpGoogleServicesDAO(
     val groups = directory.groups
     retry(when500) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(userInfo)).setName(userInfo.userEmail))
+        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(userInfo.userSubjectId)).setName(userInfo.userEmail))
         blocking {
           inserter.execute
         }
@@ -487,7 +474,7 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(userInfo: UserInfo) = s"PROXY_${userInfo.userSubjectId}@${appsDomain}"
+  def toProxyFromUser(userSubjectId: String) = s"PROXY_${userSubjectId}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 
   def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"

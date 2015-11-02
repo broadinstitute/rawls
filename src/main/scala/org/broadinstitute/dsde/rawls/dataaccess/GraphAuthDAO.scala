@@ -34,6 +34,14 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     }
   }
 
+  override def loadGroup(groupName: String, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
+    getGroupVertex(db, groupName) match {
+      case None => throw new RawlsException(s"Cannot load group ${groupName}")
+      case Some(v) =>
+        loadObject[RawlsGroup](v)
+    }
+  }
+
   override def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
     val user = RawlsUser(userInfo.userSubjectId)
     saveUser(user, txn)

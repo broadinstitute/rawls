@@ -221,6 +221,30 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
+  it should "load a group" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspace.copy(accessLevels = levels)
+      workspaceDAO.save(workspace, txn)
+    }
+
+    // separate transaction so we aren't checking un-saved vertices
+    dataSource.inTransaction() { txn =>
+      withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
+        txn.withGraph { graph =>
+          val ownerGroup = authDAO.loadGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, WorkspaceAccessLevels.Owner), txn)
+          val vAccessLevels = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
+          val vOwnerGroup = authDAO.getVertices(vAccessLevels, Direction.OUT, EdgeSchema.Ref, WorkspaceAccessLevels.Owner.toString).head
+
+          assert {
+            (ownerGroup.groupName).equals(
+              vOwnerGroup.getProperty("groupName"))
+          }
+        }
+      }
+    }
+  }
+
   it should "not allow Workspace Access Groups to be created twice" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       intercept[RawlsException] {
