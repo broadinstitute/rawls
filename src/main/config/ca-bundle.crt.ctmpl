@@ -1,1 +1,1 @@
-{{with $secret := vault "secret/dsde/local/local_broadinsititute_org" }}{{$secret.Data.ca_bundle_crt}}{{end}}
+{{with $environment := env "ENVIRONMENT"}}{{$keyname := printf "secret/dsde/%s/rawls/ssl_cert" $environment}}{{with vault $keyname}}{{.Data.ca_bundle_crt}}{{end}}{{end}}
