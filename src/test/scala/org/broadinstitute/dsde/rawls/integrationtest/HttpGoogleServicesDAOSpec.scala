@@ -20,7 +20,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
     gcsConfig.getString("secrets"),
-    gcsConfig.getString("pathToP12"),
+    gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appsDomain"),
     gcsConfig.getString("groupsPrefix"),
     gcsConfig.getString("appName"),
