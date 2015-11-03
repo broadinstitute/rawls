@@ -61,13 +61,22 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     override def compute(v: A) = !f.compute(v)
   }
 
-  private def isConnectedToTargetWorkspace(wsId:String) = new PipeFunction[Vertex, java.lang.Boolean] {
-    override def compute(v: Vertex) = v.getVertices(Direction.IN).iterator.exists({ case ws =>
-      isVertexOfClass(VertexSchema.Workspace).compute(ws) &&
-        hasPropertyValue("workspaceId", wsId).compute(ws) })
+  private def isTargetWorkspace(wsId:String) = new PipeFunction[Vertex, java.lang.Boolean] {
+    override def compute(v: Vertex) = {
+      isVertexOfClass(VertexSchema.Workspace).compute(v) && hasPropertyValue("workspaceId", wsId).compute(v)
+    }
   }
 
   override def getMaximumAccessLevel(userSubjectId: String, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel = {
+    val workspaces = listWorkspaces(userSubjectId, isTargetWorkspace(workspaceId), txn)
+    workspaces.find(_.workspaceId == workspaceId).map(_.accessLevel).getOrElse(WorkspaceAccessLevels.NoAccess)
+  }
+
+  override def listWorkspaces(userSubjectId: String, txn: RawlsTransaction): Seq[WorkspacePermissionsPair] = {
+    listWorkspaces(userSubjectId, isVertexOfClass(VertexSchema.Workspace), txn)
+  }
+
+  private def listWorkspaces(userSubjectId: String, loopEmitFn: PipeFunction[Vertex, java.lang.Boolean], txn: RawlsTransaction): Seq[WorkspacePermissionsPair] = {
     txn withGraph { db =>
 
       //Returns a list of paths starting with a group the user belongs in and ending with the workspace's access map.
@@ -78,22 +87,28 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
           .loop(
             "vtx", //start point of loop
             invert(isVertexOfClass(VertexSchema.Workspace)), //loop condition: stop walking the path once we've found a workspace node
-            isConnectedToTargetWorkspace(workspaceId)) //loop body: only emit paths to access maps connected to the target workspace
+            loopEmitFn)
           .enablePath.path()
 
-      //The last two elements of each path are the group and then the workspace access map.
-      //The edge label between them corresponds to the access level for the group.
-      //This foldl is equivalent to doing a max() on the list of those access levels.
-      accessMapPaths.iterator.foldLeft(WorkspaceAccessLevels.NoAccess:WorkspaceAccessLevel)({ (maxAccessLevel, path) =>
-        val reversePath = path.reverseIterator
-        val accessMap = reversePath.next().asInstanceOf[Vertex]
-        val group = reversePath.next().asInstanceOf[Vertex]
+      //The last 3 elements of each path are the group then the workspace access map then the workspace.
+      //The edge label between the group and the workspace access map corresponds to the access level for the group.
+      //It is possible for there to be more than 1 access level for a user for a workspace
+      //Group the paths by workspace then take the max access level for each workspace
+      val accessByWorkspace = accessMapPaths.toList.groupBy(path => loadObject[Workspace](path.last.asInstanceOf[Vertex]).workspaceId)
+      val accessLevels = accessByWorkspace map { case (workspaceId, paths) =>
+        paths.foldLeft(WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.NoAccess))({ (maxAccessLevel, path) =>
+          val reversePath = path.reverseIterator
+          reversePath.next() // remove workspace vertex
+          val accessMap = reversePath.next().asInstanceOf[Vertex]
+          val group = reversePath.next().asInstanceOf[Vertex]
 
-        val accessLabel = accessMap.getEdges(Direction.OUT).filter( _.getVertex(Direction.IN) == group ).head.getLabel
-        val accessLevel = WorkspaceAccessLevels.withName(EdgeSchema.stripEdgeRelation(accessLabel))
+          val accessLabel = accessMap.getEdges(Direction.OUT).filter( _.getVertex(Direction.IN) == group ).head.getLabel
+          val accessLevel = WorkspaceAccessLevels.withName(EdgeSchema.stripEdgeRelation(accessLabel))
 
-        WorkspaceAccessLevels.max(accessLevel, maxAccessLevel)
-      })
+          WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(accessLevel, maxAccessLevel.accessLevel))
+        })
+      }
+      accessLevels.toSeq
     }
   }
 }

@@ -11,4 +11,6 @@ trait AuthDAO {
   def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef]
 
   def getMaximumAccessLevel(userSubjectId: String, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel
+
+  def listWorkspaces(userSubjectId: String, txn: RawlsTransaction): Seq[WorkspacePermissionsPair]
 }

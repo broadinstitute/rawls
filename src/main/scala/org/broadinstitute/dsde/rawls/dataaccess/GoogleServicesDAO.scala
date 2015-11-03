@@ -24,8 +24,6 @@ trait GoogleServicesDAO {
 
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 
-  def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]]
-
   def getBucketName(workspaceId: String): String
 
   def isAdmin(userId: String): Future[Boolean]
