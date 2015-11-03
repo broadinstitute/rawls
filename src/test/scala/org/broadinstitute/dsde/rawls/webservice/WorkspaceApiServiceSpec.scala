@@ -102,10 +102,15 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   class TestWorkspaces() extends TestData {
+    val user = RawlsUser(userInfo.userSubjectId)
+    val workspaceOwnerGroup = RawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
+    val workspaceWriterGroup = RawlsGroup("workspaceWriterGroup", Set(user), Set.empty)
+    val workspaceReaderGroup = RawlsGroup("workspaceReaderGroup", Set(user), Set.empty)
+
     val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")), Map.empty)
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")), Map.empty)
-    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")), Map.empty)
+    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")), Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup))
+    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")), Map(WorkspaceAccessLevels.Write -> workspaceWriterGroup))
+    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")), Map(WorkspaceAccessLevels.Read -> workspaceReaderGroup))
     val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")), Map.empty)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
@@ -142,6 +147,11 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     )
 
     override def save(txn: RawlsTransaction): Unit = {
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(workspaceOwnerGroup, txn)
+      authDAO.saveGroup(workspaceWriterGroup, txn)
+      authDAO.saveGroup(workspaceReaderGroup, txn)
+
       workspaceDAO.save(workspaceOwner, txn)
       workspaceDAO.save(workspaceWriter, txn)
       workspaceDAO.save(workspaceReader, txn)

@@ -76,6 +76,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
+    val owner = RawlsUser(userInfo.userSubjectId)
+    val ownerGroup = RawlsGroup("testwsOwners", Set(owner), Set.empty)
+
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsAttrs = Map(
       "string" -> AttributeString("yep, it's a string"),
@@ -83,7 +86,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       "empty" -> AttributeEmptyList,
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -193,6 +196,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(owner, txn)
+      authDAO.saveGroup(ownerGroup, txn)
       workspaceDAO.save(workspace, txn)
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, aliquot1, txn)

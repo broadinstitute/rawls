@@ -285,19 +285,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]] = {
-    val directory = getGroupDirectory
-    val fetcher = directory.groups().list().setUserKey(userId)
-    val groupsQuery = retry(when500)(() => Future {
-      blocking { fetcher.execute }
-    })
-
-    groupsQuery map { groupsResult =>
-      val workspaceGroups = Option(groupsResult.getGroups).getOrElse(List.empty[Group].asJava)
-      workspaceGroups.flatMap( group => fromGroupId(group.getEmail) ).toSeq
-    }
-  }
-
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
   override def isAdmin(userId: String): Future[Boolean] = {
