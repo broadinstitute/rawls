@@ -240,12 +240,12 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Submission)).filter(hasPropertyValue("status",SubmissionStatuses.Submitted.toString))
   }
 
-  def userPipeline(db: Graph, userSubjectId: String) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",userSubjectId))
+  def userPipeline(db: Graph, user: RawlsUserRef) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",user.userSubjectId.value))
   }
 
-  def groupPipeline(db: Graph, groupName: String) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",groupName))
+  def groupPipeline(db: Graph, group: RawlsGroupRef) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",group.groupName.value))
   }
 
   // vertex getters
@@ -278,12 +278,12 @@ trait GraphDAO {
     }
   }
 
-  def getUserVertex(db: Graph, userSubjectId: String) = {
-    getSinglePipelineResult(userPipeline(db, userSubjectId))
+  def getUserVertex(db: Graph, user: RawlsUserRef) = {
+    getSinglePipelineResult(userPipeline(db, user))
   }
 
-  def getGroupVertex(db: Graph, groupName: String) = {
-    getSinglePipelineResult(groupPipeline(db, groupName))
+  def getGroupVertex(db: Graph, group: RawlsGroupRef) = {
+    getSinglePipelineResult(groupPipeline(db, group))
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
@@ -390,13 +390,13 @@ trait GraphDAO {
   }
 
   private def saveUserRef(ref: RawlsUserRef, propName: String, vertex: Vertex, db: Graph): Unit =
-    getUserVertex(db, ref.userSubjectId) match {
+    getUserVertex(db, ref) match {
       case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
       case None => throw new RawlsException("Cannot find User corresponding to " + ref.userSubjectId)
     }
 
   private def saveGroupRef(ref: RawlsGroupRef, propName: String, vertex: Vertex, db: Graph): Unit =
-    getGroupVertex(db, ref.groupName) match {
+    getGroupVertex(db, ref) match {
       case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
       case None => throw new RawlsException("Cannot find Group corresponding to " + ref.groupName)
     }
@@ -410,6 +410,9 @@ trait GraphDAO {
       case (_, value:Int)     => vertex.setProperty(propName, value)
       case (_, value:Boolean) => vertex.setProperty(propName, value)
       case (_, value:DateTime)=> vertex.setProperty(propName, value.toDate)
+
+      // RawlsUser and RawlsGroup field types.
+      case (_, value:UserAuthType)  => vertex.setProperty(propName, value.value)
 
       //Attributes.
 
@@ -460,24 +463,30 @@ trait GraphDAO {
     loadObject(typeOf[T], vertex).asInstanceOf[T]
   }
 
-  def loadObject(tpe: Type, vertex: Vertex): Any = {
+  def getCtorMirror(tpe: Type) = {
     val classT = tpe.typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
     val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
-    val ctorMirror = classMirror.reflectConstructor(ctor)
+    classMirror.reflectConstructor(ctor)
+  }
 
+  def loadObject(tpe: Type, vertex: Vertex): Any = {
     val parameters = getCtorProperties(tpe).map({
       case (tp, prop) =>
         loadProperty(tp, prop, vertex)
     }).toSeq
 
-    ctorMirror(parameters: _*)
+    getCtorMirror(tpe)(parameters: _*)
   }
 
   def loadSubObject(tpe: Type, propName: String, vertex: Vertex): Any = {
     val subVert = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     subVert.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
     loadObject(tpe, subVert)
+  }
+
+  def loadUserAuth(tpe: Type, propName: String, vertex: Vertex): Any = {
+    getCtorMirror(tpe)(vertex.getProperty(propName))
   }
 
   private def loadStringMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
@@ -563,12 +572,12 @@ trait GraphDAO {
 
   private def loadUserRef(propName: String, vertex: Vertex): RawlsUserRef = {
     val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
-    RawlsUserRef(refVtx.getProperty("userSubjectId"))
+    RawlsUserRef(RawlsUserSubjectId(refVtx.getProperty("userSubjectId")))
   }
 
   private def loadGroupRef(propName: String, vertex: Vertex): RawlsGroupRef = {
     val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
-    RawlsGroupRef(refVtx.getProperty("groupName"))
+    RawlsGroupRef(RawlsGroupName(refVtx.getProperty("groupName")))
   }
 
   private def loadAttributeList[T](propName: String, vertex: Vertex): Seq[T] = {
@@ -597,6 +606,9 @@ trait GraphDAO {
       case tp if tp =:= typeOf[Boolean] => vertex.getProperty(propName)
       //serializing joda datetime across the network breaks, though it works fine in-memory
       case tp if tp =:= typeOf[DateTime]=> new DateTime(vertex.getProperty(propName).asInstanceOf[Date])
+
+      // RawlsUser and RawlsGroup field types.
+      case tp if tp <:< typeOf[UserAuthType]  => loadUserAuth(tp, propName, vertex)
 
       //Attributes.
       case tp if tp <:< typeOf[AttributeValue] => AttributeConversions.propertyToAttribute(vertex.getProperty(propName))
