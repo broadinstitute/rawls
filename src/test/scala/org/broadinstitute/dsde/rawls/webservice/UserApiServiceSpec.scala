@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, HttpExecutionServic
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionReportFormat, SubmissionRequestFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -13,13 +12,18 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
-import spray.httpx.SprayJsonSupport._
 import spray.json._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+
+import com.tinkerpop.blueprints.{Vertex, Graph}
+import com.tinkerpop.blueprints.impls.orient.OrientVertex
+
+import scala.collection.JavaConversions._
+
 
 /**
  * Created by dvoet on 4/24/15.
@@ -52,7 +56,8 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
-    val userServiceConstructor = UserService.constructor(dataSource, new MockGoogleServicesDAO)_
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -74,6 +79,16 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
     }
   }
 
+  def userFromId(subjectId: String) =
+    RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
+
+  def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
+    graph.getVertices.filter(v => {
+      v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
+        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
+    })
+
+
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
     Put("/user/refreshToken", HttpEntity(ContentTypes.`application/json`, UserRefreshToken("gobblegobble").toJson.toString)) ~>
       sealRoute(services.userRoutes) ~>
@@ -84,10 +99,50 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       check { assertResult(StatusCodes.OK) {status} }
   }
 
-  "UserApi" should "get 404 when token is not set" in withTestDataApiServices { services =>
+  it should "get 404 when token is not set" in withTestDataApiServices { services =>
     Get("/user/refreshTokenDate") ~>
       sealRoute(services.userRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
+  }
+
+  it should "create a graph user and a user proxy group" in withEmptyTestDatabase { dataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      dataSource.inTransaction() { txn =>
+        txn.withGraph { graph =>
+          assert {
+            getMatchingUserVertices(graph, user).isEmpty
+          }
+        }
+      }
+
+      assert {
+        ! services.gcsDAO.containsProxyGroup(user)
+      }
+
+      Post("/user") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      dataSource.inTransaction() { txn =>
+        txn.withGraph { graph =>
+          assert {
+            getMatchingUserVertices(graph, user).nonEmpty
+          }
+        }
+      }
+
+      assert {
+        services.gcsDAO.containsProxyGroup(user)
+      }
+    }
   }
 
 }
