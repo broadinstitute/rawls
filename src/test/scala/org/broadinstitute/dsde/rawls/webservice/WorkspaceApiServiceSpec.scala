@@ -250,7 +250,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
+  it should "list workspaces" in withTestWorkspacesApiServices { services =>
+    Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

@@ -1,17 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
-import java.util.Date
 
-import akka.actor.{ActorSystem, ActorContext}
+import akka.actor.ActorSystem
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
-import com.google.api.client.util.DateTime
-import com.google.api.services.storage.model.BucketAccessControl.ProjectTeam
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
+
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -35,10 +33,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
 import spray.http.StatusCodes
 
-import JavaConversions._
-
-// Seq[String] -> Collection<String>
-
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
   clientSecretsJson: String,
@@ -50,8 +44,6 @@ class HttpGoogleServicesDAO(
   serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
-
-  val groupAccessLevelsAscending = Seq(WorkspaceAccessLevels.Read, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Owner)
 
   // modify these if we need more granular access in the future
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE)
