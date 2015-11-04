@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls
 
-
 import java.io.File
 
 import akka.actor.ActorSystem
@@ -17,7 +16,6 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
 
 import scala.concurrent.duration._
-import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -73,7 +71,7 @@ object Boot extends App {
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor),
-                    UserService.constructor(dataSource, gcsDAO)),
+                    UserService.constructor(dataSource, gcsDAO, containerDAO)),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

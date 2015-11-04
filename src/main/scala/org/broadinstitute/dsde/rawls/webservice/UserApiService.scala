@@ -1,11 +1,8 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -24,6 +21,13 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
   val userServiceConstructor: UserInfo => UserService
 
   val userRoutes = requireUserInfo() { userInfo =>
+    path("user") {
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.CreateUser)
+      }
+    } ~
     path("user" / "refreshToken") {
       put {
         entity(as[UserRefreshToken]) { token =>

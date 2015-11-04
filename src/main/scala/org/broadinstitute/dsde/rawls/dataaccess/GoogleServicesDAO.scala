@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspacePermissionsPair, UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.http.StatusCodes
 import scala.concurrent.Future
@@ -32,7 +32,7 @@ trait GoogleServicesDAO {
 
   def listAdmins(): Future[Seq[String]]
 
-  def createProxyGroup(userInfo: UserInfo): Future[Unit]
+  def createProxyGroup(user: RawlsUser): Future[Unit]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(userInfo: UserInfo): Future[Option[String]]

@@ -1,13 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
-import WorkspaceACLJsonSupport._
 import org.joda.time.DateTime
-import spray.json._
 import scala.concurrent.Future
-import scala.util.Try
 
 class MockGoogleServicesDAO extends GoogleServicesDAO {
 
@@ -49,6 +45,8 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
     }
   }
 
+  var mockProxyGroups: Set[RawlsUser] = Set.empty
+
   override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String) = Future.successful(Unit)
@@ -73,5 +71,10 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def listAdmins(): Future[Seq[String]] = Future.successful(adminList.toSeq)
 
-  override def createProxyGroup(userInfo: UserInfo): Future[Unit] = Future.successful(Unit)
+  override def createProxyGroup(user: RawlsUser): Future[Unit] = {
+    mockProxyGroups += user
+    Future.successful(Unit)
+  }
+
+  def containsProxyGroup(user: RawlsUser) = mockProxyGroups contains user
 }
