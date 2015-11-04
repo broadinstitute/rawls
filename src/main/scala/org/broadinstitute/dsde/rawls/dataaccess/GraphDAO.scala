@@ -244,8 +244,16 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",user.userSubjectId.value))
   }
 
+  def userPipelineByEmail(db: Graph, email: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userEmail",email))
+  }
+
   def groupPipeline(db: Graph, group: RawlsGroupRef) = {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",group.groupName.value))
+  }
+
+  def groupPipelineByEmail(db: Graph, email: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupEmail",email))
   }
 
   // vertex getters
@@ -282,8 +290,16 @@ trait GraphDAO {
     getSinglePipelineResult(userPipeline(db, user))
   }
 
+  def getUserVertexByEmail(db: Graph, email: String) = {
+    getSinglePipelineResult(userPipelineByEmail(db, email))
+  }
+
   def getGroupVertex(db: Graph, group: RawlsGroupRef) = {
     getSinglePipelineResult(groupPipeline(db, group))
+  }
+
+  def getGroupVertexByEmail(db: Graph, email: String) = {
+    getSinglePipelineResult(groupPipelineByEmail(db, email))
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
