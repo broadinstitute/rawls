@@ -457,4 +457,34 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       }
     }
   }
+
+  it should "find workspaces for users in subgroups" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val user = RawlsUser("obama@whitehouse.gov")
+      val group2 = RawlsGroup("TotallySuperSecret", Set(user), Set.empty)
+      val group = RawlsGroup("TopSecret", Set.empty, Set(group2))
+
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(group2, txn)
+      authDAO.saveGroup(group, txn)
+
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+      val workspace1 = testData.workspace.copy(name = "1", workspaceId = "1", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      val workspace2 = testData.workspace.copy(name = "2", workspaceId = "2", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Write -> group))
+      val workspace3 = testData.workspace.copy(name = "3", workspaceId = "3", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Read -> group))
+      val workspace4 = testData.workspace.copy(name = "4", workspaceId = "4", accessLevels = levels)
+      workspaceDAO.save(workspace1, txn)
+      workspaceDAO.save(workspace2, txn)
+      workspaceDAO.save(workspace3, txn)
+      workspaceDAO.save(workspace4, txn)
+
+      val result = authDAO.listWorkspaces(user.userSubjectId, txn)
+      assertResult( Set(WorkspacePermissionsPair(workspace1.workspaceId, WorkspaceAccessLevels.Owner), WorkspacePermissionsPair(workspace2.workspaceId, WorkspaceAccessLevels.Write), WorkspacePermissionsPair(workspace3.workspaceId, WorkspaceAccessLevels.Read)) ) {
+        result.toSet
+      }
+      assertResult( 3 ) {
+        result.size
+      }
+    }
+  }
 }
