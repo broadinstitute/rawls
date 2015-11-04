@@ -313,12 +313,12 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def createProxyGroup(userInfo: UserInfo): Future[Unit] = {
+  def createProxyGroup(user: RawlsUser): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
     retry(when500) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(userInfo)).setName(userInfo.userEmail))
+        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
         blocking {
           inserter.execute
         }
@@ -472,7 +472,7 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(userInfo: UserInfo) = s"PROXY_${userInfo.userSubjectId}@${appsDomain}"
+  def toProxyFromUser(subjectId: RawlsUserSubjectId) = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 
   def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"
