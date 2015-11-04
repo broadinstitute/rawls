@@ -56,6 +56,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
 
+  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef]) =
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail("dummy@example.com"), users, groups)
+
   class EmptyWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
@@ -76,8 +79,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
-    val owner = RawlsUser(userInfo.userSubjectId)
-    val ownerGroup = RawlsGroup("testwsOwners", Set(owner), Set.empty)
+    val owner = RawlsUser(userInfo)
+    val ownerGroup = makeRawlsGroup("testwsOwners", Set(owner), Set.empty)
 
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsAttrs = Map(
