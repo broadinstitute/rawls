@@ -218,7 +218,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
     // 1 query to gcsDAO to list all the workspaces
     val permissionsPairs = dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.listWorkspaces(userInfo.userSubjectId, txn)
+      containerDAO.authDAO.listWorkspaces(RawlsUser(userInfo), txn)
     }
 
     // Future.sequence will do everything within in parallel per workspace then join them all

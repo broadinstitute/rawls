@@ -16,17 +16,23 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId
+        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
     })
 
   def getMatchingGroupVertices(graph: Graph, group: RawlsGroup): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Group) &&
-        v.getProperty[String]("groupName") == group.groupName
+        v.getProperty[String]("groupName") == group.groupName.value
     })
 
   val testUserInfo = UserInfo("dummy-emal@example.com", OAuth2BearerToken("dummy-token"), 0, "dummy-ID")
-  val testUser = RawlsUser(testUserInfo.userSubjectId)
+  val testUser = RawlsUser(testUserInfo)
+
+  def userFromId(subjectId: String) =
+    RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
+
+  def groupFromName(name: String) =
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail("dummy@example.com"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
 
   "GraphAuthDAO" should "save a new User" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
@@ -42,7 +48,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save a new Group" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val group = RawlsGroup("Empty Group", Set.empty, Set.empty)
+      val group = groupFromName("Empty Group")
       authDAO.saveGroup(group, txn)
 
       txn.withGraph { graph =>
@@ -54,8 +60,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   }
 
   it should "delete a Group" in withDefaultTestDatabase { dataSource =>
-    val group1 = RawlsGroup("Group One", Set.empty, Set.empty)
-    val group2 = RawlsGroup("Group Two", Set.empty, Set.empty)
+    val group1 = groupFromName("Group One")
+    val group2 = groupFromName("Group Two")
 
     dataSource.inTransaction() { txn =>
       authDAO.saveGroup(group1, txn)
@@ -94,13 +100,13 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   it should "not delete a non-existent group" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       intercept[RawlsException] {
-        authDAO.deleteGroup(RawlsGroupRef("none"), txn)
+        authDAO.deleteGroup(groupFromName("404 Group Not Found LOL"), txn)
       }
     }
   }
 
   it should "not delete a group twice" in withDefaultTestDatabase { dataSource =>
-    val group = RawlsGroup("Group To Delete", Set.empty, Set.empty)
+    val group = groupFromName("Group To Delete")
 
     dataSource.inTransaction() { txn =>
       authDAO.saveGroup(group, txn)
@@ -150,7 +156,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "not save two copies of the same Group" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val group = RawlsGroup("Empty Group", Set.empty, Set.empty)
+      val group = groupFromName("Empty Group")
       authDAO.saveGroup(group, txn)
       authDAO.saveGroup(group, txn)
 
@@ -166,8 +172,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     dataSource.inTransaction() { txn =>
       authDAO.saveUser(testUser, txn)
 
-      val group1 = RawlsGroup("Group 1 For User", Set(testUser), Set.empty)
-      val group2 = RawlsGroup("Group 2 For User", Set(testUser), Set.empty)
+      val group1 = makeRawlsGroup("Group 1 For User", Set(testUser), Set.empty)
+      val group2 = makeRawlsGroup("Group 2 For User", Set(testUser), Set.empty)
       authDAO.saveGroup(group1, txn)
       authDAO.saveGroup(group2, txn)
 
@@ -187,9 +193,9 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "not save a new Group with missing users" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val user1 = RawlsUser("subjectId1")
-      val user2 = RawlsUser("subjectId2")
-      val group = RawlsGroup("Two User Group", Set(user1, user2), Set.empty)
+      val user1 = userFromId("subjectId1")
+      val user2 = userFromId("subjectId2")
+      val group = makeRawlsGroup("Two User Group", Set(user1, user2), Set.empty)
 
       intercept[RawlsException] {
         // note that the users have not first been saved
@@ -206,8 +212,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "not save a new Group with missing groups" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val group1 = RawlsGroup("Group One", Set.empty, Set.empty)
-      val group2 = RawlsGroup("Group Two", Set.empty, Set(group1))
+      val group1 = makeRawlsGroup("Group One", Set.empty, Set.empty)
+      val group2 = makeRawlsGroup("Group Two", Set.empty, Set(group1))
 
       intercept[RawlsException] {
         // note that the first group has not first been saved
@@ -224,9 +230,9 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save a subgroup hierarchy" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val group1 = RawlsGroup("Group One", Set.empty, Set.empty)
-      val group2 = RawlsGroup("Group Two", Set.empty, Set(group1))
-      val group3 = RawlsGroup("Group Three", Set.empty, Set(group1, group2))
+      val group1 = makeRawlsGroup("Group One", Set.empty, Set.empty)
+      val group2 = makeRawlsGroup("Group Two", Set.empty, Set(group1))
+      val group3 = makeRawlsGroup("Group Three", Set.empty, Set(group1, group2))
 
       authDAO.saveGroup(group1, txn)
       authDAO.saveGroup(group2, txn)
@@ -258,7 +264,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
           WorkspaceAccessLevels.groupAccessLevelsAscending foreach { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, level), Set.empty, Set.empty)
+            val levelGroup = RawlsGroup(testData.workspace.toWorkspaceName, level)
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -329,7 +335,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
           WorkspaceAccessLevels.groupAccessLevelsAscending map { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(UserAuth.toWorkspaceAccessGroupName(testData.workspace.toWorkspaceName, level), Set.empty, Set.empty)
+            val levelGroup = RawlsGroup(testData.workspace.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -380,8 +386,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "return the ACL for a user in a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val user = RawlsUser("obama@whitehouse.gov")
-      val group = RawlsGroup("TopSecret", Set(user), Set.empty)
+      val user = userFromId("obama@whitehouse.gov")
+      val group = makeRawlsGroup("TopSecret", Set(user), Set.empty)
 
       authDAO.saveUser(user, txn)
       authDAO.saveGroup(group, txn)
@@ -391,16 +397,16 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
-        authDAO.getMaximumAccessLevel(user.userSubjectId, workspace.workspaceId, txn)
+        authDAO.getMaximumAccessLevel(user, workspace.workspaceId, txn)
       }
     }
   }
 
   it should "choose the maximum access level for a user with multiple ACLs in a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val obama = RawlsUser("obama@whitehouse.gov")
-      val group = RawlsGroup("TopSecret", Set(obama), Set.empty)
-      val group2 = RawlsGroup("NotSoSecret", Set(obama), Set.empty)
+      val obama = userFromId("obama@whitehouse.gov")
+      val group = makeRawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = makeRawlsGroup("NotSoSecret", Set(obama), Set.empty)
 
       authDAO.saveUser(obama, txn)
       authDAO.saveGroup(group, txn)
@@ -411,17 +417,17 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
-        authDAO.getMaximumAccessLevel(obama.userSubjectId, workspace.workspaceId, txn)
+        authDAO.getMaximumAccessLevel(obama, workspace.workspaceId, txn)
       }
     }
   }
 
   it should "return NoAccess when a user isn't associated with a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val obama = RawlsUser("obama@whitehouse.gov")
-      val snowden = RawlsUser("snowden@iminurfiles.lol")
-      val group = RawlsGroup("TopSecret", Set(obama), Set.empty)
-      val group2 = RawlsGroup("NotSoSecret", Set(obama), Set.empty)
+      val obama = userFromId("obama@whitehouse.gov")
+      val snowden = userFromId("snowden@iminurfiles.lol")
+      val group = makeRawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = makeRawlsGroup("NotSoSecret", Set(obama), Set.empty)
 
       authDAO.saveUser(obama, txn)
       authDAO.saveUser(snowden, txn)
@@ -433,16 +439,16 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       workspaceDAO.save(workspace, txn)
 
       assertResult(WorkspaceAccessLevels.NoAccess) {
-        authDAO.getMaximumAccessLevel(snowden.userSubjectId, workspace.workspaceId, txn)
+        authDAO.getMaximumAccessLevel(snowden, workspace.workspaceId, txn)
       }
     }
   }
 
   it should "find ACLs for users in subgroups" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val user = RawlsUser("obama@whitehouse.gov")
-      val group2 = RawlsGroup("TotallySuperSecret", Set(user), Set.empty)
-      val group = RawlsGroup("TopSecret", Set.empty, Set(group2))
+      val user = userFromId("obama@whitehouse.gov")
+      val group2 = makeRawlsGroup("TotallySuperSecret", Set(user), Set.empty)
+      val group = makeRawlsGroup("TopSecret", Set.empty, Set(group2))
 
       authDAO.saveUser(user, txn)
       authDAO.saveGroup(group2, txn)
@@ -453,16 +459,16 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
-        authDAO.getMaximumAccessLevel(user.userSubjectId, workspace.workspaceId, txn)
+        authDAO.getMaximumAccessLevel(user, workspace.workspaceId, txn)
       }
     }
   }
 
   it should "find workspaces for users in subgroups" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val user = RawlsUser("obama@whitehouse.gov")
-      val group2 = RawlsGroup("TotallySuperSecret", Set(user), Set.empty)
-      val group = RawlsGroup("TopSecret", Set.empty, Set(group2))
+      val user = userFromId("obama@whitehouse.gov")
+      val group2 = makeRawlsGroup("TotallySuperSecret", Set(user), Set.empty)
+      val group = makeRawlsGroup("TopSecret", Set.empty, Set(group2))
 
       authDAO.saveUser(user, txn)
       authDAO.saveGroup(group2, txn)
@@ -478,7 +484,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       workspaceDAO.save(workspace3, txn)
       workspaceDAO.save(workspace4, txn)
 
-      val result = authDAO.listWorkspaces(user.userSubjectId, txn)
+      val result = authDAO.listWorkspaces(user, txn)
       assertResult( Set(WorkspacePermissionsPair(workspace1.workspaceId, WorkspaceAccessLevels.Owner), WorkspacePermissionsPair(workspace2.workspaceId, WorkspaceAccessLevels.Write), WorkspacePermissionsPair(workspace3.workspaceId, WorkspaceAccessLevels.Read)) ) {
         result.toSet
       }

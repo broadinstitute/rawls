@@ -102,10 +102,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   class TestWorkspaces() extends TestData {
-    val user = RawlsUser(userInfo.userSubjectId)
-    val workspaceOwnerGroup = RawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
-    val workspaceWriterGroup = RawlsGroup("workspaceWriterGroup", Set(user), Set.empty)
-    val workspaceReaderGroup = RawlsGroup("workspaceReaderGroup", Set(user), Set.empty)
+    val user = RawlsUser(userInfo)
+    val workspaceOwnerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
+    val workspaceWriterGroup = makeRawlsGroup("workspaceWriterGroup", Set(user), Set.empty)
+    val workspaceReaderGroup = makeRawlsGroup("workspaceReaderGroup", Set(user), Set.empty)
 
     val writerWorkspaceName = WorkspaceName("ns", "writer")
     val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")), Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup))
