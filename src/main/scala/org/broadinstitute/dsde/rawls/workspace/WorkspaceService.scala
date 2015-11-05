@@ -156,7 +156,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)), workspaceContext.workspace.workspaceId, txn)
+        val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext.workspace.workspaceId, txn)
         if (accessLevel < WorkspaceAccessLevels.Read)
           Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
         else {
@@ -1066,7 +1066,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(codeBlock: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    val userLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)), workspace.workspaceId, txn)
+    val userLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspace.workspaceId, txn)
     if (userLevel >= requiredLevel) {
       if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
         Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
