@@ -80,7 +80,7 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
 
   class LockedWorkspace() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val owner = RawlsUser(UserInfo("owner_access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val owner = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("testwsOwners", Set(owner), Set.empty)
     val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup), isLocked = true )
