@@ -156,17 +156,16 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        gcsDAO.getMaximumAccessLevel(userInfo.userEmail,workspaceContext.workspace.workspaceId) flatMap { accessLevel =>
-          if (accessLevel < WorkspaceAccessLevels.Read)
-            Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-          else {
-            gcsDAO.getOwners(workspaceContext.workspace.workspaceId) map { owners =>
-              val response = WorkspaceListResponse(accessLevel,
-                workspaceContext.workspace,
-                getWorkspaceSubmissionStats(workspaceContext, txn),
-                owners)
-              RequestComplete(StatusCodes.OK, response)
-            }
+        val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext.workspace.workspaceId, txn)
+        if (accessLevel < WorkspaceAccessLevels.Read)
+          Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        else {
+          gcsDAO.getOwners(workspaceContext.workspace.workspaceId) map { owners =>
+            val response = WorkspaceListResponse(accessLevel,
+              workspaceContext.workspace,
+              getWorkspaceSubmissionStats(workspaceContext, txn),
+              owners)
+            RequestComplete(StatusCodes.OK, response)
           }
         }
       }
@@ -279,7 +278,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace) {
+        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
           gcsDAO.getACL(workspaceContext.workspace.workspaceId) map { RequestComplete(StatusCodes.OK,_) }
         }
       }
@@ -288,7 +287,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace) {
+        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
           gcsDAO.updateACL(userInfo.userEmail, workspaceContext.workspace.workspaceId, aclUpdates).map( _ match {
             case None => RequestComplete(StatusCodes.OK)
             case Some(reports) => RequestComplete(ErrorReport(StatusCodes.Conflict,"Unable to alter some ACLs in $workspaceName",reports))
@@ -300,7 +299,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace) {
+        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
           Future {
             if ( !containerDAO.submissionDAO.list(workspaceContext,txn).forall(_.status.isDone) )
               RequestComplete(ErrorReport(StatusCodes.Conflict,s"There are running submissions in workspace $workspaceName, so it cannot be locked."))
@@ -317,7 +316,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace) {
+        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
           Future {
             if ( workspaceContext.workspace.isLocked ) {
               containerDAO.workspaceDAO.save(workspaceContext.workspace.copy(isLocked = false), txn)
@@ -1053,7 +1052,7 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-      requireAccess(workspaceContext.workspace, accessLevel) { op(workspaceContext) }
+      requireAccess(workspaceContext.workspace, accessLevel, txn) { op(workspaceContext) }
     }
   }
 
@@ -1066,20 +1065,19 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel)(codeBlock: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    gcsDAO.getMaximumAccessLevel(userInfo.userEmail, workspace.workspaceId) flatMap { userLevel =>
-      if (userLevel >= requiredLevel) {
-        if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
-          Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-        else codeBlock
-      }
-      else if (userLevel >= WorkspaceAccessLevels.Read) Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-      else Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(codeBlock: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    val userLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspace.workspaceId, txn)
+    if (userLevel >= requiredLevel) {
+      if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
+        Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+      else codeBlock
     }
+    else if (userLevel >= WorkspaceAccessLevels.Read) Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+    else Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
   }
 
-  private def requireOwnerIgnoreLock(workspace: Workspace)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner)(op)
+  private def requireOwnerIgnoreLock(workspace: Workspace, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner, txn)(op)
   }
 
   private def tryIsAdmin(userId: String): Future[Boolean] = {
