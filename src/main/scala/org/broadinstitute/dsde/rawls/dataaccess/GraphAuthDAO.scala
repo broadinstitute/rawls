@@ -11,6 +11,13 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import scala.collection.JavaConversions._
 
 class GraphAuthDAO extends AuthDAO with GraphDAO {
+  override def loadUser(ref: RawlsUserRef, txn: RawlsTransaction): Option[RawlsUser] = txn withGraph { db =>
+    getUserVertex(db, ref).map(loadObject[RawlsUser])
+  }
+
+  override def loadUserByEmail(userEmail: String, txn: RawlsTransaction): Option[RawlsUser] = txn withGraph { db =>
+    getUserVertexByEmail(db, userEmail).map(loadObject[RawlsUser])
+  }
 
   override def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser = txn withGraph { db =>
     val vertex = getUserVertex(db, rawlsUser).getOrElse(addVertex(db, VertexSchema.User))
@@ -38,6 +45,14 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
         saveObject[RawlsGroup](rawlsGroup, addVertex(db, VertexSchema.Group), None, db)
         rawlsGroup
     }
+  }
+
+  override def loadGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Option[RawlsGroup] = txn withGraph { db =>
+    getGroupVertex(db, groupRef).map(loadObject[RawlsGroup])
+  }
+
+  def loadGroupByEmail(groupEmail: String, txn: RawlsTransaction): Option[RawlsGroup] = txn withGraph { db =>
+    getGroupVertexByEmail(db, groupEmail).map(loadObject[RawlsGroup])
   }
 
   override def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
