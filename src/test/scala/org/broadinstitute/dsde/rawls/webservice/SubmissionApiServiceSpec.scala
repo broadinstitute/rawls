@@ -51,7 +51,9 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+    gcsDAO.storeToken(userInfo, "test_token")
+    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

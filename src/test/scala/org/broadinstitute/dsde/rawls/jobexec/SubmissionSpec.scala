@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
+import spray.json._
 import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 
@@ -124,7 +125,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
         dataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, new MockGoogleServicesDAO, submissionSupervisor)_
+      val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+      gcsDAO.storeToken(userInfo, "foo")
+      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, gcsDAO, submissionSupervisor)_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
         testCode(workspaceService)
@@ -175,7 +178,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val (status, newSubmission) = rqComplete.response
     assertResult(StatusCodes.Created) { status }
     assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
-    assertResult(Some("{\"jes_gcs_root\":\"gs://rawls-aWorkspaceId/" + newSubmission.submissionId + "\"}")) { mockExecSvc.submitOptions }
+
+    import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
+    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, "foo"))) {
+      mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+    }
 
     val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
     assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test

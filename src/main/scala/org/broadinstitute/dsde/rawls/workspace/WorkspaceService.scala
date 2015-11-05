@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.WorkflowOutputsF
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceValidationFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
+import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, PerRequestMessage, RequestComplete}
 import AttributeUpdateOperations._
@@ -102,7 +103,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit executionContext: ExecutionContext) extends Actor {
+class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit executionContext: ExecutionContext) extends Actor with FutureSupport {
   override def receive = {
     case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to context.parent
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to context.parent
@@ -823,12 +824,12 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
         val submissionId: String = UUID.randomUUID().toString
-
-        val submittedWorkflowsFuture = Future.sequence(successes map { entityInputs =>
+        val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
+        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
           val methodProps = for ( (methodInput,entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined ) yield( methodInput.wdlName -> entityValue.value.get )
-          val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions(workspaceContext, submissionId), userInfo)
+          val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
           execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)))
-        })
+        }))
 
         submittedWorkflowsFuture map { submittedWorkflows =>
           val failedWorkflows = failures.map { entityInputs =>
@@ -1113,13 +1114,11 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   }
 
   private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    // TODO add Method to model instead of exposing AgoraEntity?
-    methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo) flatMap { agoraEntityOption => agoraEntityOption match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
-      case Some(agoraEntity) => op(agoraEntity)
-    }} recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable)))
-    }
+    toFutureTry(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)) flatMap { agoraEntityOption => agoraEntityOption match {
+      case Success(None) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
+      case Success(Some(agoraEntity)) => op(agoraEntity)
+      case Failure(throwable) => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
+    }}
   }
 
   private def withWdl(method: AgoraEntity)(op: (String) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -1143,20 +1142,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
     }
   }
 
-// TODO: not used?
-//  private def submitWorkflow(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, submissionId: String, userInfo: UserInfo, txn: RawlsTransaction) : Either[WorkflowFailure, Workflow] = {
-//    MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
-//      case Left(failures) => Left(WorkflowFailure(entityName = entity.name, entityType = entity.entityType, errors = failures.map(AttributeString(_))))
-//      case Right(inputs) =>
-//        val execStatus = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(inputs), workflowOptions(workspaceContext, submissionId), userInfo)
-//        Right(Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityName = entity.name, entityType = entity.entityType)))
-//    }
-//  }
-
-  private def workflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Option[String] = {
+  private def buildWorkflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Future[Option[String]] = {
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make toJson work below
-    val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
-    Option(ExecutionServiceWorkflowOptions(s"gs://${bucketName}/${submissionId}").toJson.toString)
+    gcsDAO.getToken(userInfo).map { refreshTokenOption =>
+      val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
+      Option(ExecutionServiceWorkflowOptions(
+        s"gs://${bucketName}/${submissionId}",
+        workspaceContext.workspace.namespace,
+        userInfo.userEmail,
+        refreshTokenOption.getOrElse(throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}"))
+      ).toJson.toString)
+    }
   }
 
   private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: WorkspaceContext, rootEntityType: String, txn: RawlsTransaction)(op: (Seq[Entity]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -1194,18 +1190,17 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
   private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     val methodRepoMethod = methodConfig.methodRepoMethod
-    methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) flatMap { _ match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
-      case Some(agoraEntity) => agoraEntity.payload match {
+    toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo)) flatMap { _ match {
+      case Success(None) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
+      case Success(Some(agoraEntity)) => agoraEntity.payload match {
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
         case Some(wdl) => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
           case Failure(exception) => Future.successful(RequestComplete(ErrorReport(exception,StatusCodes.BadRequest)))
           case Success(methodInputs) => op(wdl,methodInputs)
         }
       }
-    }} recover { case throwable =>
-      RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable)))
-    }
+      case Failure(throwable) => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
+    }}
   }
 
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
