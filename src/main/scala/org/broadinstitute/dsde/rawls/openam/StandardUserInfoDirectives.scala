@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.openam
 
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
-import spray.http.HttpHeaders.Authorization
-import spray.http.{HttpHeader, OAuth2BearerToken, HttpHeaders, HttpCookie}
+import spray.http.{HttpHeader, OAuth2BearerToken}
 import spray.routing.Directive1
 import spray.routing.Directives._
 

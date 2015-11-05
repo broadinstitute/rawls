@@ -1920,7 +1920,27 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/user/refreshToken':
+  '/user':
+     post:
+       responses:
+         '201':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Create user
+       operationId: create
+       parameters:
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+ '/user/refreshToken':
     put:
       responses:
         '201':
