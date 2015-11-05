@@ -25,7 +25,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("groupsPrefix"),
     gcsConfig.getString("appName"),
     gcsConfig.getInt("deletedBucketCheckSeconds"),
-    "broad-dsde-dev"
+    gcsConfig.getString("serviceProject"),
+    gcsConfig.getString("tokenEncryptionKey")
   )
 
   val testProject = "broad-dsde-dev"

@@ -17,6 +17,7 @@ gcs {
   dataStoreRoot = "{{.Data.gcs_dataStoreRoot}}"
   secrets = """{"web":{"client_id":"{{.Data.gcs_client_id}}","auth_uri":"{{.Data.gcs_auth_uri}}","token_uri":"{{.Data.gcs_token_uri}}","auth_provider_x509_cert_url":"{{.Data.gcs_auth_provider_x509_cert_url}}","client_email":"{{.Data.gcs_client_email}}","sub_email":"{{.Data.gcs_sub_email}}","client_x509_cert_url":"{{.Data.gcs_client_x509_cert_url}}","client_secret":"{{.Data.gcs_client_secret}}","redirect_uris": ["{{.Data.gcs_redirect_uris}}"],"javascript_origins":["{{.Data.gcs_javascript_origins}}"]}}"""
   serviceProject = "{{.Data.gcs_serviceProject}}"
+  tokenEncryptionKey = "{{.Data.gcs_tokenEncryptionKey}}"
 }
 methodrepo {
   server = "{{.Data.methodrepo_server}}"

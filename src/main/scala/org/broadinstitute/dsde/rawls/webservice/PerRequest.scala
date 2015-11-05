@@ -18,6 +18,14 @@ import spray.http._
 import scala.language.postfixOps
 
 
+case class RawlsMessage(message: String)
+
+object RawlsMessageJsonSupport extends DefaultJsonProtocol with BasicToResponseMarshallers {
+
+  implicit val RawlsMessageFormat = jsonFormat1(RawlsMessage)
+
+}
+
 /**
  * This actor controls the lifecycle of a request. It is responsible for forwarding the initial message
  * to a target handling actor. This actor waits for the target actor to signal completion (via a message),
@@ -43,9 +51,9 @@ trait PerRequest extends Actor {
   target ! message
 
   def receive = {
-    case RequestComplete_(response, marshaller) => complete(response)(marshaller)
-    case RequestCompleteWithHeaders_(response, headers, marshaller) => complete(response, headers:_*)(marshaller)
-    case RequestCompleteWithLocation_(response, location, marshaller) => complete(response, HttpHeaders.Location(r.request.uri.copy(path = Uri.Path(location))))(marshaller)
+    case RequestComplete_(response, marshaller: ToResponseMarshaller[Any]) => complete(response)(marshaller)
+    case RequestCompleteWithHeaders_(response, headers, marshaller: ToResponseMarshaller[Any]) => complete(response, headers:_*)(marshaller)
+    case RequestCompleteWithLocation_(response, location, marshaller: ToResponseMarshaller[Any]) => complete(response, HttpHeaders.Location(r.request.uri.copy(path = Uri.Path(location))))(marshaller)
     case ReceiveTimeout => complete(GatewayTimeout)
     case Failure(t) =>
       // failed Futures will end up in this case
@@ -150,10 +158,3 @@ trait PerRequestCreator {
     actorRefFactory.actorOf(Props(new WithProps(r, props, message, timeout)))
 }
 
-case class RawlsMessage(message: String)
-
-object RawlsMessageJsonSupport extends DefaultJsonProtocol with BasicToResponseMarshallers {
-
-  implicit val RawlsMessageFormat = jsonFormat1(RawlsMessage)
-
-}
