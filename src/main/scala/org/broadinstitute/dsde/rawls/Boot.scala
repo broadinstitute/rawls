@@ -47,6 +47,13 @@ object Boot extends App {
       gcsConfig.getString("tokenEncryptionKey")
     )
 
+    val ldapConfig = conf.getConfig("userLdap")
+    val userDirDAO = new JndiUserDirectoryDAO(
+      ldapConfig.getString("providerUrl"),
+      ldapConfig.getString("user"),
+      ldapConfig.getString("password")
+    )
+
     system.registerOnTermination {
       dataSource.shutdown()
     }
@@ -72,7 +79,7 @@ object Boot extends App {
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor),
-                    UserService.constructor(dataSource, gcsDAO, containerDAO)),
+                    UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

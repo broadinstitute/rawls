@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStar
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, PerRequestMessage, RequestComplete}
 import AttributeUpdateOperations._
@@ -94,7 +94,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
 }
 
-class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit executionContext: ExecutionContext) extends Actor with FutureSupport {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
     case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to context.parent
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to context.parent
@@ -1082,17 +1082,6 @@ class WorkspaceService(userInfo: UserInfo, dataSource: DataSource, containerDAO:
 
   private def requireOwnerIgnoreLock(workspace: Workspace, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner, txn)(op)
-  }
-
-  private def tryIsAdmin(userId: String): Future[Boolean] = {
-    gcsDAO.isAdmin(userId) transform( s => s, t => throw new RawlsException("Unable to query for admin status.", t))
-  }
-
-  private def asAdmin(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-
-    tryIsAdmin(userInfo.userEmail) flatMap { isAdmin =>
-      if (isAdmin) op else Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
-    }
   }
 
   private def withEntity(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {

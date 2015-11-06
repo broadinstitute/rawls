@@ -19,15 +19,6 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     getUserVertexByEmail(db, userEmail).map(loadObject[RawlsUser])
   }
 
-  override def createUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser = txn withGraph { db =>
-    getUserVertex(db, rawlsUser) match {
-      case Some(_) => throw new RawlsException("Cannot create user %s in database because it already exists".format(rawlsUser))
-      case None =>
-        saveObject[RawlsUser](rawlsUser, addVertex(db, VertexSchema.User), None, db)
-        rawlsUser
-    }
-  }
-
   override def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser = txn withGraph { db =>
     val vertex = getUserVertex(db, rawlsUser).getOrElse(addVertex(db, VertexSchema.User))
     saveObject[RawlsUser](rawlsUser, vertex, None, db)

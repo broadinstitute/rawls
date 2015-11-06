@@ -21,4 +21,11 @@ methodrepo {
 }
 executionservice {
   server = "{{.Data.execservice_server}}"
-}{{end}}{{end}}
+}
+userLdap {
+  providerUrl = "{{.Data.ldap_provider_url}}"
+  user = "{{.Data.ldap_user}}"
+  password = "{{.Data.ldap_password}}"
+}
+{{end}}
+{{end}}

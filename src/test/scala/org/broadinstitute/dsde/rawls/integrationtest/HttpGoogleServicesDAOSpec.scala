@@ -110,6 +110,18 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
 
+  it should "crud proxy groups" in {
+    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, UUID.randomUUID().toString))
+    Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
+    assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
+    Await.result(gcsDAO.addUserToProxyGroup(user), Duration.Inf)
+    assert(Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
+    Await.result(gcsDAO.removeUserFromProxyGroup(user), Duration.Inf)
+    assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
+
+    gcsDAO.getGroupDirectory.groups().delete(gcsDAO.toProxyFromUser(user.userSubjectId)).execute()
+  }
+
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
       case gjre: GoogleJsonResponseException => gjre.getStatusCode/100 == 5
