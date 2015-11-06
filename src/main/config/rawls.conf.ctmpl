@@ -20,10 +20,10 @@ gcs {
   tokenEncryptionKey = "{{.Data.gcs_tokenEncryptionKey}}"
 }
 methodrepo {
-  server = "{{.Data.methodrepo_server}}"
+  server = "{{.Data.methodrepo_server}}/api/v1"
 }
 executionservice {
-  server = "{{.Data.execservice_server}}"
+  server = "{{.Data.execservice_server}}/api"
 }
 {{end}}
 {{end}}
