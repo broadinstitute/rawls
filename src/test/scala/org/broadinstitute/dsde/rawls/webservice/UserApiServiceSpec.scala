@@ -15,6 +15,7 @@ import spray.http._
 import spray.json._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
+import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -57,7 +58,8 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
-    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO)_
+    val directoryDAO = new MockUserDirectoryDAO
+    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, directoryDAO)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -105,7 +107,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user and a user proxy group" in withEmptyTestDatabase { dataSource =>
+  it should "create a graph user, user proxy group and ldap entry" in withEmptyTestDatabase { dataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -121,6 +123,9 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
 
       assert {
         ! services.gcsDAO.containsProxyGroup(user)
+      }
+      assert {
+        ! services.directoryDAO.exists(user)
       }
 
       Post("/user") ~>
@@ -142,7 +147,72 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       assert {
         services.gcsDAO.containsProxyGroup(user)
       }
+      assert {
+        services.directoryDAO.exists(user)
+      }
     }
   }
 
+  it should "enable/disable user" in withEmptyTestDatabase { dataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+      Get(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+            responseAs[UserStatus]
+          }
+        }
+      Post(s"/user/${user.userSubjectId.value}/enable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      Get(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true))) {
+            responseAs[UserStatus]
+          }
+        }
+      Post(s"/user/${user.userSubjectId.value}/disable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      Get(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+            responseAs[UserStatus]
+          }
+        }
+
+
+
+    }
+  }
 }
