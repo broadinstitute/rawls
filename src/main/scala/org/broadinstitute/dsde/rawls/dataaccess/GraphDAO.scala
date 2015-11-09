@@ -31,11 +31,12 @@ object VertexSchema {
   val WorkflowFailure = vertexClassOf[org.broadinstitute.dsde.rawls.model.WorkflowFailure]
   val User = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsUser]
   val Group = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsGroup]
+  val BillingProject = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsBillingProject]
 
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, Map)
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, Map)
 
   def vertexClassOf[T: TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString
@@ -256,6 +257,10 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupEmail",email))
   }
 
+  def billingProjectPipeline(db: Graph, projectName: RawlsBillingProjectName) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.BillingProject)).filter(hasPropertyValue("projectName",projectName.value))
+  }
+
   // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
@@ -300,6 +305,10 @@ trait GraphDAO {
 
   def getGroupVertexByEmail(db: Graph, email: String) = {
     getSinglePipelineResult(groupPipelineByEmail(db, email))
+  }
+
+  def getBillingProjectVertex(db: Graph, projectName: RawlsBillingProjectName) = {
+    getSinglePipelineResult(billingProjectPipeline(db, projectName))
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
