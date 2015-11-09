@@ -18,8 +18,6 @@ trait GoogleServicesDAO {
 
   def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]]
 
-  def getOwners(workspaceId: String): Future[Seq[String]]
-
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 
   def getBucketName(workspaceId: String): String

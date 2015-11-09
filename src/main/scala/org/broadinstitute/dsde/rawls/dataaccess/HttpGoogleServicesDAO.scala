@@ -246,19 +246,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getOwners(workspaceId: String): Future[Seq[String]] = {
-    val members = getGroupDirectory.members
-    //a workspace should always have an owner, but just in case for some reason it doesn't...
-    val fetcher = members.list(toGroupId(getBucketName(workspaceId), WorkspaceAccessLevels.Owner))
-    val ownersQuery = retry(when500) (() => Future {
-      blocking { fetcher.execute }
-    })
-
-    ownersQuery map { queryResults =>
-      Option(queryResults.getMembers).getOrElse(List.empty[Member].asJava).map(_.getEmail)
-    }
-  }
-
   override def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel] = {
     val bucketName = getBucketName(workspaceId)
     val members = getGroupDirectory.members
