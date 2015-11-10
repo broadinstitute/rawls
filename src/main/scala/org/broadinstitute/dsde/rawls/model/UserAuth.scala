@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import spray.json._
 
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
@@ -50,13 +51,37 @@ object UserAuth {
 }
 
 object UserAuthJsonSupport extends JsonSupport {
-  implicit val RawlsUserEmailFormat = jsonFormat1(RawlsUserEmail)
+  implicit object RawlsUserEmailFormat extends RootJsonFormat[RawlsUserEmail] {
+    override def read(json: JsValue): RawlsUserEmail = json match {
+      case JsString(value) => RawlsUserEmail(value)
+      case _ => throw new DeserializationException("could not deserialize user object")
+    }
+    override def write(obj: RawlsUserEmail): JsValue = JsString(obj.value)
+  }
+  implicit object RawlsUserSubjectIdFormat extends RootJsonFormat[RawlsUserSubjectId] {
+    override def read(json: JsValue): RawlsUserSubjectId = json match {
+      case JsString(value) => RawlsUserSubjectId(value)
+      case _ => throw new DeserializationException("could not deserialize user object")
+    }
+    override def write(obj: RawlsUserSubjectId): JsValue = JsString(obj.value)
+  }
 
-  implicit val RawlsUserSubjectIdFormat = jsonFormat1(RawlsUserSubjectId)
+  implicit object RawlsGroupNameFormat extends RootJsonFormat[RawlsGroupName] {
+    override def read(json: JsValue): RawlsGroupName = json match {
+      case JsString(value) => RawlsGroupName(value)
+      case _ => throw new DeserializationException("could not deserialize user object")
+    }
+    override def write(obj: RawlsGroupName): JsValue = JsString(obj.value)
+  }
 
-  implicit val RawlsGroupNameFormat = jsonFormat1(RawlsGroupName)
+  implicit object RawlsGroupEmailFormat extends RootJsonFormat[RawlsGroupEmail] {
+    override def read(json: JsValue): RawlsGroupEmail = json match {
+      case JsString(value) => RawlsGroupEmail(value)
+      case _ => throw new DeserializationException("could not deserialize user object")
+    }
+    override def write(obj: RawlsGroupEmail): JsValue = JsString(obj.value)
+  }
 
-  implicit val RawlsGroupEmailFormat = jsonFormat1(RawlsGroupEmail)
 
   // need "apply" here so it doesn't choose the companion class
   implicit val RawlsUserFormat = jsonFormat2(RawlsUser.apply)

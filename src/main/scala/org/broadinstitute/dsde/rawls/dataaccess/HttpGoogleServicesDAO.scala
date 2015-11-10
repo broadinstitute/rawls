@@ -27,7 +27,6 @@ import com.google.api.services.storage.model.Bucket.{Logging, Lifecycle}
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.{StorageScopes, Storage}
 import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAccessControl, ObjectAccessControl}
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -63,7 +62,7 @@ class HttpGoogleServicesDAO(
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
-      case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue =>
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
         val logBucket = new Bucket().
           setName(tokenBucketName + "-logs")
         val logInserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, logBucket)
@@ -169,7 +168,7 @@ class HttpGoogleServicesDAO(
         blocking { deleter.execute }
       }) recover {
         //Google returns 409 Conflict if the bucket isn't empty.
-        case gjre: GoogleJsonResponseException if gjre.getStatusCode == 409 =>
+        case t: HttpResponseException if t.getStatusCode == 409 =>
           //Google doesn't let you delete buckets that are full.
           //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
           //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
@@ -275,7 +274,7 @@ class HttpGoogleServicesDAO(
       blocking { query.execute }
       true
     }) recover {
-        case gjre: GoogleJsonResponseException if gjre.getStatusCode == StatusCodes.NotFound => false
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => false
     }
   }
 
@@ -288,6 +287,26 @@ class HttpGoogleServicesDAO(
   override def deleteAdmin(userId: String): Future[Unit] = {
     val deleter = getGroupDirectory.members.delete(adminGroupName,userId)
     retry(when500)(() => Future { blocking { deleter.execute } })
+  }
+
+  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
+    val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
+    val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
+    retry(when500)(() => Future { blocking { inserter.execute } })
+  }
+
+  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
+    val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail.value)
+    retry(when500)(() => Future { blocking { deleter.execute } })
+  }
+
+  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = {
+    val getter = getGroupDirectory.members.get(toProxyFromUser(user.userSubjectId), user.userEmail.value)
+    retry(when500)(() => Future {
+      blocking { Option(getter.execute) }
+    } recover {
+      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+    }) map { _.isDefined }
   }
 
   override def listAdmins(): Future[Seq[String]] = {
@@ -335,7 +354,7 @@ class HttpGoogleServicesDAO(
         val so = get.execute()
         Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
       } catch {
-        case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue => None
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
       }
     } )
   }
@@ -346,7 +365,7 @@ class HttpGoogleServicesDAO(
       try {
         Option(new time.DateTime(get.execute().getUpdated.getValue))
       } catch {
-        case gjre: HttpResponseException if gjre.getStatusCode == StatusCodes.NotFound.intValue => None
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
       }
     } )
   }
@@ -360,7 +379,7 @@ class HttpGoogleServicesDAO(
   // these really should all be private, but we're opening up a few of these to allow integration testing
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
-      case gjre: GoogleJsonResponseException => gjre.getStatusCode/100 == 5
+      case t: HttpResponseException => t.getStatusCode/100 == 5
       case _ => false
     }
   }
@@ -462,7 +481,7 @@ class HttpGoogleServicesDAO(
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 
-  def adminGroupName = s"${groupsPrefix}-ADMIN@${appsDomain}"
+  def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"
   def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
     val pattern = s"rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r

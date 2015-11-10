@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
+import scala.collection.mutable
 import scala.concurrent.Future
 
 class MockGoogleServicesDAO extends GoogleServicesDAO {
@@ -45,7 +46,7 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
     }
   }
 
-  var mockProxyGroups: Set[RawlsUser] = Set.empty
+  var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
   override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
 
@@ -70,9 +71,15 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
   override def listAdmins(): Future[Seq[String]] = Future.successful(adminList.toSeq)
 
   override def createProxyGroup(user: RawlsUser): Future[Unit] = {
-    mockProxyGroups += user
+    mockProxyGroups += (user -> false)
     Future.successful(Unit)
   }
 
-  def containsProxyGroup(user: RawlsUser) = mockProxyGroups contains user
+  def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
+
+  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> true))
+
+  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> false))
+
+  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = Future.successful(mockProxyGroups.getOrElse(user, false))
 }

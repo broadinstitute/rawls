@@ -1937,10 +1937,82 @@ paths:
        parameters:
        security:
          - authorization:
-             - openid
-             - email
-             - profile
- '/user/refreshToken':
+            - openid
+            - email
+            - profile
+  '/user':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+           schema:
+             $ref: '#/definitions/UserStatus'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the status of a user"
+       tags:
+         - users
+       summary: gets the status of a user
+       operationId: status
+       parameters:
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/user/{userSubjectId}/disable':
+     post:
+       responses:
+         '204':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Disable user
+       operationId: diable
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/user/{userSubjectId}/enable':
+     post:
+       responses:
+         '204':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Enable user
+       operationId: enable
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/user/refreshToken':
     put:
       responses:
         '201':
@@ -1971,6 +2043,8 @@ paths:
       responses:
         '200':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/UserRefreshTokenDate'
         '404':
           description: There is no refresh token for the user
           schema:
@@ -2880,3 +2954,18 @@ definitions:
       refreshTokenUpdatedDate:
         type: string
         format: date-time
+  UserStatus:
+    description: users status
+    properties:
+      userInfo:
+        $ref: '#/definitions/RawlsUser'
+      enabled:
+        type: ''
+        description: Map[String,Boolean]
+  RawlsUser:
+    description: information about a rawls user
+    properties:
+      userSubjectId:
+        type: String
+      userEmail:
+        type: String

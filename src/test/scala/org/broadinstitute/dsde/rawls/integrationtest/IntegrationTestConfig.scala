@@ -24,4 +24,9 @@ trait IntegrationTestConfig {
 
   val integrationConfig = jenkinsConf.withFallback(etcConf).getConfig("integration")
   val integrationRunFullLoadTest = integrationConfig.getBoolean("runFullLoadTest")
+
+  val ldapConfig = jenkinsConf.withFallback(etcConf).getConfig("userLdap")
+  val ldapProviderUrl = ldapConfig.getString("providerUrl")
+  val ldapUser = ldapConfig.getString("user")
+  val ldapPassword = ldapConfig.getString("password")
 }

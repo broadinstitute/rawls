@@ -8,8 +8,6 @@ trait AuthDAO {
 
   def loadUserByEmail(userEmail: String, txn: RawlsTransaction): Option[RawlsUser]
 
-  def createUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser
-
   def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser
 
   def loadGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Option[RawlsGroup]
