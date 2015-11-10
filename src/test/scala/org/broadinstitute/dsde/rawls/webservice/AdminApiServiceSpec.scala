@@ -277,99 +277,92 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
   }
 
-  //NOTE: the following tests require a bit of feedback on what actual payload the addMember/removeMember functions take
-  //currently just takes in a plain string. should it take in something like a RawlsMemberEmail which is:
-  // {
-  //  "memberEmail": "samplemember@example.com"
-  // }
+  it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
-    it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
-      val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Put(s"/admin/groups/${group.groupName.value}/members/thisuserdoesntexist@example.com") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
 
-      Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) { status }
-        }
-      Put(s"/admin/groups/${group.groupName.value}/members/thisuserdoesntexist@example.com") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.NotFound) { status }
-        }
-    }
+  it should "return 200 when adding a member to a group" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
 
-    it should "return 200 when adding a member to a group" in withTestDataApiServices { services =>
-      val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-      val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
+          responseAs[Array[String]]
+        }
+      }
+  }
 
-      Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) { status }
-        }
-      Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) { status }
-        }
-      Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) { status }
-        }
-      Get(s"/admin/groups/${group.groupName.value}/members") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
-            responseAs[Array[String]]
-          }
-        }
-    }
+  it should "return 200 when removing a member from a group" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
 
-    it should "return 200 when removing a member from a group" in withTestDataApiServices { services =>
-      val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-      val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
-
-      //make main group
-      Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) { status }
+    //make main group
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    //make subgroup
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    //put subgroup into main group
+    Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    //verify subgroup was put into subgroup
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
+          responseAs[Array[String]]
         }
-      //make subgroup
-      Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) { status }
+      }
+    //remove subgroup from main group
+    Delete(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    //verify that subgroup was removed from maingroup
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(List.empty) {
+          responseAs[Array[String]]
         }
-      //put subgroup into main group
-      Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) { status }
-        }
-      //verify subgroup was put into subgroup
-      Get(s"/admin/groups/${group.groupName.value}/members") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
-            responseAs[Array[String]]
-          }
-        }
-      //remove subgroup from main group
-      Delete(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) { status }
-        }
-      //verify that subgroup was removed from maingroup
-      Get(s"/admin/groups/${group.groupName.value}/members") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(List.empty) {
-            responseAs[Array[String]]
-          }
-        }
-    }
-
+      }
+  }
 }
