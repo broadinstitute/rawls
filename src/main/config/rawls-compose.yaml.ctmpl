@@ -1,5 +1,5 @@
 {{with $environment := env "ENVIRONMENT"}}
-{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yml" $environment}}
+{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yaml" $environment}}
 {{with vault $keyname}}
 
 app:
