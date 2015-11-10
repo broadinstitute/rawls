@@ -250,21 +250,21 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save Workspace Access Groups as map properties on a Workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels)
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
 
     // separate transaction so we aren't checking un-saved vertices
     dataSource.inTransaction() { txn =>
-      withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
+      withWorkspaceContext(testData.workspaceNoGroups, txn, bSkipLockCheck = true) { wc =>
         txn.withGraph { graph =>
           val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
 
           WorkspaceAccessLevels.groupAccessLevelsAscending foreach { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(testData.workspace.toWorkspaceName, level)
+            val levelGroup = RawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level)
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -281,14 +281,14 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save the user to the Owner Workspace Access Group on a Workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels)
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
 
     // separate transaction so we aren't checking un-saved vertices
     dataSource.inTransaction() { txn =>
-      withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
+      withWorkspaceContext(testData.workspaceNoGroups, txn, bSkipLockCheck = true) { wc =>
         txn.withGraph { graph =>
           val vAccessLevels = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
           val vOwnerGroup = authDAO.getVertices(vAccessLevels, Direction.OUT, EdgeSchema.Ref, WorkspaceAccessLevels.Owner.toString).head
@@ -312,30 +312,30 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   it should "not allow Workspace Access Groups to be created twice" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       intercept[RawlsException] {
-        authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-        authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
+        authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+        authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       }
     }
   }
 
   it should "delete Workspace Access Groups" in withEmptyTestDatabase { dataSource =>
     val context = dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels)
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
 
     // first confirm the groups exist, and save them
 
     val groups = dataSource.inTransaction() { txn =>
-      withWorkspaceContext(testData.workspace, txn, bSkipLockCheck = true) { wc =>
+      withWorkspaceContext(testData.workspaceNoGroups, txn, bSkipLockCheck = true) { wc =>
         txn.withGraph { graph =>
           val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
 
           WorkspaceAccessLevels.groupAccessLevelsAscending map { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(testData.workspace.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+            val levelGroup = RawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -392,8 +392,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveUser(user, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
@@ -412,8 +412,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
       authDAO.saveGroup(group2, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
@@ -434,8 +434,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
       authDAO.saveGroup(group2, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
       assertResult(WorkspaceAccessLevels.NoAccess) {
@@ -454,8 +454,8 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspace.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
@@ -474,11 +474,11 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspace.toWorkspaceName, testUserInfo, txn)
-      val workspace1 = testData.workspace.copy(name = "1", workspaceId = "1", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
-      val workspace2 = testData.workspace.copy(name = "2", workspaceId = "2", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Write -> group))
-      val workspace3 = testData.workspace.copy(name = "3", workspaceId = "3", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Read -> group))
-      val workspace4 = testData.workspace.copy(name = "4", workspaceId = "4", accessLevels = levels)
+      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace1 = testData.workspaceNoGroups.copy(name = "1", workspaceId = "1", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      val workspace2 = testData.workspaceNoGroups.copy(name = "2", workspaceId = "2", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Write -> group))
+      val workspace3 = testData.workspaceNoGroups.copy(name = "3", workspaceId = "3", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Read -> group))
+      val workspace4 = testData.workspaceNoGroups.copy(name = "4", workspaceId = "4", accessLevels = levels)
       workspaceDAO.save(workspace1, txn)
       workspaceDAO.save(workspace2, txn)
       workspaceDAO.save(workspace3, txn)
