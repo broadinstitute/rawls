@@ -321,6 +321,7 @@ paths:
               - openid
               - email
               - profile
+  '/admin/groups/{groupName}/members/{memberEmail}':
       put:
         responses:
           '204':
@@ -344,12 +345,11 @@ paths:
             name: groupName
             required: true
             type: string
-          - in: body
-            description: RawlsGroupRef
-            name: group
+          - in: path
+            description: email of the user
+            name: memberEmail
             required: true
-            schema:
-              $ref: '#/definitions/RawlsUserRef'
+            type: string
         security:
           - authorization:
               - openid
@@ -378,12 +378,11 @@ paths:
             name: groupName
             required: true
             type: string
-          - in: body
-            description: RawlsGroupRef
-            name: group
+          - in: path
+            description: email of the user
+            name: memberEmail
             required: true
-            schema:
-              $ref: '#/definitions/RawlsUserRef'
+            type: string
         security:
           - authorization:
               - openid
@@ -2099,7 +2098,6 @@ paths:
        parameters:
        security:
          - authorization:
-<<<<<<< 33240689b5b304045b98fc6d04cb69922f980fde
             - openid
             - email
             - profile
@@ -2925,15 +2923,6 @@ definitions:
       groupName:
         type: string
         description: The unique name associated with the group
-
-  RawlsUserRef:
-    description: ''
-    required:
-      - userSubjectId
-    properties:
-      userSubjectId:
-        type: string
-        description: The unique ID associated with the user
 
   Workspace:
     description: ''
