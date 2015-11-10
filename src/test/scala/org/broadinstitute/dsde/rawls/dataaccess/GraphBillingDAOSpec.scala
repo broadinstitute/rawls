@@ -16,13 +16,13 @@ class GraphBillingDAOSpec extends FlatSpec with Matchers with OrientDbTestFixtur
   def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
+        v.getProperty[String]("userSubjectId") == user.userSubjectId.toString
     })
 
   def getMatchingBillingProjectVertices(graph: Graph, project: RawlsBillingProject): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.BillingProject) &&
-        v.getProperty[String]("projectName") == project.projectName.value
+        v.getProperty[String]("projectName") == project.projectName.toString
     })
 
   val testUserInfo = UserInfo("dummy-email@example.com", OAuth2BearerToken("dummy-token"), 0, "dummy-ID")

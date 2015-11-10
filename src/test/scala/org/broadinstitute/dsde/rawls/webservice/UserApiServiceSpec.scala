@@ -87,7 +87,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
   def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
+        v.getProperty[String]("userSubjectId") == user.userSubjectId.toString
     })
 
 
@@ -166,7 +166,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
             status
           }
         }
-      Get(s"/user/${user.userSubjectId.value}") ~>
+      Get(s"/user/${user.userSubjectId}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -176,14 +176,14 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
             responseAs[UserStatus]
           }
         }
-      Post(s"/user/${user.userSubjectId.value}/enable") ~>
+      Post(s"/user/${user.userSubjectId}/enable") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
           }
         }
-      Get(s"/user/${user.userSubjectId.value}") ~>
+      Get(s"/user/${user.userSubjectId}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -193,14 +193,14 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
             responseAs[UserStatus]
           }
         }
-      Post(s"/user/${user.userSubjectId.value}/disable") ~>
+      Post(s"/user/${user.userSubjectId}/disable") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.NoContent) {
             status
           }
         }
-      Get(s"/user/${user.userSubjectId.value}") ~>
+      Get(s"/user/${user.userSubjectId}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {

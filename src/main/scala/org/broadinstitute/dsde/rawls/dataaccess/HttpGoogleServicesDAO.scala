@@ -238,8 +238,8 @@ class HttpGoogleServicesDAO(
     val directory = getGroupDirectory
 
     val futureReports = Future.traverse(aclUpdates){
-      case (Left(ru:RawlsUser), level) => updateUserAccess(currentUser,toProxyFromUser(ru),ru.userEmail.value,level,workspaceId,directory)
-      case (Right(rg:RawlsGroup), level) => updateUserAccess(currentUser,rg.groupEmail.value,rg.groupEmail.value,level,workspaceId,directory)
+      case (Left(ru:RawlsUser), level) => updateUserAccess(currentUser,toProxyFromUser(ru),ru.userEmail,level,workspaceId,directory)
+      case (Right(rg:RawlsGroup), level) => updateUserAccess(currentUser,rg.groupEmail,rg.groupEmail,level,workspaceId,directory)
     }.map(_.collect{case Some(errorReport)=>errorReport})
     futureReports.map { reports =>
       if (reports.isEmpty) None
@@ -289,18 +289,18 @@ class HttpGoogleServicesDAO(
   }
 
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
-    val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
+    val member = new Member().setEmail(user.userEmail).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
     retry(when500)(() => Future { blocking { inserter.execute } })
   }
 
   override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
-    val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail.value)
+    val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail)
     retry(when500)(() => Future { blocking { deleter.execute } })
   }
 
   override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = {
-    val getter = getGroupDirectory.members.get(toProxyFromUser(user.userSubjectId), user.userEmail.value)
+    val getter = getGroupDirectory.members.get(toProxyFromUser(user.userSubjectId), user.userEmail)
     retry(when500)(() => Future {
       blocking { Option(getter.execute) }
     } recover {
@@ -323,7 +323,7 @@ class HttpGoogleServicesDAO(
     val groups = directory.groups
     retry(when500) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
+        val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail))
         blocking {
           inserter.execute
         }
@@ -482,9 +482,9 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def toProxyFromUser(rawlsUser: RawlsUser) = toProxyFromUserSubjectId(rawlsUser.userSubjectId.value)
+  def toProxyFromUser(rawlsUser: RawlsUser) = toProxyFromUserSubjectId(rawlsUser.userSubjectId)
   def toProxyFromUser(userInfo: UserInfo) = toProxyFromUserSubjectId(userInfo.userSubjectId)
-  def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
+  def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId)
   def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
 

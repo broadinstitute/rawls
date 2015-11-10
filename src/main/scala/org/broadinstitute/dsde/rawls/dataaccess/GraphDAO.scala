@@ -242,7 +242,7 @@ trait GraphDAO {
   }
 
   def userPipeline(db: Graph, user: RawlsUserRef) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",user.userSubjectId.value))
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue[String]("userSubjectId",user.userSubjectId))
   }
 
   def userPipelineByEmail(db: Graph, email: String) = {
@@ -250,7 +250,7 @@ trait GraphDAO {
   }
 
   def groupPipeline(db: Graph, group: RawlsGroupRef) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",group.groupName.value))
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue[String]("groupName",group.groupName))
   }
 
   def groupPipelineByEmail(db: Graph, email: String) = {
@@ -258,7 +258,7 @@ trait GraphDAO {
   }
 
   def billingProjectPipeline(db: Graph, projectName: RawlsBillingProjectName) = {
-    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.BillingProject)).filter(hasPropertyValue("projectName",projectName.value))
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.BillingProject)).filter(hasPropertyValue[String]("projectName",projectName))
   }
 
   // vertex getters
@@ -437,7 +437,7 @@ trait GraphDAO {
       case (_, value:DateTime)=> vertex.setProperty(propName, value.toDate)
 
       // RawlsUser and RawlsGroup field types.
-      case (_, value:UserAuthType)  => vertex.setProperty(propName, value.value)
+      case (_, value:UserAuthType)  => vertex.setProperty(propName, value.toString)
 
       //Attributes.
 
