@@ -86,6 +86,12 @@ object WorkspaceService {
   case object ListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
 
+  case class CreateGroup(groupRef: RawlsGroupRef) extends WorkspaceServiceMessage
+  case class ListGroupMembers(groupName: String) extends WorkspaceServiceMessage
+  case class DeleteGroup(groupName: String) extends WorkspaceServiceMessage
+  case class AddGroupMember(groupName: String, memberEmail: String) extends WorkspaceServiceMessage
+  case class RemoveGroupMember(groupName: String, memberEmail: String) extends WorkspaceServiceMessage
+
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
   }
@@ -145,6 +151,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case DeleteAdmin(userId) => pipe(deleteAdmin(userId)) to context.parent
     case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to context.parent
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to context.parent
+
+    case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
+    case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
+    case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
+    case AddGroupMember(groupName, memberEmail) => addGroupMember(groupName, memberEmail) to context.parent
+    case RemoveGroupMember(groupName, memberEmail) => removeGroupMember(groupName, memberEmail) to context.parent
+
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
@@ -1027,6 +1040,91 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, txn)
+        }
+      }
+    }
+  }
+
+  def listGroupMembers(groupName: String) = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        Future {
+          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
+            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
+            case Some(group) =>
+              val memberUsers = group.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
+              val memberGroups = group.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
+              RequestComplete(StatusCodes.OK, (memberUsers ++ memberGroups).toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  def createGroup(groupRef: RawlsGroupRef) = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        Future {
+          containerDAO.authDAO.loadGroup(RawlsGroupRef(groupRef.groupName), txn) match {
+            case Some(_) => RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists"))
+            case None =>
+              gcsDAO.createGoogleGroup(groupRef.groupName.value)
+              //break email creation out into new function
+              containerDAO.authDAO.createGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGroupName(groupRef.groupName.value)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
+              RequestComplete(StatusCodes.Created)
+          }
+        }
+      }
+    }
+  }
+
+  def deleteGroup(groupName: String) = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        Future {
+          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
+            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
+            case Some(_) =>
+              gcsDAO.deleteGoogleGroup(groupName)
+              containerDAO.authDAO.deleteGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn)
+              RequestComplete(StatusCodes.OK)
+          }
+        }
+      }
+    }
+  }
+
+  def addGroupMember(groupName: String, memberEmail: String) = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        Future {
+          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
+            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
+            case Some(group) =>
+              gcsDAO.addMemberToGoogleGroup(groupName, memberEmail)
+              try {
+                containerDAO.authDAO.addMemberToGroup(group, memberEmail, txn)
+                RequestComplete(StatusCodes.OK)
+              } catch {
+                case re: RawlsException => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Member ${memberEmail} does not exist"))
+              }
+          }
+        }
+      }
+    }
+  }
+
+  def removeGroupMember(groupName: String, memberEmail: String) = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        Future {
+          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
+            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
+            case Some(group) =>
+              gcsDAO.removeMemberFromGoogleGroup(groupName, memberEmail)
+              containerDAO.authDAO.removeMemberFromGroup(group, memberEmail, txn)
+              RequestComplete(StatusCodes.OK)
+          }
         }
       }
     }

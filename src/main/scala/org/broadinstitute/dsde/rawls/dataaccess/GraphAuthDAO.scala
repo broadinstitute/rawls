@@ -38,7 +38,41 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     }
   }
 
-  private def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
+  override def addMemberToGroup(groupRef: RawlsGroupRef, memberEmail: String, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
+    val vertex = getGroupVertex(db, groupRef).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName} does not exist"))
+    val oldGroup = loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName} does not exist"))
+
+    loadGroupByEmail(memberEmail, txn) match {
+      case Some(group) =>
+        saveObject[RawlsGroup](oldGroup.copy(subGroups = (oldGroup.subGroups + RawlsGroupRef(RawlsGroupName(group.groupName.value)))), vertex, None, db)
+      case None => loadUserByEmail(memberEmail, txn) match {
+        case Some(user) =>
+          saveObject[RawlsGroup](oldGroup.copy(users = (oldGroup.users + RawlsUserRef(RawlsUserSubjectId(user.userSubjectId.value)))), vertex, None, db)
+        case None => throw new RawlsException("")
+      }
+    }
+
+    loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Unable to load group ${groupRef.groupName}"))
+  }
+
+  override def removeMemberFromGroup(groupRef: RawlsGroupRef, memberEmail: String, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
+    val vertex = getGroupVertex(db, groupRef).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName} does not exist"))
+    val oldGroup = loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName} does not exist"))
+
+    loadGroupByEmail(memberEmail, txn) match {
+      case Some(group) =>
+        saveObject[RawlsGroup](oldGroup.copy(subGroups = (oldGroup.subGroups - RawlsGroupRef(RawlsGroupName(group.groupName.value)))), vertex, None, db)
+      case None => loadUserByEmail(memberEmail, txn) match {
+        case Some(user) =>
+          saveObject[RawlsGroup](oldGroup.copy(users = (oldGroup.users - RawlsUserRef(RawlsUserSubjectId(user.userSubjectId.value)))), vertex, None, db)
+        case None => throw new RawlsException("")
+      }
+    }
+
+    loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Unable to load group ${groupRef.groupName}"))
+  }
+
+  override def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
     getGroupVertex(db, rawlsGroup) match {
       case Some(_) => throw new RawlsException("Cannot create group %s in database because it already exists".format(rawlsGroup))
       case None =>
