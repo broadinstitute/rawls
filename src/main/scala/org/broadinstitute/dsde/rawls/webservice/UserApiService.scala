@@ -20,14 +20,18 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   val userServiceConstructor: UserInfo => UserService
 
-  val userRoutes = requireUserInfo() { userInfo =>
+  // special route for registration that has different access control
+  val createUserRoute = requireUserInfo() { userInfo =>
     path("user") {
       post {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.CreateUser)
       }
-    } ~
+    }
+  }
+
+  val userRoutes = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
       put {
         entity(as[UserRefreshToken]) { token =>
