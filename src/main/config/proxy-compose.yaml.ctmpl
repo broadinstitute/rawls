@@ -1,7 +1,4 @@
-{{with $environment := env "ENVIRONMENT"}}
-{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yml" $environment}}
-{{with vault $keyname}}
-
+{{with $environment := env "ENVIRONMENT"}}{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yml" $environment}}{{with vault $keyname}}
 proxy:
   image: broadinstitute/openidc-proxy:latest
   {{.Data.proxy_ports}}
@@ -17,7 +14,4 @@ proxy:
     OIDC_CLAIM2: Require valid-user
     PROXY_PATH: /
     PROXY_PATH2: /api
-    SERVER_NAME: {{.Data.env_server_name}}
-
-{{end}}
-{{end}}
+    SERVER_NAME: {{.Data.env_server_name}}{{end}}{{end}}
