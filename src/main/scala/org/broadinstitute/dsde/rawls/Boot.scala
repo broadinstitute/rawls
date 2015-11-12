@@ -19,6 +19,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConversions._
 
 object Boot extends App {
 
@@ -51,7 +52,12 @@ object Boot extends App {
     val userDirDAO = new JndiUserDirectoryDAO(
       ldapConfig.getString("providerUrl"),
       ldapConfig.getString("user"),
-      ldapConfig.getString("password")
+      ldapConfig.getString("password"),
+      ldapConfig.getString("groupDn"),
+      ldapConfig.getString("memberAttribute"),
+      ldapConfig.getStringList("userObjectClasses").toList,
+      ldapConfig.getStringList("userAttributes").toList,
+      ldapConfig.getString("userDnFormat")
     )
 
     system.registerOnTermination {
