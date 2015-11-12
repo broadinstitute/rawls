@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.io.File
+import scala.collection.JavaConversions._
 
 import com.typesafe.config.ConfigFactory
 
@@ -29,4 +30,9 @@ trait IntegrationTestConfig {
   val ldapProviderUrl = ldapConfig.getString("providerUrl")
   val ldapUser = ldapConfig.getString("user")
   val ldapPassword = ldapConfig.getString("password")
+  val ldapGroupDn = ldapConfig.getString("groupDn")
+  val ldapMemberAttribute = ldapConfig.getString("memberAttribute")
+  val ldapUserObjectClasses = ldapConfig.getStringList("userObjectClasses").toList
+  val ldapUserAttributes = ldapConfig.getStringList("userAttributes").toList
+  val ldapUserDnFormat = ldapConfig.getString("userDnFormat")
 }
