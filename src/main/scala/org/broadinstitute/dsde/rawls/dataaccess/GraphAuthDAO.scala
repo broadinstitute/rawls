@@ -73,15 +73,6 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
       WorkspaceAccessLevels.Read -> rGroup)
   }
 
-  //turns a PipeFunction into one that takes a LoopBundle
-  implicit def pipeToLoopBundle[A,B](f: PipeFunction[A,B]) = new PipeFunction[LoopPipe.LoopBundle[A], B] {
-    override def compute(bundle: LoopPipe.LoopBundle[A]) : B = f.compute(bundle.getObject)
-  }
-
-  private def invert[A](f: PipeFunction[A, java.lang.Boolean]) = new PipeFunction[A, java.lang.Boolean] {
-    override def compute(v: A) = !f.compute(v)
-  }
-
   private def isTargetWorkspace(wsId:String) = new PipeFunction[Vertex, java.lang.Boolean] {
     override def compute(v: Vertex) = {
       isVertexOfClass(VertexSchema.Workspace).compute(v) && hasPropertyValue("workspaceId", wsId).compute(v)
