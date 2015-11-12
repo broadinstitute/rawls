@@ -1702,8 +1702,12 @@ paths:
           description: No response was specified
         '201':
           description: Successful Request
+        '400':
+          description: Namespace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '403':
-          description: Unable to create bucket for workspace
+          description: User does not have access to create workspace in namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -1877,7 +1881,11 @@ paths:
         '201':
           description: Successful Request
         '400':
-          description: Unable to create resources for workspace
+          description: Namespace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: User does not have access to create workspace in namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -2449,7 +2457,7 @@ definitions:
     properties:
       namespace:
         type: string
-        description: The namespace the workspace belongs to
+        description: The namespace (billing project) the workspace belongs to
       name:
         type: string
         description: The name of the workspace
@@ -2825,7 +2833,7 @@ definitions:
     properties:
       namespace:
         type: string
-        description: The namespace the workspace belongs to
+        description: The namespace (billing project) the workspace belongs to
       name:
         type: string
         description: The name of the workspace

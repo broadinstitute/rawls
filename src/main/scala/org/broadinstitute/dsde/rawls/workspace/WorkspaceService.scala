@@ -1116,22 +1116,36 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)
                                      (op: (WorkspaceContext) => PerRequestMessage): Future[PerRequestMessage] = {
     val workspaceName = workspaceRequest.toWorkspaceName
-    containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
-      case Some(_) => Future.successful(PerRequest.RequestComplete(ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
-      case None =>
-        val workspaceId = UUID.randomUUID.toString
-        gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
-          val currentDate = DateTime.now
-          val accessLevels = containerDAO.authDAO.createWorkspaceAccessGroups(workspaceName, userInfo, txn)
+    requireCreateWorkspaceAccess(workspaceName, txn) {
+      containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
+        case Some(_) => Future.successful(PerRequest.RequestComplete(ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+        case None =>
+          val workspaceId = UUID.randomUUID.toString
+          gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
+            val currentDate = DateTime.now
+            val accessLevels = containerDAO.authDAO.createWorkspaceAccessGroups(workspaceName, userInfo, txn)
 
-          val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), currentDate, currentDate, userInfo.userEmail, workspaceRequest.attributes, accessLevels)
-          op(containerDAO.workspaceDAO.save(workspace, txn))
-        }
+            val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), currentDate, currentDate, userInfo.userEmail, workspaceRequest.attributes, accessLevels)
+            op(containerDAO.workspaceDAO.save(workspace, txn))
+          }
+      }
     }
   }
 
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
+
+  private def requireCreateWorkspaceAccess(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    containerDAO.billingDAO.loadProject(RawlsBillingProjectName(workspaceName.namespace), txn) match {
+      case Some(billingProject) =>
+        if (billingProject.users.contains(RawlsUser(userInfo))) {
+          op
+        } else {
+          Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceName.namespace}")))
+        }
+      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceName.namespace} not found")))
+    }
+  }
 
   private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     withWorkspaceContext(workspaceName, txn) { workspaceContext =>
