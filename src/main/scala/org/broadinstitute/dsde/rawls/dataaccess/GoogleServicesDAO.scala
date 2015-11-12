@@ -16,7 +16,7 @@ trait GoogleServicesDAO {
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
 
-  def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]]
+  def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]]
 
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 

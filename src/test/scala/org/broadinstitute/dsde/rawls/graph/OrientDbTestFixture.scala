@@ -120,7 +120,6 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
     val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
     val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
-
     val wsAttrs = Map(
       "string" -> AttributeString("yep, it's a string"),
       "number" -> AttributeNumber(10),

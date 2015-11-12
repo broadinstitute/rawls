@@ -73,11 +73,11 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(gcsDAO.getACL(testWorkspaceId), Duration.Inf).acl should be (Map(testCreator.userEmail -> WorkspaceAccessLevels.Owner))
 
     // try adding a user, changing their access, then revoking it
-    Await.result(gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevels.Read))), Duration.Inf)
+    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.Read)), Duration.Inf)
     Await.result(gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.Read)
-    Await.result(gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevels.Write))), Duration.Inf)
+    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.Write)), Duration.Inf)
     Await.result(gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.Write)
-    Await.result(gcsDAO.updateACL(testCreator.userEmail, testWorkspaceId, Seq(WorkspaceACLUpdate(testCollaborator.userEmail, WorkspaceAccessLevels.NoAccess))), Duration.Inf)
+    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.NoAccess)), Duration.Inf)
     Await.result(gcsDAO.getMaximumAccessLevel(testCollaborator.userEmail, testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.NoAccess)
 
     // check that we can properly deconstruct group names
