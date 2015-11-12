@@ -87,9 +87,9 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future.successful(Unit)
 
-  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String) = Future.successful(Unit)
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
 
-  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String) = Future.successful(Unit)
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
 
   override def toGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 

@@ -99,7 +99,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertResult(Array("test_token")) { responseAs[UserList]}
+        assertResult(UserList(Seq("test_token"))) { responseAs[UserList]}
       }
   }
 
@@ -136,7 +136,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[String]] should contain theSameElementsAs(Array("bob","test_token"))
+        assertResult(UserList(Seq("test_token", "bob"))) { responseAs[UserList]}
       }
   }
 
@@ -232,7 +232,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Delete(s"/admin/groups/${group.groupName.value}") ~>
+    Delete(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -261,17 +261,12 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       check {
         assertResult(StatusCodes.Created) { status }
       }
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-    Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-      }
-    Get(s"/admin/groups/${group.groupName.value}/members") ~> //change this api
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
@@ -288,7 +283,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Put(s"/admin/groups/${group.groupName.value}/members/thisuserdoesntexist@example.com") ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_blahhh@dev.firecloud.org")).toJson.toString)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -309,7 +304,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -340,7 +335,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
         assertResult(StatusCodes.Created) { status }
       }
     //put subgroup into main group
-    Put(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -354,7 +349,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
         }
       }
     //remove subgroup from main group
-    Delete(s"/admin/groups/${group.groupName.value}/members/GROUP_${subGroup.groupName.value}@dev.firecloud.org") ~>
+    Delete(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }

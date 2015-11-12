@@ -333,20 +333,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-//  //TODO: these google group functions all have a lot in common with the admin ones. pull the functionality out of admin functions and use these?
-//  override def createGoogleGroup(groupName: String): Future[Unit] = {
-//    val directory = getGroupDirectory
-//    val groups = directory.groups
-//    retry(when500) {
-//      () => Future {
-//        val inserter = groups.insert(new Group().setEmail(toGroupName(groupName)).setName(groupName))
-//        blocking {
-//          inserter.execute
-//        }
-//      }
-//    }
-//  }
-
   override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
@@ -360,13 +346,20 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit] = {
-    val member = new Member().setEmail(memberEmail).setRole(groupMemberRole)
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+    val member = memberToAdd match {
+      case Left(member) => new Member().setEmail(toProxyFromUser(memberToAdd.left.get.userSubjectId)).setRole(groupMemberRole)
+      case Right(member) => new Member().setEmail(memberToAdd.right.get.groupEmail.value).setRole(groupMemberRole)
+    }
     val inserter = getGroupDirectory.members.insert(toGroupName(groupRef.groupName), member)
     retry(when500)(() => Future { blocking { inserter.execute } })
   }
 
-  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit] = {
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+    val memberEmail = memberToAdd match {
+      case Left(member) => toProxyFromUser(member.userSubjectId)
+      case Right(member) => member.groupEmail.value
+    }
     val deleter = getGroupDirectory.members.delete(toGroupName(groupRef.groupName), memberEmail)
     retry(when500)(() => Future { blocking { deleter.execute } })
   }

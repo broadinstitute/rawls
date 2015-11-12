@@ -40,9 +40,9 @@ trait GoogleServicesDAO {
 
   def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
 
-  def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit]
+  def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
-  def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit]
+  def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
   def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
 

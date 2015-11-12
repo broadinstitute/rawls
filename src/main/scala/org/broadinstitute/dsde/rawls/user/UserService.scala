@@ -45,8 +45,8 @@ object UserService {
   case class CreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class ListGroupMembers(groupName: String) extends UserServiceMessage
   case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class AddGroupMember(groupName: String, memberEmail: String) extends UserServiceMessage
-  case class RemoveGroupMember(groupName: String, memberEmail: String) extends UserServiceMessage
+  case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
@@ -66,8 +66,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
     case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
     case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
-    case AddGroupMember(groupName, memberEmail) => addGroupMember(groupName, memberEmail) to context.parent
-    case RemoveGroupMember(groupName, memberEmail) => removeGroupMember(groupName, memberEmail) to context.parent
+    case AddGroupMembers(groupName, memberList) => addGroupMembers(groupName, memberList) to context.parent
+    case RemoveGroupMembers(groupName, memberList) => removeGroupMembers(groupName, memberList) to context.parent
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -129,14 +129,11 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-
-  // **change this back once more important stuff is fixed
   def listAdmins() = {
     asAdmin {
-      //gcsDAO.listAdmins.map(RequestComplete(StatusCodes.OK, _)).recover{ case throwable =>
-      //  RequestComplete(ErrorReport(StatusCodes.BadGateway,"Unable to list admins.",gcsDAO.toErrorReport(throwable)))
-      //}
-      Future.successful(RequestComplete(StatusCodes.OK))
+      gcsDAO.listAdmins.map(users => RequestComplete(StatusCodes.OK, UserList(users))).recover{ case throwable =>
+        RequestComplete(ErrorReport(StatusCodes.BadGateway,"Unable to list admins.",gcsDAO.toErrorReport(throwable)))
+      }
     }
   }
 
@@ -231,67 +228,62 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  //this is used a lot. is the memberEmail associated with a user or a group?
-  def isGroup(memberEmail: String): Boolean = {
+  //ideally this would just return the already loaded users to avoid loading twice
+  def doAllMembersExist(memberList: RawlsGroupMemberList): Boolean = {
     dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.loadGroupByEmail(memberEmail, txn) match {
-        case Some(group) => true
-        case None => false
+      memberList.userEmails.foreach { user =>
+        containerDAO.authDAO.loadUserByEmail(user, txn).getOrElse(return false)
       }
+      memberList.subGroupEmails.foreach { subGroup =>
+        containerDAO.authDAO.loadGroupByEmail(subGroup, txn).getOrElse(return false)
+      }
+      true
     }
   }
 
-  def isUser(memberEmail: String): Boolean = {
-    dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.loadUserByEmail(memberEmail, txn) match {
-        case Some(group) => true
-        case None => false
-      }
-    }
-  }
-
-  def addGroupMember(groupName: String, memberEmail: String) = {
+  def addGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = {
     asAdmin {
       dataSource.inFutureTransaction() { txn =>
         Future {
-          val groupRef = RawlsGroupRef(RawlsGroupName(groupName))
-          val group = containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupName} does not exist"))
-          if(isUser(memberEmail)) {
-            val member = containerDAO.authDAO.loadUserByEmail(memberEmail, txn).get
-            gcsDAO.addMemberToGoogleGroup(groupRef, gcsDAO.toProxyFromUser(member.userSubjectId))
-            containerDAO.authDAO.saveGroup(group.copy(users = group.users + RawlsUserRef(member.userSubjectId)), txn)
-            RequestComplete(StatusCodes.OK)
-          }
-          else if(isGroup(memberEmail)) {
-            val member = containerDAO.authDAO.loadGroupByEmail(memberEmail, txn).get
-            gcsDAO.addMemberToGoogleGroup(groupRef, memberEmail)
-            containerDAO.authDAO.saveGroup(group.copy(subGroups = group.subGroups + RawlsGroupRef(member.groupName)), txn)
-            RequestComplete(StatusCodes.OK)
-          }
+          if(!doAllMembersExist(memberList))
+            RequestComplete(StatusCodes.NotFound, "Not all members are registered. Please ensure that all users/groups that exist")
           else {
-            RequestComplete(ErrorReport(StatusCodes.NotFound, s"Member ${memberEmail} does not exist"))
+            val group = containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName.value} does not exist"))
+            memberList.userEmails.foreach { user =>
+              val newUser = containerDAO.authDAO.loadUserByEmail(user, txn).get
+              gcsDAO.addMemberToGoogleGroup(groupRef, Left(newUser))
+              containerDAO.authDAO.saveGroup(group.copy(users = group.users + RawlsUserRef(newUser.userSubjectId)), txn)
+            }
+            memberList.subGroupEmails.foreach { subGroup =>
+              val newGroup = containerDAO.authDAO.loadGroupByEmail(subGroup, txn).get
+              gcsDAO.addMemberToGoogleGroup(groupRef, Right(newGroup))
+              containerDAO.authDAO.saveGroup(group.copy(subGroups = group.subGroups + RawlsGroupRef(newGroup.groupName)), txn)
+            }
+            RequestComplete(StatusCodes.OK)
           }
         }
       }
     }
   }
 
-  def removeGroupMember(groupName: String, memberEmail: String) = {
+  def removeGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) = {
     asAdmin {
       dataSource.inFutureTransaction() { txn =>
         Future {
-          val groupRef = RawlsGroupRef(RawlsGroupName(groupName))
-          val group = containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupName} does not exist"))
-          if(isUser(memberEmail)) {
-            val member = containerDAO.authDAO.loadUserByEmail(memberEmail, txn).get
-            gcsDAO.removeMemberFromGoogleGroup(groupRef, gcsDAO.toProxyFromUser(member.userSubjectId))
-            containerDAO.authDAO.saveGroup(group.copy(users = group.users - RawlsUserRef(RawlsUserSubjectId(member.userSubjectId.value))), txn)
-            RequestComplete(StatusCodes.OK)
-          }
+          if(!doAllMembersExist(memberList))
+            RequestComplete(StatusCodes.NotFound, "Not all members are registered. Please ensure that all users/groups that exist")
           else {
-            val member = containerDAO.authDAO.loadGroupByEmail(memberEmail, txn).get
-            gcsDAO.removeMemberFromGoogleGroup(groupRef, memberEmail)
-            containerDAO.authDAO.saveGroup(group.copy(subGroups = group.subGroups - RawlsGroupRef(RawlsGroupName(member.groupName.value))), txn)
+            val group = containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Group ${groupRef.groupName.value} does not exist"))
+            memberList.userEmails.foreach { user =>
+              val newUser = containerDAO.authDAO.loadUserByEmail(user, txn).get
+              gcsDAO.removeMemberFromGoogleGroup(groupRef, Left(newUser))
+              containerDAO.authDAO.saveGroup(group.copy(users = group.users - RawlsUserRef(newUser.userSubjectId)), txn)
+            }
+            memberList.subGroupEmails.foreach { subGroup =>
+              val newGroup = containerDAO.authDAO.loadGroupByEmail(subGroup, txn).get
+              gcsDAO.removeMemberFromGoogleGroup(groupRef, Right(newGroup))
+              containerDAO.authDAO.saveGroup(group.copy(subGroups = group.subGroups - RawlsGroupRef(newGroup.groupName)), txn)
+            }
             RequestComplete(StatusCodes.OK)
           }
         }

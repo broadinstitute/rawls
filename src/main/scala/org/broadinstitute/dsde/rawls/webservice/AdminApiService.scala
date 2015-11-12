@@ -82,20 +82,22 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
-    path("admin" / "groups" / Segment / "members" / Segment) { (groupName, memberEmail) => //add member to group
+    path("admin" / "groups" / Segment / "members") { (groupName) => //add members to group
       post {
-       // entity(as[Either[RawlsUserRef, RawlsGroupRef]]) { memberRef =>
+        entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AddGroupMember(groupName, memberEmail))
-     //   }
+            UserService.AddGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+        }
       }
     } ~
-    path("admin" / "groups" / Segment / "members" / Segment) { (groupName, memberEmail) => //remove member from group
+    path("admin" / "groups" / Segment / "members") { (groupName) => //remove member from group
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.RemoveGroupMember(groupName, memberEmail))
+        entity(as[RawlsGroupMemberList]) { memberList =>
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.RemoveGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+        }
       }
     } ~
     path("admin" / "groups" / Segment / "members") { (groupName) => //list group members
