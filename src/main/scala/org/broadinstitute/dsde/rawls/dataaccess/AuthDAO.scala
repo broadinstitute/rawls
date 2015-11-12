@@ -22,10 +22,6 @@ trait AuthDAO {
     (loadUserByEmail(email, txn).map(Left(_)) ++ loadGroupByEmail(email, txn).map(Right(_))).headOption
   }
 
-  def addMemberToGroup(groupRef: RawlsGroupRef, memberEmail: String, txn: RawlsTransaction): RawlsGroup
-
-  def removeMemberFromGroup(groupRef: RawlsGroupRef, memberEmail: String, txn: RawlsTransaction): RawlsGroup
-
   def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup
 
   def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef]

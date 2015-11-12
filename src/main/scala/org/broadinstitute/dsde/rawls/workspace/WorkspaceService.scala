@@ -79,18 +79,8 @@ object WorkspaceService {
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
 
-  case object ListAdmins extends WorkspaceServiceMessage
-  case class IsAdmin(userId: String) extends WorkspaceServiceMessage
-  case class AddAdmin(userId: String) extends WorkspaceServiceMessage
-  case class DeleteAdmin(userId: String) extends WorkspaceServiceMessage
   case object ListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
-
-  case class CreateGroup(groupRef: RawlsGroupRef) extends WorkspaceServiceMessage
-  case class ListGroupMembers(groupName: String) extends WorkspaceServiceMessage
-  case class DeleteGroup(groupName: String) extends WorkspaceServiceMessage
-  case class AddGroupMember(groupName: String, memberEmail: String) extends WorkspaceServiceMessage
-  case class RemoveGroupMember(groupName: String, memberEmail: String) extends WorkspaceServiceMessage
 
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
@@ -145,18 +135,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to context.parent
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to context.parent
 
-    case ListAdmins => pipe(listAdmins()) to context.parent
-    case IsAdmin(userId) => pipe(isAdmin(userId)) to context.parent
-    case AddAdmin(userId) => pipe(addAdmin(userId)) to context.parent
-    case DeleteAdmin(userId) => pipe(deleteAdmin(userId)) to context.parent
     case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to context.parent
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to context.parent
-
-    case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
-    case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
-    case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
-    case AddGroupMember(groupName, memberEmail) => addGroupMember(groupName, memberEmail) to context.parent
-    case RemoveGroupMember(groupName, memberEmail) => removeGroupMember(groupName, memberEmail) to context.parent
 
   }
 
@@ -974,57 +954,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 
-  def listAdmins() = {
-    asAdmin {
-      gcsDAO.listAdmins.map(RequestComplete(StatusCodes.OK, _)).recover{ case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway,"Unable to list admins.",gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def isAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) map { admin =>
-        if (admin) RequestComplete(StatusCodes.NoContent)
-        else RequestComplete(ErrorReport(StatusCodes.NotFound, s"User ${userId} is not an admin."))
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def addAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) flatMap { admin =>
-        if (admin) {
-          Future.successful(RequestComplete(StatusCodes.NoContent))
-        } else {
-          gcsDAO.addAdmin(userId) map (_ => RequestComplete(StatusCodes.Created)) recover { case throwable =>
-            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to add ${userId} as an admin.", gcsDAO.toErrorReport(throwable)))
-          }
-        }
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def deleteAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) flatMap { admin =>
-        if (admin) {
-          gcsDAO.deleteAdmin(userId) map (_ => RequestComplete(StatusCodes.NoContent)) recover { case throwable =>
-            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to delete ${userId} as an admin.", gcsDAO.toErrorReport(throwable)))
-          }
-        } else {
-          Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound,s"${userId} is not an admin.")))
-        }
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
   def listAllActiveSubmissions() = {
     asAdmin {
       dataSource.inFutureTransaction() { txn =>
@@ -1040,91 +969,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, txn)
-        }
-      }
-    }
-  }
-
-  def listGroupMembers(groupName: String) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
-            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
-            case Some(group) =>
-              val memberUsers = group.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
-              val memberGroups = group.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
-              RequestComplete(StatusCodes.OK, (memberUsers ++ memberGroups).toSeq)
-          }
-        }
-      }
-    }
-  }
-
-  def createGroup(groupRef: RawlsGroupRef) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          containerDAO.authDAO.loadGroup(RawlsGroupRef(groupRef.groupName), txn) match {
-            case Some(_) => RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists"))
-            case None =>
-              gcsDAO.createGoogleGroup(groupRef.groupName.value)
-              //break email creation out into new function
-              containerDAO.authDAO.createGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGroupName(groupRef.groupName.value)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-              RequestComplete(StatusCodes.Created)
-          }
-        }
-      }
-    }
-  }
-
-  def deleteGroup(groupName: String) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
-            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
-            case Some(_) =>
-              gcsDAO.deleteGoogleGroup(groupName)
-              containerDAO.authDAO.deleteGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn)
-              RequestComplete(StatusCodes.OK)
-          }
-        }
-      }
-    }
-  }
-
-  def addGroupMember(groupName: String, memberEmail: String) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
-            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
-            case Some(group) =>
-              gcsDAO.addMemberToGoogleGroup(groupName, memberEmail)
-              try {
-                containerDAO.authDAO.addMemberToGroup(group, memberEmail, txn)
-                RequestComplete(StatusCodes.OK)
-              } catch {
-                case re: RawlsException => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Member ${memberEmail} does not exist"))
-              }
-          }
-        }
-      }
-    }
-  }
-
-  def removeGroupMember(groupName: String, memberEmail: String) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
-            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
-            case Some(group) =>
-              gcsDAO.removeMemberFromGoogleGroup(groupName, memberEmail)
-              containerDAO.authDAO.removeMemberFromGroup(group, memberEmail, txn)
-              RequestComplete(StatusCodes.OK)
-          }
         }
       }
     }

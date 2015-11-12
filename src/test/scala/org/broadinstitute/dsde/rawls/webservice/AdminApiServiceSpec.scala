@@ -1,13 +1,15 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, HttpMethodRepoDAO, HttpExecutionServiceDAO, DataSource}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{Matchers, FlatSpec}
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
@@ -53,6 +55,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
+    val directoryDAO = new MockUserDirectoryDAO
+    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, directoryDAO)_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
@@ -95,7 +99,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertResult(Array("test_token")) { responseAs[Array[String]]}
+        assertResult(Array("test_token")) { responseAs[UserList]}
       }
   }
 
@@ -243,7 +247,6 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
   }
 
-  //probably check contents too once we can reliably add members
   it should "return 200 when listing the members of a group" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
     val subGroup = new RawlsGroupRef(RawlsGroupName("dbgap"))
@@ -268,11 +271,11 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+    Get(s"/admin/groups/${group.groupName.value}/members") ~> //change this api
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
-          responseAs[Array[String]]
+        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
+          responseAs[UserList]
         }
       }
   }
@@ -314,8 +317,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
-          responseAs[Array[String]]
+        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
+          responseAs[UserList]
         }
       }
   }
@@ -346,8 +349,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")) {
-          responseAs[Array[String]]
+        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
+          responseAs[UserList]
         }
       }
     //remove subgroup from main group
@@ -360,8 +363,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     Get(s"/admin/groups/${group.groupName.value}/members") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(List.empty) {
-          responseAs[Array[String]]
+        assertResult(UserList(List.empty)) {
+          responseAs[UserList]
         }
       }
   }
