@@ -1,7 +1,4 @@
-{{with $environment := env "ENVIRONMENT"}}
-{{$keyname := printf "secret/dsde/%s/rawls/rawls.conf" $environment}}
-{{with vault $keyname}}
-
+{{with $environment := env "ENVIRONMENT"}}{{$keyname := printf "secret/dsde/%s/rawls/rawls.conf" $environment}}{{with vault $keyname}}
 orientdb {
   server = "{{.Data.orientdb_server}}"
   rootUser = "{{.Data.orientdb_rootUser}}"
@@ -24,6 +21,4 @@ methodrepo {
 }
 executionservice {
   server = "{{.Data.execservice_server}}"
-}
-{{end}}
-{{end}}
+}{{end}}{{end}}
