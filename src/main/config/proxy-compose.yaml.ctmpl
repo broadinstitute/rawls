@@ -14,5 +14,5 @@ proxy:
     OIDC_CLAIM2: Require valid-user
     PROXY_PATH: /
     PROXY_PATH2: /api
-    PROXY_PATH2: /register
+    PROXY_PATH3: /register
     SERVER_NAME: {{.Data.env_server_name}}{{end}}{{end}}
