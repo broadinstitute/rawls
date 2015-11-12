@@ -48,6 +48,13 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.GetRefreshTokenDate)
       }
     } ~
+    path("user" / "billing") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.ListBillingProjects)
+      }
+    } ~
     path("user" / Segment) { userSubjectId =>
       get {
         requestContext => perRequest(requestContext,
