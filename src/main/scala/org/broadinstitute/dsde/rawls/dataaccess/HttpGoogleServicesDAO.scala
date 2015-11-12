@@ -318,7 +318,8 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def createProxyGroup(user: RawlsUser): Future[Unit] = {
+  //almost identical to function below. pull functionality out?
+  override def createProxyGroup(user: RawlsUser): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
     retry(when500) {
@@ -326,6 +327,56 @@ class HttpGoogleServicesDAO(
         val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
         blocking {
           inserter.execute
+        }
+      }
+    }
+  }
+
+//  //TODO: these google group functions all have a lot in common with the admin ones. pull the functionality out of admin functions and use these?
+//  override def createGoogleGroup(groupName: String): Future[Unit] = {
+//    val directory = getGroupDirectory
+//    val groups = directory.groups
+//    retry(when500) {
+//      () => Future {
+//        val inserter = groups.insert(new Group().setEmail(toGroupName(groupName)).setName(groupName))
+//        blocking {
+//          inserter.execute
+//        }
+//      }
+//    }
+//  }
+
+  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        val inserter = groups.insert(new Group().setEmail(toGroupName(groupRef.groupName)).setName(groupRef.groupName.value))
+        blocking {
+          inserter.execute
+        }
+      }
+    }
+  }
+
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit] = {
+    val member = new Member().setEmail(memberEmail).setRole(groupMemberRole)
+    val inserter = getGroupDirectory.members.insert(toGroupName(groupRef.groupName), member)
+    retry(when500)(() => Future { blocking { inserter.execute } })
+  }
+
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit] = {
+    val deleter = getGroupDirectory.members.delete(toGroupName(groupRef.groupName), memberEmail)
+    retry(when500)(() => Future { blocking { deleter.execute } })
+  }
+
+  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        blocking {
+          groups.delete(toGroupName(groupRef.groupName)).execute()
         }
       }
     }
@@ -487,6 +538,7 @@ class HttpGoogleServicesDAO(
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
   def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
+  def toGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"

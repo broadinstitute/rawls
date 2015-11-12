@@ -38,7 +38,7 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     }
   }
 
-  private def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
+  override def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
     getGroupVertex(db, rawlsGroup) match {
       case Some(_) => throw new RawlsException("Cannot create group %s in database because it already exists".format(rawlsGroup))
       case None =>

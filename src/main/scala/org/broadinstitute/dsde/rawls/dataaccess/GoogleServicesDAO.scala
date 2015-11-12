@@ -38,10 +38,22 @@ trait GoogleServicesDAO {
 
   def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
 
+  def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
+
+  def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit]
+
+  def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberEmail: String): Future[Unit]
+
+  def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(userInfo: UserInfo): Future[Option[String]]
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
   def deleteToken(userInfo: UserInfo): Future[Unit]
+
+  def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
+  def toUserFromProxy(proxy: String): String
+  def toGroupName(groupName: RawlsGroupName): String
 
   def toErrorReport(throwable: Throwable) = {
     val SOURCE = "google"

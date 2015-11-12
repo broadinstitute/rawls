@@ -227,6 +227,167 @@ paths:
             - openid
             - email
             - profile
+  '/admin/groups':
+      post:
+        responses:
+          '201':
+            description: Created
+          '403':
+            description: Unauthorized
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Create a group
+        tags:
+          - admin
+        summary: create a group
+        operationId: adminCreateGroup
+        parameters:
+          - in: body
+            description: RawlsGroupRef
+            name: group
+            required: true
+            schema:
+              $ref: '#/definitions/RawlsGroupRef'
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
+
+  '/admin/groups/{groupName}':
+      delete:
+        responses:
+          '204':
+            description: Successful Request
+          '403':
+            description: Unauthorized
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Delete a group
+        tags:
+          - admin
+        summary: delete a group
+        operationId: adminDeleteGroup
+        parameters:
+          - in: path
+            description: name of the group
+            name: groupName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
+
+  '/admin/groups/{groupName}/members':
+      get:
+        responses:
+          '201':
+            description: Successful Request
+            schema:
+              type: array
+              items:
+                type: string
+          '403':
+            description: Unauthorized
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: List the users in a group
+        tags:
+          - admin
+        summary: list users in a group
+        operationId: adminListGroupUsers
+        parameters:
+          - in: path
+            description: name of the group
+            name: groupName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
+  '/admin/groups/{groupName}/members/{memberEmail}':
+      put:
+        responses:
+          '204':
+            description: Successful Request
+          '403':
+            description: Unauthorized
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Add a user to group
+        tags:
+          - admin
+        summary: add a user to a group
+        operationId: adminAddUser
+        parameters:
+          - in: path
+            description: name of the group
+            name: groupName
+            required: true
+            type: string
+          - in: path
+            description: email of the user
+            name: memberEmail
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
+      delete:
+        responses:
+          '204':
+            description: Successful Request
+          '403':
+            description: Unauthorized
+            schema:
+              $ref: '#/definitions/ErrorReport'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Remove a user from group
+        tags:
+          - admin
+        summary: remove a user from a group
+        operationId: adminRemoveUser
+        parameters:
+          - in: path
+            description: name of the group
+            name: groupName
+            required: true
+            type: string
+          - in: path
+            description: email of the user
+            name: memberEmail
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
   '/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
@@ -2753,6 +2914,15 @@ definitions:
       accessLevel:
         type: string
         description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
+
+  RawlsGroupRef:
+    description: ''
+    required:
+      - groupName
+    properties:
+      groupName:
+        type: string
+        description: The unique name associated with the group
 
   Workspace:
     description: ''

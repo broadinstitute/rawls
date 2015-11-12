@@ -80,10 +80,6 @@ object WorkspaceService {
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
 
-  case object ListAdmins extends WorkspaceServiceMessage
-  case class IsAdmin(userId: String) extends WorkspaceServiceMessage
-  case class AddAdmin(userId: String) extends WorkspaceServiceMessage
-  case class DeleteAdmin(userId: String) extends WorkspaceServiceMessage
   case object ListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
 
@@ -140,12 +136,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to context.parent
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to context.parent
 
-    case ListAdmins => pipe(listAdmins()) to context.parent
-    case IsAdmin(userId) => pipe(isAdmin(userId)) to context.parent
-    case AddAdmin(userId) => pipe(addAdmin(userId)) to context.parent
-    case DeleteAdmin(userId) => pipe(deleteAdmin(userId)) to context.parent
     case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to context.parent
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to context.parent
+
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
@@ -1036,57 +1029,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em))
           }
         }
-      }
-    }
-  }
-
-  def listAdmins() = {
-    asAdmin {
-      gcsDAO.listAdmins.map(RequestComplete(StatusCodes.OK, _)).recover{ case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway,"Unable to list admins.",gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def isAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) map { admin =>
-        if (admin) RequestComplete(StatusCodes.NoContent)
-        else RequestComplete(ErrorReport(StatusCodes.NotFound, s"User ${userId} is not an admin."))
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def addAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) flatMap { admin =>
-        if (admin) {
-          Future.successful(RequestComplete(StatusCodes.NoContent))
-        } else {
-          gcsDAO.addAdmin(userId) map (_ => RequestComplete(StatusCodes.Created)) recover { case throwable =>
-            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to add ${userId} as an admin.", gcsDAO.toErrorReport(throwable)))
-          }
-        }
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
-      }
-    }
-  }
-
-  def deleteAdmin(userId: String) = {
-    asAdmin {
-      tryIsAdmin(userId) flatMap { admin =>
-        if (admin) {
-          gcsDAO.deleteAdmin(userId) map (_ => RequestComplete(StatusCodes.NoContent)) recover { case throwable =>
-            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to delete ${userId} as an admin.", gcsDAO.toErrorReport(throwable)))
-          }
-        } else {
-          Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound,s"${userId} is not an admin.")))
-        }
-      } recover { case throwable =>
-        RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to determine whether ${userId} is an admin.", gcsDAO.toErrorReport(throwable)))
       }
     }
   }
