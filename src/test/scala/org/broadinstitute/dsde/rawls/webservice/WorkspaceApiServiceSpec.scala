@@ -210,7 +210,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "newNamespace",
+      namespace = testData.wsName.namespace,
       name = "newWorkspace",
       Map.empty
     )
@@ -218,7 +218,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         services.dataSource.inTransaction() { txn =>
@@ -650,6 +650,41 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 400 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = "foobar",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
+    services.dataSource.inTransaction() { txn =>
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty), txn)
+    }
+    val newWorkspace = WorkspaceRequest(
+      namespace = "foobar",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
       }
   }
 }
