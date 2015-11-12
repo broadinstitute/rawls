@@ -17,7 +17,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class JndiUserDirectoryDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig {
 
   "JndiUserDirectoryDAO" should "create/enable/disable users" in {
-    val dao = new JndiUserDirectoryDAO(ldapProviderUrl, ldapUser, ldapPassword)
+    val dao = new JndiUserDirectoryDAO(ldapProviderUrl, ldapUser, ldapPassword, ldapGroupDn, ldapMemberAttribute, ldapUserObjectClasses, ldapUserAttributes, ldapUserDnFormat)
     val user = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail("foo@bar.com"))
 
     assert(!Await.result(dao.isEnabled(user), Duration.Inf))

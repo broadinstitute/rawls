@@ -13,12 +13,7 @@ import scala.collection.JavaConversions._
 /**
  * Created by dvoet on 11/5/15.
  */
-class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
-  // TODO make these vals configurable DSDEEPB-1930
-  val groupDn: String = "cn=broad-dsde-dev,ou=groups,dc=dsde-dev,dc=broadinstitute,dc=org"
-  val memberAttribute = "member"
-  val userObjectClasses = Seq("inetOrgPerson", "organizationalPerson", "person", "top")
-  val userAttributes = Seq("mail", "sn", "cn")
+class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
 
   override def createUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
     val p = new Person(user)
@@ -76,7 +71,7 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String)(
       myAttrs
     }
 
-    val name = s"mail=${rawlsUser.userSubjectId.value},ou=people,dc=dsde-dev,dc=broadinstitute,dc=org"
+    val name = userDnFormat.format(rawlsUser.userSubjectId.value)
   }
 }
 
