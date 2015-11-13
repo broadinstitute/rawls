@@ -247,11 +247,11 @@ paths:
        operationId: adminCreateGroup
        parameters:
          - in: body
-           description: group reference
-           name: groupRef
+           description: Update operations
+           name: entityUpdateJson
            required: true
            schema:
-             $ref: '#definitions/RawlsGroupRef'
+             $ref: '#/definitions/RawlsGroupRef'
        security:
          - authorization:
              - openid
@@ -317,7 +317,7 @@ paths:
            name: memberList
            required: true
            schema:
-             $ref: '#definitions/RawlsGroupMemberList'
+             $ref: '#/definitions/RawlsGroupMemberList'
        security:
          - authorization:
              - openid
@@ -353,7 +353,7 @@ paths:
            name: memberList
            required: true
            schema:
-             $ref: '#definitions/RawlsGroupMemberList'
+             $ref: '#/definitions/RawlsGroupMemberList'
        security:
          - authorization:
              - openid
@@ -3024,6 +3024,7 @@ definitions:
     properties:
       groupName:
         type: string
+        description: ''
 
   WorkspaceListResponse:
     description: ''
