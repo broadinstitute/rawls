@@ -129,7 +129,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       }
 
       Post("/user") ~>
-        sealRoute(services.userRoutes) ~>
+        sealRoute(services.createUserRoute) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
@@ -160,7 +160,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
       Post("/user") ~>
-        sealRoute(services.userRoutes) ~>
+        sealRoute(services.createUserRoute) ~>
         check {
           assertResult(StatusCodes.Created) {
             status
