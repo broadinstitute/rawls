@@ -120,6 +120,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
     val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
     val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)))
+
     val wsAttrs = Map(
       "string" -> AttributeString("yep, it's a string"),
       "number" -> AttributeNumber(10),
@@ -242,6 +245,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(RawlsUser(userInfo), txn)
+      billingDAO.saveProject(billingProject, txn)
       authDAO.saveUser(userOwner, txn)
       authDAO.saveUser(userWriter, txn)
       authDAO.saveUser(userReader, txn)

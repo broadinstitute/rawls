@@ -57,10 +57,23 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val readerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(readerGroup)).execute() }), Duration.Inf)
     val writerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(writerGroup)).execute() }), Duration.Inf)
     val ownerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(ownerGroup)).execute() }), Duration.Inf)
+    val svcAcctBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(testBucket, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
 
     readerBAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     writerBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
-    ownerBAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
+    ownerBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
+    svcAcctBAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
+
+    // check that the access level for each group is what we expect
+    val readerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(readerGroup)).execute() }), Duration.Inf)
+    val writerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(writerGroup)).execute() }), Duration.Inf)
+    val ownerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(testBucket, gcsDAO.makeGroupEntityString(ownerGroup)).execute() }), Duration.Inf)
+    val svcAcctDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(testBucket, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
+
+    readerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
+    writerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
+    ownerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
+    svcAcctDOAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
 
     // check that the groups exist (i.e. that this doesn't throw exceptions)
     val directory = gcsDAO.getGroupDirectory

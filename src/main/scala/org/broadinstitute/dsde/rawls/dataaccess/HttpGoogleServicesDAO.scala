@@ -56,6 +56,8 @@ class HttpGoogleServicesDAO(
   val tokenBucketName = "rawls-tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
+  val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
+
   initTokenBucket()
 
   private def initTokenBucket(): Unit = {
@@ -72,8 +74,8 @@ class HttpGoogleServicesDAO(
         // do it as a separate call so bucket gets default permissions plus this one
         getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(logBucket.getName, new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")).execute()
 
-        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientSecrets.getDetails.get("client_email").toString).setRole("OWNER"))
-        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientSecrets.getDetails.get("client_email").toString).setRole("OWNER"))
+        val bucketAcls = List(new BucketAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
+        val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
         val bucket = new Bucket().
           setName(tokenBucketName).
           setAcl(bucketAcls).
@@ -131,14 +133,26 @@ class HttpGoogleServicesDAO(
     def insertBucket: (Member) => Future[Unit] = { _ =>
       retry(when500) {
         () => Future {
-          val bucketAcls = groupAccessLevelsAscending.map(ac => newBucketAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), ac))
-          val defaultObjectAcls = groupAccessLevelsAscending.map(ac => {
-            // NB: writers have read access to objects -- there is no write access, objects are immutable
-            newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), if (ac == WorkspaceAccessLevels.Owner) WorkspaceAccessLevels.Owner else WorkspaceAccessLevels.Read)
-          })
+          // bucket ACLs should be:
+          //   workspace owner - bucket writer
+          //   workspace writer - bucket writer
+          //   workspace reader - bucket reader
+          //   bucket service account - bucket owner
+          val workspaceAccessToBucketAcl = Map(Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
+          val bucketAcls =
+            groupAccessLevelsAscending.map(ac => newBucketAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), workspaceAccessToBucketAcl(ac))) :+
+              newBucketAccessControl("user-" + serviceAccountClientId, "OWNER")
+
+          // default object ACLs should be:
+          //   workspace owner - object reader
+          //   workspace writer - object reader
+          //   workspace reader - object reader
+          //   bucket service account - object owner
+          val defaultObjectAcls = groupAccessLevelsAscending.map(ac => newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), "READER")) :+
+            newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
-          val inserter = getStorage(getBucketCredential(userInfo)).buckets.insert(projectId, bucket)
+          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(projectId, bucket)
           blocking {
             inserter.execute
           }
@@ -153,11 +167,11 @@ class HttpGoogleServicesDAO(
   private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
     new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel))
 
-  private def newBucketAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
-    new BucketAccessControl().setEntity(entity).setRole(accessLevel.toString)
+  private def newBucketAccessControl(entity: String, accessLevel: String) =
+    new BucketAccessControl().setEntity(entity).setRole(accessLevel)
 
-  private def newObjectAccessControl(entity: String, accessLevel: WorkspaceAccessLevel) =
-    new ObjectAccessControl().setEntity(entity).setRole(accessLevel.toString)
+  private def newObjectAccessControl(entity: String, accessLevel: String) =
+    new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any] = {
     val bucketName = getBucketName(workspaceId)
@@ -465,7 +479,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientSecrets.getDetails.get("client_email").toString)
+      .setServiceAccountId(serviceAccountClientId)
       .setServiceAccountScopes(directoryScopes)
       .setServiceAccountUser(clientSecrets.getDetails.get("sub_email").toString)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
@@ -476,7 +490,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(clientSecrets.getDetails.get("client_email").toString)
+      .setServiceAccountId(serviceAccountClientId)
       .setServiceAccountScopes(storageScopes) // grant bucket-creation powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
