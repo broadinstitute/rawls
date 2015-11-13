@@ -16,13 +16,13 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
+        v.getProperty[String]("userSubjectId") == user.userSubjectId.toString
     })
 
   def getMatchingGroupVertices(graph: Graph, group: RawlsGroup): Iterable[Vertex] =
     graph.getVertices.filter(v => {
       v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.Group) &&
-        v.getProperty[String]("groupName") == group.groupName.value
+        v.getProperty[String]("groupName") == group.groupName.toString
     })
 
   val testUserInfo = UserInfo("dummy-emal@example.com", OAuth2BearerToken("dummy-token"), 0, "dummy-ID")

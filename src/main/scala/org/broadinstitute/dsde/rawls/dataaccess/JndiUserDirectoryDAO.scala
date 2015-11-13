@@ -66,12 +66,12 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
       userObjectClasses.foreach(oc.add)
       myAttrs.put(oc)
 
-      userAttributes.foreach(myAttrs.put(_, rawlsUser.userSubjectId.value))
+      userAttributes.foreach(myAttrs.put(_, rawlsUser.userSubjectId))
 
       myAttrs
     }
 
-    val name = userDnFormat.format(rawlsUser.userSubjectId.value)
+    val name = userDnFormat.format(rawlsUser.userSubjectId)
   }
 }
 

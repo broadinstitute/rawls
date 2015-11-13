@@ -174,8 +174,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   def getWorkspaceOwners(workspaceName: WorkspaceName, txn: RawlsTransaction): Seq[String] = {
     val ownerGroup = containerDAO.authDAO.loadGroup(RawlsGroup(workspaceName, WorkspaceAccessLevels.Owner), txn).getOrElse(
       throw new RawlsException(s"Unable to load owners for workspace ${workspaceName}"))
-    val users = ownerGroup.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
-    val subGroups = ownerGroup.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
+    val users = ownerGroup.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.toString)
+    val subGroups = ownerGroup.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.toString)
 
     (users++subGroups).toSeq
   }
@@ -308,14 +308,14 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               //pairs of user emails -> this access level
               val userLevels = accessGroup.users.map {
                 withRawlsUser(_, txn) { user =>
-                  (user.userEmail.value, level)
+                  (user.userEmail.toString, level)
                 }
               }
 
               //pairs of group emails -> this access level
               val subgroupLevels = accessGroup.subGroups.map {
                 withRawlsGroup(_, txn) { subGroup =>
-                  (subGroup.groupEmail.value, level)
+                  (subGroup.groupEmail.toString, level)
                 }
               }
 
@@ -360,9 +360,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             }
           }
 
-          val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
-              case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
-              case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
+          val emailNotFoundReports = (aclUpdates.map( wau => wau.email.toString ) diff updateMap.keys.map({
+              case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.toString
+              case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.toString
             }).toSeq)
             .map( email => ErrorReport( StatusCodes.NotFound, email ) )
 

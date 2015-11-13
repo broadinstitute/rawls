@@ -85,7 +85,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       toFutureTry(Future(dataSource.inTransaction()(txn => containerDAO.authDAO.saveUser(user, txn)))),
       toFutureTry(userDirectoryDAO.createUser(user))
 
-    )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
+    )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId}"), handleException("Errors creating user")
     )
   }
 
@@ -191,7 +191,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.loadUser(rawlsUserRef, txn)
     } match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId.value}] not found")))
+      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId}] not found")))
       case Some(user) => op(user)
     }
   }

@@ -7,7 +7,12 @@ sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
-sealed trait UserAuthType { val value: String }
+sealed trait UserAuthType {
+  val value: String
+  override def toString = UserAuthType.toString(this)
+}
+object UserAuthType { implicit def toString(u:UserAuthType) = u.value }
+
 case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
