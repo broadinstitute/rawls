@@ -331,7 +331,7 @@ paths:
         '204':
           description: Successful Request
         '403':
-          description: You must be an admin to abort a submission
+          description: You must be admin to abort a submission
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
