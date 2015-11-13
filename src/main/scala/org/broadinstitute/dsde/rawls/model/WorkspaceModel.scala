@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
@@ -56,6 +58,7 @@ case class Workspace(
                       lastModified: DateTime,
                       createdBy: String,
                       attributes: Map[String, Attribute],
+                      accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -233,7 +236,11 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
 
-  implicit val WorkspaceFormat = jsonFormat9(Workspace)
+  implicit val RawlsGroupRefFormat = UserAuthJsonSupport.RawlsGroupRefFormat
+
+  implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
+
+  implicit val WorkspaceFormat = jsonFormat10(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
@@ -256,8 +263,6 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val ConflictingEntitiesFormat = jsonFormat1(ConflictingEntities)
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
-
-  implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

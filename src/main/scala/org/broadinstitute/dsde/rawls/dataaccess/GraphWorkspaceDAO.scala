@@ -1,12 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-import com.tinkerpop.blueprints.{Graph, Vertex}
+import com.tinkerpop.blueprints.Vertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 

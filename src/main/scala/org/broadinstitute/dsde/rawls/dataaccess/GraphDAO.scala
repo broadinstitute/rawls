@@ -6,6 +6,7 @@ import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientVertex}
 import com.tinkerpop.blueprints.{Edge, Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.model.RawlsEnumeration
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
@@ -14,7 +15,7 @@ import spray.http.StatusCodes
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import scala.collection.Map
+import scala.collection.{immutable, Map}
 import scala.reflect.ClassTag
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe._
@@ -29,11 +30,14 @@ object VertexSchema {
   val Submission = vertexClassOf[org.broadinstitute.dsde.rawls.model.Submission]
   val Workflow = vertexClassOf[org.broadinstitute.dsde.rawls.model.Workflow]
   val WorkflowFailure = vertexClassOf[org.broadinstitute.dsde.rawls.model.WorkflowFailure]
+  val User = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsUser]
+  val Group = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsGroup]
+  val BillingProject = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsBillingProject]
 
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, Map)
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, Map)
 
   def vertexClassOf[T: TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString
@@ -144,7 +148,7 @@ trait GraphDAO {
 
   /**
    * Returns the class of a vertex. */
-  private def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
+  def getVertexClass(vertex: Vertex): String = vertex.asInstanceOf[OrientVertex].getRecord.getClassName
 
   /**
    * Gets the properties of a vertex.
@@ -208,6 +212,15 @@ trait GraphDAO {
     override def compute(v: Vertex) = props.map(p => v.getProperty(p._1).equals(p._2)).reduce(_&&_)
   }
 
+  //turns a PipeFunction into one that takes a LoopBundle
+  implicit def pipeToLoopBundle[A,B](f: PipeFunction[A,B]) = new PipeFunction[LoopPipe.LoopBundle[A], B] {
+    override def compute(bundle: LoopPipe.LoopBundle[A]) : B = f.compute(bundle.getObject)
+  }
+
+  def invert[A](f: PipeFunction[A, java.lang.Boolean]) = new PipeFunction[A, java.lang.Boolean] {
+    override def compute(v: A) = !f.compute(v)
+  }
+
   // named GremlinPipelines
 
   def workspacePipeline(db: Graph, workspaceName: WorkspaceName) = {
@@ -238,6 +251,26 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Submission)).filter(hasPropertyValue("status",SubmissionStatuses.Submitted.toString))
   }
 
+  def userPipeline(db: Graph, user: RawlsUserRef) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",user.userSubjectId.value))
+  }
+
+  def userPipelineByEmail(db: Graph, email: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userEmail",email))
+  }
+
+  def groupPipeline(db: Graph, group: RawlsGroupRef) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupName",group.groupName.value))
+  }
+
+  def groupPipelineByEmail(db: Graph, email: String) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.Group)).filter(hasPropertyValue("groupEmail",email))
+  }
+
+  def billingProjectPipeline(db: Graph, projectName: RawlsBillingProjectName) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.BillingProject)).filter(hasPropertyValue("projectName",projectName.value))
+  }
+
   // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
@@ -266,6 +299,26 @@ trait GraphDAO {
       val workspaceName = WorkspaceName(workspaceVertex.getProperty[String]("namespace"), workspaceVertex.getProperty[String]("name"))
       (workspaceName, submissionVertex)
     }
+  }
+
+  def getUserVertex(db: Graph, user: RawlsUserRef) = {
+    getSinglePipelineResult(userPipeline(db, user))
+  }
+
+  def getUserVertexByEmail(db: Graph, email: String) = {
+    getSinglePipelineResult(userPipelineByEmail(db, email))
+  }
+
+  def getGroupVertex(db: Graph, group: RawlsGroupRef) = {
+    getSinglePipelineResult(groupPipeline(db, group))
+  }
+
+  def getGroupVertexByEmail(db: Graph, email: String) = {
+    getSinglePipelineResult(groupPipelineByEmail(db, email))
+  }
+
+  def getBillingProjectVertex(db: Graph, projectName: RawlsBillingProjectName) = {
+    getSinglePipelineResult(billingProjectPipeline(db, projectName))
   }
 
   def getCtorProperties(tpe: Type): Iterable[(Type, String)] = {
@@ -338,12 +391,21 @@ trait GraphDAO {
     objVert
   }
 
-  private def saveMap( valuesType: Type, propName: String, map: Map[String, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
+  private def saveStringMap( valuesType: Type, propName: String, map: Map[_, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     val mapDummy = addVertex(graph, VertexSchema.Map)
     addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
 
     map.map {case (key, value) =>
-      saveProperty( valuesType, key, value, mapDummy, wsc, graph )
+      saveProperty( valuesType, key.asInstanceOf[String], value, mapDummy, wsc, graph )
+    }
+  }
+
+  private def saveRawlsEnumMap( valuesType: Type, propName: String, map: Map[_, _], vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
+    val mapDummy = addVertex(graph, VertexSchema.Map)
+    addEdge(vertex, EdgeSchema.Own, propName, mapDummy)
+
+    map.map {case (key, value) =>
+      saveProperty( valuesType, key.asInstanceOf[RawlsEnumeration[_]].toString, value, mapDummy, wsc, graph )
     }
   }
 
@@ -362,6 +424,18 @@ trait GraphDAO {
     addEdge(vertex, EdgeSchema.Ref, propName, entityVertex)
   }
 
+  private def saveUserRef(ref: RawlsUserRef, propName: String, vertex: Vertex, db: Graph): Unit =
+    getUserVertex(db, ref) match {
+      case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
+      case None => throw new RawlsException("Cannot find User corresponding to " + ref.userSubjectId)
+    }
+
+  private def saveGroupRef(ref: RawlsGroupRef, propName: String, vertex: Vertex, db: Graph): Unit =
+    getGroupVertex(db, ref) match {
+      case Some(refVertex) => addEdge(vertex, EdgeSchema.Ref, propName, refVertex)
+      case None => throw new RawlsException("Cannot find Group corresponding to " + ref.groupName)
+    }
+
   private def saveProperty(tpe: Type, propName: String, valToSave: Any, vertex: Vertex, wsc: Option[WorkspaceContext], graph: Graph): Unit = {
     removeProperty(propName, vertex, graph) //remove any previously defined value
     (tpe, valToSave) match {
@@ -371,6 +445,9 @@ trait GraphDAO {
       case (_, value:Int)     => vertex.setProperty(propName, value)
       case (_, value:Boolean) => vertex.setProperty(propName, value)
       case (_, value:DateTime)=> vertex.setProperty(propName, value.toDate)
+
+      // RawlsUser and RawlsGroup field types.
+      case (_, value:UserAuthType)  => vertex.setProperty(propName, value.value)
 
       //Attributes.
 
@@ -382,21 +459,25 @@ trait GraphDAO {
       case (_, value:AttributeEntityReferenceList) => saveProperty(typeOf[Seq[AttributeEntityReference]], propName, value.list, vertex, wsc, graph)
 
       //set the values type to Any, but it's irrelevant as the map is empty so no values will be serialized
-      case (_, AttributeEmptyList) => saveMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+      case (_, AttributeEmptyList) => saveStringMap( typeOf[Any], propName, Map.empty[String,Any], vertex, wsc, graph)
+
+      //UserAuthRef types.
+      case (_, value:RawlsUserRef) => saveUserRef(value, propName, vertex, graph)
+      case (_, value:RawlsGroupRef) => saveGroupRef(value, propName, vertex, graph)
 
       //Enums.
       case (_, value:RawlsEnumeration[_]) => vertex.setProperty(propName, value.toString)
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
       //Watch out for type erasure! Ha ha ha ha ha. Ugh.
-      case (_, seq:Seq[_]) => saveMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Seq[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+      case (_, seq:Seq[_]) => saveStringMap( getTypeParams(tpe).head, propName, seq.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Seq[_]] => saveStringMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
 
-      case (_, set:Set[_]) => saveMap( getTypeParams(tpe).head, propName, set.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Set[_]] => saveMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
+      case (_, set:Set[_]) => saveStringMap( getTypeParams(tpe).head, propName, set.zipWithIndex.map({case (elem, idx) => idx.toString -> elem}).toMap, vertex, wsc, graph)
+      case (tp, _) if tp <:< typeOf[Set[_]] => saveStringMap( getTypeParams(tpe).head, propName, Map.empty, vertex, wsc, graph)
 
-      case (_, map:Map[String,_])  => saveMap( getTypeParams(tpe).last, propName, map, vertex, wsc, graph)
-      case (tp, _) if tp <:< typeOf[Map[String,_]] => saveMap( getTypeParams(tpe).last, propName, Map.empty, vertex, wsc, graph)
+      case (tp, map) if tp <:< typeOf[Map[String,_]] => saveStringMap( getTypeParams(tpe).last, propName, map.asInstanceOf[Map[String, _]], vertex, wsc, graph)
+      case (tp, map) if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tpe).head) => saveRawlsEnumMap( getTypeParams(tpe).last, propName, map.asInstanceOf[Map[RawlsEnumeration[_],_]], vertex, wsc, graph)
 
       case (_, value:Option[_]) => saveOpt(getTypeParams(tpe).head, propName, value, vertex, wsc, graph)
       case (tp, None) if tp <:< typeOf[Option[Any]] => saveOpt(getTypeParams(tp).head, propName, None, vertex, wsc, graph)
@@ -417,18 +498,20 @@ trait GraphDAO {
     loadObject(typeOf[T], vertex).asInstanceOf[T]
   }
 
-  def loadObject(tpe: Type, vertex: Vertex): Any = {
+  def getCtorMirror(tpe: Type) = {
     val classT = tpe.typeSymbol.asClass
     val classMirror = ru.runtimeMirror(getClass.getClassLoader).reflectClass(classT)
     val ctor = tpe.decl(ru.termNames.CONSTRUCTOR).asMethod
-    val ctorMirror = classMirror.reflectConstructor(ctor)
+    classMirror.reflectConstructor(ctor)
+  }
 
+  def loadObject(tpe: Type, vertex: Vertex): Any = {
     val parameters = getCtorProperties(tpe).map({
       case (tp, prop) =>
         loadProperty(tp, prop, vertex)
     }).toSeq
 
-    ctorMirror(parameters: _*)
+    getCtorMirror(tpe)(parameters: _*)
   }
 
   def loadSubObject(tpe: Type, propName: String, vertex: Vertex): Any = {
@@ -437,13 +520,25 @@ trait GraphDAO {
     loadObject(tpe, subVert)
   }
 
-  private def loadMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
+  def loadUserAuth(tpe: Type, propName: String, vertex: Vertex): Any = {
+    getCtorMirror(tpe)(vertex.getProperty(propName))
+  }
 
+  private def loadStringMap(valuesType: Type, propName: String, vertex: Vertex): Map[String, Any] = {
     val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
     mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
 
     getVertexKeys(mapDummy).map({ key =>
       (key, loadProperty(valuesType, key, mapDummy))
+    }).toMap
+  }
+
+  private def loadRawlsEnumMap[R <: RawlsEnumeration[R]](keyType: Type, valuesType: Type, propName: String, vertex: Vertex): Map[R, Any] = {
+    val mapDummy = getVertices(vertex, Direction.OUT, EdgeSchema.Own, propName).head
+    mapDummy.asInstanceOf[OrientVertex].getRecord.setAllowChainedAccess(false)
+
+    getVertexKeys(mapDummy).map({ key =>
+      (enumWithName(keyType, key), loadProperty(valuesType, key, mapDummy))
     }).toMap
   }
 
@@ -510,6 +605,16 @@ trait GraphDAO {
     AttributeEntityReference(refVtx.getProperty("entityType"), refVtx.getProperty("name"))
   }
 
+  private def loadUserRef(propName: String, vertex: Vertex): RawlsUserRef = {
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
+    RawlsUserRef(RawlsUserSubjectId(refVtx.getProperty("userSubjectId")))
+  }
+
+  private def loadGroupRef(propName: String, vertex: Vertex): RawlsGroupRef = {
+    val refVtx = vertex.getVertices(Direction.OUT, EdgeSchema.Ref.toLabel(propName)).head
+    RawlsGroupRef(RawlsGroupName(refVtx.getProperty("groupName")))
+  }
+
   private def loadAttributeList[T](propName: String, vertex: Vertex): Seq[T] = {
     loadProperty(typeOf[Seq[AttributeValue]], propName, vertex).asInstanceOf[Seq[T]]
   }
@@ -521,11 +626,11 @@ trait GraphDAO {
 
   //Sneaky. The withName() method is defined in a sealed trait, so no way to instance it to call it.
   //Instead, we find a subclass of the enum type, instance that, and call withName() on it.
-  private def enumWithName(enumType: Type, enumStr: String): RawlsEnumeration[_] = {
+  private def enumWithName[R <: RawlsEnumeration[R]](enumType: Type, enumStr: String): R = {
     val m = ru.runtimeMirror(getClass.getClassLoader)
     val anEnumElemClass = enumType.typeSymbol.asClass.knownDirectSubclasses.head.asClass.toType
     val enumModuleMirror = m.staticModule(anEnumElemClass.typeSymbol.asClass.fullName)
-    m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[RawlsEnumeration[_]]
+    m.reflectModule(enumModuleMirror).instance.asInstanceOf[RawlsEnumeration[_]].withName(enumStr).asInstanceOf[R]
   }
 
   private def loadProperty(tpe: Type, propName: String, vertex: Vertex): Any = {
@@ -537,6 +642,9 @@ trait GraphDAO {
       //serializing joda datetime across the network breaks, though it works fine in-memory
       case tp if tp =:= typeOf[DateTime]=> new DateTime(vertex.getProperty(propName).asInstanceOf[Date])
 
+      // RawlsUser and RawlsGroup field types.
+      case tp if tp <:< typeOf[UserAuthType]  => loadUserAuth(tp, propName, vertex)
+
       //Attributes.
       case tp if tp <:< typeOf[AttributeValue] => AttributeConversions.propertyToAttribute(vertex.getProperty(propName))
       case tp if tp <:< typeOf[AttributeEntityReference] => loadAttributeRef(propName, vertex)
@@ -544,14 +652,21 @@ trait GraphDAO {
       case tp if tp <:< typeOf[AttributeEntityReferenceList] => AttributeEntityReferenceList(loadAttributeList[AttributeEntityReference](propName, vertex))
       case tp if tp <:< typeOf[Attribute] => loadMysteriouslyTypedAttribute(propName, vertex)
 
+      //UserAuthRef types.
+      case tp if tp <:< typeOf[RawlsUserRef] => loadUserRef(propName, vertex)
+      case tp if tp <:< typeOf[RawlsGroupRef] => loadGroupRef(propName, vertex)
+
       //Enums.
       case tp if isRawlsEnum(tp) => enumWithName(tp, vertex.getProperty(propName))
 
       //Collections. Note that a Seq is treated as a map with the keys as indices.
-      case tp if tp <:< typeOf[Seq[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
-      case tp if tp <:< typeOf[Set[Any]] => loadMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
-      case tp if tp <:< typeOf[Map[String,Any]] => loadMap(getTypeParams(tp).last, propName, vertex)
-      case tp if tp <:< typeOf[Option[Any]] => loadOpt(tp, propName, vertex)
+      case tp if tp <:< typeOf[Seq[_]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2)
+      case tp if tp <:< typeOf[Set[_]] => loadStringMap(getTypeParams(tp).head, propName, vertex).toSeq.sortBy(_._1.toInt).map(_._2).toSet
+      case tp if tp <:< typeOf[Map[String,_]] => loadStringMap(getTypeParams(tp).last, propName, vertex)
+
+      case tp if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tp).head) => loadRawlsEnumMap(getTypeParams(tp).head, getTypeParams(tp).last, propName, vertex)
+
+      case tp if tp <:< typeOf[Option[_]] => loadOpt(tp, propName, vertex)
 
       //Everything else.
       case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex)

@@ -3,25 +3,22 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.openam.{UserInfoDirectives, MockUserInfoDirectives}
+import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpHeaders.Cookie
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
-import spray.routing.Directives._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
-import scala.collection.immutable.HashMap
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
@@ -51,7 +48,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
       // just return the cookie text as the common name
-      provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212345"))
+      user match {
+        case "owner-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212345"))
+        case "write-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212346"))
+        case "read-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212347"))
+        case "no-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212348"))
+        case _ => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212349"))
+      }
     }
   }
 
@@ -71,7 +74,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
-  def withApiServices(dataSource: DataSource, user: String = "test_token")(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource, user)
     try {
       testCode(apiService)
@@ -105,11 +108,28 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   class TestWorkspaces() extends TestData {
-    val writerWorkspaceName = WorkspaceName("ns", "writer")
-    val workspaceOwner = Workspace("ns", "owner", "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")) )
-    val workspaceWriter = Workspace(writerWorkspaceName.namespace, writerWorkspaceName.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")) )
-    val workspaceReader = Workspace("ns", "reader", "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")) )
-    val workspaceNoAccess = Workspace("ns", "noaccess", "workspaceId4", "bucket4", testDate, testDate, "testUser", Map("d" -> AttributeString("afterz")) )
+    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
+
+    val workspaceName = WorkspaceName("ns", "testworkspace")
+    val workspaceOwnerGroup = makeRawlsGroup(s"rawls ${workspaceName} OWNER", Set(userOwner), Set.empty)
+    val workspaceWriterGroup = makeRawlsGroup(s"rawls ${workspaceName} WRITER", Set(userWriter), Set.empty)
+    val workspaceReaderGroup = makeRawlsGroup(s"rawls ${workspaceName} READER", Set(userReader), Set.empty)
+
+    val workspace2Name = WorkspaceName("ns", "testworkspace2")
+    val workspace2OwnerGroup = makeRawlsGroup(s"rawls ${workspace2Name} OWNER", Set.empty, Set.empty)
+    val workspace2WriterGroup = makeRawlsGroup(s"rawls ${workspace2Name} WRITER", Set(userOwner), Set.empty)
+    val workspace2ReaderGroup = makeRawlsGroup(s"rawls ${workspace2Name} READER", Set.empty, Set.empty)
+
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
+      Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
+        WorkspaceAccessLevels.Write -> workspaceWriterGroup,
+        WorkspaceAccessLevels.Read -> workspaceReaderGroup))
+    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
+      Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
+        WorkspaceAccessLevels.Write -> workspace2WriterGroup,
+        WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -120,9 +140,9 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       AttributeEntityReference(sample3.entityType, sample3.name)
     ))))
 
-    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(writerWorkspaceName.namespace, "method-a", 1))
-    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, writerWorkspaceName)
-    val submissionTemplate = createTestSubmission(workspaceWriter, methodConfig, sampleSet, Seq(sample1, sample2, sample3))
+    val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(workspaceName.namespace, "method-a", 1))
+    val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
+    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, Seq(sample1, sample2, sample3))
     val submissionSuccess = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Done,
@@ -145,12 +165,20 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     )
 
     override def save(txn: RawlsTransaction): Unit = {
-      workspaceDAO.save(workspaceOwner, txn)
-      workspaceDAO.save(workspaceWriter, txn)
-      workspaceDAO.save(workspaceReader, txn)
-      workspaceDAO.save(workspaceNoAccess, txn)
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(workspaceOwnerGroup, txn)
+      authDAO.saveGroup(workspaceWriterGroup, txn)
+      authDAO.saveGroup(workspaceReaderGroup, txn)
+      authDAO.saveGroup(workspace2OwnerGroup, txn)
+      authDAO.saveGroup(workspace2WriterGroup, txn)
+      authDAO.saveGroup(workspace2ReaderGroup, txn)
 
-      withWorkspaceContext(workspaceWriter, txn, bSkipLockCheck=true) { ctx =>
+      workspaceDAO.save(workspace, txn)
+      workspaceDAO.save(workspace2, txn)
+
+      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { ctx =>
         entityDAO.save(ctx, sample1, txn)
         entityDAO.save(ctx, sample2, txn)
         entityDAO.save(ctx, sample3, txn)
@@ -182,7 +210,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   "WorkspaceApi" should "return 201 for post to workspaces" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
-      namespace = "newNamespace",
+      namespace = testData.wsName.namespace,
       name = "newWorkspace",
       Map.empty
     )
@@ -190,7 +218,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         services.dataSource.inTransaction() { txn =>
@@ -210,7 +238,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "get a workspace" in withTestWorkspacesApiServices { services =>
-    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -219,10 +247,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
-            ){
-              val response = responseAs[WorkspaceListResponse]
-              WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
+          ){
+            val response = responseAs[WorkspaceListResponse]
+            WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
           }
         }
       }
@@ -253,7 +281,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "list workspaces" in withTestWorkspacesApiServices { services =>     Get("/workspaces") ~>
+  it should "list workspaces" in withTestWorkspacesApiServices { services =>
+    Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -262,9 +291,8 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         val dateTime = org.joda.time.DateTime.now
         services.dataSource.inTransaction() { txn =>
           assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevel.Owner, testWorkspaces.workspaceOwner.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Write, testWorkspaces.workspaceWriter.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf)),
-            WorkspaceListResponse(WorkspaceAccessLevel.Read, testWorkspaces.workspaceReader.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Await.result(services.gcsDao.getOwners(testWorkspaces.workspaceOwner.workspaceId), Duration.Inf))
+            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
+            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
           }
@@ -411,7 +439,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
   it should "allow an owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspaceOwner.namespace}/${testWorkspaces.workspaceOwner.name}") ~>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -421,7 +449,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "allow a write-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("write-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspaceWriter.namespace}/${testWorkspaces.workspaceWriter.name}") ~>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -431,7 +459,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "allow a read-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("read-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspaceReader.namespace}/${testWorkspaces.workspaceReader.name}") ~>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -441,7 +469,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a no-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspaceNoAccess.namespace}/${testWorkspaces.workspaceNoAccess.name}") ~>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -612,7 +640,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       }
   }
 
-  it should "not allow a no-access user to infer the existence the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
+  it should "not allow a no-access user to infer the existence of the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -622,6 +650,41 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 400 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = "foobar",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
+    services.dataSource.inTransaction() { txn =>
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty), txn)
+    }
+    val newWorkspace = WorkspaceRequest(
+      namespace = "foobar",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
       }
   }
 }

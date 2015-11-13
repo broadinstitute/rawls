@@ -6,7 +6,7 @@ import spray.http.OAuth2BearerToken
 import spray.routing.Directive1
 import spray.routing.Directives._
 
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.ExecutionContext
 
 trait MockUserInfoDirectives extends UserInfoDirectives {
   def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {

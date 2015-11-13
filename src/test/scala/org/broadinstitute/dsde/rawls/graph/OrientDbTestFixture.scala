@@ -8,13 +8,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.joda.time.DateTime
 import spray.http.OAuth2BearerToken
-import scala.collection.immutable.HashMap
 import org.scalatest.BeforeAndAfterAll
 import java.util.UUID
-import spray.json._
-import spray.httpx.SprayJsonSupport
-import SprayJsonSupport._
-import WorkspaceJsonSupport._
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 
@@ -35,6 +30,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
   lazy val entityDAO: GraphEntityDAO = new GraphEntityDAO()
   lazy val workspaceDAO = new GraphWorkspaceDAO()
   lazy val methodConfigDAO = new GraphMethodConfigurationDAO()
+  lazy val authDAO = new GraphAuthDAO()
+  lazy val billingDAO = new GraphBillingDAO()
   lazy val submissionDAO = new GraphSubmissionDAO()
 
   val containerDAO = GraphContainerDAO(
@@ -42,6 +39,8 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     workspaceDAO,
     entityDAO,
     methodConfigDAO,
+    authDAO,
+    billingDAO,
     submissionDAO
   )
 
@@ -59,34 +58,84 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
 
+  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef]) =
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail("dummy@example.com"), users, groups)
+
   class EmptyWorkspace() extends TestData {
+    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup))
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
       workspaceDAO.save(workspace, txn)
     }
   }
 
   class LockedWorkspace() extends TestData {
+    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute](), isLocked = true )
+    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
       workspaceDAO.save(workspace, txn)
     }
   }
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
+    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)))
+
     val wsAttrs = Map(
       "string" -> AttributeString("yep, it's a string"),
       "number" -> AttributeNumber(10),
       "empty" -> AttributeEmptyList,
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs)
+
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
+
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup))
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -196,7 +245,16 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
         Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(RawlsUser(userInfo), txn)
+      billingDAO.saveProject(billingProject, txn)
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
       workspaceDAO.save(workspace, txn)
+      workspaceDAO.save(workspaceNoGroups, txn)
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, aliquot2, txn)

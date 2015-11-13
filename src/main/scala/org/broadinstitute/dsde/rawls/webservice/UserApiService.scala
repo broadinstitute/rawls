@@ -1,11 +1,8 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
@@ -23,6 +20,17 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   val userServiceConstructor: UserInfo => UserService
 
+  // special route for registration that has different access control
+  val createUserRoute = requireUserInfo() { userInfo =>
+    path("user") {
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.CreateUser)
+      }
+    }
+  }
+
   val userRoutes = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
       put {
@@ -38,6 +46,34 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.GetRefreshTokenDate)
+      }
+    } ~
+    path("user" / "billing") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.ListBillingProjects)
+      }
+    } ~
+    path("user" / Segment) { userSubjectId =>
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.GetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
+    path("user" / Segment / "enable") { userSubjectId =>
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.EnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
+    path("user" / Segment / "disable") { userSubjectId =>
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.DisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
       }
     }
   }

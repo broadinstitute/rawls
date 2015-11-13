@@ -1,13 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import com.google.api.services.admin.directory.model.Group
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel.WorkspaceAccessLevel
-import WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
-import spray.json._
+import scala.collection.mutable
 import scala.concurrent.Future
-import scala.util.Try
 
 class MockGoogleServicesDAO extends GoogleServicesDAO {
 
@@ -35,12 +32,12 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
   }
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
-    "test@broadinstitute.org" -> WorkspaceAccessLevel.Owner,
-    "test_token" -> WorkspaceAccessLevel.Owner,
-    "owner-access" -> WorkspaceAccessLevel.Owner,
-    "write-access" -> WorkspaceAccessLevel.Write,
-    "read-access" -> WorkspaceAccessLevel.Read,
-    "no-access" -> WorkspaceAccessLevel.NoAccess
+    "test@broadinstitute.org" -> WorkspaceAccessLevels.Owner,
+    "test_token" -> WorkspaceAccessLevels.Owner,
+    "owner-access" -> WorkspaceAccessLevels.Owner,
+    "write-access" -> WorkspaceAccessLevels.Write,
+    "read-access" -> WorkspaceAccessLevels.Read,
+    "no-access" -> WorkspaceAccessLevels.NoAccess
   )
 
   private def getAccessLevelOrDieTrying(userId: String) = {
@@ -49,25 +46,17 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
     }
   }
 
+  var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
+
   override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String) = Future.successful(Unit)
 
   override def getACL(workspaceId: String) = Future.successful(WorkspaceACL(mockPermissions))
 
-  override def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]) = Future.successful(None)
-
-  override def getOwners(workspaceId: String) = Future.successful(mockPermissions.filter(_._2 == WorkspaceAccessLevel.Owner).keys.toSeq)
+  override def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]] = Future.successful(None)
 
   override def getMaximumAccessLevel(userId: String, workspaceId: String) = Future.successful(getAccessLevelOrDieTrying(userId))
-
-  override def getWorkspaces(userId: String) = Future.successful(
-    Seq(
-      WorkspacePermissionsPair("workspaceId1", WorkspaceAccessLevel.Owner),
-      WorkspacePermissionsPair("workspaceId2", WorkspaceAccessLevel.Write),
-      WorkspacePermissionsPair("workspaceId3", WorkspaceAccessLevel.Read)
-    )
-  )
 
   override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
@@ -81,5 +70,16 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def listAdmins(): Future[Seq[String]] = Future.successful(adminList.toSeq)
 
-  override def createProxyGroup(userInfo: UserInfo): Future[Unit] = Future.successful(Unit)
+  override def createProxyGroup(user: RawlsUser): Future[Unit] = {
+    mockProxyGroups += (user -> false)
+    Future.successful(Unit)
+  }
+
+  def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
+
+  override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> true))
+
+  override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> false))
+
+  override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = Future.successful(mockProxyGroups.getOrElse(user, false))
 }

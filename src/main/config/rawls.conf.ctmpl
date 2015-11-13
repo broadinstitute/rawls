@@ -21,4 +21,16 @@ methodrepo {
 }
 executionservice {
   server = "{{.Data.execservice_server}}"
-}{{end}}{{end}}
+}
+userLdap {
+  providerUrl = "{{.Data.ldap_provider_url}}"
+  user = "{{.Data.ldap_user}}"
+  password = "{{.Data.ldap_password}}"
+  groupDn = "{{.Data.ldap_group_dn}}"
+  memberAttribute = "{{.Data.ldap_member_attribute}}"
+  userObjectClasses = [{{.Data.ldap_user_object_classes}}]
+  userAttributes = [{{.Data.ldap_user_attributes}}]
+  userDnFormat =  "{{.Data.ldap_user_dn_format}}"
+}
+{{end}}
+{{end}}

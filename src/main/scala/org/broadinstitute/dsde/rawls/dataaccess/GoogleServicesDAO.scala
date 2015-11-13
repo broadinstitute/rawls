@@ -1,13 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import com.google.api.services.admin.directory.model.Group
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevel._
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, WorkspacePermissionsPair, UserInfo, WorkspaceACLUpdate, WorkspaceACL, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.http.StatusCodes
 import scala.concurrent.Future
-import scala.util.Try
 
 trait GoogleServicesDAO {
 
@@ -18,13 +16,9 @@ trait GoogleServicesDAO {
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
 
-  def updateACL(userEmail: String, workspaceId: String, aclUpdates: Seq[WorkspaceACLUpdate]): Future[Option[Seq[ErrorReport]]]
-
-  def getOwners(workspaceId: String): Future[Seq[String]]
+  def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]]
 
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
-
-  def getWorkspaces(userId: String): Future[Seq[WorkspacePermissionsPair]]
 
   def getBucketName(workspaceId: String): String
 
@@ -36,7 +30,13 @@ trait GoogleServicesDAO {
 
   def listAdmins(): Future[Seq[String]]
 
-  def createProxyGroup(userInfo: UserInfo): Future[Unit]
+  def createProxyGroup(user: RawlsUser): Future[Unit]
+
+  def addUserToProxyGroup(user: RawlsUser): Future[Unit]
+
+  def removeUserFromProxyGroup(user: RawlsUser): Future[Unit]
+
+  def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(userInfo: UserInfo): Future[Option[String]]

@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls
 
-
 import java.io.File
 
 import akka.actor.ActorSystem
@@ -17,10 +16,10 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
 
 import scala.concurrent.duration._
-import scala.reflect.runtime.universe._
 import scala.util.{Failure, Success}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.collection.JavaConversions._
 
 object Boot extends App {
 
@@ -49,6 +48,18 @@ object Boot extends App {
       gcsConfig.getString("tokenEncryptionKey")
     )
 
+    val ldapConfig = conf.getConfig("userLdap")
+    val userDirDAO = new JndiUserDirectoryDAO(
+      ldapConfig.getString("providerUrl"),
+      ldapConfig.getString("user"),
+      ldapConfig.getString("password"),
+      ldapConfig.getString("groupDn"),
+      ldapConfig.getString("memberAttribute"),
+      ldapConfig.getStringList("userObjectClasses").toList,
+      ldapConfig.getStringList("userAttributes").toList,
+      ldapConfig.getString("userDnFormat")
+    )
+
     system.registerOnTermination {
       dataSource.shutdown()
     }
@@ -58,6 +69,8 @@ object Boot extends App {
       new GraphWorkspaceDAO(),
       new GraphEntityDAO(),
       new GraphMethodConfigurationDAO(),
+      new GraphAuthDAO(),
+      new GraphBillingDAO(),
       new GraphSubmissionDAO()
     )
 
@@ -73,7 +86,7 @@ object Boot extends App {
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor),
-                    UserService.constructor(dataSource, gcsDAO)),
+                    UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

@@ -48,7 +48,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   class SubmissionTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", new HashMap[String, Attribute]() )
+    val user = RawlsUser(userInfo)
+    val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
+    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
     val sample1 = Entity("sample1", "Sample",
       Map("type" -> AttributeString("normal")))
@@ -105,6 +107,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
             "wf.x.five" -> AttributeNumber(4))))))
 
     override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(user, txn)
+      authDAO.saveGroup(ownerGroup, txn)
       workspaceDAO.save(workspace, txn)
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, sample1, txn)

@@ -11,10 +11,8 @@ info:
     url: 'http://opensource.org/licenses/BSD-3-Clause'
   termsOfService: 'http://www.github.com/broadinstitute/rawls'
 
-basePath: /api
-
 paths:
-  '/admin/users':
+  '/api/admin/users':
     get:
       responses:
         '200':
@@ -46,7 +44,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/users/{userId}':
+  '/api/admin/users/{userId}':
     get:
       responses:
         '204':
@@ -153,7 +151,150 @@ paths:
             - openid
             - email
             - profile
-  '/admin/submissions':
+  '/admin/billing/list/{userEmail}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of billing projects for this user
+            items:
+              type: string
+        '403':
+          description: You must be an admin to list user projects
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description:  User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+       description: list billing projects for a user
+       tags:
+         - admin
+        - billing
+       summary: list billing projects for a user
+       operationId: listUserBillingProjects
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+  '/admin/billing/{projectId}':
+    put:
+      responses:
+        '201':
+          description: Successfully Created Billing Project
+        '403':
+          description: You must be an admin to create a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Billing Project already exists
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: create billing project
+      tags:
+        - admin
+        - billing
+      summary: create billing project
+      operationId: createBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Successfully Deleted Billing Project
+        '403':
+          description: You must be an admin to delete a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: delete billing project
+      tags:
+        - admin
+        - billing
+      summary: delete billing project
+      operationId: deleteBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/admin/billing/{projectId}/{userEmail}':
+    put:
+      responses:
+        '200':
+          description: Successfully Added User To Billing Project
+        '403':
+          description: You must be an admin to add a user to a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project or User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: add user to billing project
+      tags:
+        - admin
+        - billing
+      summary: add user to billing project
+      operationId: addUserToBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Successfully Removed User From Billing Project
+        '403':
+          description: You must be an admin to remove a user from a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project or User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: remove user from billing project
+      tags:
+        - admin
+        - billing
+      summary: remove user from billing project
+      operationId: removeUserFromBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/submissions':
     get:
       responses:
         '200':
@@ -184,7 +325,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
+  '/api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
     delete:
       responses:
         '204':
@@ -227,7 +368,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
         '200':
@@ -320,7 +461,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
     post:
       responses:
         '200':
@@ -370,7 +511,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
     get:
       responses:
         '200':
@@ -451,7 +592,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
     get:
       responses:
         '200':
@@ -501,7 +642,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}':
     get:
       responses:
         '200':
@@ -547,7 +688,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
     post:
       responses:
         '200':
@@ -603,7 +744,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
     post:
       responses:
         '200':
@@ -651,7 +792,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities':
     get:
       responses:
         '200':
@@ -734,7 +875,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
     get:
       responses:
         '200':
@@ -777,7 +918,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
     get:
       responses:
         '200':
@@ -959,7 +1100,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
     post:
       responses:
         '200':
@@ -1007,7 +1148,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
     post:
       responses:
         '200':
@@ -1053,7 +1194,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
     post:
       responses:
         '200':
@@ -1138,7 +1279,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
     get:
       responses:
         '200':
@@ -1188,7 +1329,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
     get:
       responses:
         '200':
@@ -1330,7 +1471,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
     post:
       responses:
         '200':
@@ -1530,7 +1671,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/lock':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
         '200':
@@ -1570,7 +1711,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
     put:
       responses:
         '200':
@@ -1610,7 +1751,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/acl':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/acl':
     get:
       responses:
         '200':
@@ -1654,12 +1795,12 @@ paths:
       responses:
         '200':
           description: Successful Request
-        '400':
-          description: 'Can''t set ACL for workspace'
+        '404':
+          description: Workspace, user or group not found
           schema:
             $ref: '#/definitions/ErrorReport'
-        '404':
-          description: Workspace not found
+        '409':
+          description: 'Error altering some ACLs'
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -1702,8 +1843,12 @@ paths:
           description: No response was specified
         '201':
           description: Successful Request
+        '400':
+          description: Namespace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '403':
-          description: Unable to create bucket for workspace
+          description: User does not have access to create workspace in namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -1754,7 +1899,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}':
     patch:
       responses:
         '200':
@@ -1871,13 +2016,17 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/workspaces/{workspaceNamespace}/{workspaceName}/clone':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/clone':
     post:
       responses:
         '201':
           description: Successful Request
         '400':
-          description: Unable to create resources for workspace
+          description: Namespace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: User does not have access to create workspace in namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -1920,7 +2069,99 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/user/refreshToken':
+  '/register/user':
+     post:
+       responses:
+         '201':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Create user
+       operationId: create
+       parameters:
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/user':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+           schema:
+             $ref: '#/definitions/UserStatus'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the status of a user"
+       tags:
+         - users
+       summary: gets the status of a user
+       operationId: status
+       parameters:
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/user/{userSubjectId}/disable':
+     post:
+       responses:
+         '204':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Disable user
+       operationId: diable
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/user/{userSubjectId}/enable':
+     post:
+       responses:
+         '204':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "creates a user in the Rawls system"
+       tags:
+         - users
+       summary: Enable user
+       operationId: enable
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/user/refreshToken':
     put:
       responses:
         '201':
@@ -1946,11 +2187,13 @@ paths:
             - openid
             - email
             - profile
-  '/user/refreshTokenDate':
+  '/api/user/refreshTokenDate':
     get:
       responses:
         '200':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/UserRefreshTokenDate'
         '404':
           description: There is no refresh token for the user
           schema:
@@ -1969,6 +2212,34 @@ paths:
             - openid
             - email
             - profile
+  '/user/billing':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of billing projects for this user
+            items:
+              type: string
+        '404':
+          description:  User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        description: list billing projects for a user
+        tags:
+          - billing
+        summary: list billing projects for a user
+        operationId: listUserBillingProjects
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
 
 tags:
   - name: admin
@@ -1981,6 +2252,8 @@ tags:
     description: Method Configuration manipulation API
   - name: workspaces
     description: Workspace manipulation API
+  - name: users
+    description: User and Group API
 
 schemes:
   - http
@@ -2355,7 +2628,7 @@ definitions:
     properties:
       namespace:
         type: string
-        description: The namespace the workspace belongs to
+        description: The namespace (billing project) the workspace belongs to
       name:
         type: string
         description: The name of the workspace
@@ -2650,15 +2923,15 @@ definitions:
   WorkspaceACLUpdate:
     description: ''
     required:
-      - userId
+      - email
       - accessLevel
     properties:
-      userId:
+      email:
         type: string
-        description: ID of the user whose permissions will be changed
+        description: email address of the user or group whose permissions will be changed
       accessLevel:
         type: string
-        description: The access level to grant to this user (OWNER, READER, WRITER, NO ACCESS)
+        description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
 
   Workspace:
     description: ''
@@ -2670,6 +2943,7 @@ definitions:
       - createdDate
       - createdBy
       - attributes
+      - accessLevels
     properties:
       namespace:
         type: string
@@ -2696,6 +2970,13 @@ definitions:
         description: The user who created the workspace
       attributes:
         $ref: ''
+        description: Map[String, Attribute]
+      accessLevels:
+         $ref: ''
+         description: Map[String, RawlsGroupRef]
+      isLocked:
+        type: boolean
+        description: Can the Workspace currently be modified?
 
   WorkspaceSubmissionStats:
     description: Statistics about submissions in a workspace
@@ -2723,7 +3004,7 @@ definitions:
     properties:
       namespace:
         type: string
-        description: The namespace the workspace belongs to
+        description: The namespace (billing project) the workspace belongs to
       name:
         type: string
         description: The name of the workspace
@@ -2852,3 +3133,18 @@ definitions:
       refreshTokenUpdatedDate:
         type: string
         format: date-time
+  UserStatus:
+    description: users status
+    properties:
+      userInfo:
+        $ref: '#/definitions/RawlsUser'
+      enabled:
+        type: ''
+        description: Map[String,Boolean]
+  RawlsUser:
+    description: information about a rawls user
+    properties:
+      userSubjectId:
+        type: String
+      userEmail:
+        type: String

@@ -4,9 +4,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import org.scalatest.{WordSpecLike, Matchers, FlatSpec}
-
-import scala.util.{Failure, Success}
+import org.scalatest.{WordSpecLike, Matchers}
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbTestFixture {
   val littleWdl =
@@ -46,7 +44,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
 
-  val workspace = new Workspace("workspaces", "test_workspace", "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty)
+  val workspace = new Workspace("workspaces", "test_workspace", "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
 
   val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
