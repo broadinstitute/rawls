@@ -16,4 +16,6 @@ trait BillingDAO {
   def removeUserFromProject(rawlsUser: RawlsUserRef, rawlsProject: RawlsBillingProject, txn: RawlsTransaction): RawlsBillingProject = {
     saveProject(rawlsProject.copy(users = rawlsProject.users - rawlsUser), txn)
   }
+
+  def listUserProjects(rawlsUser: RawlsUserRef, txn: RawlsTransaction): Traversable[RawlsBillingProjectName]
 }

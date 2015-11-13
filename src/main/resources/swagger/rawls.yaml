@@ -151,6 +151,149 @@ paths:
             - openid
             - email
             - profile
+  '/admin/billing/list/{userEmail}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of billing projects for this user
+            items:
+              type: string
+        '403':
+          description: You must be an admin to list user projects
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description:  User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+       description: list billing projects for a user
+       tags:
+         - admin
+        - billing
+       summary: list billing projects for a user
+       operationId: listUserBillingProjects
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+  '/admin/billing/{projectId}':
+    put:
+      responses:
+        '201':
+          description: Successfully Created Billing Project
+        '403':
+          description: You must be an admin to create a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Billing Project already exists
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: create billing project
+      tags:
+        - admin
+        - billing
+      summary: create billing project
+      operationId: createBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Successfully Deleted Billing Project
+        '403':
+          description: You must be an admin to delete a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: delete billing project
+      tags:
+        - admin
+        - billing
+      summary: delete billing project
+      operationId: deleteBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/admin/billing/{projectId}/{userEmail}':
+    put:
+      responses:
+        '200':
+          description: Successfully Added User To Billing Project
+        '403':
+          description: You must be an admin to add a user to a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project or User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: add user to billing project
+      tags:
+        - admin
+        - billing
+      summary: add user to billing project
+      operationId: addUserToBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Successfully Removed User From Billing Project
+        '403':
+          description: You must be an admin to remove a user from a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project or User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: remove user from billing project
+      tags:
+        - admin
+        - billing
+      summary: remove user from billing project
+      operationId: removeUserFromBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/admin/submissions':
     get:
       responses:
@@ -2069,6 +2212,34 @@ paths:
             - openid
             - email
             - profile
+  '/user/billing':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of billing projects for this user
+            items:
+              type: string
+        '404':
+          description:  User not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        description: list billing projects for a user
+        tags:
+          - billing
+        summary: list billing projects for a user
+        operationId: listUserBillingProjects
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
 
 tags:
   - name: admin

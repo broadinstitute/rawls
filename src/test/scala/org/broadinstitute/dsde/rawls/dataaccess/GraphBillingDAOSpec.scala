@@ -202,4 +202,21 @@ class GraphBillingDAOSpec extends FlatSpec with Matchers with OrientDbTestFixtur
       }
     }
   }
+
+  it should "list users in a billing project" in withEmptyTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      authDAO.saveUser(testUser, txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("1"), Set(testUser)), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("2"), Set(testUser)), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("3"), Set.empty), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("4"), Set(testUser)), txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      val userProjects = billingDAO.listUserProjects(testUser, txn)
+      assertResult(Seq(RawlsBillingProjectName("1"), RawlsBillingProjectName("2"), RawlsBillingProjectName("4"))) {
+        userProjects
+      }
+    }
+  }
 }

@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -48,7 +49,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
     mockServer.stopServer
   }
 
-  case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with MockUserInfoDirectives {
+  case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with AdminApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -210,9 +211,47 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
             responseAs[UserStatus]
           }
         }
-
-
-
     }
   }
+
+  it should "list a user's billing projects" in withTestDataApiServices { services =>
+
+    // first add the project and user to the graph
+
+    val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty)
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(billingUser, txn)
+    }
+
+    Put(s"/admin/billing/${project1.projectName.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+    Put(s"/admin/billing/${project1.projectName.value}/${billingUser.userEmail.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+
+    Get("/user/billing") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Set(project1.projectName)) {
+          responseAs[Seq[RawlsBillingProjectName]].toSet
+        }
+      }
+  }
+
+
+
 }

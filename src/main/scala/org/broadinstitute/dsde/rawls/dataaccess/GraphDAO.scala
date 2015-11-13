@@ -6,6 +6,7 @@ import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientVertex}
 import com.tinkerpop.blueprints.{Edge, Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
+import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.model.RawlsEnumeration
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
@@ -209,6 +210,15 @@ trait GraphDAO {
   // TODO be able to understand different types?
   def hasProperties(props: Map[String, Object]) = new PipeFunction[Vertex, java.lang.Boolean] {
     override def compute(v: Vertex) = props.map(p => v.getProperty(p._1).equals(p._2)).reduce(_&&_)
+  }
+
+  //turns a PipeFunction into one that takes a LoopBundle
+  implicit def pipeToLoopBundle[A,B](f: PipeFunction[A,B]) = new PipeFunction[LoopPipe.LoopBundle[A], B] {
+    override def compute(bundle: LoopPipe.LoopBundle[A]) : B = f.compute(bundle.getObject)
+  }
+
+  def invert[A](f: PipeFunction[A, java.lang.Boolean]) = new PipeFunction[A, java.lang.Boolean] {
+    override def compute(v: A) = !f.compute(v)
   }
 
   // named GremlinPipelines
