@@ -247,8 +247,8 @@ paths:
        operationId: adminCreateGroup
        parameters:
          - in: body
-           description: Update operations
-           name: entityUpdateJson
+           description: group reference
+           name: groupRef
            required: true
            schema:
              $ref: '#/definitions/RawlsGroupRef'
