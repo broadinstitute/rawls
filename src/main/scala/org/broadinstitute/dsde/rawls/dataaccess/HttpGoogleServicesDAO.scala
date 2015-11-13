@@ -338,7 +338,7 @@ class HttpGoogleServicesDAO(
     val groups = directory.groups
     retry(when500) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(toGroupName(groupRef.groupName)).setName(groupRef.groupName.value))
+        val inserter = groups.insert(new Group().setEmail(toGoogleGroupName(groupRef.groupName)).setName(groupRef.groupName.value))
         blocking {
           inserter.execute
         }
@@ -351,7 +351,7 @@ class HttpGoogleServicesDAO(
       case Left(member) => new Member().setEmail(toProxyFromUser(memberToAdd.left.get.userSubjectId)).setRole(groupMemberRole)
       case Right(member) => new Member().setEmail(memberToAdd.right.get.groupEmail.value).setRole(groupMemberRole)
     }
-    val inserter = getGroupDirectory.members.insert(toGroupName(groupRef.groupName), member)
+    val inserter = getGroupDirectory.members.insert(toGoogleGroupName(groupRef.groupName), member)
     retry(when500)(() => Future { blocking { inserter.execute } })
   }
 
@@ -360,7 +360,7 @@ class HttpGoogleServicesDAO(
       case Left(member) => toProxyFromUser(member.userSubjectId)
       case Right(member) => member.groupEmail.value
     }
-    val deleter = getGroupDirectory.members.delete(toGroupName(groupRef.groupName), memberEmail)
+    val deleter = getGroupDirectory.members.delete(toGoogleGroupName(groupRef.groupName), memberEmail)
     retry(when500)(() => Future { blocking { deleter.execute } })
   }
 
@@ -370,7 +370,7 @@ class HttpGoogleServicesDAO(
     retry(when500) {
       () => Future {
         blocking {
-          groups.delete(toGroupName(groupRef.groupName)).execute()
+          groups.delete(toGoogleGroupName(groupRef.groupName)).execute()
         }
       }
     }
@@ -524,7 +524,7 @@ class HttpGoogleServicesDAO(
 
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = s"PROXY_${subjectId.value}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
-  def toGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
+  def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"

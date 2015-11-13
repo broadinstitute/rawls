@@ -204,7 +204,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
             case Some(_) => RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists"))
             case None =>
               gcsDAO.createGoogleGroup(groupRef)
-              containerDAO.authDAO.createGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
+              containerDAO.authDAO.createGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
               RequestComplete(StatusCodes.Created)
           }
         }

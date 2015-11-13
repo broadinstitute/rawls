@@ -91,7 +91,7 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
 
-  override def toGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
+  override def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
   override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
 
