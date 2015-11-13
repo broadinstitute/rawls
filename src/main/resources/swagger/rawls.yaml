@@ -11,10 +11,8 @@ info:
     url: 'http://opensource.org/licenses/BSD-3-Clause'
   termsOfService: 'http://www.github.com/broadinstitute/rawls'
 
-basePath: /api
-
 paths:
-  '/admin/users':
+  '/api/admin/users':
     get:
       responses:
         '200':
@@ -46,7 +44,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/users/{userId}':
+  '/api/admin/users/{userId}':
     get:
       responses:
         '204':
@@ -153,7 +151,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/submissions':
+  '/api/admin/submissions':
     get:
       responses:
         '200':
@@ -184,7 +182,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
+  '/api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
     delete:
       responses:
         '204':
@@ -227,7 +225,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
         '200':
@@ -320,7 +318,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/validate':
     post:
       responses:
         '200':
@@ -370,7 +368,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}':
     get:
       responses:
         '200':
@@ -451,7 +449,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/outputs':
     get:
       responses:
         '200':
@@ -501,7 +499,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}':
     get:
       responses:
         '200':
@@ -547,7 +545,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
     post:
       responses:
         '200':
@@ -603,7 +601,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate':
     post:
       responses:
         '200':
@@ -651,7 +649,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities':
     get:
       responses:
         '200':
@@ -734,7 +732,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}':
     get:
       responses:
         '200':
@@ -777,7 +775,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}':
     get:
       responses:
         '200':
@@ -959,7 +957,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
     post:
       responses:
         '200':
@@ -1007,7 +1005,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
     post:
       responses:
         '200':
@@ -1053,7 +1051,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
     post:
       responses:
         '200':
@@ -1138,7 +1136,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate':
     get:
       responses:
         '200':
@@ -1188,7 +1186,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}':
     get:
       responses:
         '200':
@@ -1330,7 +1328,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
     post:
       responses:
         '200':
@@ -1530,7 +1528,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/lock':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
         '200':
@@ -1570,7 +1568,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
     put:
       responses:
         '200':
@@ -1610,7 +1608,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}/acl':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/acl':
     get:
       responses:
         '200':
@@ -1758,7 +1756,7 @@ paths:
             - openid
             - email
             - profile
-  '/workspaces/{workspaceNamespace}/{workspaceName}':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}':
     patch:
       responses:
         '200':
@@ -1875,7 +1873,7 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/workspaces/{workspaceNamespace}/{workspaceName}/clone':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/clone':
     post:
       responses:
         '201':
@@ -1928,7 +1926,7 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/user':
+  '/register/user':
      post:
        responses:
          '201':
@@ -1948,7 +1946,7 @@ paths:
             - openid
             - email
             - profile
-  '/user':
+  '/api/user':
      get:
        responses:
          '200':
@@ -1970,7 +1968,7 @@ paths:
             - openid
             - email
             - profile
-  '/user/{userSubjectId}/disable':
+  '/api/user/{userSubjectId}/disable':
      post:
        responses:
          '204':
@@ -1995,7 +1993,7 @@ paths:
             - openid
             - email
             - profile
-  '/user/{userSubjectId}/enable':
+  '/api/user/{userSubjectId}/enable':
      post:
        responses:
          '204':
@@ -2020,7 +2018,7 @@ paths:
             - openid
             - email
             - profile
-  '/user/refreshToken':
+  '/api/user/refreshToken':
     put:
       responses:
         '201':
@@ -2046,7 +2044,7 @@ paths:
             - openid
             - email
             - profile
-  '/user/refreshTokenDate':
+  '/api/user/refreshTokenDate':
     get:
       responses:
         '200':
@@ -2083,6 +2081,8 @@ tags:
     description: Method Configuration manipulation API
   - name: workspaces
     description: Workspace manipulation API
+  - name: users
+    description: User and Group API
 
 schemes:
   - http

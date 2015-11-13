@@ -27,7 +27,8 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   with AdminApiService with UserApiService with StandardUserInfoDirectives {
 
   def actorRefFactory = context
-  def possibleRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes
+  def apiRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes
+  def registerRoutes = options{ complete(OK) } ~ createUserRoute
 
   val swaggerRoute = {
     get {
@@ -47,7 +48,10 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   def receive = runRoute(
     swaggerRoute ~
     pathPrefix("api") {
-      possibleRoutes
+      apiRoutes
+    } ~
+    pathPrefix("register") {
+      registerRoutes
     }
   )
 }

@@ -1,5 +1,5 @@
 {{with $environment := env "ENVIRONMENT"}}
-{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yml" $environment}}
+{{$keyname := printf "secret/dsde/%s/rawls/rawls-compose.yaml" $environment}}
 {{with vault $keyname}}
 
 proxy:
@@ -17,7 +17,12 @@ proxy:
     OIDC_CLAIM2: Require valid-user
     PROXY_PATH: /
     PROXY_PATH2: /api
+    PROXY_PATH3: /register
     SERVER_NAME: {{.Data.env_server_name}}
+    AUTH_REQUIRE2: Require ldap-group {{.Data.proxy_ldap_group}}
+    AUTH_LDAP_URL2: 'AuthLDAPURL "{{.Data.proxy_ldap_url}}"'
+    AUTH_LDAP_GROUP_ATTR2: 'AuthLDAPGroupAttribute member'
+    REMOTE_USER_CLAIM: sub
 
 {{end}}
 {{end}}
