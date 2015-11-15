@@ -45,13 +45,14 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends AdminApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      dataSource,
+      gcsDAO
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
 
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
     val directoryDAO = new MockUserDirectoryDAO
     val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, directoryDAO)_

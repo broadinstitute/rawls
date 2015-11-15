@@ -61,12 +61,13 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     def actorRefFactory = system
 
+    val gcsDao: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      dataSource,
+      gcsDao
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val gcsDao = new MockGoogleServicesDAO
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDao, submissionSupervisor)_
 
     def cleanupSupervisor = {

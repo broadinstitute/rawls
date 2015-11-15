@@ -86,7 +86,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(executionServiceServer),
-      dataSource
+      dataSource,
+      gcsDAO
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     WorkspaceService.constructor(

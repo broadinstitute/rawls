@@ -486,7 +486,7 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  def getBucketServiceAccountCredential: Credential = {
+  override def getBucketServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
