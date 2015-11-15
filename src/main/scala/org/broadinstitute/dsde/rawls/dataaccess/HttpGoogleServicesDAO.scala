@@ -121,7 +121,7 @@ class HttpGoogleServicesDAO(
       retry(when500) {
         () => Future {
           val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevels.Owner)
-          val owner = new Member().setEmail(userInfo.userEmail).setRole(groupMemberRole)
+          val owner = new Member().setEmail(toProxyFromUser(userInfo)).setRole(groupMemberRole)
           val ownerInserter = directory.members.insert(ownersGroupId, owner)
           blocking {
             ownerInserter.execute
