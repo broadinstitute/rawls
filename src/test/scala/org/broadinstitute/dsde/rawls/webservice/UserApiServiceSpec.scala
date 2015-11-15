@@ -52,13 +52,14 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
   case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with AdminApiService with MockUserInfoDirectives {
     def actorRefFactory = system
 
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      dataSource,
+      gcsDAO
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
     val directoryDAO = new MockUserDirectoryDAO
     val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, directoryDAO)_
 

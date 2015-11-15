@@ -124,12 +124,13 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit, execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
     withDataOp { dataSource =>
+      val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         containerDAO,
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-        dataSource
+        dataSource,
+        gcsDAO
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
       gcsDAO.storeToken(userInfo, "foo")
       val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, gcsDAO, submissionSupervisor)_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor

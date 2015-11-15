@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
@@ -25,6 +27,10 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
     token = null
     tokenDate = null
     Future.successful(Unit)
+  }
+
+  override def getBucketServiceAccountCredential: Credential = {
+    new MockGoogleCredential.Builder().build()
   }
 
   override def getToken(userInfo: UserInfo): Future[Option[String]] = {

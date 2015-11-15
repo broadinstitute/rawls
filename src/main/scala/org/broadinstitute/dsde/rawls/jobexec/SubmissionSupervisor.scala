@@ -20,9 +20,10 @@ object SubmissionSupervisor {
   def props(containerDAO: GraphContainerDAO,
             executionServiceDAO: ExecutionServiceDAO,
             datasource: DataSource,
+            googleServicesDAO: GoogleServicesDAO,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
-    Props(new SubmissionSupervisor(containerDAO, executionServiceDAO, datasource, workflowPollInterval, submissionPollInterval))
+    Props(new SubmissionSupervisor(containerDAO, executionServiceDAO, datasource, googleServicesDAO, workflowPollInterval, submissionPollInterval))
   }
 }
 
@@ -39,17 +40,18 @@ object SubmissionSupervisor {
 class SubmissionSupervisor(containerDAO: GraphContainerDAO,
                            executionServiceDAO: ExecutionServiceDAO,
                            datasource: DataSource,
+                           googleServicesDAO: GoogleServicesDAO,
                            workflowPollInterval: Duration,
                            submissionPollInterval: Duration) extends Actor {
   import context._
 
   override def receive = {
-    case SubmissionStarted(workspaceName, submission, userInfo) => startSubmissionMonitor(workspaceName, submission, userInfo)
+    case SubmissionStarted(workspaceName, submission, userInfo) => startSubmissionMonitor(workspaceName, submission)
   }
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName, submission: Submission, userInfo: UserInfo): Unit = {
+  private def startSubmissionMonitor(workspaceName: WorkspaceName, submission: Submission): Unit = {
     actorOf(SubmissionMonitor.props(workspaceName, submission, containerDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, userInfo)), submission.submissionId)
+      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, googleServicesDAO)), submission.submissionId)
   }
 
   override val supervisorStrategy =

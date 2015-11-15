@@ -77,7 +77,8 @@ object Boot extends App {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      dataSource
+      dataSource,
+      gcsDAO
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val service = system.actorOf(RawlsApiServiceActor.props(

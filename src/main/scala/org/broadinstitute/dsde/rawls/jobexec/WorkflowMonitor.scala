@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Failed, Succeeded}
 import org.broadinstitute.dsde.rawls.model._
+import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Try}
@@ -20,9 +21,9 @@ object WorkflowMonitor {
     containerDAO: GraphContainerDAO,
     executionServiceDAO: ExecutionServiceDAO,
     datasource: DataSource,
-    userInfo: UserInfo)
+    googleServicesDAO: GoogleServicesDAO)
     (parent: ActorRef, workspaceName: WorkspaceName, submission: Submission, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, containerDAO, executionServiceDAO, datasource, userInfo))
+    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, containerDAO, executionServiceDAO, datasource, googleServicesDAO))
   }
 }
 
@@ -35,7 +36,7 @@ object WorkflowMonitor {
  * @param containerDAO
  * @param executionServiceDAO
  * @param datasource
- * @param userInfo userInfo required by executionServiceDAO
+ * @param googleServicesDAO
  */
 class WorkflowMonitor(parent: ActorRef,
                       pollInterval: Duration,
@@ -45,10 +46,12 @@ class WorkflowMonitor(parent: ActorRef,
                       containerDAO: GraphContainerDAO,
                       executionServiceDAO: ExecutionServiceDAO,
                       datasource: DataSource,
-                      userInfo: UserInfo) extends Actor {
+                      googleServicesDAO: GoogleServicesDAO) extends Actor {
   import context._
 
   setReceiveTimeout(pollInterval)
+
+  private val serviceAccountCred = googleServicesDAO.getBucketServiceAccountCredential
 
   override def receive = {
     case ReceiveTimeout => pollWorkflowStatus()
@@ -59,7 +62,7 @@ class WorkflowMonitor(parent: ActorRef,
 
   def pollWorkflowStatus(): Unit = {
     system.log.debug("polling execution service for workflow {}", workflow.workflowId)
-    executionServiceDAO.status(workflow.workflowId, userInfo) pipeTo self
+    executionServiceDAO.status(workflow.workflowId, getServiceAccountUserInfo) pipeTo self
   }
 
   def updateWorkflowStatus(statusResponse: ExecutionServiceStatus) = datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
@@ -72,7 +75,7 @@ class WorkflowMonitor(parent: ActorRef,
     if (refreshedWorkflow.status != status) {
       status match {
         case Succeeded =>
-          executionServiceDAO.outputs(workflow.workflowId, userInfo) pipeTo self
+          executionServiceDAO.outputs(workflow.workflowId, getServiceAccountUserInfo) pipeTo self
           // stop(self) will get called in attachOutputs
         case Failed =>
           parent ! WorkflowStatusChange(refreshedWorkflow.copy(status = status, messages = refreshedWorkflow.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None)
@@ -120,5 +123,13 @@ class WorkflowMonitor(parent: ActorRef,
 
   private def getWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction): WorkspaceContext = {
     containerDAO.workspaceDAO.loadContext(workspaceName, txn).getOrElse(throw new RawlsException(s"workspace ${workspaceName} does not exist"))
+  }
+
+  private def getServiceAccountUserInfo = {
+    val expiresInSeconds: Long = Option(serviceAccountCred.getExpiresInSeconds).map(_.toLong).getOrElse(0)
+    if (expiresInSeconds <= 10) {
+      serviceAccountCred.refreshToken()
+    }
+    UserInfo("", OAuth2BearerToken(serviceAccountCred.getAccessToken), Option(serviceAccountCred.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
   }
 }
