@@ -173,17 +173,23 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-       description: list billing projects for a user
-       tags:
-         - admin
+      description: list billing projects for a user
+      parameters:
+        - in: path
+          description: User Email
+          name: userEmail
+          required: true
+          type: string
+      tags:
+        - admin
         - billing
-       summary: list billing projects for a user
-       operationId: listUserBillingProjects
-       security:
-         - authorization:
-             - openid
-             - email
-             - profile
+      summary: list billing projects for a user
+      operationId: listUserBillingProjects
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/admin/billing/{projectId}':
     put:
       responses:
@@ -202,6 +208,12 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
       description: create billing project
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
       tags:
         - admin
         - billing
@@ -229,6 +241,12 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
       description: delete billing project
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
       tags:
         - admin
         - billing
@@ -257,6 +275,17 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
       description: add user to billing project
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+        - in: path
+          description: User Email
+          name: userEmail
+          required: true
+          type: string
       tags:
         - admin
         - billing
@@ -284,6 +313,17 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
       description: remove user from billing project
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+        - in: path
+          description: User Email
+          name: userEmail
+          required: true
+          type: string
       tags:
         - admin
         - billing
@@ -2212,7 +2252,8 @@ paths:
             - openid
             - email
             - profile
-  '/user/billing':
+
+  '/api/user/billing':
     get:
       responses:
         '200':
@@ -2230,16 +2271,17 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-        description: list billing projects for a user
-        tags:
-          - billing
-        summary: list billing projects for a user
-        operationId: listUserBillingProjects
-        security:
-          - authorization:
-              - openid
-              - email
-              - profile
+      description: list billing projects for a user
+      tags:
+        - billing
+        - users
+      summary: list billing projects for a user
+      operationId: listUserBillingProjects
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
 
 tags:
   - name: admin
@@ -2254,6 +2296,8 @@ tags:
     description: Workspace manipulation API
   - name: users
     description: User and Group API
+  - name: billing
+    description: Billing Project API
 
 schemes:
   - http
