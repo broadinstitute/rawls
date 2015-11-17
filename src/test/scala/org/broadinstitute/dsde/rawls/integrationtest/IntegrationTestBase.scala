@@ -15,7 +15,9 @@ import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.HttpHeaders.{RawHeader, Cookie}
@@ -54,6 +56,17 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     gcsConfig.getString("tokenEncryptionKey")
   )
 
+  val userDirDAO = new JndiUserDirectoryDAO(
+    ldapProviderUrl,
+    ldapUser,
+    ldapPassword,
+    ldapGroupDn,
+    ldapMemberAttribute,
+    ldapUserObjectClasses,
+    ldapUserObjectClasses,
+    ldapUserDnFormat
+  )
+
   def addSecurityHeaders: RequestTransformer = {
 
     val googleCred = gcsDAO.getBucketServiceAccountCredential
@@ -62,7 +75,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     addHeader(RawHeader("OIDC_access_token", googleCred.getAccessToken)) ~>
     addHeader(RawHeader("OIDC_CLAIM_expires_in", String.valueOf(googleCred.getExpiresInSeconds))) ~>
     addHeader(RawHeader("OIDC_CLAIM_email", gcsDAO.clientSecrets.getDetails.get("client_email").toString)) ~>
-    addHeader(RawHeader("OIDC_CLAIM_sub", "it_123456789876543212"))
+    addHeader(RawHeader("OIDC_CLAIM_sub", "x"))
   }
 
   // convenience methods - TODO add these to unit tests too?
@@ -90,13 +103,17 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       gcsDAO
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
-    WorkspaceService.constructor(
+    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)_
+
+    val workspaceServiceConstructor = WorkspaceService.constructor(
       dataSource,
       containerDAO,
       new HttpMethodRepoDAO(methodRepoServer),
       new HttpExecutionServiceDAO(executionServiceServer),
       gcsDAO, submissionSupervisor
     )_
+
+    (workspaceServiceConstructor, userServiceConstructor, dataSource)
   }
 
 }

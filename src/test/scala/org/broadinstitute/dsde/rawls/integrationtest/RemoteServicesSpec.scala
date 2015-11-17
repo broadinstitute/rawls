@@ -5,21 +5,21 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
+import org.broadinstitute.dsde.rawls.webservice.{AdminApiService, MethodConfigApiService, SubmissionApiService, WorkspaceApiService}
 import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService {
+class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService with MethodConfigApiService with SubmissionApiService with AdminApiService {
   def actorRefFactory = system
 
   // setup workspace service
-  val workspaceServiceConstructor = workspaceServiceWithDbName("remote-services-latest")
+  val (workspaceServiceConstructor, userServiceConstructor, dataSource) = workspaceServiceWithDbName("integration-test-latest")
 
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
 
-  val wsns = "namespace"
+  val wsns = "broad-dsde-dev"
   val wsname = UUID.randomUUID().toString
   val methodConfig = MethodConfiguration(wsns, "testConfig", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")), MethodRepoMethod("method-a", "dsde", 1))
   val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, WorkspaceName(wsns, wsname))
@@ -40,6 +40,11 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
 
   "RemoteServicesSpec" should "copy a method config from the method repo" ignore {
     // need to init workspace
+    dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(RawlsUser(RawlsUserSubjectId("x"), RawlsUserEmail(gcsDAO.clientSecrets.getDetails.get("client_email").toString)), txn)
+      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(workspace.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x")))), txn)
+    }
+
     Post(s"/workspaces", httpJson(workspace)) ~>
       addSecurityHeaders ~>
       sealRoute(workspaceRoutes) ~>
