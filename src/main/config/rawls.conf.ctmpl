@@ -32,5 +32,8 @@ userLdap {
   userAttributes = [{{.Data.ldap_user_attributes}}]
   userDnFormat =  "{{.Data.ldap_user_dn_format}}"
 }
+
+integration.runFullLoadTest = {{.Data.runFullLoadTest}}
+
 {{end}}
 {{end}}

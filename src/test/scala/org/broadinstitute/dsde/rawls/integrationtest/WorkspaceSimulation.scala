@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceSimulation._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.webservice.{MethodConfigApiService, EntityApiService, WorkspaceApiService, SubmissionApiService}
+import org.broadinstitute.dsde.rawls.webservice._
 import spray.http._
 import spray.httpx.SprayJsonSupport._
 
@@ -57,19 +57,23 @@ case class SimulationParams(
   numAnnotationUpdatesLarge: Int
 )
 
-class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService {
+class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with AdminApiService {
   implicit val routeTestTimeout = RouteTestTimeout(600.seconds) // this is a load test, so response times may be slow
   def actorRefFactory = system
 
-  val workspaceServiceConstructor = workspaceServiceWithDbName("integration-test-latest")
+  val (workspaceServiceConstructor, userServiceConstructor, dataSource) = workspaceServiceWithDbName("integration-test-latest")
 
   val params = if (integrationRunFullLoadTest) fullSimulation else liteSimulation
 
   val gen = new WorkspaceGenerator("broad-dsde-dev", System.currentTimeMillis().toString())
 
   "WorkspaceSimulation" should "create a workspace" in {
-    val postWorkspaceTimer = new Timer("Post workspace")
+    dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(RawlsUser(RawlsUserSubjectId("x"), RawlsUserEmail(gcsDAO.clientSecrets.getDetails.get("client_email").toString)), txn)
+      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(gen.wn.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x")))), txn)
+    }
 
+    val postWorkspaceTimer = new Timer("Post workspace")
     postWorkspaceTimer.timedOperation {
       Post(s"/workspaces", httpJson(gen.workspace)) ~>
         addSecurityHeaders ~> sealRoute(workspaceRoutes) ~>
