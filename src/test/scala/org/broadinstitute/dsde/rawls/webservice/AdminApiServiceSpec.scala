@@ -89,86 +89,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
     }
 
-  "AdminApi" should "return 204 when checking for the seeded user" in withTestDataApiServices { services =>
-    Get(s"/admin/users/test_token") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-  }
-
-  it should "return 404 when checking for a bogus user" in withTestDataApiServices { services =>
-    Get(s"/admin/users/fred") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "return 200 and the seeded user as a single-element list when listing users" in withTestDataApiServices { services =>
-    Get(s"/admin/users") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        assertResult(Array("test_token")) { responseAs[Array[String]]}
-      }
-  }
-
-  it should "return 201 when adding an new user to the admin list" in withTestDataApiServices { services =>
-    Put(s"/admin/users/bob") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) { status }
-      }
-  }
-
-  it should "return 204 when adding an existing user to the admin list" in withTestDataApiServices { services =>
-    services.gcsDAO.addAdmin("bob")
-    Put(s"/admin/users/bob") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-  }
-
-  it should "return 204 when checking on the new admin user" in withTestDataApiServices { services =>
-    services.gcsDAO.addAdmin("bob")
-    Get(s"/admin/users/bob") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-  }
-
-  it should "return 200 and a two-member list when asked for the current list" in withTestDataApiServices { services =>
-    services.gcsDAO.addAdmin("bob")
-    services.gcsDAO.addAdmin("test_token")
-    Get(s"/admin/users") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) { status }
-        responseAs[Array[String]] should contain theSameElementsAs(Array("bob","test_token"))
-      }
-  }
-
-  it should "return 204 when removing an existing user from the admin list" in withTestDataApiServices { services =>
-    services.gcsDAO.addAdmin("bob")
-    Delete(s"/admin/users/bob") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-  }
-
-  it should "return 404 when removing a bogus user from the admin list" in withTestDataApiServices { services =>
-    Delete(s"/admin/users/jimmy") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) { status }
-      }
-  }
-
-  it should "return 200 when listing active submissions" in withTestDataApiServices { services =>
+  "AdminApi" should "return 200 when listing active submissions" in withTestDataApiServices { services =>
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -416,17 +337,4 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
         }
       }
   }
-
-  it should "return 403 when making an admin call as a non-admin user" in withTestDataApiServices { services =>
-    Delete(s"/admin/users/test_token") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) { status }
-      }
-    Get(s"/admin/users") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Forbidden) { status }
-      }
-    }
 }

@@ -18,34 +18,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
   val userServiceConstructor: UserInfo => UserService
 
   val adminRoutes = requireUserInfo() { userInfo =>
-    path("admin" / "users") {
-      get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListAdmins)
-      }
-    } ~
-    path("admin" / "users" / Segment) { (userId) =>
-      get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.IsAdmin(userId))
-      }
-    } ~
-    path("admin" / "users" / Segment) { (userId) =>
-      put {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AddAdmin(userId))
-      }
-    } ~
-    path("admin" / "users" / Segment) { (userId) =>
-      delete {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.DeleteAdmin(userId))
-      }
-    } ~
     path("admin" / "billing" / "list" / Segment) { (userEmail) =>
       get {
         requestContext => perRequest(requestContext,
