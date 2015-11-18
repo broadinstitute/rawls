@@ -7,6 +7,7 @@ app:
   {{.Data.app_dns}}
   {{.Data.app_volumes}}
   {{.Data.app_ports}}
+  {{.Data.log_driver}}
 proxy:
   extends:
     file: proxy-compose.yaml
