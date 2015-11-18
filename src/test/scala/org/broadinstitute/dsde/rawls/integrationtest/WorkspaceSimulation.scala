@@ -70,7 +70,7 @@ class WorkspaceSimulation extends IntegrationTestBase with WorkspaceApiService w
   "WorkspaceSimulation" should "create a workspace" in {
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveUser(RawlsUser(RawlsUserSubjectId("x"), RawlsUserEmail(gcsDAO.clientSecrets.getDetails.get("client_email").toString)), txn)
-      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(gen.wn.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x")))), txn)
+      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(gen.wn.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x"))), "mockBucketUrl"), txn)
     }
 
     val postWorkspaceTimer = new Timer("Post workspace")

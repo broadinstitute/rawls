@@ -33,7 +33,7 @@ class GraphBillingDAOSpec extends FlatSpec with Matchers with OrientDbTestFixtur
     RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
 
   def projectFromName(name: String) =
-    RawlsBillingProject(RawlsBillingProjectName(name), Set.empty)
+    RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
 
   val testProject = projectFromName("Test Billing Project")
 
@@ -206,10 +206,10 @@ class GraphBillingDAOSpec extends FlatSpec with Matchers with OrientDbTestFixtur
   it should "list users in a billing project" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       authDAO.saveUser(testUser, txn)
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("1"), Set(testUser)), txn)
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("2"), Set(testUser)), txn)
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("3"), Set.empty), txn)
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("4"), Set(testUser)), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("1"), Set(testUser), "bucketUrl1"), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("2"), Set(testUser), "bucketUrl2"), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("3"), Set.empty, "bucketUrl3"), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("4"), Set(testUser), "bucketUrl4"), txn)
     }
 
     dataSource.inTransaction() { txn =>

@@ -1162,14 +1162,29 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   private def buildWorkflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Future[Option[String]] = {
-    import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make toJson work below
-    gcsDAO.getToken(userInfo).map { refreshTokenOption =>
-      val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
+    val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
+    val billingProjectName = RawlsBillingProjectName(workspaceContext.workspace.namespace)
+
+    // note: executes in a Future
+    gcsDAO.getToken(userInfo) map { optToken =>
+      val refreshToken = optToken getOrElse {
+        throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}")
+      }
+
+      val billingProject = dataSource.inTransaction() { txn =>
+        containerDAO.billingDAO.loadProject(billingProjectName, txn) getOrElse {
+          throw new RawlsException(s"Billing Project with name ${billingProjectName.value} not found")
+        }
+      }
+
+      import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
+
       Option(ExecutionServiceWorkflowOptions(
         s"gs://${bucketName}/${submissionId}",
         workspaceContext.workspace.namespace,
         userInfo.userEmail,
-        refreshTokenOption.getOrElse(throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}"))
+        refreshToken,
+        billingProject.cromwellAuthBucketUrl
       ).toJson.toString)
     }
   }
@@ -1241,6 +1256,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 }
+
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)

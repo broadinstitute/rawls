@@ -42,7 +42,7 @@ class RemoteServicesSpec extends IntegrationTestBase with WorkspaceApiService wi
     // need to init workspace
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveUser(RawlsUser(RawlsUserSubjectId("x"), RawlsUserEmail(gcsDAO.clientSecrets.getDetails.get("client_email").toString)), txn)
-      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(workspace.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x")))), txn)
+      containerDAO.billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName(workspace.namespace), Set(RawlsUserRef(RawlsUserSubjectId("x"))), "mockBucketUrl"), txn)
     }
 
     Post(s"/workspaces", httpJson(workspace)) ~>

@@ -189,7 +189,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
-    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken))) {
+    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken, testData.billingProject.cromwellAuthBucketUrl))) {
       mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
     }
 

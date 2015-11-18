@@ -220,7 +220,7 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
     // first add the project and user to the graph
 
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")
 
     services.dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveUser(billingUser, txn)

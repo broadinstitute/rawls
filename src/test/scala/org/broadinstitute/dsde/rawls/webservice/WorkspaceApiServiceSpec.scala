@@ -672,7 +672,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
     services.dataSource.inTransaction() { txn =>
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty), txn)
+      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl"), txn)
     }
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",

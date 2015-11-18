@@ -138,14 +138,19 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
   def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
     dataSource.inFutureTransaction() { txn =>
-      Future {
-        containerDAO.billingDAO.loadProject(projectName, txn) match {
-          case Some(_) =>
+      containerDAO.billingDAO.loadProject(projectName, txn) match {
+        case Some(_) =>
+          Future {
             RequestComplete(ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists"))
-          case None =>
-            containerDAO.billingDAO.saveProject(RawlsBillingProject(projectName, Set.empty), txn)
+          }
+        case None =>
+          // note: executes in a Future
+          gcsDAO.createCromwellAuthBucket(projectName) map { bucketName =>
+            val bucketName = gcsDAO.getCromwellAuthBucketName(projectName)
+            val bucketUrl = "gs://" + bucketName
+            containerDAO.billingDAO.saveProject(RawlsBillingProject(projectName, Set.empty, bucketUrl), txn)
             RequestComplete(StatusCodes.Created)
-        }
+          }
       }
     }
   }
