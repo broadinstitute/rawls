@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import java.util.UUID
+
 import akka.actor.{PoisonPill, ActorSystem}
 import akka.testkit.{TestKit, TestActorRef}
 import akka.util.Timeout
@@ -54,6 +56,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val sample1 = Entity("sample1", "Sample",
       Map("type" -> AttributeString("normal")))
+
+    val refreshToken = UUID.randomUUID.toString
 
     val existingWorkflowId = "69d1d92f-3895-4a7b-880a-82535e9a096e"
     val nonExistingWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c9999"
@@ -131,7 +135,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         dataSource,
         gcsDAO
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      gcsDAO.storeToken(userInfo, "foo")
+      gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, gcsDAO, submissionSupervisor)_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
@@ -185,7 +189,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
-    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, "foo"))) {
+    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken))) {
       mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
     }
 
