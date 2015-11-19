@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import kamon.spray.KamonTraceDirectives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -24,9 +25,11 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
   val createUserRoute = requireUserInfo() { userInfo =>
     path("user") {
       post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.CreateUser)
+        traceName("CreateUser") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.CreateUser)
+        }
       }
     }
   }
@@ -34,46 +37,58 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
   val userRoutes = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
       put {
-        entity(as[UserRefreshToken]) { token =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.SetRefreshToken(token))
+        traceName("SetRefreshToken") {
+          entity(as[UserRefreshToken]) { token =>
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.SetRefreshToken(token))
+          }
         }
       }
     } ~
     path("user" / "refreshTokenDate") {
       get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.GetRefreshTokenDate)
+        traceName("GetRefreshTokenDate") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.GetRefreshTokenDate)
+        }
       }
     } ~
     path("user" / "billing") {
       get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListBillingProjects)
+        traceName("ListBillingProjects") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.ListBillingProjects)
+        }
       }
     } ~
     path("user" / Segment) { userSubjectId =>
       get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.GetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        traceName("GetUserStatus") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.GetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        }
       }
     } ~
     path("user" / Segment / "enable") { userSubjectId =>
       post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.EnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        traceName("EnableUser") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.EnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        }
       }
     } ~
     path("user" / Segment / "disable") { userSubjectId =>
       post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.DisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        traceName("DisableUser") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.DisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        }
       }
     }
   }

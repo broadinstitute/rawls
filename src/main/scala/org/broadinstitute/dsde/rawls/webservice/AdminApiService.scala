@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing._
+import kamon.spray.KamonTraceDirectives._
 
 import scala.concurrent.ExecutionContext
 
@@ -20,47 +21,61 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
   val adminRoutes = requireUserInfo() { userInfo =>
     path("admin" / "billing" / "list" / Segment) { (userEmail) =>
       get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListBillingProjectsForUser(RawlsUserEmail(userEmail)))
+        traceName("ListBillingProjectsForUser") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.ListBillingProjectsForUser(RawlsUserEmail(userEmail)))
+        }
       }
     } ~
     path("admin" / "billing" / Segment) { (projectId) =>
       put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.CreateBillingProject(RawlsBillingProjectName(projectId)))
+        traceName("CreateBillingProject") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.CreateBillingProject(RawlsBillingProjectName(projectId)))
+        }
       } ~
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.DeleteBillingProject(RawlsBillingProjectName(projectId)))
+        traceName("DeleteBillingProject") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.DeleteBillingProject(RawlsBillingProjectName(projectId)))
+        }
       }
     } ~
     path("admin" / "billing" / Segment / Segment) { (projectId, userEmail) =>
       put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+        traceName("AddUserToBillingProject") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+        }
       } ~
       delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+        traceName("RemoveUserFromBillingProject") {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+        }
       }
     } ~
     path("admin" / "submissions") {
       get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListAllActiveSubmissions)
+        traceName("ListAllActiveSubmissions") {
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListAllActiveSubmissions)
+        }
       }
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
       delete {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId))
+        traceName("AdminAbortSubmission") {
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.AdminAbortSubmission(workspaceNamespace, workspaceName, submissionId))
+        }
       }
     }
   }
