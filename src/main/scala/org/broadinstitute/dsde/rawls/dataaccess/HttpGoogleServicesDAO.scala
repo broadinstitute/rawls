@@ -86,7 +86,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = {
+  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = {
     val bucketName = getBucketName(workspaceId)
     val directory = getGroupDirectory
     val groups = directory.groups

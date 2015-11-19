@@ -42,7 +42,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   "HttpGoogleServicesDAO" should "do all of the things" in {
-    Await.result(gcsDAO.createBucket(testCreator, testProject, testWorkspaceId, testWorkspace), Duration.Inf)
+    Await.result(gcsDAO.setupWorkspace(testCreator, testProject, testWorkspaceId, testWorkspace), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 

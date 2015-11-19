@@ -54,7 +54,7 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
+  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
 
   override def deleteBucket(userInfo: UserInfo, workspaceId: String) = Future.successful(Unit)
 
