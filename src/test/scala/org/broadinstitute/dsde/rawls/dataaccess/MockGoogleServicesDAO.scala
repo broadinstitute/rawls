@@ -29,11 +29,11 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
     Future.successful(Unit)
   }
 
-  override def getBucketServiceAccountCredential: Credential = {
-    new MockGoogleCredential.Builder().build()
+  override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
+    Future.successful(Option(new MockGoogleCredential.Builder().build()))
   }
 
-  override def getToken(userInfo: UserInfo): Future[Option[String]] = {
+  override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     Future.successful(Option(token))
   }
 

@@ -19,24 +19,24 @@ object MethodConfigResolver {
   val multipleResultError  = "Expected single value for workflow input, but evaluated result set had multiple values"
   val missingMandatoryValueError  = "Mandatory workflow input is not specified in method config"
 
-  private def getSingleResult(seq: Seq[AttributeValue], optional: Boolean): SubmissionValidationValue = {
+  private def getSingleResult(inputName: String, seq: Seq[AttributeValue], optional: Boolean): SubmissionValidationValue = {
     def handleEmpty = if (optional) None else Some(emptyResultError)
     seq match {
-      case Seq() => SubmissionValidationValue(None, handleEmpty)
-      case Seq(null) => SubmissionValidationValue(None, handleEmpty)
-      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty)
-      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None)
-      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues)), Some(multipleResultError))
+      case Seq() => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(null) => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, inputName)
+      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None, inputName)
+      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues)), Some(multipleResultError), inputName)
     }
   }
 
-  private def getArrayResult(seq: Seq[AttributeValue]): SubmissionValidationValue = {
-    SubmissionValidationValue(Some(AttributeValueList(seq.filter(v => v != null && v != AttributeNull))), None)
+  private def getArrayResult(inputName: String, seq: Seq[AttributeValue]): SubmissionValidationValue = {
+    SubmissionValidationValue(Some(AttributeValueList(seq.filter(v => v != null && v != AttributeNull))), None, inputName)
   }
 
   private def unpackResult(mcSequence: Seq[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
-    case arrayType: WdlArrayType => getArrayResult(mcSequence)
-    case _ => getSingleResult(mcSequence, wfInput.optional)
+    case arrayType: WdlArrayType => getArrayResult(wfInput.fqn, mcSequence)
+    case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
   private def evaluateResult(workspaceContext: WorkspaceContext, rootEntity: Entity, expression: String): Try[Seq[AttributeValue]] = {
@@ -69,7 +69,7 @@ object MethodConfigResolver {
     inputs.map{ input =>
       evaluator.evalFinalAttribute(workspaceContext,entity.entityType,entity.name,input.expression) match {
         case Success(attributeSequence) => unpackResult(attributeSequence,input.workflowInput)
-        case Failure(regrets) => SubmissionValidationValue(None,Some(regrets.getMessage))
+        case Failure(regrets) => SubmissionValidationValue(None,Some(regrets.getMessage), input.workflowInput.fqn)
       }
     }
   }
@@ -85,11 +85,11 @@ object MethodConfigResolver {
         case Some(AttributeString(expression)) =>
           evaluateResult(workspaceContext, entity, expression) match {
             case Success(mcSequence) => unpackResult(mcSequence, wfInput)
-            case Failure(regret) => SubmissionValidationValue(None, Some(regret.getMessage))
+            case Failure(regret) => SubmissionValidationValue(None, Some(regret.getMessage), wfInput.fqn)
           }
         case _ =>
           val errorOption = if (wfInput.optional) None else Some(missingMandatoryValueError) // if an optional value is unspecified in the MC, we don't care
-          SubmissionValidationValue(None, errorOption)
+          SubmissionValidationValue(None, errorOption, wfInput.fqn)
         }
         (wfInput.fqn, result)
       } toMap
@@ -101,8 +101,8 @@ object MethodConfigResolver {
    */
   def resolveInputsOrGatherErrors(workspaceContext: WorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String): Either[Seq[String], Map[String, Attribute]] = {
     val (successes, failures) = resolveInputs(workspaceContext, methodConfig, entity, wdl) partition (_._2.error.isEmpty)
-    if (failures.nonEmpty) Left( failures collect { case (key, SubmissionValidationValue(_, Some(error))) => s"Error resolving ${key}: ${error}" } toSeq )
-    else Right( successes collect { case (key, SubmissionValidationValue(Some(attribute), _)) => (key, attribute) } )
+    if (failures.nonEmpty) Left( failures collect { case (key, SubmissionValidationValue(_, Some(error), inputName)) => s"Error resolving ${inputName}: ${error}" } toSeq )
+    else Right( successes collect { case (key, SubmissionValidationValue(Some(attribute), _, inputName)) => (inputName, attribute) } )
   }
 
   /**

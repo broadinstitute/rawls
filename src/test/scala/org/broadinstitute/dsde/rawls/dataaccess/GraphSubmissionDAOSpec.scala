@@ -24,8 +24,8 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
     }
   }
 
-  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, Seq(testData.sample1, testData.sample2, testData.sample3))
-  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, Seq(testData.sample1, testData.sample2, testData.sample3))
+  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
+  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
 
   "GraphSubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { (context, txn) =>
     dao.save(context, submission3, txn)
@@ -90,7 +90,7 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
       assertResult(Some(workflow2)) {
         workflowDAO.get(context, testData.submission1.submissionId, workflow2.workflowId, txn)
       }
-      val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity)
+      val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity, testData.inputResolutions)
       workflowDAO.update(context, testData.submission1.submissionId, workflow3, txn)
       assertResult(Some(workflow3)) {
         workflowDAO.get(context, testData.submission1.submissionId, workflow3.workflowId, txn)

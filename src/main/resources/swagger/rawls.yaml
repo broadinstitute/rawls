@@ -2615,6 +2615,11 @@ definitions:
         description: List of errors starting this workflow
         items:
           type: string
+      inputResolutions:
+        type: array
+        items:
+          $ref: '#/definitions/SubmissionValidationValue'
+        description: The evaluation of each input
 
   Workflow:
     description: ''
@@ -2641,6 +2646,11 @@ definitions:
       entityName:
         type: string
         description: Entity name
+      inputResolutions:
+        type: array
+        items:
+          $ref: '#/definitions/SubmissionValidationValue'
+        description: The evaluation of each input
   WorkflowStatus:
     properties:
       done:
@@ -2708,6 +2718,9 @@ definitions:
       error:
         type: string
         description: parsing error(s)
+      inputName:
+        type: string
+        description: name of input
 
   SubmissionValidationEntityInputs:
     description: the results of parsing each of the inputs for one entity

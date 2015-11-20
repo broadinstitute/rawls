@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
+
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
@@ -27,14 +29,16 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   val workflowDAO: GraphWorkflowDAO = new GraphWorkflowDAO(new GraphSubmissionDAO())
   val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
 
+  val mockCredential = new MockGoogleCredential.Builder().build()
+
   override def afterAll: Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll
   }
 
   "WorkflowMonitor" should "throw exception for non-existent workflow" in withDefaultTestDatabase { dataSource =>
-    val workflow = Workflow("id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"))
-    val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission1, workflow))
+    val workflow = Workflow("id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"), testData.inputResolutions)
+    val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, workflow))
     intercept[RawlsException] {
       monitorRef.underlyingActor.updateWorkflowStatus(ExecutionServiceStatus(workflow.workflowId, "Succeeded"))
     }
@@ -42,20 +46,20 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   it should "do nothing for unchanged state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(testData.submission1.workflows.head.status.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission1, testData.submission1.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(testData.submission1.workflows.head.status.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, testData.submission1.workflows.head))
     expectNoMsg(1 seconds)
     system.stop(monitorRef)
   }
 
   it should "emit update message for changed state" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission1, testData.submission1.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, testData.submission1.workflows.head))
     expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Running), None))
     system.stop(monitorRef)
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
     it should s"terminate when ${status}" in withDefaultTestDatabase { dataSource =>
-      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission1, testData.submission1.workflows.head))
+      val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, testData.submission1.workflows.head))
       watch(monitorRef)
       status match {
         case WorkflowStatuses.Failed => fishForMessage(1 second) {
@@ -80,8 +84,13 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   it should "fail a workflow if the method config can't be found" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val wsCtx = containerDAO.workspaceDAO.loadContext(testData.wsName, txn).get
+      containerDAO.submissionDAO.save(wsCtx, testData.submission1.copy(methodConfigurationName = "DNE"), txn)
+    }
+
     val status = WorkflowStatuses.Succeeded
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission1.copy(methodConfigurationName = "DNE"), testData.submission1.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, testData.submission1.workflows.head))
     watch(monitorRef)
     expectMsg(SubmissionMonitor.WorkflowStatusChange(testData.submission1.workflows.head.copy(status = WorkflowStatuses.Failed, messages = Seq(AttributeString(s"Could not find method config ${testData.submission1.methodConfigurationNamespace}/DNE, was it deleted?"))), None))
     fishForMessage(1 second) {
@@ -93,7 +102,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
 
   it should "fail a workflow if outputs can't be found" in withDefaultTestDatabase { dataSource =>
     val status = WorkflowStatuses.Succeeded
-    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, gcsDAO)(testActor, testData.wsName, testData.submission2, testData.submission2.workflows.head))
+    val monitorRef = system.actorOf(WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(status.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission2.submissionId, testData.submission2.workflows.head))
     watch(monitorRef)
     fishForMessage(1 second) {
       case m: SubmissionMonitor.WorkflowStatusChange =>

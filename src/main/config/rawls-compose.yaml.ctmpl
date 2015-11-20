@@ -14,10 +14,6 @@ proxy:
     service: proxy
   links:
     - app:app
-  environment:
-    PROXY_URL: http://app:8080/
-    PROXY_URL2: http://app:8080/api
-    PROXY_URL3: http://app:8080/register
 
 {{end}}
 {{end}}

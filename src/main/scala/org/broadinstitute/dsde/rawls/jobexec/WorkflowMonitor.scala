@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor._
+import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitor.WorkflowStatusChange
@@ -21,9 +22,9 @@ object WorkflowMonitor {
     containerDAO: GraphContainerDAO,
     executionServiceDAO: ExecutionServiceDAO,
     datasource: DataSource,
-    googleServicesDAO: GoogleServicesDAO)
-    (parent: ActorRef, workspaceName: WorkspaceName, submission: Submission, workflow: Workflow): Props = {
-    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submission, workflow, containerDAO, executionServiceDAO, datasource, googleServicesDAO))
+    credential: Credential)
+    (parent: ActorRef, workspaceName: WorkspaceName, submissionId: String, workflow: Workflow): Props = {
+    Props(new WorkflowMonitor(parent, pollInterval, workspaceName, submissionId, workflow, containerDAO, executionServiceDAO, datasource, credential))
   }
 }
 
@@ -36,22 +37,20 @@ object WorkflowMonitor {
  * @param containerDAO
  * @param executionServiceDAO
  * @param datasource
- * @param googleServicesDAO
+ * @param credential for accessing exec service
  */
 class WorkflowMonitor(parent: ActorRef,
                       pollInterval: Duration,
                       workspaceName: WorkspaceName,
-                      submission: Submission,
+                      submissionId: String,
                       workflow: Workflow,
                       containerDAO: GraphContainerDAO,
                       executionServiceDAO: ExecutionServiceDAO,
                       datasource: DataSource,
-                      googleServicesDAO: GoogleServicesDAO) extends Actor {
+                      credential: Credential) extends Actor {
   import context._
 
   setReceiveTimeout(pollInterval)
-
-  private val serviceAccountCred = googleServicesDAO.getBucketServiceAccountCredential
 
   override def receive = {
     case ReceiveTimeout => pollWorkflowStatus()
@@ -62,20 +61,20 @@ class WorkflowMonitor(parent: ActorRef,
 
   def pollWorkflowStatus(): Unit = {
     system.log.debug("polling execution service for workflow {}", workflow.workflowId)
-    executionServiceDAO.status(workflow.workflowId, getServiceAccountUserInfo) pipeTo self
+    executionServiceDAO.status(workflow.workflowId, getUserInfo) pipeTo self
   }
 
   def updateWorkflowStatus(statusResponse: ExecutionServiceStatus) = datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
     val status = WorkflowStatuses.withName(statusResponse.status)
 
-    val refreshedWorkflow = containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn), submission.submissionId, workflow.workflowId, txn).getOrElse(
+    val refreshedWorkflow = containerDAO.workflowDAO.get(getWorkspaceContext(workspaceName, txn),   submissionId, workflow.workflowId, txn).getOrElse(
       throw new RawlsException(s"workflow ${workflow} could not be found")
     )
 
     if (refreshedWorkflow.status != status) {
       status match {
         case Succeeded =>
-          executionServiceDAO.outputs(workflow.workflowId, getServiceAccountUserInfo) pipeTo self
+          executionServiceDAO.outputs(workflow.workflowId, getUserInfo) pipeTo self
           // stop(self) will get called in attachOutputs
         case Failed =>
           parent ! WorkflowStatusChange(refreshedWorkflow.copy(status = status, messages = refreshedWorkflow.messages :+ AttributeString("Workflow execution failed, check outputs for details")), None)
@@ -90,13 +89,16 @@ class WorkflowMonitor(parent: ActorRef,
   }
 
   def withMethodConfig(workspaceContext: WorkspaceContext, txn: RawlsTransaction)(op: MethodConfiguration => WorkflowStatusChange): WorkflowStatusChange = {
+    val submission = containerDAO.submissionDAO.get(getWorkspaceContext(workspaceName, txn), submissionId, txn).getOrElse(
+      throw new RawlsException(s"submissions ${submissionId} does not exist")
+    )
     containerDAO.methodConfigurationDAO.get(workspaceContext, submission.methodConfigurationNamespace, submission.methodConfigurationName, txn) match {
       case None => WorkflowStatusChange(workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(s"Could not find method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}, was it deleted?")), None)
       case Some(methodConfig) => op(methodConfig)
     }
   }
 
-  def attachOutputs(outputsResponse: ExecutionServiceOutputs): Unit = datasource.inTransaction() { txn =>
+  def attachOutputs(outputsResponse: ExecutionServiceOutputs): Unit = datasource.inTransaction(readLocks = Set(workspaceName)) { txn =>
     val workspaceContext = getWorkspaceContext(workspaceName, txn)
     val statusMessage = withMethodConfig(workspaceContext, txn) { methodConfig =>
       val outputs = outputsResponse.outputs
@@ -125,11 +127,11 @@ class WorkflowMonitor(parent: ActorRef,
     containerDAO.workspaceDAO.loadContext(workspaceName, txn).getOrElse(throw new RawlsException(s"workspace ${workspaceName} does not exist"))
   }
 
-  private def getServiceAccountUserInfo = {
-    val expiresInSeconds: Long = Option(serviceAccountCred.getExpiresInSeconds).map(_.toLong).getOrElse(0)
-    if (expiresInSeconds <= 10) {
-      serviceAccountCred.refreshToken()
+  private def getUserInfo = {
+    val expiresInSeconds: Long = Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0)
+    if (expiresInSeconds <= 5*60) {
+      credential.refreshToken()
     }
-    UserInfo("", OAuth2BearerToken(serviceAccountCred.getAccessToken), Option(serviceAccountCred.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
+    UserInfo("", OAuth2BearerToken(credential.getAccessToken), Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
   }
 }

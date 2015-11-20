@@ -53,7 +53,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     gcsConfig.getString("appName"),
     gcsConfig.getInt("deletedBucketCheckSeconds"),
     gcsConfig.getString("serviceProject"),
-    gcsConfig.getString("tokenEncryptionKey")
+    gcsConfig.getString("tokenEncryptionKey"),
+    gcsConfig.getString("tokenSecretsJson")
   )
 
   val userDirDAO = new JndiUserDirectoryDAO(
@@ -99,8 +100,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(executionServiceServer),
-      dataSource,
-      gcsDAO
+      dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)_

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -52,7 +53,7 @@ trait GoogleServicesDAO {
   def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
-  def getToken(userInfo: UserInfo): Future[Option[String]]
+  def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
   def deleteToken(userInfo: UserInfo): Future[Unit]
 
@@ -71,5 +72,5 @@ trait GoogleServicesDAO {
     }
   }
 
-  def getBucketServiceAccountCredential: Credential
-  }
+  def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
+}

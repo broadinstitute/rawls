@@ -29,7 +29,7 @@ import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
 
 /**
  * Created by dvoet on 4/27/15.
@@ -881,31 +881,36 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        Future.successful(RequestComplete(StatusCodes.OK, containerDAO.submissionDAO.list(workspaceContext, txn).toList))
+        val statuses = containerDAO.submissionDAO.list(workspaceContext, txn) map { submission =>
+          withRawlsUser(submission.submitter, txn) { user =>
+            new SubmissionStatusResponse(submission, user)
+          }
+        }
+        Future.successful(RequestComplete(StatusCodes.OK, statuses.toList))
       }
     }
 
-  def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
-    withSubmissionParameters(workspaceName,submissionRequest) {
+  def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
+    val submissionFuture: Future[PerRequestMessage] = withSubmissionParameters(workspaceName, submissionRequest) {
       (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
         val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
-          val methodProps = for ( (methodInput,entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined ) yield( methodInput.wdlName -> entityValue.value.get )
+          val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
           val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
-          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)))
+          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName), inputResolutions = entityInputs.inputResolutions))
         }))
 
         submittedWorkflowsFuture map { submittedWorkflows =>
           val failedWorkflows = failures.map { entityInputs =>
-            val errors = for( entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined ) yield( AttributeString(entityValue.error.get) )
-            WorkflowFailure(entityInputs.entityName,header.entityType,errors)
+            val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
+            WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
           }
 
           val submission = Submission(submissionId = submissionId,
             submissionDate = DateTime.now(),
-            submitter = userInfo.userEmail,
+            submitter = RawlsUser(userInfo),
             methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
             methodConfigurationName = submissionRequest.methodConfigurationName,
             submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
@@ -914,16 +919,28 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
           )
 
-          if (submission.status == SubmissionStatuses.Submitted) {
-            submissionSupervisor ! SubmissionStarted(workspaceName, submission, userInfo)
+          containerDAO.submissionDAO.save(workspaceContext, submission, txn)
+          val workflowReports = submittedWorkflows.map { workflow =>
+            WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.entityName, workflow.inputResolutions)
           }
 
-          containerDAO.submissionDAO.save(workspaceContext, submission, txn)
-          val workflowReports = for ( (workflow,entityInputs) <- submittedWorkflows.zip(successes) )
-            yield( WorkflowReport(workflow.workflowId,workflow.status,workflow.statusLastChangedDate,entityInputs.entityName,entityInputs.inputResolutions) )
-          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest,submission.submissionId,submission.submissionDate,submission.submitter,submission.status,header,workflowReports,failures))
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
         }
-      }
+    }
+
+    val credFuture = gcsDAO.getUserCredentials(RawlsUser(userInfo))
+
+    submissionFuture.zip(credFuture) map {
+      case (RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)), Some(credential)) =>
+        if (submissionReport.status == SubmissionStatuses.Submitted) {
+          submissionSupervisor ! SubmissionStarted(workspaceName, submissionReport.submissionId, credential)
+        }
+        RequestComplete(StatusCodes.Created, submissionReport)
+
+      case (somethingWrong, _) => somethingWrong // this is the case where something was not found in withSubmissionParameters
+      case (_, None) => RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"No refresh token found for ${userInfo.userEmail}"))
+    }
+  }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
     withSubmissionParameters(workspaceName,submissionRequest) {
@@ -935,7 +952,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, txn) { submission =>
-          Future.successful(RequestComplete(StatusCodes.OK, submission))
+          withRawlsUser(submission.submitter, txn) { user =>
+            Future.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
+          }
         }
       }
     }
@@ -1166,7 +1185,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     val billingProjectName = RawlsBillingProjectName(workspaceContext.workspace.namespace)
 
     // note: executes in a Future
-    gcsDAO.getToken(userInfo) map { optToken =>
+    gcsDAO.getToken(RawlsUser(userInfo)) map { optToken =>
       val refreshToken = optToken getOrElse {
         throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}")
       }

@@ -65,8 +65,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource,
-      gcsDao
+      dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDao, submissionSupervisor)_
 
@@ -143,7 +142,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
     val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(workspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
-    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, Seq(sample1, sample2, sample3))
+    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions))
     val submissionSuccess = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Done,

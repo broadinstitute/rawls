@@ -94,6 +94,7 @@ class GraphDAODeleteSpec extends FreeSpec with Matchers with OrientDbTestFixture
             entityDAO.save(context, testData.sample3, txn)
             entityDAO.save(context, testData.sset1, txn)
             entityDAO.save(context, testData.indiv1, txn)
+            authDAO.saveUser(testData.userOwner, txn)
 
             val wsVerts = graph.getVertices.toList.size
 
