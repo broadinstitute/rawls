@@ -11,7 +11,7 @@ import scala.concurrent.Future
 trait GoogleServicesDAO {
 
   // returns a workspaceID
-  def createBucket(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit]
+  def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit]
 
   def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any]
 

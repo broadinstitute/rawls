@@ -1062,7 +1062,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         case Some(_) => Future.successful(PerRequest.RequestComplete(ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          gcsDAO.createBucket(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
+          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
             val currentDate = DateTime.now
             val accessLevels = containerDAO.authDAO.createWorkspaceAccessGroups(workspaceName, userInfo, txn)
 
