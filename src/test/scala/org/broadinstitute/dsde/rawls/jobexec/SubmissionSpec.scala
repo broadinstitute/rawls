@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
@@ -134,8 +135,18 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
         dataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
+      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
-      val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), execService, gcsDAO, submissionSupervisor)_
+      val workspaceServiceConstructor = WorkspaceService.constructor(
+        dataSource,
+        containerDAO,
+        new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+        execService,
+        gcsDAO,
+        submissionSupervisor,
+        bucketDeletionMonitor
+      )_
       lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
       try {
         testCode(workspaceService)

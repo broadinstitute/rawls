@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
 
-import akka.actor.ActorSystem
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 
@@ -32,7 +33,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.{OAuth2BearerToken, StatusCodes}
+import spray.http.StatusCodes
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -193,34 +194,8 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any] = {
+  override def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef): Future[Any] = {
     val bucketName = getBucketName(workspaceId)
-    def bucketDeleteFn(): Future[Any] = {
-      val buckets = getStorage(getBucketCredential(userInfo)).buckets
-      val deleter = buckets.delete(bucketName)
-      retry(when500)(() => Future {
-        blocking { deleter.execute }
-      }) recover {
-        //Google returns 409 Conflict if the bucket isn't empty.
-        case t: HttpResponseException if t.getStatusCode == 409 =>
-          //Google doesn't let you delete buckets that are full.
-          //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
-          //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
-          //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
-          val deleteEverythingRule = new Lifecycle.Rule()
-            .setAction(new Action().setType("delete"))
-            .setCondition(new Condition().setAge(0))
-          val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
-          val fetcher = buckets.get(bucketName)
-          val bucketFuture = retry(when500)(() => Future { blocking { fetcher.execute } })
-          bucketFuture.map(bucket => bucket.setLifecycle(lifecycle))
-
-          system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds)(bucketDeleteFn)
-        case _ =>
-        //TODO: I am entirely unsure what other cases might want to be handled here.
-        //404 means the bucket is already gone, which is fine.
-      }
-    }
 
     val groups = getGroupDirectory.groups
 
@@ -236,7 +211,37 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    deleteGroups(bucketName) flatMap { _ => bucketDeleteFn() }
+    deleteGroups(bucketName) map { _ => monitorRef ! DeleteBucket(bucketName) }
+  }
+
+  override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
+    val buckets = getStorage(getBucketServiceAccountCredential).buckets
+    val deleter = buckets.delete(bucketName)
+    retry(when500)(() => Future {
+      blocking { deleter.execute }
+      monitorRef ! BucketDeleted(bucketName)
+    }) recover {
+      //Google returns 409 Conflict if the bucket isn't empty.
+      case t: HttpResponseException if t.getStatusCode == 409 =>
+        //Google doesn't let you delete buckets that are full.
+        //You can either remove all the objects manually, or you can set up lifecycle management on the bucket.
+        //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
+        //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
+        val deleteEverythingRule = new Lifecycle.Rule()
+          .setAction(new Action().setType("delete"))
+          .setCondition(new Condition().setAge(0))
+        val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
+        val fetcher = buckets.get(bucketName)
+        val bucketFuture = retry(when500)(() => Future { blocking { fetcher.execute } })
+        bucketFuture.map(bucket => bucket.setLifecycle(lifecycle))
+
+        system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds, monitorRef, DeleteBucket(bucketName))
+      // Bucket is already deleted
+      case t: HttpResponseException if t.getStatusCode == 404 =>
+        monitorRef ! BucketDeleted(bucketName)
+      case _ =>
+      //TODO: I am entirely unsure what other cases might want to be handled here.
+    }
   }
 
   override def getACL(workspaceId: String): Future[WorkspaceACL] = {

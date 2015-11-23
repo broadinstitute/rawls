@@ -32,11 +32,12 @@ object VertexSchema {
   val User = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsUser]
   val Group = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsGroup]
   val BillingProject = vertexClassOf[org.broadinstitute.dsde.rawls.model.RawlsBillingProject]
+  val PendingBucketDeletions = vertexClassOf[org.broadinstitute.dsde.rawls.model.PendingBucketDeletions]
 
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, Map)
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, PendingBucketDeletions, Map)
 
   def vertexClassOf[T :TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString
@@ -282,6 +283,10 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.BillingProject)).filter(hasPropertyValue("projectName",projectName.value))
   }
 
+  def pendingBucketDeletionsPipeline(db: Graph): GremlinPipeline[_, Vertex] = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.PendingBucketDeletions))
+  }
+
   // vertex getters
 
   def getWorkspaceVertex(db: Graph, workspaceName: WorkspaceName) = {
@@ -334,6 +339,10 @@ trait GraphDAO {
 
   def getBillingProjectVertex(db: Graph, projectName: RawlsBillingProjectName) = {
     getSinglePipelineResult(billingProjectPipeline(db, projectName))
+  }
+
+  def getPendingBucketDeletionsVertex(db: Graph) = {
+    getSinglePipelineResult(pendingBucketDeletionsPipeline(db))
   }
 
   //NOTE: We return Iterable[(tpe:Type, propName:String, value:Any)], but value will always be of type tpe.

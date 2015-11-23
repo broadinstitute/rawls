@@ -10,6 +10,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -81,12 +82,16 @@ object Boot extends App {
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+
+    BootMonitors.restartMonitors(dataSource, containerDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
+
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
                                                   containerDAO,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor),
+                                                  gcsDAO, submissionSupervisor, bucketDeletionMonitor),
                     UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)),
                     "rawls-service")
 

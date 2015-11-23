@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{Matchers, FlatSpec}
@@ -49,13 +50,20 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
 
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
+      dataSource,
+      containerDAO,
+      gcsDAO
+    ))
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       dataSource,
       containerDAO,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,
-      submissionSupervisor
+      submissionSupervisor,
+      bucketDeletionMonitor
     )_
 
     val directoryDAO = new MockUserDirectoryDAO

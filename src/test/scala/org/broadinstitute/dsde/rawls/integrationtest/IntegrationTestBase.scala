@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -102,6 +103,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       new HttpExecutionServiceDAO(executionServiceServer),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
 
     val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)_
 
@@ -110,7 +112,9 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       containerDAO,
       new HttpMethodRepoDAO(methodRepoServer),
       new HttpExecutionServiceDAO(executionServiceServer),
-      gcsDAO, submissionSupervisor
+      gcsDAO,
+      submissionSupervisor,
+      bucketDeletionMonitor
     )_
 
     (workspaceServiceConstructor, userServiceConstructor, dataSource)

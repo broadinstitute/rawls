@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -16,7 +16,9 @@ trait GoogleServicesDAO {
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
-  def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any]
+  def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef): Future[Any]
+
+  def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any]
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
 

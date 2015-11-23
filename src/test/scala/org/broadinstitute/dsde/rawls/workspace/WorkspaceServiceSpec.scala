@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
@@ -46,8 +47,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
 
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), new MockGoogleServicesDAO, submissionSupervisor)_
+    val workspaceServiceConstructor = WorkspaceService.constructor(
+      dataSource,
+      containerDAO,
+      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      new MockGoogleServicesDAO,
+      submissionSupervisor,
+      bucketDeletionMonitor
+    )_
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill

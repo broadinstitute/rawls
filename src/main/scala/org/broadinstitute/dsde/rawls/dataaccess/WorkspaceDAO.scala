@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{PendingBucketDeletions, WorkspaceName, Workspace}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -11,4 +11,6 @@ trait WorkspaceDAO {
   def findById(workspaceId: String, txn: RawlsTransaction): Option[WorkspaceContext]
   def list(txn: RawlsTransaction): TraversableOnce[Workspace]
   def delete(workspaceName: WorkspaceName, txn: RawlsTransaction) : Boolean
+  def loadPendingBucketDeletions(txn: RawlsTransaction): Option[PendingBucketDeletions]
+  def savePendingBucketDeletions(pbd: PendingBucketDeletions, txn: RawlsTransaction)
 }
