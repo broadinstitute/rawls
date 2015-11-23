@@ -47,7 +47,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(
       testData.wsName,
-      testData.submission1,
+      testData.submission1.submissionId,
       containerDAO,
       dataSource,
       10 milliseconds,
@@ -67,7 +67,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
 	  watch(monitorRef)
 
 	  val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
@@ -103,10 +103,11 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         }
       }
     }
+    unwatch(monitorRef)
   }
 
   it should "save workflows with error messages" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
@@ -133,7 +134,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionTerminateTest, monitorRef)
@@ -146,11 +147,12 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     testData.submissionTerminateTest.workflows.zip(WorkflowStatuses.terminalStatuses).foreach { case (workflow, status) =>
       wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = status), None), testActor)
     }
+    unwatch(monitorRef)
   }
 
   it should "update attributes on entities" in withDefaultTestDatabase { dataSource =>
     //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionUpdateEntity, monitorRef)
@@ -171,16 +173,17 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
           testData.submissionUpdateEntity.submissionEntity.entityType,
           testData.submissionUpdateEntity.submissionEntity.entityName,
           txn).get
-        assertResult(AttributeString("foo")) {
-          entity.attributes("myAttribute")
+        assertResult(AttributeString("foo"), entity.attributes) {
+          entity.attributes.getOrElse("myAttribute", None)
         }
       }
     }
+    unwatch(monitorRef)
   }
 
   it should "update attributes on workspaces" in withDefaultTestDatabase { dataSource =>
     //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionUpdateWorkspace, monitorRef)
@@ -196,15 +199,16 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
       val workspace = workspaceDAO.loadContext(testData.wsName, txn).get.workspace
-      assertResult(AttributeString("foo")) {
-        workspace.attributes("myAttribute")
+      assertResult(AttributeString("foo"), workspace.attributes) {
+        workspace.attributes.getOrElse("myAttribute", None)
       }
     }
+    unwatch(monitorRef)
   }
 }
 
 object TestActor {
-  def props()(parent: ActorRef, workspaceName: WorkspaceName, submission: Submission, workflow: Workflow) = {
+  def props()(parent: ActorRef, workspaceName: WorkspaceName, submissionId: String, workflow: Workflow) = {
     Props(new TestActor(parent))
   }
 }

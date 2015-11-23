@@ -221,6 +221,10 @@ trait GraphDAO {
     override def compute(v: A) = !f.compute(v)
   }
 
+  def or[A](f1: PipeFunction[A, java.lang.Boolean], f2: PipeFunction[A, java.lang.Boolean]) = new PipeFunction[A, java.lang.Boolean] {
+    override def compute(v: A) = f1.compute(v) || f2.compute(v)
+  }
+
   // named GremlinPipelines
 
   def workspacePipeline(db: Graph, workspaceName: WorkspaceName) = {
@@ -666,7 +670,7 @@ trait GraphDAO {
 
       case tp if tp <:< typeOf[Map[_,_]] && isRawlsEnum(getTypeParams(tp).head) => loadRawlsEnumMap(getTypeParams(tp).head, getTypeParams(tp).last, propName, vertex)
 
-      case tp if tp <:< typeOf[Option[_]] => loadOpt(tp, propName, vertex)
+      case tp if tp <:< typeOf[Option[_]] => loadOpt(getTypeParams(tp).head, propName, vertex)
 
       //Everything else.
       case tp if tp <:< typeOf[DomainObject] => loadSubObject(tp, propName, vertex)

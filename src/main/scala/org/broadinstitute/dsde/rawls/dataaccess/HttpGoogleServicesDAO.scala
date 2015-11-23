@@ -16,7 +16,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.Try
 
-import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.auth.oauth2.{TokenResponse, Credential}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -31,7 +31,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.StatusCodes
+import spray.http.{OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -42,7 +42,8 @@ class HttpGoogleServicesDAO(
   appName: String,
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
-  tokenEncryptionKey: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
+  tokenEncryptionKey: String,
+  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -53,6 +54,7 @@ class HttpGoogleServicesDAO(
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
   val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
+  val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "rawls-tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
@@ -413,9 +415,9 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def getToken(userInfo: UserInfo): Future[Option[String]] = {
+  override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     retryWhen500(() => {
-      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userInfo.userSubjectId)
+      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, rawlsUserRef.userSubjectId.value)
       get.getMediaHttpDownloader().setDirectDownloadEnabled(true);
       val tokenBytes = new ByteArrayOutputStream()
       try {
@@ -542,7 +544,7 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
-  override def getBucketServiceAccountCredential: Credential = {
+  def getBucketServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
@@ -569,4 +571,15 @@ class HttpGoogleServicesDAO(
     }.toOption
   }
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
+
+  def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
+    getToken(rawlsUserRef) map { refreshTokenOption =>
+      refreshTokenOption.map { refreshToken =>
+        new GoogleCredential.Builder().setTransport(httpTransport)
+          .setJsonFactory(jsonFactory)
+          .setClientSecrets(tokenClientSecrets)
+          .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+      }
+    }
+  }
 }

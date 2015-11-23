@@ -28,7 +28,7 @@ class GraphBillingDAO extends BillingDAO with GraphDAO {
   }
 
   override def listUserProjects(user: RawlsUserRef, txn: RawlsTransaction): Traversable[RawlsBillingProjectName] = txn withGraph { db =>
-    userPipeline(db, user).as("vtx").in().loop("vtx", invert(isVertexOfClass(VertexSchema.BillingProject))).toList.map(loadObject[RawlsBillingProject](_).projectName)
+    userPipeline(db, user).as("vtx").in().loop("vtx", isVertexOfClass(VertexSchema.Map), isVertexOfClass(VertexSchema.BillingProject)).toList.map(loadObject[RawlsBillingProject](_).projectName)
   }
 
 }

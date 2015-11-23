@@ -98,7 +98,7 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
         userPipeline(db, user).as("vtx").in()
           .loop(
             "vtx", //start point of loop
-            invert(isVertexOfClass(VertexSchema.Workspace)), //loop condition: stop walking the path once we've found a workspace node
+            or(isVertexOfClass(VertexSchema.Group), isVertexOfClass(VertexSchema.Map)), //loop condition: walk while vertex is on an acl path (group or a list which looks like map)
             loopEmitFn)
           .enablePath.path()
 

@@ -48,12 +48,12 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     def save(txn:RawlsTransaction)
   }
 
-  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, workflowEntities: Seq[Entity]) = {
+  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef, workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
     val workflows = (workflowEntities collect {
-      case ref: Entity => Workflow("workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name))
+      case ref: Entity => Workflow("workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, AttributeEntityReference(ref.entityType, ref.name), inputResolutions(ref))
     })
 
-    Submission("submission_" + UUID.randomUUID.toString, testDate, "testUser", methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
+    Submission("submission_" + UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
@@ -232,17 +232,19 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
 
-    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, Seq(sample1, sample2, sample3))
-    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, Seq(sample1, sample2, sample3))
+    val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
 
-    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, Seq(indiv1))
-    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, Seq(indiv1))
+    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions))
+    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions))
 
-    val submissionTerminateTest = Submission("submissionTerminate",testDate, "testUser",methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
-      Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name)),
-        Workflow("workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name)),
-        Workflow("workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name)),
-        Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name))), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
+    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
+
+    val submissionTerminateTest = Submission("submissionTerminate",testDate, userOwner,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
+      Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), inputResolutions),
+        Workflow("workflowB",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name), inputResolutions),
+        Workflow("workflowC",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name), inputResolutions),
+        Workflow("workflowD",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save(txn:RawlsTransaction): Unit = {
       authDAO.saveUser(RawlsUser(userInfo), txn)

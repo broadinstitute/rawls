@@ -26,7 +26,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("appName"),
     gcsConfig.getInt("deletedBucketCheckSeconds"),
     gcsConfig.getString("serviceProject"),
-    gcsConfig.getString("tokenEncryptionKey")
+    gcsConfig.getString("tokenEncryptionKey"),
+    gcsConfig.getString("tokenSecretsJson")
   )
 
   val testProject = "broad-dsde-dev"
@@ -106,20 +107,20 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "crud tokens" in {
     val userInfo = UserInfo(null, null, 0, UUID.randomUUID().toString)
-    assertResult(None) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
     Await.result(gcsDAO.storeToken(userInfo, "testtoken"), Duration.Inf)
-    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     val storeTime = Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get
 
     Thread.sleep(100)
 
     Await.result(gcsDAO.storeToken(userInfo, "testtoken2"), Duration.Inf)
-    assertResult(Some("testtoken2")) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(Some("testtoken2")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
 
     Await.result(gcsDAO.deleteToken(userInfo), Duration.Inf)
-    assertResult(None) { Await.result(gcsDAO.getToken(userInfo), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
 

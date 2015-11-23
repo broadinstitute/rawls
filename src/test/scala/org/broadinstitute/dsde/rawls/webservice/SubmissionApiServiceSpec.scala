@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, Gra
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionReportFormat, SubmissionRequestFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -50,8 +50,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource,
-      gcsDAO
+      dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
     gcsDAO.storeToken(userInfo, "test_token")
     val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
@@ -95,7 +94,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                          services: TestApiService): Submission = {
+                                          services: TestApiService): SubmissionStatusResponse = {
       Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
           sealRoute(services.methodConfigRoutes) ~>
         check {
@@ -118,7 +117,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
               assertResult(StatusCodes.OK) {
                 status
               }
-              return responseAs[Submission]
+              return responseAs[SubmissionStatusResponse]
             }
         }
 
@@ -162,7 +161,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(testData.submission1) {responseAs[Submission]}
+        assertResult(new SubmissionStatusResponse(testData.submission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }
 
@@ -179,8 +178,14 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(List(testData.submissionTerminateTest, testData.submission1, testData.submission2, testData.submissionUpdateEntity, testData.submissionUpdateWorkspace)) {
-          responseAs[List[Submission]]
+        assertResult(List(
+          new SubmissionStatusResponse(testData.submissionTerminateTest, testData.userOwner),
+          new SubmissionStatusResponse(testData.submission1, testData.userOwner),
+          new SubmissionStatusResponse(testData.submission2, testData.userOwner),
+          new SubmissionStatusResponse(testData.submissionUpdateEntity, testData.userOwner),
+          new SubmissionStatusResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
+
+          responseAs[List[SubmissionStatusResponse]]
         }
       }
   }

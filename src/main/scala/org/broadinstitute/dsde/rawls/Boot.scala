@@ -45,7 +45,8 @@ object Boot extends App {
       gcsConfig.getString("appName"),
       gcsConfig.getInt("deletedBucketCheckSeconds"),
       gcsConfig.getString("serviceProject"),
-      gcsConfig.getString("tokenEncryptionKey")
+      gcsConfig.getString("tokenEncryptionKey"),
+      gcsConfig.getString("tokenSecretsJson")
     )
 
     val ldapConfig = conf.getConfig("userLdap")
@@ -77,8 +78,7 @@ object Boot extends App {
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      dataSource,
-      gcsDAO
+      dataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val service = system.actorOf(RawlsApiServiceActor.props(

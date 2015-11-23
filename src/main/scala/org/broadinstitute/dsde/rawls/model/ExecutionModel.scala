@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import UserAuthJsonSupport._
 
 import spray.json._
 import org.joda.time.DateTime
@@ -57,6 +58,7 @@ case class Workflow(
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
   workflowEntity: AttributeEntityReference,
+  inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty
 ) extends DomainObject {
   def idFields = Seq("workflowId")
@@ -66,6 +68,7 @@ case class Workflow(
 case class WorkflowFailure(
   entityName: String,
   entityType: String,
+  inputResolutions: Seq[SubmissionValidationValue],
   errors: Seq[AttributeString]
 ) extends DomainObject {
   def idFields = Seq("entityName")
@@ -85,7 +88,7 @@ case class WorkflowOutputs(
 case class Submission(
   submissionId: String,
   submissionDate: DateTime,
-  submitter: String,
+  submitter: RawlsUserRef,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
@@ -94,6 +97,20 @@ case class Submission(
   status: SubmissionStatus
 ) extends DomainObject {
   def idFields = Seq("submissionId")
+}
+
+case class SubmissionStatusResponse(
+  submissionId: String,
+  submissionDate: DateTime,
+  submitter: String,
+  methodConfigurationNamespace: String,
+  methodConfigurationName: String,
+  submissionEntity: AttributeEntityReference,
+  workflows: Seq[Workflow],
+  notstarted: Seq[WorkflowFailure],
+  status: SubmissionStatus
+) {
+  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.workflows, submission.notstarted, submission.status)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -111,8 +128,11 @@ case class SubmissionValidationHeader(
 // result of an expression parse
 case class SubmissionValidationValue(
   value: Option[Attribute],
-  error: Option[String]
-)
+  error: Option[String],
+  inputName: String
+) extends DomainObject {
+  def idFields = Seq("inputName")
+}
 
 // the results of parsing each of the inputs for one entity
 case class SubmissionValidationEntityInputs(
@@ -216,25 +236,27 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowOutputsFormat = jsonFormat2(WorkflowOutputs)
 
-  implicit val WorkflowFormat = jsonFormat5(Workflow)
-
-  implicit val WorkflowFailureFormat = jsonFormat3(WorkflowFailure)
-
-  implicit val SubmissionFormat = jsonFormat9(Submission)
-
   implicit val SubmissionValidationInputFormat = jsonFormat2(SubmissionValidationInput)
 
   implicit val SubmissionValidationHeaderFormat = jsonFormat2(SubmissionValidationHeader)
 
-  implicit val SubmissionValidationValueFormat = jsonFormat2(SubmissionValidationValue)
+  implicit val SubmissionValidationValueFormat = jsonFormat3(SubmissionValidationValue)
 
   implicit val SubmissionValidationEntityInputsFormat = jsonFormat2(SubmissionValidationEntityInputs)
 
   implicit val SubmissionValidationReportFormat = jsonFormat4(SubmissionValidationReport)
 
+  implicit val WorkflowFormat = jsonFormat6(Workflow)
+
+  implicit val WorkflowFailureFormat = jsonFormat4(WorkflowFailure)
+
+  implicit val SubmissionFormat = jsonFormat9(Submission)
+
   implicit val WorkflowReportFormat = jsonFormat5(WorkflowReport)
 
   implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
+
+  implicit val SubmissionStatusResponseFormat = jsonFormat9(SubmissionStatusResponse)
 
   implicit val CallMetadataFormat = jsonFormat12(CallMetadata)
 

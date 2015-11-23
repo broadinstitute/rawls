@@ -18,13 +18,13 @@ import scala.util.{Success, Try, Failure}
  */
 object SubmissionMonitor {
   def props(workspaceName: WorkspaceName,
-            submission: Submission,
+            submissionId: String,
             containerDAO: GraphContainerDAO,
             datasource: DataSource,
             workflowPollInterval: Duration,
             submissionPollInterval: Duration,
-            workflowMonitorProps: (ActorRef, WorkspaceName, Submission, Workflow) => Props): Props = {
-    Props(new SubmissionMonitor(workspaceName, submission, containerDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
+            workflowMonitorProps: (ActorRef, WorkspaceName, String, Workflow) => Props): Props = {
+    Props(new SubmissionMonitor(workspaceName, submissionId, containerDAO, datasource, workflowPollInterval, submissionPollInterval, workflowMonitorProps))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -38,7 +38,7 @@ object SubmissionMonitor {
  * When there is no workflow activity this actor will wake up every submissionPollInterval to double check (although
  * this seems unnecessary, it make me feel better).
  *
- * @param submission to monitor
+ * @param submissionId id of submission to monitor
  * @param containerDAO
  * @param datasource
  * @param workflowPollInterval time between polls of execution service for individual workflow status
@@ -48,12 +48,12 @@ object SubmissionMonitor {
  *                             an actor ref to report back to and the workflow to monitor
  */
 class SubmissionMonitor(workspaceName: WorkspaceName,
-                        submission: Submission,
+                        submissionId: String,
                         containerDAO: GraphContainerDAO,
                         datasource: DataSource,
                         workflowPollInterval: Duration,
                         submissionPollInterval: Duration,
-                        workflowMonitorProps: (ActorRef, WorkspaceName, Submission, Workflow) => Props) extends Actor {
+                        workflowMonitorProps: (ActorRef, WorkspaceName, String, Workflow) => Props) extends Actor {
   import context._
 
   setReceiveTimeout(submissionPollInterval)
@@ -61,14 +61,14 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
 
   override def receive = {
     case WorkflowStatusChange(workflow, workflowOutputs) =>
-      system.log.debug("workflow state change, submission {}, workflow {} {}", submission.submissionId, workflow.workflowId, workflow.status)
+      system.log.debug("workflow state change, submission {}, workflow {} {}", submissionId, workflow.workflowId, workflow.status)
       handleStatusChange(workflow, workflowOutputs)
     case ReceiveTimeout =>
-      system.log.debug("submission monitor timeout, submission {}", submission.submissionId)
+      system.log.debug("submission monitor timeout, submission {}", submissionId)
       checkSubmissionStatus()
     case Terminated(monitor) =>
-      system.log.debug("workflow monitor terminated, submission {}, actor {}", submission.submissionId, monitor)
-      handleTerminatedMonitor(submission.submissionId, monitor.path.name)
+      system.log.debug("workflow monitor terminated, submission {}, actor {}", submissionId, monitor)
+      handleTerminatedMonitor(submissionId, monitor.path.name)
   }
 
   private def handleTerminatedMonitor(submissionId: String, workflowId: String): Unit = {
@@ -87,11 +87,18 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   }
 
   private def startWorkflowMonitorActors(): Unit = {
-    submission.workflows.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
+    datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
+      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+        val submission = containerDAO.submissionDAO.get(workspaceContext, submissionId, txn).getOrElse(
+          throw new RawlsException(s"submission ${submissionId} does not exist")
+        )
+        submission.workflows.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
+      }
+    }
   }
 
   private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
-    watch(actorOf(workflowMonitorProps(self, workspaceName, submission, workflow), workflow.workflowId))
+    watch(actorOf(workflowMonitorProps(self, workspaceName, submissionId, workflow), workflow.workflowId))
   }
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Unit = {
@@ -122,7 +129,7 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
           case Failure(t) => workflow.copy(status = Failed, messages = workflow.messages :+ AttributeString(t.getMessage))
         }
 
-        containerDAO.workflowDAO.update(workspaceContext, submission.submissionId, workflowToSave.copy(statusLastChangedDate = DateTime.now), txn)
+        containerDAO.workflowDAO.update(workspaceContext, submissionId, workflowToSave.copy(statusLastChangedDate = DateTime.now), txn)
       }
     }
 
@@ -132,11 +139,11 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   }
 
   private def checkSubmissionStatus(): Unit = {
-    system.log.debug("polling workflow status, submission {}", submission.submissionId)
+    system.log.debug("polling workflow status, submission {}", submissionId)
     datasource.inTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submission.submissionId, txn).getOrElse(
-          throw new RawlsException(s"submissions ${submission} does not exist")
+        val refreshedSubmission = containerDAO.submissionDAO.get(workspaceContext, submissionId, txn).getOrElse(
+          throw new RawlsException(s"submissions ${submissionId} does not exist")
         )
 
         if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
