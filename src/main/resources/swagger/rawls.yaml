@@ -151,7 +151,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/billing/list/{userEmail}':
+  '/api/admin/billing/list/{userEmail}':
     get:
       responses:
         '200':
@@ -190,7 +190,7 @@ paths:
           - openid
           - email
           - profile
-  '/admin/billing/{projectId}':
+  '/api/admin/billing/{projectId}':
     put:
       responses:
         '201':
@@ -257,7 +257,7 @@ paths:
             - openid
             - email
             - profile
-  '/admin/billing/{projectId}/{userEmail}':
+  '/api/admin/billing/{projectId}/{userEmail}':
     put:
       responses:
         '200':
@@ -334,6 +334,179 @@ paths:
             - openid
             - email
             - profile
+
+  '/api/admin/groups':
+     post:
+       responses:
+         '201':
+           description: Group creation successful
+         '403':
+           description: You must be an admin to create a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively create a group
+       tags:
+         - admin
+         - groups
+       summary: create a group
+       operationId: adminCreateGroup
+       parameters:
+         - in: body
+           description: group reference
+           name: groupRef
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupRef'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+     delete:
+       responses:
+         '201':
+           description: Group deletion successful
+         '403':
+           description: You must be an admin to delete a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively delete a group
+       tags:
+         - admin
+         - groups
+       summary: delete a group
+       operationId: adminDeleteGroup
+       parameters:
+         - in: body
+           description: group reference
+           name: groupRef
+           required: true
+           schema:
+             $ref: '#definitions/RawlsGroupRef'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+  '/api/admin/groups/members/{groupName}':
+     post:
+       responses:
+         '201':
+           description: Successfully added members
+         '403':
+           description: You must be an admin to add members to a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Unable to find member(s)
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively add members to a group
+       tags:
+         - admin
+         - groups
+       summary: add members to a group
+       operationId: adminAddMembers
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+         - in: body
+           description: member list
+           name: memberList
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupMemberList'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+     delete:
+       responses:
+         '201':
+           description: Successfully removed members
+         '403':
+           description: You must be an admin to remove members from a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Unable to find member(s)
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively remove members from a group
+       tags:
+         - admin
+         - groups
+       summary: remove members from a group
+       operationId: adminRemoveMembers
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+         - in: body
+           description: member list
+           name: memberList
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupMemberList'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+  '/api/admin/groups/members':
+     get:
+       responses:
+         '201':
+            schema:
+              type: array
+              description: list of users
+              items:
+                type: string
+         '403':
+            description: You must be an admin to list members of a group
+            schema:
+              $ref: '#/definitions/ErrorReport'
+         '404':
+            description: Unable to find group
+         '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+       description: Administratively list members to a group
+       tags:
+         - admin
+         - groups
+       summary: list members in a group
+       operationId: adminListMembers
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
   '/api/admin/submissions':
     get:
       responses:
@@ -2298,6 +2471,8 @@ tags:
     description: User and Group API
   - name: billing
     description: Billing Project API
+  - name: groups
+    description: Group manipulation API
 
 schemes:
   - http
@@ -3059,6 +3234,25 @@ definitions:
     description: ''
     properties:
       value:
+        type: string
+        description: ''
+
+  RawlsGroupMemberList:
+    description: a member list of users and groups
+    properties:
+      userEmails:
+        type: array
+        items:
+          type: string
+      groupEmails:
+        type: array
+        items:
+          type: string
+
+  RawlsGroupRef:
+    description: a reference to a group
+    properties:
+      groupName:
         type: string
         description: ''
 

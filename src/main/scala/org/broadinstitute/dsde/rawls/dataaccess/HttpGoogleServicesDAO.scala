@@ -358,6 +358,49 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        val inserter = groups.insert(new Group().setEmail(toGoogleGroupName(groupRef.groupName)).setName(groupRef.groupName.value))
+        blocking {
+          inserter.execute
+        }
+      }
+    }
+  }
+
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+    val memberEmail = memberToAdd match {
+      case Left(member) => new Member().setEmail(toProxyFromUser(member)).setRole(groupMemberRole)
+      case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
+    }
+    val inserter = getGroupDirectory.members.insert(toGoogleGroupName(groupRef.groupName), memberEmail)
+    retry(when500)(() => Future { blocking { inserter.execute } })
+  }
+
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+    val memberEmail = memberToAdd match {
+      case Left(member) => toProxyFromUser(member.userSubjectId)
+      case Right(member) => member.groupEmail.value
+    }
+    val deleter = getGroupDirectory.members.delete(toGoogleGroupName(groupRef.groupName), memberEmail)
+    retry(when500)(() => Future { blocking { deleter.execute } })
+  }
+
+  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        blocking {
+          groups.delete(toGoogleGroupName(groupRef.groupName)).execute()
+        }
+      }
+    }
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     retryWhen500(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId)
@@ -514,6 +557,7 @@ class HttpGoogleServicesDAO(
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
   def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
   def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
+  def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"

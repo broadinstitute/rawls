@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -14,11 +15,12 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.scalatest.{Matchers, FlatSpec}
-import spray.http.StatusCodes
+import spray.http.{ContentTypes, HttpEntity, StatusCodes}
 import spray.httpx.SprayJsonSupport
 import spray.json.DefaultJsonProtocol._
 import spray.routing.HttpService
 import spray.testkit.ScalatestRouteTest
+import spray.json._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
@@ -27,6 +29,9 @@ import scala.concurrent.duration._
  */
 class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture with SprayJsonSupport {
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+
+  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import spray.httpx.SprayJsonSupport._
 
   def actorRefFactory = system
 
@@ -336,6 +341,146 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
         }
         assertResult(Set(project1.projectName)) {
           responseAs[Seq[RawlsBillingProjectName]].toSet
+        }
+      }
+  }
+
+  it should "return 201 when creating a new group" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+  }
+
+  it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
+  it should "return 200 when deleting a group that exists" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Delete(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 404 when trying to delete a group that does not exist" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("dbgap"))
+
+    Delete(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return a list of members only one level down in the group hierarchy" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
+    val subSubGroup = new RawlsGroupRef(RawlsGroupName("test_subSubGroup"))
+
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
+          responseAs[UserList]
+        }
+      }
+  }
+
+  it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_blahhh@dev.firecloud.org")).toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 200 when removing a member from a group" in withTestDataApiServices { services =>
+    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
+
+    //make main group
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    //make subgroup
+    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    //put subgroup into main group
+    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    //verify subgroup was put into main group
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(UserList(List(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))) {
+          responseAs[UserList]
+        }
+      }
+    //remove subgroup from main group
+    Delete(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    //verify that subgroup was removed from main group
+    Get(s"/admin/groups/${group.groupName.value}/members") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(UserList(List.empty)) {
+          responseAs[UserList]
         }
       }
   }

@@ -14,6 +14,8 @@ trait AuthDAO {
 
   def loadGroupByEmail(groupEmail: String, txn: RawlsTransaction): Option[RawlsGroup]
 
+  def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup
+
   def saveGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup
 
   def deleteGroup(rawlsGroup: RawlsGroupRef, txn: RawlsTransaction)

@@ -88,4 +88,18 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
   override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> false))
 
   override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = Future.successful(mockProxyGroups.getOrElse(user, false))
+
+  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future.successful(Unit)
+
+  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future.successful(Unit)
+
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
+
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
+
+  override def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
+
+  override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
+
+  override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
 }
