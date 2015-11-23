@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
 import com.wordnik.swagger.model.ApiInfo
+import kamon.spray.KamonTraceDirectives._
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -33,13 +34,15 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
   val swaggerRoute = {
     get {
       pathPrefix("swagger") {
-        pathEnd {
-          getFromResource("swagger/index.html")
-        } ~
-        pathSingleSlash {
-          complete {
-            HttpResponse(StatusCodes.NotFound)
-          }
+        traceName("swagger") {
+          pathEnd {
+            getFromResource("swagger/index.html")
+          } ~
+            pathSingleSlash {
+              complete {
+                HttpResponse(StatusCodes.NotFound)
+              }
+            }
         }
       } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.1.1/")
     }

@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import kamon.spray.KamonTraceDirectives._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
@@ -24,81 +25,103 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
   val entityRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       post {
-        entity(as[Entity]) { entity =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity))
+        traceName("CreateEntity") {
+          entity(as[Entity]) { entity =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.CreateEntity(WorkspaceName(workspaceNamespace, workspaceName), entity))
+          }
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+        traceName("GetEntity") {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.GetEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+        }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       patch {
-        entity(as[Array[AttributeUpdateOperation]]) { operations =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations))
+        traceName("UpdateEntity") {
+          entity(as[Array[AttributeUpdateOperation]]) { operations =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.UpdateEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, operations))
+          }
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
       post {
-        entity(as[Array[EntityUpdateDefinition]]) { operations =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
+        traceName("BatchUpsertEntities") {
+          entity(as[Array[EntityUpdateDefinition]]) { operations =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.BatchUpsertEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
+          }
         }
       }
     } ~
       path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
         post {
-          entity(as[Array[EntityUpdateDefinition]]) { operations =>
-            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
+          traceName("BatchUpdateEntities") {
+            entity(as[Array[EntityUpdateDefinition]]) { operations =>
+              requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+                WorkspaceService.BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
+            }
           }
         }
       } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
       delete {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+        traceName("DeleteEntity") {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+        }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
-        entity(as[EntityName]) { newEntityName =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name))
+        traceName("RenameEntity") {
+          entity(as[EntityName]) { newEntityName =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.RenameEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, newEntityName.name))
+          }
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
-        entity(as[String]) { expression =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression))
+        traceName("EvaluateExpression") {
+          entity(as[String]) { expression =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression))
+          }
         }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
+        traceName("ListEntityTypes") {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
+        }
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType))
+        traceName("ListEntities") {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType))
+        }
       }
     } ~
     path("workspaces" / "entities" / "copy" ) {
       post {
-        entity(as[EntityCopyDefinition]) { copyDefinition =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
+        traceName("CopyEntities") {
+          entity(as[EntityCopyDefinition]) { copyDefinition =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.CopyEntities(copyDefinition, requestContext.request.uri))
+          }
         }
       }
     }

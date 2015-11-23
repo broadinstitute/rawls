@@ -8,6 +8,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
+import kamon.Kamon
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -24,6 +25,8 @@ import scala.collection.JavaConversions._
 object Boot extends App {
 
   private def startup(): Unit = {
+    Kamon.start()
+
     val conf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
 
     // we need an ActorSystem to host our application in
@@ -63,6 +66,7 @@ object Boot extends App {
 
     system.registerOnTermination {
       dataSource.shutdown()
+      Kamon.shutdown()
     }
 
     val containerDAO = GraphContainerDAO(

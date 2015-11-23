@@ -155,6 +155,10 @@ trait PerRequestCreator {
   implicit def actorRefFactory: ActorRefFactory
 
   def perRequest(r: RequestContext, props: Props, message: AnyRef, timeout: Duration = 1 minutes) =
-    actorRefFactory.actorOf(Props(new WithProps(r, props, message, timeout)))
+    actorRefFactory.actorOf(Props(new WithProps(r, props, message, timeout)), PerRequestCreator.endpointActorName(message))
+
 }
 
+object PerRequestCreator {
+  def endpointActorName(message: AnyRef) = "Endpoint-" + message.getClass.getSimpleName + System.nanoTime()
+}
