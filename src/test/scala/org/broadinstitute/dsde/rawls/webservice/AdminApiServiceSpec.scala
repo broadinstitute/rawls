@@ -89,6 +89,8 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
       }
     }
 
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
+
   "AdminApi" should "return 200 when listing active submissions" in withTestDataApiServices { services =>
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
@@ -118,7 +120,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 201 when creating a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     assert {
       getMatchingBillingProjectVertices(services.dataSource, project).isEmpty
@@ -152,7 +154,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 200 when deleting a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -183,7 +185,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -210,7 +212,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -236,7 +238,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -267,7 +269,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   }
 
   it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
-    val project = RawlsBillingProject(RawlsBillingProjectName("new_project"), Set.empty)
+    val project = billingProjectFromName("new_project")
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -294,7 +296,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
 
   it should "return 200 when listing a user's billing projects" in withTestDataApiServices { services =>
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty)
+    val project1 = billingProjectFromName("project1")
 
     services.dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveUser(testUser, txn)

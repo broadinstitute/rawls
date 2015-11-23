@@ -13,6 +13,8 @@ trait GoogleServicesDAO {
   // returns a workspaceID
   def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit]
 
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
+
   def deleteBucket(userInfo: UserInfo, workspaceId: String): Future[Any]
 
   def getACL(workspaceId: String): Future[WorkspaceACL]
@@ -21,7 +23,9 @@ trait GoogleServicesDAO {
 
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 
-  def getBucketName(workspaceId: String): String
+  def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
+
+  def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"
 
   def isAdmin(userId: String): Future[Boolean]
 

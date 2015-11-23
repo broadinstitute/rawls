@@ -44,7 +44,12 @@ case class ExecutionServiceLogs(
  logs: Map[String, Seq[Map[String,String]]]
 )
 
-case class ExecutionServiceWorkflowOptions(jes_gcs_root: String, google_project: String, account_name: String, refresh_token: String)
+case class ExecutionServiceWorkflowOptions(
+  jes_gcs_root: String,
+  google_project: String,
+  account_name: String,
+  refresh_token: String,
+  auth_bucket: String)
 
 // Status of a successfully started workflow
 case class Workflow(
@@ -205,7 +210,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat4(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat5(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 

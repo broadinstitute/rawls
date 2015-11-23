@@ -164,6 +164,21 @@ class HttpGoogleServicesDAO(
     doItAll.transform(f => f, rollbackGroups)
   }
 
+  def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = {
+    val bucketName = getCromwellAuthBucketName(billingProject)
+    retry(when500) {
+      () => Future {
+        val bucket = new Bucket().setName(bucketName)
+        val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
+        blocking {
+          inserter.execute
+        }
+
+        bucketName
+      }
+    }
+  }
+
   private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
     new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel))
 
@@ -278,8 +293,6 @@ class HttpGoogleServicesDAO(
       userAccessLevels.sorted[WorkspaceAccessLevel].last
     }
   }
-
-  override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
   override def isAdmin(userId: String): Future[Boolean] = {
     val query = getGroupDirectory.members.get(adminGroupName,userId)

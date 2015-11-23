@@ -43,7 +43,7 @@ object RawlsGroup {
   }
 }
 
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef]) extends DomainObject {
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String) extends DomainObject {
   def idFields = Seq("projectName")
 }
 
@@ -100,7 +100,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat2(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat3(RawlsBillingProject)
 
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
 

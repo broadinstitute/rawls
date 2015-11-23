@@ -56,6 +56,8 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
 
+  override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = Future.successful("mockBucket")
+
   override def deleteBucket(userInfo: UserInfo, workspaceId: String) = Future.successful(Unit)
 
   override def getACL(workspaceId: String) = Future.successful(WorkspaceACL(mockPermissions))
@@ -63,8 +65,6 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
   override def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]] = Future.successful(None)
 
   override def getMaximumAccessLevel(userId: String, workspaceId: String) = Future.successful(getAccessLevelOrDieTrying(userId))
-
-  override def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
 
   val adminList = scala.collection.mutable.Set("test_token")
 
