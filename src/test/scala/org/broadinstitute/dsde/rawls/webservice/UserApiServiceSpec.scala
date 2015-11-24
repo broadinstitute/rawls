@@ -214,6 +214,26 @@ class UserApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTe
     }
   }
 
+  it should "get a users own status" in withTestDataApiServices { services =>
+
+    val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(user, txn)
+    }
+
+    Get("/user") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+          responseAs[UserStatus]
+        }
+      }
+  }
+
   it should "list a user's billing projects" in withTestDataApiServices { services =>
 
     // first add the project and user to the graph

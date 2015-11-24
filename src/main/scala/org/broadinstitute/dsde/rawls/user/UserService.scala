@@ -33,7 +33,8 @@ object UserService {
   case object GetRefreshTokenDate extends UserServiceMessage
 
   case object CreateUser extends UserServiceMessage
-  case class GetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminGetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
+  case object UserGetUserStatus extends UserServiceMessage
   case class EnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class DisableUser(userRef: RawlsUserRef) extends UserServiceMessage
 
@@ -56,7 +57,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo context.parent
 
     case CreateUser => createUser() pipeTo context.parent
-    case GetUserStatus(userRef) => getUserStatus(userRef) pipeTo context.parent
+    case AdminGetUserStatus(userRef) => adminGetUserStatus(userRef) pipeTo context.parent
+    case UserGetUserStatus => userGetUserStatus() pipeTo context.parent
     case EnableUser(userRef) => enableUser(userRef) pipeTo context.parent
     case DisableUser(userRef) => disableUser(userRef) pipeTo context.parent
 
@@ -101,14 +103,20 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     )
   }
 
-  def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
-    withUser(userRef) { user =>
-      handleFutures(Future.sequence(Seq(
-        toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
-        toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _))
+  def userGetUserStatus(): Future[PerRequestMessage] = {
+    getUserStatus(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
+  }
 
-      )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
-    }
+  def adminGetUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
+    getUserStatus(userRef)
+  }
+
+  def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = withUser(userRef) { user =>
+    handleFutures(Future.sequence(Seq(
+      toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
+      toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _))
+
+    )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
   }
 
   def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
