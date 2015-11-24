@@ -3,5 +3,5 @@ jdk:
 language: scala
 scala:
   - 2.11.1
-script: sbt clean coverage test -Denv.type=test it:compile
-after_success: sbt coveralls
+script: SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test it:compile
+after_success: SBT_OPTS=-Xmx3g sbt coveralls

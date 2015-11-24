@@ -59,7 +59,14 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.GetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+          UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
+    path("user") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.UserGetUserStatus)
       }
     } ~
     path("user" / Segment / "enable") { userSubjectId =>

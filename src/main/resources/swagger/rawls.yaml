@@ -12,145 +12,6 @@ info:
   termsOfService: 'http://www.github.com/broadinstitute/rawls'
 
 paths:
-  '/api/admin/users':
-    get:
-      responses:
-        '200':
-          description: Successful Request
-          schema:
-            type: array
-            description: list of admin users
-            items:
-              type: string
-        '403':
-          description: You must be an admin to list admins
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: List all admins
-      tags:
-        - admin
-      summary: list admins
-      operationId: listAdmins
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-  '/api/admin/users/{userId}':
-    get:
-      responses:
-        '204':
-          description: Yes, user is an admin
-        '403':
-          description: You must be an admin to check for other admins
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '404':
-          description: No, user is not an admin
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: Check whether a user is an admin
-      tags:
-        - admin
-      summary: test admin
-      operationId: isAdmin
-      parameters:
-        - in: path
-          description: userId to check
-          name: userId
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-    put:
-      responses:
-        '204':
-          description: User was already an admin
-        '201':
-          description: User is now an admin
-        '403':
-          description: You must be an admin to add another admin
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: Add an admin
-      tags:
-        - admin
-      summary: add admin
-      operationId: addAdmin
-      parameters:
-        - in: path
-          description: userId to add
-          name: userId
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
-    delete:
-      responses:
-        '204':
-          description: User is no longer an admin
-        '403':
-          description: You must be an admin to delete another admin
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '404':
-          description: User is not an admin
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: Delete an admin
-      tags:
-        - admin
-      summary: delete admin
-      operationId: deleteAdmin
-      parameters:
-        - in: path
-          description: userId to delete
-          name: userId
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   '/api/admin/billing/list/{userEmail}':
     get:
       responses:
@@ -2337,7 +2198,35 @@ paths:
        tags:
          - users
        summary: Disable user
-       operationId: diable
+       operationId: disable
+       parameters:
+        - in: path
+          description: subject id of user
+          name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/user/{userSubjectId}':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+           schema:
+             $ref: '#/definitions/UserStatus'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the status of a user"
+       tags:
+         - users
+         - admin
+       summary: Get status of user
+       operationId: adminStatus
        parameters:
         - in: path
           description: subject id of user
