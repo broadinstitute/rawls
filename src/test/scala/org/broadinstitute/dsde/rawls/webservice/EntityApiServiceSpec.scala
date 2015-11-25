@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-import spray.json._
 
 import scala.concurrent.ExecutionContext
 
@@ -32,7 +31,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities", httpJson(testData.sample2)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -45,7 +44,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val wsName = WorkspaceName(testData.workspace.namespace,testData.workspace.name)
     val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")))
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, newSample.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(newSample)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -70,7 +69,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 conflict on create entity when entity exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, testData.sample2.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(testData.sample2)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -81,7 +80,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -95,7 +94,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when batch upserting an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition("newSample", "Sample", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -114,7 +113,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
     val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", HttpEntity(ContentTypes.`application/json`, Seq(update1, update2).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -132,7 +131,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember("bingo", AttributeString("a"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -146,7 +145,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 400 when batch updating an entity that does not yet exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition("superDuperNewSample", "Samples", Seq(AddUpdateAttribute("newAttribute", AttributeString("foo"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -160,7 +159,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", HttpEntity(ContentTypes.`application/json`, Seq(update1).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -246,7 +245,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on update entity" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -263,7 +262,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on remove attribute from entity" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("bar"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(RemoveAttribute("bar"): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -280,7 +279,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on update to non-existing entity" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}x", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -290,7 +289,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 on remove from an attribute that is not a list" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(RemoveListMember("foo", AttributeString("adsf")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -299,7 +298,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
   it should "return 400 on remove from list attribute that does not exist" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(RemoveListMember("grip", AttributeString("adsf")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -308,7 +307,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
   it should "return 400 on add to list attribute that is not a list" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample1.entityType}/${testData.sample1.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddListMember("somefoo", AttributeString("adsf")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample1.entityType}/${testData.sample1.name}", httpJson(Seq(AddListMember("somefoo", AttributeString("adsf")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -318,7 +317,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on entity rename when rename already exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("sample1").toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", httpJson(EntityName("sample1"))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -328,7 +327,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 on entity rename" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", httpJson(EntityName("s2_changed"))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -345,7 +344,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on entity rename, entity does not exist" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/foox/rename", HttpEntity(ContentTypes.`application/json`, EntityName("s2_changed").toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/foox/rename", httpJson(EntityName("s2_changed"))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -420,7 +419,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   )
 
   it should "return 201 for copying entities into a workspace with no conflicts" in withTestDataApiServices { services =>
-    Post("/workspaces", HttpEntity(ContentTypes.`application/json`, workspace2Request.toJson.toString())) ~>
+    Post("/workspaces", httpJson(workspace2Request)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -433,7 +432,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-        Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", HttpEntity(ContentTypes.`application/json`, z1.toJson.toString())) ~>
+        Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", httpJson(z1)) ~>
               sealRoute(services.entityRoutes) ~>
           check {
             assertResult(StatusCodes.Created) {
@@ -448,7 +447,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
-            Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+            Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
                       sealRoute(services.entityRoutes) ~>
               check {
                 assertResult(StatusCodes.Created) {
@@ -469,7 +468,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 409 for copying entities into a workspace with conflicts" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
-    Post("/workspaces/entities/copy", HttpEntity(ContentTypes.`application/json`, entityCopyDefinition.toJson.toString())) ~>
+    Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -480,7 +479,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow dots in user-defined strings" in withTestDataApiServices { services =>
     val dotSample = Entity("sample.with.dots.in.name", "sample", Map("type" -> AttributeString("tumor")))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", HttpEntity(ContentTypes.`application/json`, dotSample.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(dotSample)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }

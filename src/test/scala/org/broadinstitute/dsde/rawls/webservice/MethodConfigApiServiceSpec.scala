@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-import spray.json._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -38,7 +37,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -68,7 +67,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, newMethodConfig.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -102,7 +101,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     get(mc2)
 
     def create(mc: MethodConfiguration) = {
-      Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, mc.toJson.toString())) ~>
+      Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(mc)) ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
@@ -126,7 +125,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -136,7 +135,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -156,7 +155,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", HttpEntity(ContentTypes.`application/json`, MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)).toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -215,7 +214,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -244,7 +243,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", HttpEntity(ContentTypes.`application/json`, modifiedMethodConfig.toJson.toString())) ~>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -297,7 +296,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", HttpEntity(ContentTypes.`application/json`, testData.methodConfig.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", httpJson(testData.methodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -307,7 +306,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 on copy method configuration" in withTestDataApiServices { services =>
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairCreated.toJson.toString())) ~>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreated)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -324,7 +323,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on copy method configuration to existing name" in withTestDataApiServices { services =>
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairConflict.toJson.toString())) ~>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairConflict)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -334,7 +333,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on copy method configuration from bogus source" in withTestDataApiServices { services =>
-    Post("/methodconfigs/copy", HttpEntity(ContentTypes.`application/json`, testData.methodConfigNamePairNotFound.toJson.toString())) ~>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairNotFound)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -346,7 +345,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   val copyToMethodRepo = "/methodconfigs/copyToMethodRepo"
 
   it should "return 200 on copy method configuration to method repo" in withTestDataApiServices { services =>
-    Post(copyToMethodRepo, HttpEntity(ContentTypes.`application/json`, MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName).toJson.toString)) ~>
+    Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {
@@ -356,7 +355,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on copy method configuration to method repo if config dne" in withTestDataApiServices { services =>
-    Post(copyToMethodRepo, HttpEntity(ContentTypes.`application/json`, MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName3).toJson.toString)) ~>
+    Post(copyToMethodRepo, httpJson(MethodRepoConfigurationExport("mcns", "mcn", testData.methodConfigName3))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -368,7 +367,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   val copyFromMethodRepo = "/methodconfigs/copyFromMethodRepo"
 
   it should "return 201 on copy method configuration from method repo" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoGood.toJson.toString())) ~>
+    Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -386,7 +385,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 409 on copy method configuration from method repo to existing name" in withTestDataApiServices { services =>
     val existingMethodConfigCopy = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, testData.methodConfigName)
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, existingMethodConfigCopy.toJson.toString())) ~>
+    Post(copyFromMethodRepo, httpJson(existingMethodConfigCopy)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -396,7 +395,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on copy method configuration from bogus source in method repo" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoMissing.toJson.toString())) ~>
+    Post(copyFromMethodRepo, httpJson(testData.methodRepoMissing)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -406,7 +405,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 422 on copy method configuration when method repo payload is missing" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoEmptyPayload.toJson.toString())) ~>
+    Post(copyFromMethodRepo, httpJson(testData.methodRepoEmptyPayload)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -416,7 +415,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 422 on copy method configuration when method repo payload is unparseable" in withTestDataApiServices { services =>
-    Post(copyFromMethodRepo, HttpEntity(ContentTypes.`application/json`, testData.methodRepoBadPayload.toJson.toString())) ~>
+    Post(copyFromMethodRepo, httpJson(testData.methodRepoBadPayload)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -427,7 +426,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when generating a method config template from a valid method" in withTestDataApiServices { services =>
     val method = MethodRepoMethod("dsde","three_step",1)
-    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,method.toJson.toString)) ~>
+    Post("/methodconfigs/template", httpJson(method)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
@@ -439,7 +438,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template",HttpEntity(ContentTypes.`application/json`,MethodRepoMethod("dsde","three_step",2).toJson.toString)) ~>
+    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }

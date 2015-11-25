@@ -6,7 +6,6 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProje
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-import spray.json._
 
 import scala.concurrent.ExecutionContext
 
@@ -48,7 +47,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
 
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
-    Put("/user/refreshToken", HttpEntity(ContentTypes.`application/json`, UserRefreshToken("gobblegobble").toJson.toString)) ~>
+    Put("/user/refreshToken", httpJson(UserRefreshToken("gobblegobble"))) ~>
       sealRoute(services.userRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
 
