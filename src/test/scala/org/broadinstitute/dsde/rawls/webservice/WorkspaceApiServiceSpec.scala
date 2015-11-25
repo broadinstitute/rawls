@@ -2,48 +2,21 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
-import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
-import spray.httpx.SprayJsonSupport._
 import spray.json._
 import spray.routing._
-import spray.testkit.ScalatestRouteTest
-import scala.concurrent.{Await, ExecutionContext}
-import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
 
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
-  // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
-  // intermittent failures occur on requests not completing in time
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
-
-  def actorRefFactory = system
-
-  val mockServer = RemoteServicesMockServer()
-
-  override def beforeAll() = {
-    super.beforeAll
-    mockServer.startServer
-  }
-
-  override def afterAll() = {
-    super.afterAll
-    mockServer.stopServer
-  }
-
+class WorkspaceApiServiceSpec extends ApiServiceSpec {
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
@@ -58,24 +31,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
-  case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    def actorRefFactory = system
-
-    val gcsDao: MockGoogleServicesDAO = new MockGoogleServicesDAO
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDao, submissionSupervisor)_
-
-    def cleanupSupervisor = {
-      submissionSupervisor ! PoisonPill
-    }
-  }
+  case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
   def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource, user)
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO)
     try {
       testCode(apiService)
     } finally {
