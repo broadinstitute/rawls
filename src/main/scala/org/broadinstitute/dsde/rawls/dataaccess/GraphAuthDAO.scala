@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 
 import scala.collection.JavaConversions._
+import CachedTypes._
 
 class GraphAuthDAO extends AuthDAO with GraphDAO {
   override def loadUser(ref: RawlsUserRef, txn: RawlsTransaction): Option[RawlsUser] = txn withGraph { db =>

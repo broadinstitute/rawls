@@ -11,6 +11,7 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 import org.broadinstitute.dsde.rawls.model.AttributeConversions._
+import CachedTypes._
 
 class GraphEntityDAO extends EntityDAO with GraphDAO {
 

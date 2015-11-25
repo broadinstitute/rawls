@@ -30,8 +30,8 @@ object Boot extends App {
     implicit val system = ActorSystem("rawls")
 
     val orientConfig = conf.getConfig("orientdb")
-    val dbUrl = s"remote:${orientConfig.getString("server")}/${orientConfig.getString("dbName")}"
-    val dataSource = DataSource(dbUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
+    val dbConnectionUrl = orientConfig.getString("connectionUrl")
+    val dataSource = DataSource(dbConnectionUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
 
     dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 

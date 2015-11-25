@@ -179,6 +179,8 @@ class HttpGoogleServicesDAO(
 
         bucketName
       }
+    } recover {
+      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
     }
   }
 
