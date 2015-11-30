@@ -1,73 +1,25 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import akka.actor.PoisonPill
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
-import com.tinkerpop.blueprints.{Vertex, Graph}
+import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.scalatest.{Matchers, FlatSpec}
-import spray.http.{ContentTypes, HttpEntity, StatusCodes}
-import spray.httpx.SprayJsonSupport
-import spray.json.DefaultJsonProtocol._
-import spray.routing.HttpService
-import spray.testkit.ScalatestRouteTest
-import spray.json._
+import spray.http.StatusCodes
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 
 /**
  * Created by tsharpe on 9/28/15.
  */
-class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture with SprayJsonSupport {
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
-
+class AdminApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import spray.httpx.SprayJsonSupport._
 
-  def actorRefFactory = system
-
-  val mockServer = RemoteServicesMockServer()
-
-  override def beforeAll() = {
-    super.beforeAll
-    mockServer.startServer
-  }
-
-  override def afterAll() = {
-    super.afterAll
-    mockServer.stopServer
-  }
-
-  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends AdminApiService with MockUserInfoDirectives {
-    def actorRefFactory = system
-
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
-    val directoryDAO = new MockUserDirectoryDAO
-    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, directoryDAO)_
-
-    def cleanupSupervisor = {
-      submissionSupervisor ! PoisonPill
-    }
-  }
+  case class TestApiService(dataSource: DataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource)
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO)
     try {
       testCode(apiService)
     } finally {
@@ -347,7 +299,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   it should "return 201 when creating a new group" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
@@ -357,12 +309,12 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) { status }
@@ -372,12 +324,12 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   it should "return 200 when deleting a group that exists" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Delete(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Delete(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -387,7 +339,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   it should "return 404 when trying to delete a group that does not exist" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("dbgap"))
 
-    Delete(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Delete(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -399,17 +351,17 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
     val subSubGroup = new RawlsGroupRef(RawlsGroupName("test_subSubGroup"))
 
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(subGroup)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -426,12 +378,12 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
   it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_blahhh@dev.firecloud.org")).toJson.toString)) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_blahhh@dev.firecloud.org")))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -443,19 +395,19 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
     val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
 
     //make main group
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, group.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
     //make subgroup
-    Post(s"/admin/groups", HttpEntity(ContentTypes.`application/json`, subGroup.toJson.toString)) ~>
+    Post(s"/admin/groups", httpJson(subGroup)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) { status }
       }
     //put subgroup into main group
-    Post(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -469,7 +421,7 @@ class AdminApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteT
         }
       }
     //remove subgroup from main group
-    Delete(s"/admin/groups/${group.groupName.value}/members", HttpEntity(ContentTypes.`application/json`, RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")).toJson.toString)) ~>
+    Delete(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }

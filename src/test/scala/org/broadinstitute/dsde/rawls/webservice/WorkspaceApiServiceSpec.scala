@@ -2,48 +2,21 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
-import org.scalatest.{FlatSpec, Matchers}
 import spray.http._
-import spray.httpx.SprayJsonSupport._
 import spray.json._
 import spray.routing._
-import spray.testkit.ScalatestRouteTest
-import scala.concurrent.{Await, ExecutionContext}
-import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext
 
 /**
  * Created by dvoet on 4/24/15.
  */
-class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
-  // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
-  // intermittent failures occur on requests not completing in time
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
-
-  def actorRefFactory = system
-
-  val mockServer = RemoteServicesMockServer()
-
-  override def beforeAll() = {
-    super.beforeAll
-    mockServer.startServer
-  }
-
-  override def afterAll() = {
-    super.afterAll
-    mockServer.stopServer
-  }
-
+class WorkspaceApiServiceSpec extends ApiServiceSpec {
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
@@ -58,24 +31,10 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
     }
   }
 
-  case class TestApiService(dataSource: DataSource, user: String)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    def actorRefFactory = system
-
-    val gcsDao: MockGoogleServicesDAO = new MockGoogleServicesDAO
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDao, submissionSupervisor)_
-
-    def cleanupSupervisor = {
-      submissionSupervisor ! PoisonPill
-    }
-  }
+  case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
   def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource, user)
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO)
     try {
       testCode(apiService)
     } finally {
@@ -215,7 +174,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       Map.empty
     )
 
-    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -301,7 +260,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(testData.workspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -315,7 +274,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
           status
         }
       }
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -332,7 +291,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -345,7 +304,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
         }
       }
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -362,7 +321,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
 
   it should "copy a workspace if the source exists" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceName(namespace = testData.workspace.namespace, name = "test_copy")
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, workspaceCopy.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -393,7 +352,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "return 409 Conflict on copy if the destination already exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", HttpEntity(ContentTypes.`application/json`, testData.workspace.toJson.toString())) ~>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(testData.workspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -481,7 +440,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
   it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -491,7 +450,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser("write-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -501,7 +460,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser("read-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -511,7 +470,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
   }
 
   it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq(RemoveAttribute("boo"): AttributeUpdateOperation).toJson.toString())) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -660,7 +619,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       Map.empty
     )
 
-    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest, response.entity.asString) {
@@ -679,7 +638,7 @@ class WorkspaceApiServiceSpec extends FlatSpec with HttpService with ScalatestRo
       Map.empty
     )
 
-    Post(s"/workspaces", HttpEntity(ContentTypes.`application/json`, newWorkspace.toJson.toString())) ~>
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden, response.entity.asString) {

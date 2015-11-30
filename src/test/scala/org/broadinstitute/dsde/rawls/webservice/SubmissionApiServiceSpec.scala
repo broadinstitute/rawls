@@ -1,67 +1,27 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import akka.actor.PoisonPill
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, GraphEntityDAO, GraphMethodConfigurationDAO, GraphWorkspaceDAO, HttpExecutionServiceDAO, HttpMethodRepoDAO, _}
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionFormat, SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.scalatest.{FlatSpec, Matchers}
-import spray.http.HttpHeaders.Cookie
 import spray.http._
-import spray.httpx.SprayJsonSupport._
-import spray.json._
-import spray.routing.HttpService
-import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
  */
-class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture {
-  // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
-  // intermittent failures occur on requests not completing in time
-  implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
+class SubmissionApiServiceSpec extends ApiServiceSpec {
 
-  def actorRefFactory = system
-
-  val mockServer = RemoteServicesMockServer()
-
-  override def beforeAll() = {
-    super.beforeAll
-    mockServer.startServer
-  }
-
-  override def afterAll() = {
-    super.afterAll
-    mockServer.stopServer
-  }
-
-  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
-    def actorRefFactory = system
-
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
-    gcsDAO.storeToken(userInfo, "test_token")
-    val workspaceServiceConstructor = WorkspaceService.constructor(dataSource, containerDAO, new HttpMethodRepoDAO(mockServer.mockServerBaseUrl), new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl), gcsDAO, submissionSupervisor)_
-
-    def cleanupSupervisor = {
-      submissionSupervisor ! PoisonPill
-    }
-  }
+  case class TestApiService(dataSource: DataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource)
+
+    val gcsDAO = new MockGoogleServicesDAO
+    gcsDAO.storeToken(userInfo, "test_token")
+
+    val apiService = new TestApiService(dataSource, gcsDAO)
     try {
       testCode(apiService)
     } finally {
@@ -76,7 +36,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest("dsde","not there","Pattern","pattern1", None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -84,10 +44,10 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("three_step.cgrep.pattern"->AttributeString("String")), Map.empty, MethodRepoMethod("dsde","three_step",1))
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None).toJson.toString)) ~>
+    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -95,7 +55,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
                                           services: TestApiService): SubmissionStatusResponse = {
-      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", HttpEntity(ContentTypes.`application/json`, methodConf.toJson.toString)) ~>
+      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", httpJson(methodConf)) ~>
           sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
@@ -104,7 +64,7 @@ class SubmissionApiServiceSpec extends FlatSpec with HttpService with ScalatestR
         }
 
       val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
-      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", HttpEntity(ContentTypes.`application/json`, submissionRq.toJson.toString)) ~>
+      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", httpJson(submissionRq)) ~>
           sealRoute(services.submissionRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
