@@ -1910,7 +1910,7 @@ paths:
             - openid
             - email
             - profile
-  /workspaces:
+  '/api/workspaces':
     post:
       responses:
         '200':
@@ -2163,13 +2163,14 @@ paths:
             - openid
             - email
             - profile
-  '/api/user':
      get:
        responses:
          '200':
            description: Successful Request
            schema:
              $ref: '#/definitions/UserStatus'
+         '404':
+           description: User Not Found
          '500':
            description: Rawls Internal Error
            schema:
@@ -2185,6 +2186,7 @@ paths:
             - openid
             - email
             - profile
+            
   '/api/user/{userSubjectId}/disable':
      post:
        responses:

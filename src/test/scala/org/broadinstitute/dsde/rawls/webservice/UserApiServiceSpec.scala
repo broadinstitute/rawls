@@ -177,7 +177,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
 
     Get("/user") ~>
-      sealRoute(services.userRoutes) ~>
+      sealRoute(services.getUserStatusRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
