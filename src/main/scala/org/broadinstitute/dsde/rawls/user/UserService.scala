@@ -166,7 +166,6 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
         case None =>
           // note: executes in a Future
           gcsDAO.createCromwellAuthBucket(projectName) map { bucketName =>
-            val bucketName = gcsDAO.getCromwellAuthBucketName(projectName)
             val bucketUrl = "gs://" + bucketName
             containerDAO.billingDAO.saveProject(RawlsBillingProject(projectName, Set.empty, bucketUrl), txn)
             RequestComplete(StatusCodes.Created)
