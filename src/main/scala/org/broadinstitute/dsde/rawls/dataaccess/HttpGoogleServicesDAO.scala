@@ -123,7 +123,7 @@ class HttpGoogleServicesDAO(
       retry(when500) {
         () => Future {
           val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevels.Owner)
-          val owner = new Member().setEmail(toProxyFromUser(userInfo)).setRole(groupMemberRole)
+          val owner = new Member().setEmail(toProxyFromUser(userInfo)).setRole(groupMemberRole).setType("GROUP")
           val ownerInserter = directory.members.insert(ownersGroupId, owner)
           blocking {
             ownerInserter.execute
@@ -473,7 +473,7 @@ class HttpGoogleServicesDAO(
         Future.successful(Option(ErrorReport(s"Failed to change permissions for ${currentUser.userEmail}.  You cannot change your own permissions.",Seq.empty)))
       else {
         val bucketName = getBucketName(workspaceId)
-        val member = new Member().setEmail(groupEmail).setRole(groupMemberRole)
+        val member = new Member().setEmail(groupEmail).setRole(groupMemberRole).setType("GROUP")
         val currentGroupId = toGroupId(bucketName,currentAccessLevel)
         val deleter = members.delete(currentGroupId, groupEmail)
         val targetGroupId = toGroupId(bucketName, targetAccessLevel)
