@@ -31,6 +31,16 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
     }
   }
 
+  val getUserStatusRoute = requireUserInfo() { userInfo =>
+    path("user") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.UserGetUserStatus)
+      }
+    }
+  }
+
   val userRoutes = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
       put {
@@ -60,13 +70,6 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
-    path("user") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.UserGetUserStatus)
       }
     } ~
     path("user" / Segment / "enable") { userSubjectId =>
