@@ -8,8 +8,6 @@ proxy:
   {{.Data.proxy_volumes}}
   {{.Data.log_driver}}
   environment:
-    CLIENTID: {{.Data.env_client_id}}
-    CLIENTSECRET: {{.Data.env_client_secret}}
     CALLBACK_URI: {{.Data.env_callback_uri}}
     LOG_LEVEL: {{.Data.env_log_level}}
     SERVER_NAME: {{.Data.env_server_name}}
