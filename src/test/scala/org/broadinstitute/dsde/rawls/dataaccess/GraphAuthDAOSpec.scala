@@ -309,15 +309,6 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
-  it should "not allow Workspace Access Groups to be created twice" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction() { txn =>
-      intercept[RawlsException] {
-        authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-        authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      }
-    }
-  }
-
   it should "delete Workspace Access Groups" in withEmptyTestDatabase { dataSource =>
     val context = dataSource.inTransaction() { txn =>
       val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
