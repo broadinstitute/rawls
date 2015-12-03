@@ -55,7 +55,7 @@ class HttpGoogleServicesDAO(
   val jsonFactory = JacksonFactory.getDefaultInstance
   val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
-  val tokenBucketName = "rawls-tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
+  val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)
 
   val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
