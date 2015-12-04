@@ -38,15 +38,6 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     }
   }
 
-  override def createGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
-    getGroupVertex(db, rawlsGroup) match {
-      case Some(_) => throw new RawlsException("Cannot create group %s in database because it already exists".format(rawlsGroup))
-      case None =>
-        saveObject[RawlsGroup](rawlsGroup, addVertex(db, VertexSchema.Group), None, db)
-        rawlsGroup
-    }
-  }
-
   override def loadGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Option[RawlsGroup] = txn withGraph { db =>
     getGroupVertex(db, groupRef).map(loadObject[RawlsGroup])
   }
@@ -63,9 +54,9 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     val oGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Owner, Set[RawlsUserRef](user), Set.empty[RawlsGroupRef])
     val wGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Write)
     val rGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Read)
-    createGroup(oGroup, txn)
-    createGroup(wGroup, txn)
-    createGroup(rGroup, txn)
+    saveGroup(oGroup, txn)
+    saveGroup(wGroup, txn)
+    saveGroup(rGroup, txn)
 
     Map(
       WorkspaceAccessLevels.Owner -> oGroup,
