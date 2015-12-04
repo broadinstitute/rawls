@@ -105,6 +105,8 @@ testOptions in Test += Tests.Setup(classLoader =>
     .invoke(null, "ROOT")
 )
 
+test in assembly := {}
+
 val buildSettings = Defaults.defaultSettings ++ Seq(
   javaOptions += "-Xmx2G"
 )
