@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
 
 import akka.actor.ActorSystem
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
@@ -108,7 +109,7 @@ class HttpGoogleServicesDAO(
 
     def insertGroups(workspaceName: WorkspaceName, bucketName: String): Future[Seq[Try[Group]]] = {
       Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-        toFutureTry(retry(when500) {
+        toFutureTry(retryExponentially(when500orQuotaExceeded) {
           () => Future {
             val inserter = groups.insert(newGroup(bucketName, workspaceName, accessLevel))
             blocking {
@@ -133,7 +134,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertBucket: (Member) => Future[Unit] = { _ =>
-      retry(when500) {
+      retryExponentially(when500orQuotaExceeded) {
         () => Future {
           // bucket ACLs should be:
           //   workspace owner - bucket writer
@@ -451,6 +452,16 @@ class HttpGoogleServicesDAO(
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
       case t: HttpResponseException => t.getStatusCode/100 == 5
+      case _ => false
+    }
+  }
+
+  private def when500orQuotaExceeded( throwable: Throwable ): Boolean = {
+    throwable match {
+      case t: GoogleJsonResponseException => {
+        ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits"))
+      }
+      case h: HttpResponseException => when500(throwable)
       case _ => false
     }
   }
