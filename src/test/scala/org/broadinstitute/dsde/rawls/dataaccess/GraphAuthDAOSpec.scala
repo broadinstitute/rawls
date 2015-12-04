@@ -192,16 +192,18 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   }
 
   it should "not save a new Group with missing users" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction() { txn =>
-      val user1 = userFromId("subjectId1")
-      val user2 = userFromId("subjectId2")
-      val group = makeRawlsGroup("Two User Group", Set(user1, user2), Set.empty)
+    val user1 = userFromId("subjectId1")
+    val user2 = userFromId("subjectId2")
+    val group = makeRawlsGroup("Two User Group", Set(user1, user2), Set.empty)
 
-      intercept[RawlsException] {
+    intercept[RawlsException] {
+      dataSource.inTransaction() { txn =>
         // note that the users have not first been saved
         authDAO.saveGroup(group, txn)
       }
+    }
 
+    dataSource.inTransaction() { txn =>
       txn.withGraph { graph =>
         assert {
           getMatchingGroupVertices(graph, group).isEmpty
@@ -211,15 +213,17 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   }
 
   it should "not save a new Group with missing groups" in withDefaultTestDatabase { dataSource =>
-    dataSource.inTransaction() { txn =>
-      val group1 = makeRawlsGroup("Group One", Set.empty, Set.empty)
-      val group2 = makeRawlsGroup("Group Two", Set.empty, Set(group1))
+    val group1 = makeRawlsGroup("Group One", Set.empty, Set.empty)
+    val group2 = makeRawlsGroup("Group Two", Set.empty, Set(group1))
 
-      intercept[RawlsException] {
+    intercept[RawlsException] {
+      dataSource.inTransaction() { txn =>
         // note that the first group has not first been saved
         authDAO.saveGroup(group2, txn)
       }
+    }
 
+    dataSource.inTransaction() { txn =>
       txn.withGraph { graph =>
         assert {
           getMatchingGroupVertices(graph, group2).isEmpty
