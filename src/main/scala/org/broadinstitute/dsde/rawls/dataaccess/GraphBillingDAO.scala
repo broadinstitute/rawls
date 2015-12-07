@@ -5,6 +5,7 @@ import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.JavaConversions._
+import CachedTypes._
 
 class GraphBillingDAO extends BillingDAO with GraphDAO {
   override def saveProject(rawlsProject: RawlsBillingProject, txn: RawlsTransaction) = txn withGraph { db =>

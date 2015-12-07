@@ -1,9 +1,8 @@
 {{with $environment := env "ENVIRONMENT"}}{{$keyname := printf "secret/dsde/%s/rawls/rawls.conf" $environment}}{{with vault $keyname}}
 orientdb {
-  server = "{{.Data.orientdb_server}}"
+  connectionUrl = "{{.Data.orientdb_connection_url}}"
   rootUser = "{{.Data.orientdb_rootUser}}"
   rootPassword = "{{.Data.orientdb_rootPassword}}"
-  dbName = "{{.Data.orientdb_dbName}}"
 }
 gcs {
   deletedBucketCheckSeconds = "{{.Data.gcs_deletedBucketCheckSeconds}}"

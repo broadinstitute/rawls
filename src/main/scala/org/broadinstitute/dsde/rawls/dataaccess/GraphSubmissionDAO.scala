@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{Submission, Workflow, ActiveSubmissi
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+import CachedTypes._
 
 /**
  * @author tsharpe

@@ -209,21 +209,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       }
     }
 
-  def listWorkspaces(): Future[PerRequestMessage] = {
-    // this one is a little special:
-    // 1 query to get the accessible workspace
-    // then for each result in parallel 1 query to get the owners and 1 query to get details out of the db
-    // last, join those parallel operations to a single result
-
-    val permissionsPairs = dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.listWorkspaces(RawlsUser(userInfo), txn)
-    }
-
-    // Future.sequence will do everything within in parallel per workspace then join them all
-    val eventualResponses = Future.sequence(permissionsPairs map { permissionsPair =>
+  def listWorkspaces(): Future[PerRequestMessage] =
+    dataSource.inFutureTransaction() { txn =>
       Future {
-        // database query to get details
-        dataSource.inTransaction() { txn =>
+        val permissionsPairs = containerDAO.authDAO.listWorkspaces(RawlsUser(userInfo), txn)
+
+        val responses = permissionsPairs map { permissionsPair =>
+          // database query to get details
           containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn) match {
             case Some(workspaceContext) =>
               Option(WorkspaceListResponse(permissionsPair.accessLevel,
@@ -236,12 +228,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               None
           }
         }
-      }
-    })
 
-    // collect the result
-    eventualResponses map (r => RequestComplete(StatusCodes.OK, r.collect { case Some(x) => x }))
-  }
+        RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x })
+      }
+    }
 
   private def getWorkspaceSubmissionStats(workspaceContext: WorkspaceContext, txn: RawlsTransaction): WorkspaceSubmissionStats = {
     val submissions = containerDAO.submissionDAO.list(workspaceContext, txn)

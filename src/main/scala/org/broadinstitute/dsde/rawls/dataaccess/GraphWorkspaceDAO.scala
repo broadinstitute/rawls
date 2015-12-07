@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+import CachedTypes._
 
 class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
 
