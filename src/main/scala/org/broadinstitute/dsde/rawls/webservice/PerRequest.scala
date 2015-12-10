@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.actor.Status.Failure
 import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
+import akka.event.Logging
+import akka.event.Logging.LogLevel
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -76,16 +78,31 @@ trait PerRequest extends Actor {
     response match {
       case (statusCode: StatusCode, message: String) =>
         val newResponse = (statusCode, RawlsMessage(message))
-        //we need to explicitly set the implicit marshaller here, otherwise it uses the implicit marshaller above
+        logResponse(newResponse._1, newResponse._2)
+        //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
-        stop(self)
       case errorReport: ErrorReport =>
         val newResponse = (errorReport.statusCode.getOrElse(StatusCodes.InternalServerError), errorReport)
+        logResponse(newResponse._1, newResponse._2)
+        //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, ErrorReportFormat))
-      case _ =>
+      case (statusCode: StatusCode, payload: Any) =>
+        logResponse(statusCode, payload)
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
-        stop(self)
+      case _ =>
+        logResponse(StatusCodes.OK, response)
+        r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
     }
+    stop(self)
+  }
+
+  private def logResponse(statusCode: StatusCode, response: Any) {
+    val logLevel: LogLevel = (statusCode.intValue / 100) match {
+      case 5 => Logging.ErrorLevel
+      case 4 => Logging.InfoLevel
+      case _ => Logging.DebugLevel
+    }
+    system.log.log(logLevel, s"request response: status code $statusCode, response $response")
   }
 
   override val supervisorStrategy =
