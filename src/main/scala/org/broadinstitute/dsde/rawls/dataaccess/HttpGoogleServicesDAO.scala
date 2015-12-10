@@ -109,7 +109,7 @@ class HttpGoogleServicesDAO(
 
     def insertGroups(workspaceName: WorkspaceName, bucketName: String): Future[Seq[Try[Group]]] = {
       Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-        toFutureTry(retryExponentially(when500orQuotaExceeded) {
+        toFutureTry(retryExponentially(when500orGoogleError) {
           () => Future {
             val inserter = groups.insert(newGroup(bucketName, workspaceName, accessLevel))
             blocking {
@@ -134,7 +134,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertBucket: (Member) => Future[Unit] = { _ =>
-      retryExponentially(when500orQuotaExceeded) {
+      retryExponentially(when500orGoogleError) {
         () => Future {
           // bucket ACLs should be:
           //   workspace owner - bucket writer
@@ -458,10 +458,11 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def when500orQuotaExceeded( throwable: Throwable ): Boolean = {
+  private def when500orGoogleError( throwable: Throwable ): Boolean = {
     throwable match {
       case t: GoogleJsonResponseException => {
-        ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits"))
+        ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
+          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid"))
       }
       case h: HttpResponseException => when500(throwable)
       case _ => false
