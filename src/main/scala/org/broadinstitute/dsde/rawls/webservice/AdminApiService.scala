@@ -64,7 +64,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       delete {
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId))
+          WorkspaceService.AdminAbortSubmission(workspaceNamespace, workspaceName, submissionId))
       }
     } ~
     path("admin" / "groups") { //create group
@@ -108,6 +108,22 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.ListGroupMembers(groupName))
+      }
+    } ~
+    path("admin" / "users") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.ListUsers)
+      }
+    } ~
+    path("admin" / "users") {
+      post {
+        entity(as[RawlsUserInfoList]) { userInfoList =>
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.ImportUsers(userInfoList))
+        }
       }
     }
   }

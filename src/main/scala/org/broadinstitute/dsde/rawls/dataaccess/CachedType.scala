@@ -103,6 +103,8 @@ object CachedTypes {
   implicit val dateTimeCachedType = new CachedType[DateTime]
   implicit val MapStringWildCachedType = new CachedType[Map[String, _]]
   implicit val mapWildWildCachedType = new CachedType[Map[_, _]]
+  implicit val rawlsUserInfoType = new CachedType[RawlsUserInfo]
+  implicit val rawlsUserInfoListType = new CachedType[RawlsUserInfoList]
 
   /** utility to extract the cachedType implicit */
   def cachedTypeOf[T](implicit cachedType: CachedType[T]) = cachedType

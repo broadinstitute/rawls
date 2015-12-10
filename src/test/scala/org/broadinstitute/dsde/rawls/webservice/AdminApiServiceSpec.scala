@@ -375,6 +375,47 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 when listing users" in withTestDataApiServices { services =>
+    val userOwner = RawlsUserInfo(testData.userOwner, Seq(RawlsBillingProjectName("myNamespace")))
+    val userWriter = RawlsUserInfo(testData.userWriter, Seq.empty)
+    val userReader = RawlsUserInfo(testData.userReader, Seq.empty)
+
+    Get("/admin/users") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader)), response) {
+          responseAs[RawlsUserInfoList]
+        }
+      }
+  }
+
+  it should "return 200 when importing users" in withTestDataApiServices { services =>
+    val userOwner = RawlsUserInfo(testData.userOwner, Seq(RawlsBillingProjectName("myNamespace")))
+    val userWriter = RawlsUserInfo(testData.userWriter, Seq.empty)
+    val userReader = RawlsUserInfo(testData.userReader, Seq.empty)
+    val user1 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("1"), RawlsUserEmail("owner-access2")), Seq(RawlsBillingProjectName("myNamespace")))
+    val user2 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("2"), RawlsUserEmail("writer-access2")), Seq.empty)
+    val user3 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("3"), RawlsUserEmail("reader-access2")), Seq.empty)
+
+    val userInfoList = RawlsUserInfoList(Seq(user1, user2, user3))
+
+    Post("/admin/users", httpJson(userInfoList)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Get("/admin/users") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader, user1, user2, user3)), response) {
+          responseAs[RawlsUserInfoList]
+        }
+      }
+  }
+
   it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 

@@ -16,6 +16,10 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     getUserVertex(db, ref).map(loadObject[RawlsUser])
   }
 
+  override def loadAllUsers(txn: RawlsTransaction): Seq[RawlsUser] = txn withGraph { db =>
+    getAllUserVertices(db).toList.map(loadObject[RawlsUser]).toSeq
+  }
+
   override def loadUserByEmail(userEmail: String, txn: RawlsTransaction): Option[RawlsUser] = txn withGraph { db =>
     getUserVertexByEmail(db, userEmail).map(loadObject[RawlsUser])
   }
