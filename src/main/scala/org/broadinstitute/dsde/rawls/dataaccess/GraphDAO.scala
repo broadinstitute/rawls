@@ -262,6 +262,10 @@ trait GraphDAO {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userSubjectId",user.userSubjectId.value))
   }
 
+  def allUsersPipeline(db: Graph) = {
+    new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User))
+  }
+
   def userPipelineByEmail(db: Graph, email: String) = {
     new GremlinPipeline(db.asInstanceOf[OrientGraph].getVerticesOfClass(VertexSchema.User)).filter(hasPropertyValue("userEmail",email))
   }
@@ -310,6 +314,10 @@ trait GraphDAO {
 
   def getUserVertex(db: Graph, user: RawlsUserRef) = {
     getSinglePipelineResult(userPipeline(db, user))
+  }
+
+  def getAllUserVertices(db: Graph) = {
+    allUsersPipeline(db)
   }
 
   def getUserVertexByEmail(db: Graph, email: String) = {

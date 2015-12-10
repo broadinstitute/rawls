@@ -399,6 +399,71 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/users':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/RawlsUserInfoList'
+        '403':
+          description: You must be an admin to list users
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '502':
+          description: Trouble talking to Google
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List all users in rawls
+      tags:
+        - admin
+        - users
+      summary: list users
+      operationId: listUsers
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/users':
+    post:
+      responses:
+        '201':
+          description: Successful Request
+        '403':
+          description: You must be an admin to import users
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '502':
+          description: Trouble talking to Google
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Import users into rawls
+      parameters:
+        - in: body
+          description: List of users to import.
+          name: userInfoList
+          required: true
+          schema:
+            $ref: '#/definitions/RawlsUserInfoList'
+      tags:
+        - admin
+        - users
+      summary: import users
+      operationId: importUsers
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
     delete:
       responses:
@@ -3290,3 +3355,19 @@ definitions:
         type: String
       userEmail:
         type: String
+  RawlsUserInfo:
+    description: information about a rawls user
+    properties:
+      user:
+        $ref: '#/definitions/RawlsUser'
+      billingProjects:
+        type: array
+        items:
+          type: string
+  RawlsUserInfoList:
+    description: a list of rawls users and their info
+    properties:
+      userInfoList:
+        type: array
+        items:
+          $ref: '#/definitions/RawlsUserInfo'

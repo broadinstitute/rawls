@@ -14,6 +14,8 @@ case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 case class RawlsGroupMemberList(userEmails: Seq[String], subGroupEmails: Seq[String])
+case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
+case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
 
 case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail) extends DomainObject {
   def idFields = Seq("userSubjectId")
@@ -108,4 +110,9 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat2(RawlsGroupMemberList)
+
+  implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
+
+  implicit val RawlsUserInfoListFormat = jsonFormat1(RawlsUserInfoList)
+
 }

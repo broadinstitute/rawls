@@ -37,6 +37,8 @@ object UserService {
   case object UserGetUserStatus extends UserServiceMessage
   case class EnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class DisableUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case object ListUsers extends UserServiceMessage
+  case class ImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
   case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -61,6 +63,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case UserGetUserStatus => userGetUserStatus() pipeTo context.parent
     case EnableUser(userRef) => enableUser(userRef) pipeTo context.parent
     case DisableUser(userRef) => disableUser(userRef) pipeTo context.parent
+    case ListUsers => listUsers pipeTo context.parent
+    case ImportUsers(rawlsUserInfoList) => importUsers(rawlsUserInfoList) pipeTo context.parent
 
     // ListBillingProjects is for the current user, not as admin
     // ListBillingProjectsForUser is for any user, as admin
@@ -101,6 +105,31 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
+  }
+
+  import spray.json.DefaultJsonProtocol._
+  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
+
+  def listUsers(): Future[PerRequestMessage] = asAdmin {
+    Future(dataSource.inTransaction() { txn =>
+      val users = containerDAO.authDAO.loadAllUsers(txn)
+      val userInfoList = users.map(u => RawlsUserInfo(u, containerDAO.billingDAO.listUserProjects(u, txn).toSeq))
+      RequestComplete(RawlsUserInfoList(userInfoList))
+    })
+  }
+
+  //imports the response from the above listUsers
+  def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = asAdmin {
+    Future(dataSource.inTransaction() { txn =>
+      val users = rawlsUserInfoList.userInfoList
+      users.foreach(u => {
+        containerDAO.authDAO.saveUser(u.user, txn)
+        u.billingProjects.foreach(b =>
+          containerDAO.billingDAO.addUserToProject(u.user, containerDAO.billingDAO.loadProject(b, txn).get, txn)
+        )
+      })
+      RequestComplete(StatusCodes.Created)
+    })
   }
 
   def userGetUserStatus(): Future[PerRequestMessage] = {

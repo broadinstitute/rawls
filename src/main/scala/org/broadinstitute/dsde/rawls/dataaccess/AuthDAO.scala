@@ -6,6 +6,8 @@ import org.broadinstitute.dsde.rawls.model._
 trait AuthDAO {
   def loadUser(ref: RawlsUserRef, txn: RawlsTransaction): Option[RawlsUser]
 
+  def loadAllUsers(txn: RawlsTransaction): Seq[RawlsUser]
+
   def loadUserByEmail(userEmail: String, txn: RawlsTransaction): Option[RawlsUser]
 
   def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser
