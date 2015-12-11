@@ -17,3 +17,9 @@ trait RawlsSimulation extends Simulation {
   val numUsers = lines.next.toInt
 
 }
+
+case class SubmissionStatus(
+  submissionId: String,
+  submissionStatus: String,
+  workflowStatuses: Vector[String]
+)
