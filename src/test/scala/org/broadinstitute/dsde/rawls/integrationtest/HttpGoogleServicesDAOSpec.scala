@@ -2,20 +2,21 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.util.UUID
 import akka.actor.ActorSystem
-import org.joda.time.DateTime
+import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
 import scala.util.Try
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.{Retry, HttpGoogleServicesDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, Retry, HttpGoogleServicesDAO}
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
 import spray.http.OAuth2BearerToken
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 
-class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry {
+class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with OrientDbTestFixture {
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
@@ -29,6 +30,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("tokenEncryptionKey"),
     gcsConfig.getString("tokenSecretsJson")
   )
+  val mockDataSource = DataSource("memory:12345", "admin", "admin")
+  val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(mockDataSource, containerDAO, gcsDAO))
 
   val testProject = "broad-dsde-dev"
   val testWorkspaceId = UUID.randomUUID.toString
@@ -39,7 +42,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123, "123456789876543212345aaa")
 
   override def afterAll() = {
-    Try(gcsDAO.deleteBucket(testCreator,testWorkspaceId)) // one last-gasp attempt at cleaning up
+    Try(gcsDAO.deleteWorkspace(testCreator,testWorkspaceId, bucketDeletionMonitor)) // one last-gasp attempt at cleaning up
   }
 
   "HttpGoogleServicesDAO" should "do all of the things" in {
@@ -98,8 +101,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val groupName = gcsDAO.toGroupId(testBucket, WorkspaceAccessLevels.Owner)
     gcsDAO.fromGroupId(groupName) should be (Some(WorkspacePermissionsPair(testWorkspaceId, WorkspaceAccessLevels.Owner)))
 
-    // delete the bucket. confirm that the corresponding groups are deleted
-    Await.result(gcsDAO.deleteBucket(testCreator, testWorkspaceId), Duration.Inf)
+    // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
+    Await.result(gcsDAO.deleteWorkspace(testCreator, testWorkspaceId, bucketDeletionMonitor), Duration.Inf)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerGroup).execute() }

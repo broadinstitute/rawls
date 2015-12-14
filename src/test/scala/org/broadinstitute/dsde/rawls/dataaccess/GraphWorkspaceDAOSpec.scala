@@ -136,4 +136,45 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       }
     }
   }
+
+  it should "save, load, and modify PendingBucketDeletions" in withDefaultTestDatabase { dataSource =>
+    val initPendingSet = Set("bucket1", "bucket2", "bucket3")
+    val initPending = PendingBucketDeletions(initPendingSet)
+
+    dataSource.inTransaction() { txn =>
+      workspaceDAO.savePendingBucketDeletions(initPending, txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      assertResult(initPending) {
+        workspaceDAO.loadPendingBucketDeletions(txn).get
+      }
+    }
+
+    val newBucket = "bucket4"
+    val setPlusOne = initPendingSet + newBucket
+    val pendingPlusOne = PendingBucketDeletions(setPlusOne)
+
+    dataSource.inTransaction() { txn =>
+      workspaceDAO.savePendingBucketDeletions(initPending.copy(buckets = initPending.buckets + newBucket), txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      assertResult(pendingPlusOne) {
+        workspaceDAO.loadPendingBucketDeletions(txn).get
+      }
+    }
+
+    dataSource.inTransaction() { txn =>
+      workspaceDAO.savePendingBucketDeletions(pendingPlusOne.copy(buckets = initPending.buckets - newBucket), txn)
+    }
+
+    dataSource.inTransaction() { txn =>
+      assertResult(initPending) {
+        workspaceDAO.loadPendingBucketDeletions(txn).get
+      }
+    }
+
+  }
+
 }

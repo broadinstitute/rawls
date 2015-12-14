@@ -87,11 +87,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor)
+  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor : ActorRef)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
     case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to context.parent
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to context.parent
@@ -183,7 +183,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
         }
 
-        gcsDAO.deleteBucket(userInfo, workspaceContext.workspace.workspaceId).map { _ =>
+        gcsDAO.deleteWorkspace(userInfo, workspaceContext.workspace.workspaceId, bucketDeletionMonitor).map { _ =>
           containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
           containerDAO.workspaceDAO.delete(workspaceName, txn)
 

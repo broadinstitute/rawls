@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.model._
@@ -58,7 +59,9 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = Future.successful("mockBucket")
 
-  override def deleteBucket(userInfo: UserInfo, workspaceId: String) = Future.successful(Unit)
+  override def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef) = Future.successful(Unit)
+
+  override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
   override def getACL(workspaceId: String) = Future.successful(WorkspaceACL(mockPermissions))
 

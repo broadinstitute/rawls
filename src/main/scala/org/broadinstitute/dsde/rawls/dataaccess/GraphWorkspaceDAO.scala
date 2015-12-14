@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.Vertex
 import com.tinkerpop.gremlin.java.GremlinPipeline
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.{PendingBucketDeletions, WorkspaceName, Workspace}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -54,4 +55,14 @@ class GraphWorkspaceDAO extends WorkspaceDAO with GraphDAO {
       case None => false
     }
   }
+
+  override def loadPendingBucketDeletions(txn: RawlsTransaction): Option[PendingBucketDeletions] = txn withGraph { db =>
+    getPendingBucketDeletionsVertex(db) map loadObject[PendingBucketDeletions]
+  }
+
+  override def savePendingBucketDeletions(pbd: PendingBucketDeletions, txn: RawlsTransaction) = txn withGraph { db =>
+    val vertex = getPendingBucketDeletionsVertex(db).getOrElse(addVertex(db, VertexSchema.PendingBucketDeletions))
+    saveObject[PendingBucketDeletions](pbd, vertex, None, db)
+  }
 }
+
