@@ -53,7 +53,7 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[
 object UserAuth {
 
   def toWorkspaceAccessGroupName(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
-    s"rawls ${workspaceName.namespace}/${workspaceName.name} ${accessLevel}"
+    s"${workspaceName.namespace}/${workspaceName.name} ${accessLevel}".take(64) // group names have a 64 char limit
 
 }
 
