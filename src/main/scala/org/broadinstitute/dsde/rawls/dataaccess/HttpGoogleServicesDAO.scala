@@ -122,7 +122,7 @@ class HttpGoogleServicesDAO(
     }
 
     def insertOwnerMember: (Seq[Try[Group]]) => Future[Member] = { _ =>
-      retry(when500) {
+      retryExponentially(when500orGoogleError) {
         () => Future {
           val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevels.Owner)
           val owner = new Member().setEmail(toProxyFromUser(userInfo)).setRole(groupMemberRole)
