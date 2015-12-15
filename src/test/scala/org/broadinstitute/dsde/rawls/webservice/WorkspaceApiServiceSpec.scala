@@ -72,14 +72,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
     val workspaceName = WorkspaceName("ns", "testworkspace")
-    val workspaceOwnerGroup = makeRawlsGroup(s"rawls ${workspaceName} OWNER", Set(userOwner), Set.empty)
-    val workspaceWriterGroup = makeRawlsGroup(s"rawls ${workspaceName} WRITER", Set(userWriter), Set.empty)
-    val workspaceReaderGroup = makeRawlsGroup(s"rawls ${workspaceName} READER", Set(userReader), Set.empty)
+    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner), Set.empty)
+    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter), Set.empty)
+    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader), Set.empty)
 
     val workspace2Name = WorkspaceName("ns", "testworkspace2")
-    val workspace2OwnerGroup = makeRawlsGroup(s"rawls ${workspace2Name} OWNER", Set.empty, Set.empty)
-    val workspace2WriterGroup = makeRawlsGroup(s"rawls ${workspace2Name} WRITER", Set(userOwner), Set.empty)
-    val workspace2ReaderGroup = makeRawlsGroup(s"rawls ${workspace2Name} READER", Set.empty, Set.empty)
+    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty, Set.empty)
+    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner), Set.empty)
+    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty, Set.empty)
 
     val workspace = Workspace(workspaceName.namespace, workspaceName.name, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,

@@ -66,9 +66,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
-    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
-    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
     val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
@@ -91,9 +91,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
-    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
-    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
     val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
@@ -117,9 +117,9 @@ trait OrientDbTestFixture extends BeforeAndAfterAll {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"rawls ${wsName} OWNER", Set(userOwner), Set.empty)
-    val writerGroup = makeRawlsGroup(s"rawls ${wsName} WRITER", Set(userWriter), Set.empty)
-    val readerGroup = makeRawlsGroup(s"rawls ${wsName} READER", Set(userReader), Set.empty)
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), "testBucketUrl")
 
