@@ -12,7 +12,7 @@ trait IntegrationTestConfig {
   val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
 
   val orientConfig = jenkinsConf.withFallback(etcConf).getConfig("orientdb")
-  val orientServer = orientConfig.getString("server")
+  val orientUrl = orientConfig.getString("connectionUrl")
   val orientRootUser = orientConfig.getString("rootUser")
   val orientRootPassword = orientConfig.getString("rootPassword")
 
