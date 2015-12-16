@@ -186,7 +186,7 @@ class HttpGoogleServicesDAO(
   }
 
   private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
-    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel))
+    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel).take(64)) // group names have a 64 char limit
 
   private def newBucketAccessControl(entity: String, accessLevel: String) =
     new BucketAccessControl().setEntity(entity).setRole(accessLevel)

@@ -157,15 +157,15 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           val response = WorkspaceListResponse(accessLevel,
             workspaceContext.workspace,
             getWorkspaceSubmissionStats(workspaceContext, txn),
-            getWorkspaceOwners(workspaceName, txn))
+            getWorkspaceOwners(workspaceContext.workspace, txn))
           Future.successful(RequestComplete(StatusCodes.OK, response))
         }
       }
     }
 
-  def getWorkspaceOwners(workspaceName: WorkspaceName, txn: RawlsTransaction): Seq[String] = {
-    val ownerGroup = containerDAO.authDAO.loadGroup(RawlsGroup(workspaceName, WorkspaceAccessLevels.Owner), txn).getOrElse(
-      throw new RawlsException(s"Unable to load owners for workspace ${workspaceName}"))
+  def getWorkspaceOwners(workspace: Workspace, txn: RawlsTransaction): Seq[String] = {
+    val ownerGroup = containerDAO.authDAO.loadGroup(workspace.accessLevels(WorkspaceAccessLevels.Owner), txn).getOrElse(
+      throw new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
     val users = ownerGroup.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
     val subGroups = ownerGroup.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
 
@@ -221,7 +221,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               Option(WorkspaceListResponse(permissionsPair.accessLevel,
                 workspaceContext.workspace,
                 getWorkspaceSubmissionStats(workspaceContext, txn),
-                getWorkspaceOwners(workspaceContext.workspace.toWorkspaceName, txn))
+                getWorkspaceOwners(workspaceContext.workspace, txn))
               )
             case None =>
               // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
