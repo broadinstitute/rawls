@@ -2721,9 +2721,24 @@ definitions:
     description: Outputs from a single task in a workflow
     properties:
       logs:
+        type: array
+        description: logs for this task
+        items:
+          $ref: '#/definitions/ExecutionServiceCallLogs'
+      outputs:
         $ref: ''
         description: Map[String,String]
-      outputs:
+
+  ExecutionServiceCallLogs:
+    description: Execution service logs per call
+    properties:
+      stdout:
+        type: string
+        description: Google bucket location for standard output
+      stderr:
+        type: string
+        description: Google bucket location for standard error
+      backendLogs:
         $ref: ''
         description: Map[String,String]
 

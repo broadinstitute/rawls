@@ -95,18 +95,24 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       Map(
         "wf.y" -> TaskOutput(
           Some(Seq(
-            Map(
-              "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-1.txt",
-              "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt"),
-            Map(
-              "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
-              "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-2.txt")
+            ExecutionServiceCallLogs(
+              stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-1.txt",
+              stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt",
+              backendLogs = Some(Map(
+                "log" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes.log",
+                "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes-stdout.log",
+                "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes-stderr.log"
+              ))
+            ),
+            ExecutionServiceCallLogs(
+              stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
+              stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-2.txt")
           )),
           Some(Map("wf.y.six" -> AttributeNumber(4)))),
         "wf.x" -> TaskOutput(
-          Some(Seq(Map(
-            "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
-            "stderr" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"))),
+          Some(Seq(ExecutionServiceCallLogs(
+            stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
+            stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"))),
           Some(Map(
             "wf.x.four" -> AttributeNumber(4),
             "wf.x.five" -> AttributeNumber(4))))))
@@ -468,9 +474,9 @@ class MockExecutionServiceDAO() extends ExecutionServiceDAO {
   }
 
   override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id,
-    Map("x" -> Seq(Map(
-      "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
-      "stdout" -> "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt")))))
+    Map("x" -> Seq(ExecutionServiceCallLogs(
+      stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
+      stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt")))))
 
   override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("foo" -> AttributeString("bar"))))
 
