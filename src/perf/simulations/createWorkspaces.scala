@@ -5,20 +5,8 @@ import java.io._
 
 import io.gatling.core.Predef._
 import io.gatling.http.Predef._
-import io.gatling.jdbc.Predef._
 
-class createWorkspaces extends Simulation {
-
-	//Helpers to set up the run
-
-	val lines = scala.io.Source.fromFile("../user-files/config.txt").getLines
-	val accessToken = lines.next
-	val numUsers = lines.next.toInt
-
-	def fileGenerator(f: java.io.File)(op: java.io.PrintWriter => Unit) {
-		val p = new java.io.PrintWriter(f)
-		try { op(p) } finally { p.close() }
-	}
+class createWorkspaces extends RawlsSimulation {
 
 	val r = scala.util.Random
 	val runID = s"gatling_creations_${r.nextInt}"

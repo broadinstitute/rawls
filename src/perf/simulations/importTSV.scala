@@ -1,18 +1,11 @@
 package default
 
 import scala.concurrent.duration._
-import java.io._
 
 import io.gatling.core.Predef._
 import io.gatling.http.Predef._
-import io.gatling.jdbc.Predef._
 
-class importTSV extends Simulation {
-
-  //specify this stuff in /user-files/config.txt
-  val lines = scala.io.Source.fromFile("../user-files/config.txt").getLines
-  val accessToken = lines.next
-  val numUsers = lines.next.toInt
+class importTSV extends RawlsSimulation {
 
   val httpProtocol = http
     .baseURL("https://firecloud.dsde-dev.broadinstitute.org") //hit orchestration instead of rawls. this functionality doesn't quite exist in rawls
