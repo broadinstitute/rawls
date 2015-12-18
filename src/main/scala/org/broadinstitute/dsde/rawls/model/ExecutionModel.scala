@@ -42,7 +42,14 @@ case class ExecutionServiceOutputs(
 
 case class ExecutionServiceLogs(
  id: String,
- logs: Map[String, Seq[Map[String,String]]]
+ logs: Map[String, Seq[ExecutionServiceCallLogs]]
+)
+
+// cromwell.engine.backend.CallLogs
+case class ExecutionServiceCallLogs(
+  stdout: String,
+  stderr: String,
+  backendLogs: Option[Map[String, String]] = None
 )
 
 case class ExecutionServiceWorkflowOptions(
@@ -75,7 +82,7 @@ case class WorkflowFailure(
 }
 
 case class TaskOutput(
-  logs: Option[Seq[Map[String, String]]],
+  logs: Option[Seq[ExecutionServiceCallLogs]],
   outputs: Option[Map[String, Attribute]]
 )
 
@@ -227,6 +234,8 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val ExecutionServiceValidationFormat = jsonFormat2(ExecutionServiceValidation)
 
   implicit val ExecutionServiceOutputsFormat = jsonFormat2(ExecutionServiceOutputs)
+
+  implicit val ExecutionServiceCallLogsFormat = jsonFormat3(ExecutionServiceCallLogs)
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 

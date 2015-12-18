@@ -333,7 +333,12 @@ class RemoteServicesMockServer(port:Int) {
               |    }],
               |    "wf.y": [{
               |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-1.txt",
-              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt"
+              |      "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-1.txt",
+              |      "backendLogs": {
+              |        "log": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes.log",
+              |        "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes-stdout.log",
+              |        "stderr": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/jes-stderr.log"
+              |      }
               |    },
               |    {
               |      "stdout": "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
