@@ -91,9 +91,9 @@ trait GraphDAO {
     override def compute(a: A): B = f(a)
   }
 
+  //in general, we only support alphanumeric, spaces, _, and - for user-input
   def validateUserDefinedString(s: String) = {
-    // due to Orient's chained access "feature", we should avoid dots in certain user-defined strings
-    if (s.contains('.')) throw new RawlsExceptionWithStatusCode(message = s"User-defined string $s should not contain dot characters", statusCode = StatusCodes.BadRequest)
+    if(!s.matches("[A-z0-9 _-]+")) throw new RawlsExceptionWithStatusCode(message = s"Invalid input: $s . Input may only contain alphanumeric characters, underscores, spaces, and dashes.", statusCode = StatusCodes.BadRequest)
   }
 
   def validateAttributeName(name: String) = {
