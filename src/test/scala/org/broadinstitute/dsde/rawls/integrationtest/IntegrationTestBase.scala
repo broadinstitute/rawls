@@ -11,6 +11,7 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.compute.ComputeScopes
 import com.google.api.services.storage.StorageScopes
 import com.orientechnologies.orient.client.remote.OServerAdmin
+import com.orientechnologies.orient.core.db.document.ODatabaseDocumentTx
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -90,12 +91,24 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
   def workspaceServiceWithDbName(dbName: String) = {
     // setup DB. if it already exists, drop and then re-create it.
-    val dbUrl = orientUrl.replace("rawls", dbName)   // TODO: don't hard-code this
-    val admin = new OServerAdmin(dbUrl).connect(orientRootUser, orientRootPassword)
-    if (admin.existsDatabase()) admin.dropDatabase(dbName)
-    admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
-    val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
+    val dbUrl = orientUrl.replace("rawlsdb", dbName)   // TODO: don't hard-code this
 
+    if (dbUrl.startsWith("remote")) {
+      // "connect" is invalid for plocal
+      val admin = new OServerAdmin(dbUrl).connect(orientRootUser, orientRootPassword)
+      if (admin.existsDatabase()) admin.dropDatabase(dbName)
+      admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
+    }
+    else {
+      val db = new ODatabaseDocumentTx(dbUrl)
+      if (db.exists()) {
+        if (db.isClosed) db.open("admin", "admin")
+        db.drop()
+      }
+      db.create()
+    }
+
+    val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
     dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
