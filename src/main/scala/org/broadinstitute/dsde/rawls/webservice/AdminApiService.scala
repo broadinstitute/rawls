@@ -74,9 +74,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             UserService.props(userServiceConstructor, userInfo),
             UserService.CreateGroup(groupRef))
         }
-      }
-    } ~
-    path("admin" / "groups") { //delete group
+      } ~
       delete {
         entity(as[RawlsGroupRef]) { groupRef =>
           requestContext => perRequest(requestContext,
@@ -90,20 +88,16 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.UpdateGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList, true))
+            UserService.AddGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
         }
-      }
-    } ~
-    path("admin" / "groups" / Segment / "members") { (groupName) => //remove members from group
+      } ~
       delete {
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.UpdateGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList, false))
+            UserService.RemoveGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
         }
-      }
-    } ~
-    path("admin" / "groups" / Segment / "members") { (groupName) => //list group members
+      } ~
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
@@ -115,9 +109,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.ListUsers)
-      }
-    } ~
-    path("admin" / "users") {
+      } ~
       post {
         entity(as[RawlsUserInfoList]) { userInfoList =>
           requestContext => perRequest(requestContext,

@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 
 import scala.concurrent.ExecutionContext
@@ -62,7 +63,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group and ldap entry" in withEmptyTestDatabase { dataSource =>
+  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -72,6 +73,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
         txn.withGraph { graph =>
           assert {
             getMatchingUserVertices(graph, user).isEmpty
+          }
+          assert {
+            containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn).isEmpty
           }
         }
       }
@@ -95,6 +99,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         txn.withGraph { graph =>
           assert {
             getMatchingUserVertices(graph, user).nonEmpty
+          }
+          assert {
+            val group = containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn)
+            group.isDefined && group.get.users.contains(user)
           }
         }
       }
@@ -127,7 +135,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
             responseAs[UserStatus]
           }
         }
@@ -144,7 +152,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true))) {
+          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
             responseAs[UserStatus]
           }
         }
@@ -161,7 +169,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
             responseAs[UserStatus]
           }
         }
@@ -182,7 +190,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false))) {
+        assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> false))) {
           responseAs[UserStatus]
         }
       }

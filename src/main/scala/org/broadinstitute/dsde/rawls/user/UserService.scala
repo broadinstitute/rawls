@@ -21,6 +21,8 @@ import scala.util.{Success, Try, Failure}
  * Created by dvoet on 10/27/15.
  */
 object UserService {
+  val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
+
   def props(userServiceConstructor: UserInfo => UserService, userInfo: UserInfo): Props = {
     Props(userServiceConstructor(userInfo))
   }
@@ -50,7 +52,8 @@ object UserService {
   case class CreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class ListGroupMembers(groupName: String) extends UserServiceMessage
   case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class UpdateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, adding: Boolean) extends UserServiceMessage
+  case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
@@ -79,7 +82,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
     case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
     case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
-    case UpdateGroupMembers(groupName, memberList, adding) => updateGroupMembers(groupName, memberList, adding) to context.parent
+    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to context.parent
+    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to context.parent
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -100,7 +104,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.createProxyGroup(user)),
-      toFutureTry(Future(dataSource.inTransaction()(txn => containerDAO.authDAO.saveUser(user, txn)))),
+      toFutureTry(dataSource.inFutureTransaction() { txn =>
+        Future(containerDAO.authDAO.saveUser(user, txn)).
+          flatMap(user => addUsersToAllUsersGroup(Seq(user), txn)) }),
       toFutureTry(userDirectoryDAO.createUser(user))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
@@ -120,15 +126,37 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
   //imports the response from the above listUsers
   def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = asAdmin {
-    Future(dataSource.inTransaction() { txn =>
-      val users = rawlsUserInfoList.userInfoList
-      users.foreach(u => {
-        containerDAO.authDAO.saveUser(u.user, txn)
-        u.billingProjects.foreach(b =>
-          containerDAO.billingDAO.addUserToProject(u.user, containerDAO.billingDAO.loadProject(b, txn).get, txn)
-        )
+    dataSource.inFutureTransaction() { txn =>
+      Future { 
+        val userInfos = rawlsUserInfoList.userInfoList
+        userInfos.map { u =>
+          val user = containerDAO.authDAO.saveUser(u.user, txn)
+          u.billingProjects.foreach(b =>
+            containerDAO.billingDAO.addUserToProject(u.user, containerDAO.billingDAO.loadProject(b, txn).get, txn)
+          )
+          user
+        }
+      } flatMap { users =>
+        addUsersToAllUsersGroup(users, txn)
+      } map(_ match {
+        case None => RequestComplete(StatusCodes.Created)
+        case Some(error) => RequestComplete(error)
       })
-      RequestComplete(StatusCodes.Created)
+    }
+  }
+
+  private def addUsersToAllUsersGroup(users: Seq[RawlsUser], txn: RawlsTransaction): Future[Option[ErrorReport]] = {
+    getOrCreateAllUsersGroup(txn) flatMap { allUsersGroup =>
+      updateGroupMembersInternal(allUsersGroup, users, Seq.empty, AddGroupMembersOp, txn)
+    }
+  }
+
+  private def getOrCreateAllUsersGroup(txn: RawlsTransaction): Future[RawlsGroup] = {
+    Future {
+      containerDAO.authDAO.loadGroup(allUsersGroupRef, txn)
+    } flatMap (_ match {
+      case Some(g) => Future.successful(g)
+      case None => createGroupInternal(allUsersGroupRef, txn)
     })
   }
 
@@ -143,7 +171,13 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = withUser(userRef) { user =>
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
-      toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _))
+      toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _)),
+      toFutureTry {
+        dataSource.inFutureTransaction() { txn =>
+          val allUsersGroup = getOrCreateAllUsersGroup(txn)
+          allUsersGroup.map("allUsersGroup" -> _.users.contains(userRef))
+        }
+      }
 
     )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
   }
@@ -262,17 +296,21 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
         containerDAO.authDAO.loadGroup(groupRef, txn) match {
           case Some(_) => Future.successful(RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
           case None =>
-            containerDAO.authDAO.saveGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-            gcsDAO.createGoogleGroup(groupRef) map { _ => RequestComplete(StatusCodes.Created) }
+            createGroupInternal(groupRef, txn) map { _ => RequestComplete(StatusCodes.Created) }
         }
       }
     }
   }
 
+  private def createGroupInternal(groupRef: RawlsGroupRef, txn: RawlsTransaction): Future[RawlsGroup] = {
+    val rawlsGroup = containerDAO.authDAO.saveGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
+    gcsDAO.createGoogleGroup(groupRef).map(_ => rawlsGroup)
+  }
+
   def deleteGroup(groupRef: RawlsGroupRef) = {
     asAdmin {
       dataSource.inTransaction() { txn =>
-        withGroup(groupRef) { group =>
+        withGroup(groupRef, txn) { group =>
           containerDAO.authDAO.deleteGroup(groupRef, txn)
           gcsDAO.deleteGoogleGroup(groupRef) map { _ => RequestComplete(StatusCodes.OK) }
         }
@@ -280,76 +318,68 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  //ideally this would probably just return the already loaded users to avoid loading twice
-  def allMembersExist(memberList: RawlsGroupMemberList): Boolean = {
-    dataSource.inTransaction() { txn =>
-      val users = memberList.userEmails.map(e => containerDAO.authDAO.loadUserByEmail(e, txn))
-      val groups = memberList.subGroupEmails.map(e => containerDAO.authDAO.loadGroupByEmail(e, txn))
-      !(users++groups).contains(None)
+  def updateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, operation: UpdateGroupMembersOp): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        withGroup(groupRef, txn) { group =>
+          val users = memberList.userEmails.map(email => (email, containerDAO.authDAO.loadUserByEmail(email, txn)))
+          val subGroups = memberList.subGroupEmails.map(email => (email, containerDAO.authDAO.loadGroupByEmail(email, txn)))
+
+          (users.collect { case (email, None) => email }, subGroups.collect { case (email, None) => email }) match {
+            // success case, all users and groups found
+            case (Seq(), Seq()) =>
+              updateGroupMembersInternal(group, users.map(_._2.get), subGroups.map(_._2.get), operation, txn) map {
+                _ match {
+                  case None => RequestComplete(StatusCodes.OK)
+                  case Some(error) => RequestComplete(error)
+                }
+              }
+
+            // failure cases, some users and/or groups not found
+            case (Seq(), missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
+            case (missingUsers, Seq()) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
+            case (missingUsers, missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
+          }
+        }
+      }
     }
   }
 
-  //in the event of a failure updating the user in the google group, the user will not be updated in the RawlsGroup
-  def updateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, adding: Boolean) = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        if (!allMembersExist(memberList))
-          Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound,
-            "Not all members are registered. Please ensure that all users/groups exist")))
-        else {
-          val updateMap = memberList.userEmails.map { user =>
-            val theUser = containerDAO.authDAO.loadUserByEmail(user, txn).get
-            val updateTry = adding match {
-              case true => toFutureTry(gcsDAO.addMemberToGoogleGroup(groupRef, Left(theUser)))
-              case false => toFutureTry(gcsDAO.removeMemberFromGoogleGroup(groupRef, Left(theUser)))
-            }
-            updateTry.map(Left(theUser) -> _)
-          } ++ memberList.subGroupEmails.map { subGroup =>
-            val theGroup = containerDAO.authDAO.loadGroupByEmail(subGroup, txn).get
-            val updateTry = adding match {
-              case true => toFutureTry(gcsDAO.addMemberToGoogleGroup(groupRef, Right(theGroup)))
-              case false => toFutureTry(gcsDAO.removeMemberFromGoogleGroup(groupRef, Right(theGroup)))
-            }
-            updateTry.map(Right(theGroup) -> _)
-          }
+  /**
+   * updates the contents of a group. in the event of a failure updating the user in the google group, the user will not be updated in the RawlsGroup.
+   *
+   * @param group the group the update
+   * @param users users to add or remove from the group
+   * @param subGroups sub groups to add or remove from the group
+   * @param operation which update operation to perform
+   * @param txn the transaction to operate within
+   * @return Future(None) if all went well
+   */
+  private def updateGroupMembersInternal(group: RawlsGroup, users: Seq[RawlsUser], subGroups: Seq[RawlsGroup], operation: UpdateGroupMembersOp, txn: RawlsTransaction): Future[Option[ErrorReport]] = {
+    // update the google group, each update happens in the future and may or may not succeed.
+    val googleUpdateTrials: Seq[Future[Try[Either[RawlsUser, RawlsGroup]]]] = users.map { user =>
+      toFutureTry(operation.updateGoogle(group, Left(user))).map(_ match {
+        case Success(_) => Success(Left(user))
+        case Failure(f) => Failure(new RawlsException(s"Could not update user ${user.userEmail.value}", f))
+      })
+    } ++ subGroups.map { subGroup =>
+      toFutureTry(operation.updateGoogle(group, Right(subGroup))).map(_ match {
+        case Success(_) => Success(Right(subGroup))
+        case Failure(f) => Failure(new RawlsException(s"Could not update group ${subGroup.groupEmail.value}", f))
+      })
+    }
 
-          val list: Future[Seq[Try[Either[RawlsUser, RawlsGroup]]]] = Future.sequence(updateMap) map { pairs =>
-            pairs.map { case (member: Either[RawlsUser, RawlsGroup], result: Try[Either[RawlsUser, RawlsGroup]]) =>
-              result match {
-                case Success(_) => Success(member)
-                case Failure(f) => member match {
-                  case Left(theUser) => Failure(new RawlsException(s"Could not update user ${theUser.userEmail.value}", f))
-                  case Right(theGroup) => Failure(new RawlsException(s"Could not update group ${theGroup.groupEmail.value}", f))
-                }
-              }
-            }
-          }
+    // wait for all google updates to finish then for each successful update change the rawls database
+    Future.sequence(googleUpdateTrials).map { tries =>
+      val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }.toSet
+      val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }.toSet
+      containerDAO.authDAO.saveGroup(operation.updateGroupObject(group, successfulUsers, successfulGroups), txn)
 
-          list.map { tries =>
-            val exceptions = tries.collect {
-              case Failure(t) => t
-            }
-
-            val successfulUsers = tries.collect {
-              case Success(Left(member)) => RawlsUser.toRef(member)
-            }.toSet
-            val successfulGroups = tries.collect {
-              case Success(Right(member)) => RawlsGroup.toRef(member)
-            }.toSet
-
-            val group = containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException("Unable to load group"))
-            adding match {
-              case true => containerDAO.authDAO.saveGroup(group.copy(users = (group.users ++ successfulUsers),
-                subGroups = (group.subGroups ++ successfulGroups)), txn)
-              case false => containerDAO.authDAO.saveGroup(group.copy(users = (group.users -- successfulUsers),
-                subGroups = (group.subGroups -- successfulGroups)), txn)
-            }
-            if (exceptions.isEmpty)
-              RequestComplete(StatusCodes.OK)
-            else
-              RequestComplete(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_))))
-          }
-        }
+      val exceptions = tries.collect { case Failure(t) => t }
+      if (exceptions.isEmpty) {
+        None
+      } else {
+        Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_))))
       }
     }
   }
@@ -372,10 +402,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  private def withGroup(rawlsGroupRef: RawlsGroupRef)(op: RawlsGroup => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.loadGroup(rawlsGroupRef, txn)
-    } match {
+  private def withGroup(rawlsGroupRef: RawlsGroupRef, txn: RawlsTransaction)(op: RawlsGroup => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    containerDAO.authDAO.loadGroup(rawlsGroupRef, txn) match {
       case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found")))
       case Some(group) => op(group)
     }
@@ -411,6 +439,19 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
   private def handleException(message: String)(exceptions: Seq[Throwable]): PerRequestMessage = {
     RequestComplete(ErrorReport(StatusCodes.InternalServerError, message, exceptions.map(ErrorReport(_))))
+  }
+
+  private sealed trait UpdateGroupMembersOp {
+    def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
+    def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup
+  }
+  private object AddGroupMembersOp extends UpdateGroupMembersOp {
+    override def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.addMemberToGoogleGroup(groupRef, member)
+    override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users ++ users), subGroups = (group.subGroups ++ subGroups))
+  }
+  private object RemoveGroupMembersOp extends UpdateGroupMembersOp {
+    override def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.removeMemberFromGoogleGroup(groupRef, member)
+    override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users -- users), subGroups = (group.subGroups -- subGroups))
   }
 }
 

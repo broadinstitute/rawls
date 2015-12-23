@@ -387,7 +387,10 @@ class HttpGoogleServicesDAO(
       case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
     }
     val inserter = getGroupDirectory.members.insert(toGoogleGroupName(groupRef.groupName), memberEmail)
-    retry(when500)(() => Future { blocking { inserter.execute } })
+    val insertFuture: Future[Unit] = retry(when500)(() => Future { blocking { inserter.execute } })
+    insertFuture recover {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => Unit // it is ok of the email is already there
+    }
   }
 
   override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
@@ -396,7 +399,10 @@ class HttpGoogleServicesDAO(
       case Right(member) => member.groupEmail.value
     }
     val deleter = getGroupDirectory.members.delete(toGoogleGroupName(groupRef.groupName), memberEmail)
-    retry(when500)(() => Future { blocking { deleter.execute } })
+    val deleteFuture: Future[Unit] = retry(when500)(() => Future { blocking { deleter.execute } })
+    deleteFuture recover {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // it is ok of the email is already missing
+    }
   }
 
   override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
