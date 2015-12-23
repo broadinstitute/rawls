@@ -91,7 +91,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
   def workspaceServiceWithDbName(dbName: String) = {
     // setup DB. if it already exists, drop and then re-create it.
-    val dbUrl = orientUrl.replace("rawlsdb", dbName)   // TODO: don't hard-code this
+    val dbUrl = orientUrl.replace("rawlsdb", dbName).replace("rawls", dbName)   // TODO: don't hard-code these
 
     if (dbUrl.startsWith("remote")) {
       // "connect" is invalid for plocal
