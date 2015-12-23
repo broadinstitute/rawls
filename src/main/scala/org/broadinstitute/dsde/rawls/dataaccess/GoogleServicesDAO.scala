@@ -9,14 +9,14 @@ import org.joda.time.DateTime
 import spray.http.StatusCodes
 import scala.concurrent.Future
 
-trait GoogleServicesDAO {
+abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   // returns a workspaceID
   def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit]
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
-  def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef): Future[Any]
+  def deleteWorkspace(bucketName: String, monitorRef: ActorRef): Future[Any]
 
   def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any]
 
@@ -26,7 +26,7 @@ trait GoogleServicesDAO {
 
   def getMaximumAccessLevel(userId: String, workspaceId: String): Future[WorkspaceAccessLevel]
 
-  def getBucketName(workspaceId: String) = s"rawls-${workspaceId}"
+  def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"
 

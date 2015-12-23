@@ -45,7 +45,7 @@ class HttpGoogleServicesDAO(
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
   tokenEncryptionKey: String,
-  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO with Retry with FutureSupport {
+  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -194,9 +194,7 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef): Future[Any] = {
-    val bucketName = getBucketName(workspaceId)
-
+  override def deleteWorkspace(bucketName: String, monitorRef: ActorRef): Future[Any] = {
     val groups = getGroupDirectory.groups
 
     def deleteGroups(bucketName: String): Future[Seq[Unit]] = {
@@ -589,7 +587,7 @@ class HttpGoogleServicesDAO(
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"
   def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
-    val pattern = s"rawls-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r
+    val pattern = s"${groupsPrefix}-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r
     Try{
       val pattern(workspaceId,accessLevelString) = groupId
       WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevels.withName(accessLevelString.toUpperCase))

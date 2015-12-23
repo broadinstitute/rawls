@@ -41,7 +41,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
-    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+    val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
@@ -54,7 +54,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       containerDAO,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      new MockGoogleServicesDAO,
+      new MockGoogleServicesDAO("test"),
       submissionSupervisor,
       bucketDeletionMonitor
     )_

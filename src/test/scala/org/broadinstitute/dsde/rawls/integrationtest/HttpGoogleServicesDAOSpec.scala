@@ -42,7 +42,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   val testCollaborator = UserInfo("fake_user_42@broadinstitute.org", OAuth2BearerToken("testtoken"), 123, "123456789876543212345aaa")
 
   override def afterAll() = {
-    Try(gcsDAO.deleteWorkspace(testCreator,testWorkspaceId, bucketDeletionMonitor)) // one last-gasp attempt at cleaning up
+    Try(gcsDAO.deleteWorkspace(testBucket, bucketDeletionMonitor)) // one last-gasp attempt at cleaning up
   }
 
   "HttpGoogleServicesDAO" should "do all of the things" in {
@@ -102,7 +102,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsDAO.fromGroupId(groupName) should be (Some(WorkspacePermissionsPair(testWorkspaceId, WorkspaceAccessLevels.Owner)))
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
-    Await.result(gcsDAO.deleteWorkspace(testCreator, testWorkspaceId, bucketDeletionMonitor), Duration.Inf)
+    Await.result(gcsDAO.deleteWorkspace(testBucket, bucketDeletionMonitor), Duration.Inf)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerGroup).execute() }

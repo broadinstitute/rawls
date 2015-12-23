@@ -35,7 +35,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
   def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO)
+    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
     } finally {

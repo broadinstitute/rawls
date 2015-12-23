@@ -18,7 +18,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
 
-    val gcsDAO = new MockGoogleServicesDAO
+    val gcsDAO = new MockGoogleServicesDAO("test")
     gcsDAO.storeToken(userInfo, "test_token")
 
     val apiService = new TestApiService(dataSource, gcsDAO)

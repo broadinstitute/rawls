@@ -192,7 +192,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
         }
 
-        gcsDAO.deleteWorkspace(userInfo, workspaceContext.workspace.workspaceId, bucketDeletionMonitor).map { _ =>
+        gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, bucketDeletionMonitor).map { _ =>
           containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
           containerDAO.workspaceDAO.delete(workspaceName, txn)
 

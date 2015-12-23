@@ -20,7 +20,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: DataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO)
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
     } finally {

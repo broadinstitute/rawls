@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import akka.actor.{PoisonPill, ActorSystem}
+import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.testkit.{TestKit, TestActorRef}
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -20,7 +20,7 @@ import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 
 import scala.concurrent.{Future, Await}
-import scala.util.Success
+import scala.util.{Try, Success}
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
 
@@ -135,7 +135,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit, execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
     withDataOp { dataSource =>
-      val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO
+      val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         containerDAO,
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
@@ -197,23 +197,37 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
+  private def waitForSubmissionActor(submissionId: String) = {
+    var subActor: Option[ActorRef] = None
+    awaitCond({
+      val tr = Try(Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + submissionId).resolveOne(100 milliseconds), Duration.Inf))
+      subActor = tr.toOption
+      tr.isSuccess
+    }, 250 milliseconds)
+    subActor.get
+  }
+
   it should "return a successful Submission and spawn a submission monitor actor when given an entity expression that evaluates to a single entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"))
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmission) = rqComplete.response
-    assertResult(StatusCodes.Created) { status }
-    assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") { mockExecSvc.submitInput }
+    assertResult(StatusCodes.Created) {
+      status
+    }
+    assertResult("{\"three_step.cgrep.pattern\":\"tumor\"}") {
+      mockExecSvc.submitInput
+    }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
-    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://rawls-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken, testData.billingProject.cromwellAuthBucketUrl))) {
+    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://test-aWorkspaceId/${newSubmission.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken, testData.billingProject.cromwellAuthBucketUrl))) {
       mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
     }
 
-    val monitorActor = Await.result(system.actorSelection("/user/" + submissionSupervisorActorName + "/" + newSubmission.submissionId).resolveOne(5.seconds), Timeout(5.seconds).duration )
-    assert( monitorActor != None ) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
+    val monitorActor = waitForSubmissionActor(newSubmission.submissionId)
+    assert(monitorActor != None) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
 
-    assert( newSubmission.notstarted.size == 0 )
-    assert( newSubmission.workflows.size == 1 )
+    assert(newSubmission.notstarted.size == 0)
+    assert(newSubmission.workflows.size == 1)
 
     checkSubmissionStatus(workspaceService, newSubmission.submissionId)
   }
