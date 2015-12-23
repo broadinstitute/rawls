@@ -90,7 +90,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
   def workspaceServiceWithDbName(dbName: String) = {
     // setup DB. if it already exists, drop and then re-create it.
-    val dbUrl = s"remote:${orientServer}/${dbName}"
+    val dbUrl = orientUrl.replace("rawls", dbName)   // TODO: don't hard-code this
     val admin = new OServerAdmin(dbUrl).connect(orientRootUser, orientRootPassword)
     if (admin.existsDatabase()) admin.dropDatabase(dbName)
     admin.createDatabase("graph", "plocal") // storage type is 'plocal' even though this is a remote server
