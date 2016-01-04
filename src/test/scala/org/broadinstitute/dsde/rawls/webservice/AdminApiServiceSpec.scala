@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http.StatusCodes
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
@@ -474,6 +475,38 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(UserList(List.empty)) {
           responseAs[UserList]
         }
+      }
+  }
+
+  it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
+    }
+
+    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
+      }
+    Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
+      }
+    Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+      }
+    Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
   }
 }

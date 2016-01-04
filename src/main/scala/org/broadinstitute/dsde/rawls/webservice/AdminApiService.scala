@@ -117,6 +117,23 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             UserService.ImportUsers(userInfoList))
         }
       }
+    } ~
+    path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.HasAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+      } ~
+      put {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GrantAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+      } ~
+      delete {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
     }
   }
 }

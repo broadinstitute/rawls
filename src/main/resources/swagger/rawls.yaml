@@ -507,6 +507,104 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/allUserReadAccess/{workspaceNamespace}/{workspaceName}':
+    get:
+      responses:
+        '204':
+          description: All users have read access to this workspace
+        '404':
+          description: Not all users have read access to this workspace or the workspace does not exist
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: ''
+      tags:
+        - admin
+      summary: Query all user read access status for a workspace
+      operationId: getAllUserReadAccess
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    put:
+      responses:
+        '201':
+          description: Access granted
+        '404':
+          description: Workspace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: ''
+      tags:
+        - admin
+      summary: Grant all user read access status for a workspace
+      operationId: grantAllUserReadAccess
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    delete:
+      responses:
+        '200':
+          description: Access revoked
+        '404':
+          description: Workspace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: ''
+      tags:
+        - admin
+      summary: Revoke all user read access status for a workspace
+      operationId: revokeAllUserReadAccess
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:

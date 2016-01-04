@@ -10,20 +10,18 @@ case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel)
 
 object WorkspaceAccessLevels {
   sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
-    val all = Seq(UnknownUser, NoAccess, Read, Write, Owner)
-
     def compare(that: WorkspaceAccessLevel) = { all.indexOf(this).compare(all.indexOf(that)) }
 
     override def toString = WorkspaceAccessLevels.toString(this)
     override def withName(name: String) = WorkspaceAccessLevels.withName(name)
   }
 
-  case object UnknownUser extends WorkspaceAccessLevel
   case object NoAccess extends WorkspaceAccessLevel
   case object Read extends WorkspaceAccessLevel
   case object Write extends WorkspaceAccessLevel
   case object Owner extends WorkspaceAccessLevel
 
+  val all = Seq(NoAccess, Read, Write, Owner)
   val groupAccessLevelsAscending = Seq(Read, Write, Owner)
 
   // note that the canonical string must match the format for GCS ACL roles,
@@ -35,7 +33,6 @@ object WorkspaceAccessLevels {
       case Write => "WRITER"
       case Read => "READER"
       case NoAccess => "NO ACCESS"
-      case UnknownUser => "UNKNOWN USER"
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${v}]")
     }
   }
@@ -46,7 +43,6 @@ object WorkspaceAccessLevels {
       case "WRITER" => Write
       case "READER" => Read
       case "NO ACCESS" => NoAccess
-      case "UNKNOWN USER" => UnknownUser
       case _ => throw new RawlsException(s"invalid WorkspaceAccessLevel [${s}]")
     }
   }

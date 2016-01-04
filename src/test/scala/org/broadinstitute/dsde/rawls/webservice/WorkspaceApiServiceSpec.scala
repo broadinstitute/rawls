@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http._
 import spray.json._
@@ -487,6 +488,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
       }
+  }
+
+  it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser("owner-access") { services =>
+    val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
+    }
+    import WorkspaceACLJsonSupport._
+    WorkspaceAccessLevels.all.foreach { accessLevel =>
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)).toJson.toString)) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) { status }
+        }
+    }
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser("write-access") { services =>
