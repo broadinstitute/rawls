@@ -927,7 +927,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         }
         RequestComplete(StatusCodes.Created, submissionReport)
 
-      case (somethingWrong, _) => somethingWrong // this is the case where something was not found in withSubmissionParameters
+      case (somethingWrong, Some(_)) => somethingWrong // this is the case where something was not found in withSubmissionParameters
       case (_, None) => RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"No refresh token found for ${userInfo.userEmail}"))
     }
   }
