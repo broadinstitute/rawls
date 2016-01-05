@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStar
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, PerRequestMessage, RequestComplete}
@@ -83,6 +84,10 @@ object WorkspaceService {
   case object ListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
 
+  case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class GrantAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class RevokeAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userInfo: UserInfo): Props = {
     Props(workspaceServiceConstructor(userInfo))
   }
@@ -138,6 +143,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
     case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to context.parent
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to context.parent
+
+    case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to context.parent
+    case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to context.parent
+    case RevokeAllUserReadAccess(workspaceName) => pipe(revokeAllUserReadAccess(workspaceName)) to context.parent
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
@@ -310,6 +319,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       }
     }
 
+  /**
+   * updates acls for a workspace
+   * @param workspaceName
+   * @param aclUpdates changes to make, if an entry already exists it will be changed to the level indicated in this
+   *                   Seq, use NoAccess to remove an entry, all other preexisting accesses remain unchanged
+   * @return
+   */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
       withWorkspaceContext(workspaceName, txn) { workspaceContext =>
@@ -326,37 +342,43 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             case (Right(rawlsGroup:RawlsGroup), level) => RawlsGroup.toRef(rawlsGroup)
           }.toSet
 
-          val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
-          //go through the access level groups on the workspace and update them
-          workspaceContext.workspace.accessLevels.foreach { case (level, groupRef) =>
-            withRawlsGroup(groupRef, txn) { group =>
-              //remove existing records for users and groups in the acl update list
-              val users = group.users.filter( userRef => !allTheRefs.contains(userRef) )
-              val groups = group.subGroups.filter( groupRef => !allTheRefs.contains(groupRef) )
+          if (allTheRefs.contains(UserService.allUsersGroupRef)) {
+            Future.successful(RequestComplete( ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}") ))
 
-              //generate the list of new references
-              val newusers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
-              val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+          } else {
+            val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
+            //go through the access level groups on the workspace and update them
+            workspaceContext.workspace.accessLevels.foreach { case (level, groupRef) =>
+              withRawlsGroup(groupRef, txn) { group =>
+                //remove existing records for users and groups in the acl update list
+                val users = group.users.filter( userRef => !allTheRefs.contains(userRef) )
+                val groups = group.subGroups.filter( groupRef => !allTheRefs.contains(groupRef) )
 
-              containerDAO.authDAO.saveGroup(group.copy( users = users ++ newusers, subGroups = groups ++ newgroups ) ,txn)
+                //generate the list of new references
+                val newusers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
+                val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+
+                containerDAO.authDAO.saveGroup(group.copy( users = users ++ newusers, subGroups = groups ++ newgroups ) ,txn)
+              }
             }
-          }
 
-          val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
+            val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
               case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
               case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
             }).toSeq)
-            .map( email => ErrorReport( StatusCodes.NotFound, email ) )
+              .map( email => ErrorReport( StatusCodes.NotFound, email ) )
 
-          gcsDAO.updateACL(userInfo, workspaceContext.workspace.workspaceId, updateMap).map({
-            case None =>
-              if (emailNotFoundReports.isEmpty) {
-                RequestComplete(StatusCodes.OK)
-              } else {
-                RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
-              }
-            case Some(reports) => RequestComplete( ErrorReport(StatusCodes.Conflict,s"Unable to alter some ACLs in $workspaceName",reports ++ emailNotFoundReports) )
-          })
+            gcsDAO.updateACL(userInfo, workspaceContext.workspace.workspaceId, updateMap).map({
+              case None =>
+                if (emailNotFoundReports.isEmpty) {
+                  RequestComplete(StatusCodes.OK)
+                } else {
+                  RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
+                }
+              case Some(reports) => RequestComplete( ErrorReport(StatusCodes.Conflict,s"Unable to alter some ACLs in $workspaceName",reports ++ emailNotFoundReports) )
+            })
+          }
+
         }
       }
     }
@@ -1056,6 +1078,48 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, txn)
+        }
+      }
+    }
+  }
+
+  def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+
+          if (readerGroup.subGroups.contains(UserService.allUsersGroupRef)) {
+            Future.successful(RequestComplete(StatusCodes.NoContent))
+          } else {
+            Future.successful(RequestComplete(StatusCodes.NotFound))
+          }
+        }
+      }
+    }
+  }
+
+  def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+
+          containerDAO.authDAO.saveGroup(readerGroup.copy(subGroups = readerGroup.subGroups + UserService.allUsersGroupRef), txn)
+          Future.successful(RequestComplete(StatusCodes.Created))
+        }
+      }
+    }
+  }
+
+  def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+
+          containerDAO.authDAO.saveGroup(readerGroup.copy(subGroups = readerGroup.subGroups - UserService.allUsersGroupRef), txn)
+          Future.successful(RequestComplete(StatusCodes.OK))
         }
       }
     }
