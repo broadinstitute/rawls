@@ -93,7 +93,7 @@ trait GraphDAO {
 
   //in general, we only support alphanumeric, spaces, _, and - for user-input
   def validateUserDefinedString(s: String) = {
-    if(!s.matches("[A-z0-9 _-]+")) throw new RawlsExceptionWithStatusCode(message = s"Invalid input: $s . Input may only contain alphanumeric characters, underscores, spaces, and dashes.", statusCode = StatusCodes.BadRequest)
+    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithStatusCode(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest)
   }
 
   def validateAttributeName(name: String) = {
