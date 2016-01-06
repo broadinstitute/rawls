@@ -9,7 +9,7 @@ import org.joda.time.DateTime
 import scala.collection.mutable
 import scala.concurrent.Future
 
-class MockGoogleServicesDAO extends GoogleServicesDAO {
+class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
@@ -59,7 +59,7 @@ class MockGoogleServicesDAO extends GoogleServicesDAO {
 
   override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = Future.successful("mockBucket")
 
-  override def deleteWorkspace(userInfo: UserInfo, workspaceId: String, monitorRef: ActorRef) = Future.successful(Unit)
+  override def deleteWorkspace(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
