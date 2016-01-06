@@ -47,6 +47,16 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     getGroupVertex(db, groupRef).map(loadObject[RawlsGroup])
   }
 
+  override def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef, txn: RawlsTransaction): Option[RawlsGroup] = txn withGraph { db =>
+    val groupMemberPipeline = userPipeline(db, userRef).as("vtx").in()
+      .loop(
+        "vtx", //start point of loop
+        or(isVertexOfClass(VertexSchema.Group), isVertexOfClass(VertexSchema.Map)), //loop condition: walk while vertex is on an acl path (group or a list which looks like map)
+        isTargetGroup(groupRef))
+
+    getSinglePipelineResult(groupMemberPipeline).map(loadObject[RawlsGroup])
+  }
+
   def loadGroupByEmail(groupEmail: String, txn: RawlsTransaction): Option[RawlsGroup] = txn withGraph { db =>
     getGroupVertexByEmail(db, groupEmail).map(loadObject[RawlsGroup])
   }
@@ -72,6 +82,12 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
   private def isTargetWorkspace(wsId:String) = new PipeFunction[Vertex, java.lang.Boolean] {
     override def compute(v: Vertex) = {
       isVertexOfClass(VertexSchema.Workspace).compute(v) && hasPropertyValue("workspaceId", wsId).compute(v)
+    }
+  }
+
+  private def isTargetGroup(groupRef: RawlsGroupRef) = new PipeFunction[Vertex, java.lang.Boolean] {
+    override def compute(v: Vertex) = {
+      isVertexOfClass(VertexSchema.Group).compute(v) && hasPropertyValue("groupName", groupRef.groupName.value).compute(v)
     }
   }
 
