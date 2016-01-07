@@ -2510,6 +2510,38 @@ paths:
             - email
             - profile
 
+  '/api/user/group/{groupName}':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/RawlsGroupShort'
+        '404':
+          description: Group not found or user is not a member
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Get information about a group a user is a member of
+      tags:
+        - users
+      summary: Get information about a group a user is a member of
+      operationId: userGroupMember
+      parameters:
+        - in: path
+          description: name of group
+          name: groupName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
 tags:
   - name: admin
     description: Administrative API
@@ -3335,6 +3367,16 @@ definitions:
     description: a reference to a group
     properties:
       groupName:
+        type: string
+        description: ''
+
+  RawlsGroupShort:
+    description: group information without memberships
+    properties:
+      groupName:
+        type: string
+        description: ''
+      groupEmail:
         type: string
         description: ''
 

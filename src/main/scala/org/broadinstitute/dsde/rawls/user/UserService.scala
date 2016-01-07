@@ -14,6 +14,7 @@ import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
 import scala.concurrent.{Future, ExecutionContext}
 import scala.util.{Success, Try, Failure}
@@ -42,6 +43,7 @@ object UserService {
   case class DisableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case object ListUsers extends UserServiceMessage
   case class ImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
+  case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
   case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -69,6 +71,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case DisableUser(userRef) => disableUser(userRef) pipeTo context.parent
     case ListUsers => listUsers pipeTo context.parent
     case ImportUsers(rawlsUserInfoList) => importUsers(rawlsUserInfoList) pipeTo context.parent
+    case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo context.parent
 
     // ListBillingProjects is for the current user, not as admin
     // ListBillingProjectsForUser is for any user, as admin
@@ -143,6 +146,15 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
         case None => RequestComplete(StatusCodes.Created)
         case Some(error) => RequestComplete(error)
       })
+    }
+  }
+
+  def getUserGroup(rawlsGroupRef: RawlsGroupRef): Future[PerRequestMessage] = {
+    dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.loadGroupIfMember(rawlsGroupRef, RawlsUser(userInfo), txn) match {
+        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group")))
+        case Some(group) => Future.successful(RequestComplete(group.toRawlsGroupShort))
+      }
     }
   }
 

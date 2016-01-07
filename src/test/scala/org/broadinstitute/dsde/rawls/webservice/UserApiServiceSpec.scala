@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -229,11 +228,81 @@ class UserApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Set(project1.projectName)) {
+          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
           responseAs[Seq[RawlsBillingProjectName]].toSet
         }
       }
   }
 
+  it should "get details of a group a user is a member of" in withTestDataApiServices { services =>
+    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
+    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
+    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(group3, txn)
+      containerDAO.authDAO.saveGroup(group2, txn)
+      containerDAO.authDAO.saveGroup(group1, txn)
+    }
+
+    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    Get(s"/user/group/${group3.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(group3.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
+      }
+    Get(s"/user/group/${group2.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(group2.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
+      }
+    Get(s"/user/group/${group1.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(group1.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
+      }
+  }
+
+  it should "not get details of a group a user is not a member of" in withTestDataApiServices { services =>
+    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
+    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(group3, txn)
+      containerDAO.authDAO.saveGroup(group2, txn)
+      containerDAO.authDAO.saveGroup(group1, txn)
+    }
+
+    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    Get(s"/user/group/${group3.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(group3.toRawlsGroupShort) { responseAs[RawlsGroupShort] }
+      }
+    Get(s"/user/group/${group2.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+    Get(s"/user/group/${group1.groupName.value}") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "get not details of a group that does not exist" in withTestDataApiServices { services =>
+    Get("/user/group/blarg") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
 
 
 }
