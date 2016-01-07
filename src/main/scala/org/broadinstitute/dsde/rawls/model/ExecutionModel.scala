@@ -296,6 +296,7 @@ object WorkflowStatuses {
       case "Running" => Running
       case "Failed" => Failed
       case "Succeeded" => Succeeded
+      case "Aborting" => Aborting
       case "Aborted" => Aborted
       case "Unknown" => Unknown
       case _ => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
@@ -306,6 +307,7 @@ object WorkflowStatuses {
   case object Running extends WorkflowStatus
   case object Failed extends WorkflowStatus
   case object Succeeded extends WorkflowStatus
+  case object Aborting extends WorkflowStatus
   case object Aborted extends WorkflowStatus
   case object Unknown extends WorkflowStatus
 }
