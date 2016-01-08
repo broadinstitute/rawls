@@ -4,7 +4,7 @@ import cromwell.binding.types.{WdlType, WdlArrayType}
 import cromwell.binding.{WorkflowInput, NamespaceWithWorkflow, WdlNamespace}
 import cromwell.engine.backend.Backend
 import cromwell.parser.BackendType
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{model, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.{WorkspaceContext, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionParser, ExpressionEvaluator}
 import org.broadinstitute.dsde.rawls.model._
@@ -122,5 +122,12 @@ object MethodConfigResolver {
     val inputs = for ( input <- workflow.inputs ) yield input.fqn.toString -> nothing
     val outputs = for ( output <- workflow.outputs ) yield output._1.toString -> nothing
     MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs,methodRepoMethod)
+  }
+
+  def getMethodInputsOutputs(wdl: String) = {
+    val workflow = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow
+    MethodInputsOutputs(
+      workflow.inputs.map(i => model.MethodInput(i.fqn, i.wdlType.toWdlString, i.optional)),
+      workflow.outputs.map(o => MethodOutput(o._1, o._2.toWdlString)).toSeq)
   }
 }

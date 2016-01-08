@@ -1950,6 +1950,38 @@ paths:
             - openid
             - email
             - profile
+  /methodconfigs/inputsOutputs:
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodInputsOutputs'
+        '400':
+          description: Method WDL can't be parsed
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: No such method
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: ''
+      tags:
+        - methodconfigs
+      summary: Get information about a method's inputs and outputs
+      operationId: method_inputs_outputs
+      parameters:
+        - in: body
+          description: name of method to use for template
+          name: methodName
+          required: true
+          schema:
+            $ref: '#/definitions/MethodRepoMethod'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
@@ -3557,9 +3589,9 @@ definitions:
     description: information about a rawls user
     properties:
       userSubjectId:
-        type: String
+        type: string
       userEmail:
-        type: String
+        type: string
   RawlsUserInfo:
     description: information about a rawls user
     properties:
@@ -3576,3 +3608,30 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/RawlsUserInfo'
+  MethodInput:
+    description: description of a method input
+    properties:
+      name:
+        type: string
+      inputType:
+        type: string
+      optional:
+        type: boolean
+  MethodOutput:
+    description: description of a method output
+    properties:
+      name:
+        type: string
+      outputType:
+        type: string
+  MethodInputsOutputs:
+    description: description of a method's inputs and outputs
+    properties:
+      inputs:
+        type: array
+        items:
+          $ref: '#/definitions/MethodInput'
+      outputs:
+        type: array
+        items:
+          $ref: '#/definitions/MethodOutput'
