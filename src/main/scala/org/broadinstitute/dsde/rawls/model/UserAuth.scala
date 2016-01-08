@@ -13,7 +13,7 @@ case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
-case class RawlsGroupMemberList(userEmails: Seq[String], subGroupEmails: Seq[String])
+case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
 case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
 
@@ -114,7 +114,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
 
-  implicit val RawlsGroupMemberListFormat = jsonFormat2(RawlsGroupMemberList)
+  implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
 

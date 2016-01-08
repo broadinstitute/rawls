@@ -257,10 +257,10 @@ paths:
              - openid
              - email
              - profile
-  '/api/admin/groups/members/{groupName}':
+  '/api/admin/groups/{groupName}/members':
      post:
        responses:
-         '201':
+         '200':
            description: Successfully added members
          '403':
            description: You must be an admin to add members to a group
@@ -268,6 +268,8 @@ paths:
              $ref: '#/definitions/ErrorReport'
          '404':
            description: Unable to find member(s)
+           schema:
+             $ref: '#/definitions/ErrorReport'
          '500':
            description: Rawls Internal Error
            schema:
@@ -295,9 +297,48 @@ paths:
              - openid
              - email
              - profile
+     put:
+       responses:
+         '204':
+           description: Successfully overwrote members
+         '403':
+           description: You must be an admin to overwrite members of a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Unable to find member(s)
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively overwrite group membership. Any existing members not in the submitted list are removed, any missing members in the submitted list are added.
+       tags:
+         - admin
+         - groups
+       summary: overwrite group membership
+       operationId: adminOverwriteMembers
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+         - in: body
+           description: member list
+           name: memberList
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupMemberList'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
      delete:
        responses:
-         '201':
+         '200':
            description: Successfully removed members
          '403':
            description: You must be an admin to remove members from a group
@@ -305,6 +346,8 @@ paths:
              $ref: '#/definitions/ErrorReport'
          '404':
            description: Unable to find member(s)
+           schema:
+             $ref: '#/definitions/ErrorReport'
          '500':
            description: Rawls Internal Error
            schema:
@@ -332,10 +375,9 @@ paths:
              - openid
              - email
              - profile
-  '/api/admin/groups/members':
      get:
        responses:
-         '201':
+         '200':
             schema:
               type: array
               description: list of users
@@ -3352,13 +3394,21 @@ definitions:
         description: ''
 
   RawlsGroupMemberList:
-    description: a member list of users and groups
+    description: a member list of users and groups, users may be specified by email address or their subject id, sub groups may be specified by their email address or name, combinations of any or all are allowed in a single request
     properties:
       userEmails:
         type: array
         items:
           type: string
-      groupEmails:
+      subGroupEmails:
+        type: array
+        items:
+          type: string
+      userSubjectIds:
+        type: array
+        items:
+          type: string
+      subGroupNames:
         type: array
         items:
           type: string

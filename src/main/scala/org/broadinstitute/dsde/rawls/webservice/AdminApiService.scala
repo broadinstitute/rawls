@@ -83,7 +83,18 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
-    path("admin" / "groups" / Segment / "members") { (groupName) => //add members to group
+    path("admin" / "groups" / Segment / "members") { (groupName) =>
+      // there are 3 methods supported to modify group membership:
+      // PUT = "set the group members to exactly this list"
+      // POST = "add these things to the list"
+      // DELETE = "remove these things from the list"
+      put {
+        entity(as[RawlsGroupMemberList]) { memberList =>
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.OverwriteGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+        }
+      } ~
       post {
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,

@@ -55,6 +55,7 @@ object UserService {
   case class CreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class ListGroupMembers(groupName: String) extends UserServiceMessage
   case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
 }
@@ -86,6 +87,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
     case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
     case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
+    case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to context.parent
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to context.parent
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to context.parent
   }
@@ -110,7 +112,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       toFutureTry(gcsDAO.createProxyGroup(user)),
       toFutureTry(dataSource.inFutureTransaction() { txn =>
         Future(containerDAO.authDAO.saveUser(user, txn)).
-          flatMap(user => addUsersToAllUsersGroup(Seq(user), txn)) }),
+          flatMap(user => addUsersToAllUsersGroup(Set(user), txn)) }),
       toFutureTry(userDirectoryDAO.createUser(user))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
@@ -141,7 +143,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
           user
         }
       } flatMap { users =>
-        addUsersToAllUsersGroup(users, txn)
+        addUsersToAllUsersGroup(users.toSet, txn)
       } map(_ match {
         case None => RequestComplete(StatusCodes.Created)
         case Some(error) => RequestComplete(error)
@@ -158,9 +160,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  private def addUsersToAllUsersGroup(users: Seq[RawlsUser], txn: RawlsTransaction): Future[Option[ErrorReport]] = {
+  private def addUsersToAllUsersGroup(users: Set[RawlsUser], txn: RawlsTransaction): Future[Option[ErrorReport]] = {
     getOrCreateAllUsersGroup(txn) flatMap { allUsersGroup =>
-      updateGroupMembersInternal(allUsersGroup, users, Seq.empty, AddGroupMembersOp, txn)
+      updateGroupMembersInternal(allUsersGroup, users, Set.empty, AddGroupMembersOp, txn)
     }
   }
 
@@ -335,27 +337,76 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
+  def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        withGroup(groupRef, txn) { group =>
+          withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
+            val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
+            val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
+
+            // first remove members that should be removed
+            val removeMembersFuture = updateGroupMembersInternal(group,
+              usersToRemove.map(containerDAO.authDAO.loadUser(_, txn).get),
+              subGroupsToRemove.map(containerDAO.authDAO.loadGroup(_, txn).get),
+              RemoveGroupMembersOp, txn)
+
+            // then if there were no errors, add users that should be added
+            val addMembersFuture = removeMembersFuture.flatMap {
+              _ match {
+                case Some(errorReport) => Future.successful(Option(errorReport))
+                case None =>
+                  val usersToAdd = users.filter(user => !group.users.contains(user))
+                  val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
+
+                  // need to reload group cause it changed if members were removed
+                  updateGroupMembersInternal(containerDAO.authDAO.loadGroup(groupRef, txn).get, usersToAdd, subGroupsToAdd, AddGroupMembersOp, txn)
+              }
+            }
+
+            // finally report the results
+            addMembersFuture.map {
+              _ match {
+                case None => RequestComplete(StatusCodes.NoContent)
+                case Some(error) => RequestComplete(error)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private def withMemberUsersAndGroups(memberList: RawlsGroupMemberList, txn: RawlsTransaction)(op: (Set[RawlsUser], Set[RawlsGroup]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    val users =
+      memberList.userEmails.map(_.map(email => (email, containerDAO.authDAO.loadUserByEmail(email, txn)))).getOrElse(Seq.empty) ++
+      memberList.userSubjectIds.map(_.map(sub => (sub, containerDAO.authDAO.loadUser(RawlsUserRef(RawlsUserSubjectId(sub)), txn)))).getOrElse(Seq.empty)
+    val subGroups =
+      memberList.subGroupEmails.map(_.map(email => (email, containerDAO.authDAO.loadGroupByEmail(email, txn)))).getOrElse(Seq.empty) ++
+      memberList.subGroupNames.map(_.map(name => (name, containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(name)), txn)))).getOrElse(Seq.empty)
+
+    (users.collect { case (email, None) => email }, subGroups.collect { case (email, None) => email }) match {
+      // success case, all users and groups found
+      case (Seq(), Seq()) => op(users.map(_._2.get).toSet, subGroups.map(_._2.get).toSet)
+
+      // failure cases, some users and/or groups not found
+      case (Seq(), missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
+      case (missingUsers, Seq()) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
+      case (missingUsers, missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
+    }
+  }
+
   def updateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, operation: UpdateGroupMembersOp): Future[PerRequestMessage] = {
     asAdmin {
       dataSource.inFutureTransaction() { txn =>
         withGroup(groupRef, txn) { group =>
-          val users = memberList.userEmails.map(email => (email, containerDAO.authDAO.loadUserByEmail(email, txn)))
-          val subGroups = memberList.subGroupEmails.map(email => (email, containerDAO.authDAO.loadGroupByEmail(email, txn)))
-
-          (users.collect { case (email, None) => email }, subGroups.collect { case (email, None) => email }) match {
-            // success case, all users and groups found
-            case (Seq(), Seq()) =>
-              updateGroupMembersInternal(group, users.map(_._2.get), subGroups.map(_._2.get), operation, txn) map {
-                _ match {
-                  case None => RequestComplete(StatusCodes.OK)
-                  case Some(error) => RequestComplete(error)
-                }
+          withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
+            updateGroupMembersInternal(group, users, subGroups, operation, txn) map {
+              _ match {
+                case None => RequestComplete(StatusCodes.OK)
+                case Some(error) => RequestComplete(error)
               }
-
-            // failure cases, some users and/or groups not found
-            case (Seq(), missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
-            case (missingUsers, Seq()) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
-            case (missingUsers, missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
+            }
           }
         }
       }
@@ -372,9 +423,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
    * @param txn the transaction to operate within
    * @return Future(None) if all went well
    */
-  private def updateGroupMembersInternal(group: RawlsGroup, users: Seq[RawlsUser], subGroups: Seq[RawlsGroup], operation: UpdateGroupMembersOp, txn: RawlsTransaction): Future[Option[ErrorReport]] = {
+  private def updateGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], operation: UpdateGroupMembersOp, txn: RawlsTransaction): Future[Option[ErrorReport]] = {
     // update the google group, each update happens in the future and may or may not succeed.
-    val googleUpdateTrials: Seq[Future[Try[Either[RawlsUser, RawlsGroup]]]] = users.map { user =>
+    val googleUpdateTrials: Set[Future[Try[Either[RawlsUser, RawlsGroup]]]] = users.map { user =>
       toFutureTry(operation.updateGoogle(group, Left(user))).map(_ match {
         case Success(_) => Success(Left(user))
         case Failure(f) => Failure(new RawlsException(s"Could not update user ${user.userEmail.value}", f))
@@ -396,7 +447,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       if (exceptions.isEmpty) {
         None
       } else {
-        Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_))))
+        Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
       }
     }
   }

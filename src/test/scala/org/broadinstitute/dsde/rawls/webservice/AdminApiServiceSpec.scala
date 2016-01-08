@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
 import com.tinkerpop.blueprints.impls.orient.OrientVertex
 import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -362,7 +364,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -425,7 +427,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_blahhh@dev.firecloud.org")))) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_blahhh@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -449,7 +451,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) { status }
       }
     //put subgroup into main group
-    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
+    Post(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -463,7 +465,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
     //remove subgroup from main group
-    Delete(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(Seq.empty, Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org")))) ~>
+    Delete(s"/admin/groups/${group.groupName.value}/members", httpJson(RawlsGroupMemberList(subGroupEmails = Option(Seq(s"GROUP_${subGroup.groupName.value}@dev.firecloud.org"))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -476,6 +478,52 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           responseAs[UserList]
         }
       }
+  }
+
+  it should "return 200 when overwriting group membership" in withTestDataApiServices { services =>
+    val user1 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
+    val user2 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
+    val user3 = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail(s"${UUID.randomUUID().toString}@foo.com"))
+
+    val subGroup1 = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    val subGroup2 = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    val subGroup3 = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+
+    val testGroup = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set[RawlsUserRef](user1, user2), Set[RawlsGroupRef](subGroup1, subGroup2))
+
+    services.dataSource.inTransaction() { txn =>
+      authDAO.saveUser(user1, txn)
+      authDAO.saveUser(user2, txn)
+      authDAO.saveUser(user3, txn)
+
+      authDAO.saveGroup(subGroup1, txn)
+      authDAO.saveGroup(subGroup2, txn)
+      authDAO.saveGroup(subGroup3, txn)
+
+      authDAO.saveGroup(testGroup, txn)
+    }
+
+
+    Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userEmails = Option(Seq(user2.userEmail.value, user3.userEmail.value)), subGroupEmails = Option(Seq(subGroup2.groupEmail.value, subGroup3.groupEmail.value))))) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    services.dataSource.inTransaction() { txn =>
+      assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { authDAO.loadGroup(testGroup, txn) }
+    }
+
+    // put it back the way it was this time using subject ids and group names
+    Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userSubjectIds = Option(Seq(user2.userSubjectId.value, user1.userSubjectId.value)), subGroupNames = Option(Seq(subGroup2.groupName.value, subGroup1.groupName.value))))) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    services.dataSource.inTransaction() { txn =>
+      assertResult(Option(testGroup)) { authDAO.loadGroup(testGroup, txn) }
+    }
   }
 
   it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
