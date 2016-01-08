@@ -110,6 +110,10 @@ case class MethodRepoMethod(
   def idFields = Seq("methodName")
 }
 
+case class MethodInput(name: String, inputType: String, optional: Boolean)
+case class MethodOutput(name: String, outputType: String)
+case class MethodInputsOutputs(intputs: Seq[MethodInput], outputs: Seq[MethodOutput])
+
 case class MethodConfiguration(
                    namespace: String,
                    name: String,
@@ -267,6 +271,12 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
+
+  implicit val MethodInputFormat = jsonFormat3(MethodInput)
+
+  implicit val MethodOutputFormat = jsonFormat2(MethodOutput)
+
+  implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

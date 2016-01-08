@@ -71,6 +71,7 @@ object WorkspaceService {
   case class CopyMethodConfigurationToMethodRepo(query: MethodRepoConfigurationExport) extends WorkspaceServiceMessage
   case class ListMethodConfigurations(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
+  case class GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) extends WorkspaceServiceMessage
   case class GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
 
   case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -131,6 +132,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case CopyMethodConfigurationToMethodRepo(query) => pipe(copyMethodConfigurationToMethodRepo(query)) to context.parent
     case ListMethodConfigurations(workspaceName) => pipe(listMethodConfigurations(workspaceName)) to context.parent
     case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => pipe(createMethodConfigurationTemplate(methodRepoMethod)) to context.parent
+    case GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) => pipe(getMethodInputsOutputs(methodRepoMethod)) to context.parent
     case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to context.parent
 
     case ListSubmissions(workspaceName) => pipe(listSubmissions(workspaceName)) to context.parent
@@ -855,10 +857,22 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
 
   def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
-    methodRepoDAO.getMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) map { method =>
-      if (method.isEmpty) RequestComplete(ErrorReport(StatusCodes.NotFound, s"No method configuration named ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} exists in the repository."))
-      else if (method.get.payload.isEmpty) RequestComplete(ErrorReport(StatusCodes.BadRequest, "The method configuration named ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName} has no payload."))
-      else RequestComplete(StatusCodes.OK, MethodConfigResolver.toMethodConfiguration(method.get.payload.get, methodRepoMethod))
+    withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+      withWdl(method) { wdl =>
+        Future {
+          RequestComplete(StatusCodes.OK, MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod))
+        }
+      }
+    }
+  }
+
+  def getMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
+    withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+      withWdl(method) { wdl =>
+        Future {
+          RequestComplete(StatusCodes.OK, MethodConfigResolver.getMethodInputsOutputs(wdl))
+        }
+      }
     }
   }
 
@@ -871,7 +885,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
-            withMethod(workspaceContext, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
+            withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
               withEntity(workspaceContext, entityType, entityName, txn) { entity =>
                 withWdl(method) { wdl =>
                   Future {
@@ -1205,7 +1219,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 
-  private def withMethod(workspaceContext: WorkspaceContext, methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withMethod(methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     toFutureTry(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)) flatMap { agoraEntityOption => agoraEntityOption match {
       case Success(None) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => op(agoraEntity)

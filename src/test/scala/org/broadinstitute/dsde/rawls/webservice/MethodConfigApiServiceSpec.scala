@@ -437,7 +437,27 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 getting method inputs and outputs" in withTestDataApiServices { services =>
+    val method = MethodRepoMethod("dsde","three_step",1)
+    Post("/methodconfigs/inputsOutputs", httpJson(method)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(MethodInputsOutputs(Seq(MethodInput("three_step.cgrep.pattern","String",false)),Seq(MethodOutput("three_step.ps.procs","File"), MethodOutput("three_step.cgrep.count","Int"), MethodOutput("three_step.wc.count","Int")))) {
+          responseAs[MethodInputsOutputs]
+        }
+      }
+  }
+
   it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 404 getting method inputs and outputs from a bogus method" in withTestDataApiServices { services =>
     Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
