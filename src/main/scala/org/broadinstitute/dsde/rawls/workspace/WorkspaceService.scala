@@ -4,6 +4,7 @@ import java.util.UUID
 
 import akka.actor._
 import akka.pattern._
+import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -32,6 +33,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLF
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
 
+import scala.concurrent.duration._
 /**
  * Created by dvoet on 4/27/15.
  */
@@ -93,62 +95,62 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
+  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
-    case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to context.parent
-    case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to context.parent
-    case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to context.parent
-    case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to context.parent
-    case ListWorkspaces => pipe(listWorkspaces()) to context.parent
-    case CloneWorkspace(sourceWorkspace, destWorkspace) => pipe(cloneWorkspace(sourceWorkspace, destWorkspace)) to context.parent
-    case GetACL(workspaceName) => pipe(getACL(workspaceName)) to context.parent
-    case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to context.parent
-    case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to context.parent
-    case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to context.parent
+    case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to sender
+    case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to sender
+    case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to sender
+    case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
+    case ListWorkspaces => pipe(listWorkspaces()) to sender
+    case CloneWorkspace(sourceWorkspace, destWorkspace) => pipe(cloneWorkspace(sourceWorkspace, destWorkspace)) to sender
+    case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
+    case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
+    case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
+    case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
 
-    case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to context.parent
-    case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to context.parent
-    case UpdateEntity(workspaceName, entityType, entityName, operations) => pipe(updateEntity(workspaceName, entityType, entityName, operations)) to context.parent
-    case DeleteEntity(workspaceName, entityType, entityName) => pipe(deleteEntity(workspaceName, entityType, entityName)) to context.parent
-    case RenameEntity(workspaceName, entityType, entityName, newName) => pipe(renameEntity(workspaceName, entityType, entityName, newName)) to context.parent
-    case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to context.parent
-    case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to context.parent
-    case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to context.parent
-    case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to context.parent
-    case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpsertEntities(workspaceName, entityUpdates)) to context.parent
-    case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates)) to context.parent
+    case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
+    case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to sender
+    case UpdateEntity(workspaceName, entityType, entityName, operations) => pipe(updateEntity(workspaceName, entityType, entityName, operations)) to sender
+    case DeleteEntity(workspaceName, entityType, entityName) => pipe(deleteEntity(workspaceName, entityType, entityName)) to sender
+    case RenameEntity(workspaceName, entityType, entityName, newName) => pipe(renameEntity(workspaceName, entityType, entityName, newName)) to sender
+    case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
+    case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
+    case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
+    case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
+    case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpsertEntities(workspaceName, entityUpdates)) to sender
+    case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates)) to sender
 
-    case CreateMethodConfiguration(workspaceName, methodConfiguration) => pipe(createMethodConfiguration(workspaceName, methodConfiguration)) to context.parent
-    case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => pipe(renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)) to context.parent
-    case DeleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to context.parent
-    case GetMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to context.parent
-    case UpdateMethodConfiguration(workspaceName, methodConfiguration) => pipe(updateMethodConfiguration(workspaceName, methodConfiguration)) to context.parent
-    case CopyMethodConfiguration(methodConfigNamePair) => pipe(copyMethodConfiguration(methodConfigNamePair)) to context.parent
-    case CopyMethodConfigurationFromMethodRepo(query) => pipe(copyMethodConfigurationFromMethodRepo(query)) to context.parent
-    case CopyMethodConfigurationToMethodRepo(query) => pipe(copyMethodConfigurationToMethodRepo(query)) to context.parent
-    case ListMethodConfigurations(workspaceName) => pipe(listMethodConfigurations(workspaceName)) to context.parent
-    case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => pipe(createMethodConfigurationTemplate(methodRepoMethod)) to context.parent
-    case GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) => pipe(getMethodInputsOutputs(methodRepoMethod)) to context.parent
-    case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to context.parent
+    case CreateMethodConfiguration(workspaceName, methodConfiguration) => pipe(createMethodConfiguration(workspaceName, methodConfiguration)) to sender
+    case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => pipe(renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)) to sender
+    case DeleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(deleteMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
+    case GetMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
+    case UpdateMethodConfiguration(workspaceName, methodConfiguration) => pipe(updateMethodConfiguration(workspaceName, methodConfiguration)) to sender
+    case CopyMethodConfiguration(methodConfigNamePair) => pipe(copyMethodConfiguration(methodConfigNamePair)) to sender
+    case CopyMethodConfigurationFromMethodRepo(query) => pipe(copyMethodConfigurationFromMethodRepo(query)) to sender
+    case CopyMethodConfigurationToMethodRepo(query) => pipe(copyMethodConfigurationToMethodRepo(query)) to sender
+    case ListMethodConfigurations(workspaceName) => pipe(listMethodConfigurations(workspaceName)) to sender
+    case CreateMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ) => pipe(createMethodConfigurationTemplate(methodRepoMethod)) to sender
+    case GetMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ) => pipe(getMethodInputsOutputs(methodRepoMethod)) to sender
+    case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
 
-    case ListSubmissions(workspaceName) => pipe(listSubmissions(workspaceName)) to context.parent
-    case CreateSubmission(workspaceName, submission) => pipe(createSubmission(workspaceName, submission)) to context.parent
-    case ValidateSubmission(workspaceName, submission) => pipe(validateSubmission(workspaceName, submission)) to context.parent
-    case GetSubmissionStatus(workspaceName, submissionId) => pipe(getSubmissionStatus(workspaceName, submissionId)) to context.parent
-    case AbortSubmission(workspaceName, submissionId) => pipe(abortSubmission(workspaceName, submissionId)) to context.parent
-    case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to context.parent
-    case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to context.parent
+    case ListSubmissions(workspaceName) => pipe(listSubmissions(workspaceName)) to sender
+    case CreateSubmission(workspaceName, submission) => pipe(createSubmission(workspaceName, submission)) to sender
+    case ValidateSubmission(workspaceName, submission) => pipe(validateSubmission(workspaceName, submission)) to sender
+    case GetSubmissionStatus(workspaceName, submissionId) => pipe(getSubmissionStatus(workspaceName, submissionId)) to sender
+    case AbortSubmission(workspaceName, submissionId) => pipe(abortSubmission(workspaceName, submissionId)) to sender
+    case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to sender
+    case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
 
-    case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to context.parent
-    case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to context.parent
+    case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to sender
+    case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to sender
 
-    case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to context.parent
-    case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to context.parent
-    case RevokeAllUserReadAccess(workspaceName) => pipe(revokeAllUserReadAccess(workspaceName)) to context.parent
+    case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
+    case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to sender
+    case RevokeAllUserReadAccess(workspaceName) => pipe(revokeAllUserReadAccess(workspaceName)) to sender
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
@@ -345,42 +347,56 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           }.toSet
 
           if (allTheRefs.contains(UserService.allUsersGroupRef)) {
-            Future.successful(RequestComplete( ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}") ))
+            // UserService.allUsersGroupRef cannot be updated in this code path, there is an admin end point for that
+            Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}")))
+
+          } else if (!updateMap.get(Left(RawlsUser(userInfo))).forall(_ == containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext.workspace.workspaceId, txn))) {
+            // don't allow the user to change their own permissions but let it pass if they are in the list and their current access level
+            // is the same as the new value
+            Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, "You may not change your own permissions")))
 
           } else {
+            val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
             val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
-            //go through the access level groups on the workspace and update them
-            workspaceContext.workspace.accessLevels.foreach { case (level, groupRef) =>
-              withRawlsGroup(groupRef, txn) { group =>
-                //remove existing records for users and groups in the acl update list
-                val users = group.users.filter( userRef => !allTheRefs.contains(userRef) )
-                val groups = group.subGroups.filter( groupRef => !allTheRefs.contains(groupRef) )
 
-                //generate the list of new references
-                val newusers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
-                val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+            // go through the access level groups on the workspace and update them
+            // foldLeft to go through the futures in order instead of parallel to avoid concurrent modification exceptions
+            workspaceContext.workspace.accessLevels.foldLeft(Future.successful(RequestComplete(StatusCodes.NoContent)).asInstanceOf[Future[PerRequestMessage]]) {
+              case (priorFuture, (level, groupRef)) => priorFuture.flatMap {
+                case RequestComplete(StatusCodes.NoContent) => withRawlsGroup(groupRef, txn) { group =>
+                  //remove existing records for users and groups in the acl update list
+                  val usersNotChanging = group.users.filter(userRef => !allTheRefs.contains(userRef))
+                  val groupsNotChanging = group.subGroups.filter(groupRef => !allTheRefs.contains(groupRef))
 
-                containerDAO.authDAO.saveGroup(group.copy( users = users ++ newusers, subGroups = groups ++ newgroups ) ,txn)
+                  //generate the list of new references
+                  val newUsers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
+                  val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+
+                  implicit val timeout = Timeout(1 minutes)
+                  userServiceRef ? UserService.OverwriteGroupMembers(group, RawlsGroupMemberList(
+                    userSubjectIds = Option((usersNotChanging ++ newUsers).map(_.userSubjectId.value).toSeq),
+                    subGroupNames = Option((groupsNotChanging ++ newgroups).map(_.groupName.value).toSeq)
+                  ))
+                }.asInstanceOf[Future[PerRequestMessage]]
+                case _ => priorFuture
               }
-            }
+            } map {
+              case RequestComplete(StatusCodes.NoContent) =>
+                val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
+                  case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
+                  case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
+                }).toSeq)
+                  .map( email => ErrorReport( StatusCodes.NotFound, email ) )
 
-            val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
-              case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
-              case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
-            }).toSeq)
-              .map( email => ErrorReport( StatusCodes.NotFound, email ) )
-
-            gcsDAO.updateACL(userInfo, workspaceContext.workspace.workspaceId, updateMap).map({
-              case None =>
                 if (emailNotFoundReports.isEmpty) {
                   RequestComplete(StatusCodes.OK)
                 } else {
                   RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
                 }
-              case Some(reports) => RequestComplete( ErrorReport(StatusCodes.Conflict,s"Unable to alter some ACLs in $workspaceName",reports ++ emailNotFoundReports) )
-            })
-          }
 
+              case otherwise => otherwise
+            }
+          }
         }
       }
     }

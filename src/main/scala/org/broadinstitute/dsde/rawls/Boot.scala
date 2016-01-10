@@ -10,6 +10,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
+import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
@@ -86,13 +87,14 @@ object Boot extends App {
 
     BootMonitors.restartMonitors(dataSource, containerDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
                                                   containerDAO,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor, bucketDeletionMonitor),
-                    UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)),
+                                                  gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),
+                    userServiceConstructor),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

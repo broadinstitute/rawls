@@ -94,7 +94,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.OverwriteGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+            UserService.AdminOverwriteGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
         }
       } ~
       post {

@@ -67,12 +67,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
-  override def getACL(workspaceId: String) = Future.successful(WorkspaceACL(mockPermissions))
-
-  override def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]] = Future.successful(None)
-
-  override def getMaximumAccessLevel(userId: String, workspaceId: String) = Future.successful(getAccessLevelOrDieTrying(userId))
-
   val adminList = scala.collection.mutable.Set("test_token")
 
   override def isAdmin(userId: String): Future[Boolean] = Future.successful(adminList.contains(userId))

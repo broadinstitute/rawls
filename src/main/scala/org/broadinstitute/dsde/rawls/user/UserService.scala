@@ -55,6 +55,7 @@ object UserService {
   case class CreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class ListGroupMembers(groupName: String) extends UserServiceMessage
   case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
@@ -63,35 +64,36 @@ object UserService {
 
 class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
-    case SetRefreshToken(token) => setRefreshToken(token) pipeTo context.parent
-    case GetRefreshTokenDate => getRefreshTokenDate() pipeTo context.parent
+    case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
+    case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
-    case CreateUser => createUser() pipeTo context.parent
-    case AdminGetUserStatus(userRef) => adminGetUserStatus(userRef) pipeTo context.parent
-    case UserGetUserStatus => userGetUserStatus() pipeTo context.parent
-    case EnableUser(userRef) => enableUser(userRef) pipeTo context.parent
-    case DisableUser(userRef) => disableUser(userRef) pipeTo context.parent
-    case ListUsers => listUsers pipeTo context.parent
-    case ImportUsers(rawlsUserInfoList) => importUsers(rawlsUserInfoList) pipeTo context.parent
-    case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo context.parent
+    case CreateUser => createUser() pipeTo sender
+    case AdminGetUserStatus(userRef) => adminGetUserStatus(userRef) pipeTo sender
+    case UserGetUserStatus => userGetUserStatus() pipeTo sender
+    case EnableUser(userRef) => enableUser(userRef) pipeTo sender
+    case DisableUser(userRef) => disableUser(userRef) pipeTo sender
+    case ListUsers => listUsers pipeTo sender
+    case ImportUsers(rawlsUserInfoList) => importUsers(rawlsUserInfoList) pipeTo sender
+    case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     // ListBillingProjects is for the current user, not as admin
     // ListBillingProjectsForUser is for any user, as admin
 
-    case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo context.parent
-    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo context.parent
-    case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo context.parent
-    case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo context.parent
-    case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo context.parent
-    case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo context.parent
+    case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
+    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
+    case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
+    case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
+    case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
 
-    case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to context.parent
-    case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to context.parent
-    case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to context.parent
-    case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to context.parent
-    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to context.parent
-    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to context.parent
-    case SynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) to context.parent
+    case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to sender
+    case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to sender
+    case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => adminOverwriteGroupMembers(groupName, memberList) to sender
+    case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
+    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
+    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
+    case SynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) to sender
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -339,39 +341,43 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+  def adminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
     asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        withGroup(groupRef, txn) { group =>
-          withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
-            val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
-            val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
+      overwriteGroupMembers(groupRef, memberList)
+    }
+  }
 
-            // first remove members that should be removed
-            val removeMembersFuture = updateGroupMembersInternal(group,
-              usersToRemove.map(containerDAO.authDAO.loadUser(_, txn).get),
-              subGroupsToRemove.map(containerDAO.authDAO.loadGroup(_, txn).get),
-              RemoveGroupMembersOp, txn)
+  def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+    dataSource.inFutureTransaction() { txn =>
+      withGroup(groupRef, txn) { group =>
+        withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
+          val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
+          val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
 
-            // then if there were no errors, add users that should be added
-            val addMembersFuture = removeMembersFuture.flatMap {
-              _ match {
-                case Some(errorReport) => Future.successful(Option(errorReport))
-                case None =>
-                  val usersToAdd = users.filter(user => !group.users.contains(user))
-                  val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
+          // first remove members that should be removed
+          val removeMembersFuture = updateGroupMembersInternal(group,
+            usersToRemove.map(containerDAO.authDAO.loadUser(_, txn).get),
+            subGroupsToRemove.map(containerDAO.authDAO.loadGroup(_, txn).get),
+            RemoveGroupMembersOp, txn)
 
-                  // need to reload group cause it changed if members were removed
-                  updateGroupMembersInternal(containerDAO.authDAO.loadGroup(groupRef, txn).get, usersToAdd, subGroupsToAdd, AddGroupMembersOp, txn)
-              }
+          // then if there were no errors, add users that should be added
+          val addMembersFuture = removeMembersFuture.flatMap {
+            _ match {
+              case Some(errorReport) => Future.successful(Option(errorReport))
+              case None =>
+                val usersToAdd = users.filter(user => !group.users.contains(user))
+                val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
+
+                // need to reload group cause it changed if members were removed
+                updateGroupMembersInternal(containerDAO.authDAO.loadGroup(groupRef, txn).get, usersToAdd, subGroupsToAdd, AddGroupMembersOp, txn)
             }
+          }
 
-            // finally report the results
-            addMembersFuture.map {
-              _ match {
-                case None => RequestComplete(StatusCodes.NoContent)
-                case Some(error) => RequestComplete(error)
-              }
+          // finally report the results
+          addMembersFuture.map {
+            _ match {
+              case None => RequestComplete(StatusCodes.NoContent)
+              case Some(error) => RequestComplete(error)
             }
           }
         }

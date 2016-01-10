@@ -127,7 +127,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
       new HttpExecutionServiceDAO(executionServiceServer),
       gcsDAO,
       submissionSupervisor,
-      bucketDeletionMonitor
+      bucketDeletionMonitor,
+      userServiceConstructor
     )_
 
     (workspaceServiceConstructor, userServiceConstructor, dataSource)

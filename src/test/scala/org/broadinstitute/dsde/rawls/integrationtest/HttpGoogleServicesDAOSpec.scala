@@ -85,18 +85,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val writerResource = Await.result(retry(when500)(() => Future { directory.groups.get(writerGroup).execute() }), Duration.Inf)
     val ownerResource = Await.result(retry(when500)(() => Future { directory.groups.get(ownerGroup).execute() }), Duration.Inf)
 
-    // check that the creator is an owner, and that getACL is consistent
-    Await.result(gcsDAO.getMaximumAccessLevel(gcsDAO.toProxyFromUser(RawlsUser(testCreator)), testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.Owner)
-    Await.result(gcsDAO.getACL(testWorkspaceId), Duration.Inf).acl should be (Map(gcsDAO.toProxyFromUser(RawlsUser(testCreator)) -> WorkspaceAccessLevels.Owner))
-
-    // try adding a user, changing their access, then revoking it
-    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.Read)), Duration.Inf)
-    Await.result(gcsDAO.getMaximumAccessLevel(gcsDAO.toProxyFromUser(RawlsUser(testCollaborator)), testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.Read)
-    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.Write)), Duration.Inf)
-    Await.result(gcsDAO.getMaximumAccessLevel(gcsDAO.toProxyFromUser(RawlsUser(testCollaborator)), testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.Write)
-    Await.result(gcsDAO.updateACL(testCreator, testWorkspaceId, Map(Left(RawlsUser(testCollaborator)) -> WorkspaceAccessLevels.NoAccess)), Duration.Inf)
-    Await.result(gcsDAO.getMaximumAccessLevel(gcsDAO.toProxyFromUser(RawlsUser(testCollaborator)), testWorkspaceId), Duration.Inf) should be (WorkspaceAccessLevels.NoAccess)
-
     // check that we can properly deconstruct group names
     val groupName = gcsDAO.toGroupId(testBucket, WorkspaceAccessLevels.Owner)
     gcsDAO.fromGroupId(groupName) should be (Some(WorkspacePermissionsPair(testWorkspaceId, WorkspaceAccessLevels.Owner)))
