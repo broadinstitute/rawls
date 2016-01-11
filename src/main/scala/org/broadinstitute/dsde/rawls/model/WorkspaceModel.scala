@@ -112,7 +112,7 @@ case class MethodRepoMethod(
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
-case class MethodInputsOutputs(intputs: Seq[MethodInput], outputs: Seq[MethodOutput])
+case class MethodInputsOutputs(inputs: Seq[MethodInput], outputs: Seq[MethodOutput])
 
 case class MethodConfiguration(
                    namespace: String,
