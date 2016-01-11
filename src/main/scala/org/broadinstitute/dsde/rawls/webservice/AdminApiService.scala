@@ -4,6 +4,8 @@ package org.broadinstitute.dsde.rawls.webservice
  * Created by tsharpe on 9/25/15.
  */
 
+import java.net.URLDecoder
+
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -83,7 +85,8 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
-    path("admin" / "groups" / Segment / "members") { (groupName) =>
+    path("admin" / "groups" / Segment / "members") { (groupNameRaw) =>
+      val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
       // there are 3 methods supported to modify group membership:
       // PUT = "set the group members to exactly this list"
       // POST = "add these things to the list"
