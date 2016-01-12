@@ -4,9 +4,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, WorkspaceCont
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.FunSuite
+import org.scalatest.TryValues
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Success
+import scala.util.{Failure, Success}
 
 /**
  * Created by abaumann on 5/21/15.
@@ -39,6 +40,59 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
 
       assertResult(Success(ArrayBuffer(AttributeString("a"), AttributeBoolean(true)))) {
         evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.thingies")
+      }
+    }
+  }
+
+  test("string literals") {
+    withTestWorkspace { (workspaceContext, txn) =>
+      val evaluator = new ExpressionEvaluator(new ExpressionParser)
+      assertResult(Success(ArrayBuffer(AttributeString("str"))), "(simple string failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """"str"""")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString(" str"))), "(string with space failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """" str"""")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString("\"str"))), "(string with quote in it failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """""str"""")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeString("\"st\"r"))), "(string with two quotes in it failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """""st"r"""")
+      }
+
+      val quotedattr = evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """this."foo"""")
+      assert(quotedattr.isFailure, "(this.\"foo\" should fail)")
+
+      val badattr = evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """this.f"oo"""")
+      assert(badattr.isFailure, "(this.f\"oo\" should fail)")
+
+      val nonsense = evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """that."foo"""")
+      assert(nonsense.isFailure, "(that.\"foo\" should fail)")
+
+      assertResult(Success(ArrayBuffer(AttributeString("42"))), "(quoted numeral should have parsed as string)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """"42"""")
+      }
+
+      val unquoted = evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """unquoted""")
+      assert(unquoted.isFailure, "(unquoted string parsed as literal when it shouldn't have)")
+
+      val badquote = evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """foo"bar"""")
+      assert(badquote.isFailure, """(quotes must always be the first character)""")
+    }
+  }
+
+  test("numeric literals") {
+    withTestWorkspace { (workspaceContext, txn) =>
+      val evaluator = new ExpressionEvaluator(new ExpressionParser)
+      assertResult(Success(ArrayBuffer(AttributeNumber(42))), "(integer failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """42""")
+      }
+
+      assertResult(Success(ArrayBuffer(AttributeNumber(-4.2))), "(decimal failed)") {
+        evaluator.evalFinalAttribute(workspaceContext, "Sample", "sample1", """-4.2""")
       }
     }
   }

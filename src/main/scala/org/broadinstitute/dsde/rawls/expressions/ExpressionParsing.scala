@@ -75,6 +75,13 @@ class ExpressionParser extends JavaTokenParsers {
     workspaceDot ~ rep(entityRefDot) ~ valueAttribute ^^ {
       case workspace ~ Nil ~ last => PipelineQuery(List(workspace), last)
       case workspace ~ ref ~ last => PipelineQuery(List(workspace) ++ ref, last)
+    } |
+    //Literal parsing. These should be removed and folded into complex expressions once we support them.
+    literalNum ^^ {
+      case num => PipelineQuery(List(), num)
+    } |
+    literalString ^^ {
+      case str => PipelineQuery(List(), str)
     }
   }
 
@@ -83,9 +90,9 @@ class ExpressionParser extends JavaTokenParsers {
     rootDot ~ valueAttribute ^^ {
       case root ~ attr => PipelineQuery(List(root), attr)
     } |
-      workspaceDot ~ valueAttribute ^^ {
-        case workspace ~ attr => PipelineQuery(List(workspace), attr)
-      }
+    workspaceDot ~ valueAttribute ^^ {
+      case workspace ~ attr => PipelineQuery(List(workspace), attr)
+    }
   }
 
   //Parser for expressions ending in an attribute that's a reference to another entity
@@ -126,6 +133,12 @@ class ExpressionParser extends JavaTokenParsers {
   // the last attribute has no dot after it
   private def valueAttribute: Parser[FinalFunc] =
     ident ^^ { case name => lastAttributePipeFunc(name)}
+
+  private def literalString: Parser[FinalFunc] =
+    """^\".*\"$""".r ^^ { case str => stringFunc(str) }
+
+  private def literalNum: Parser[FinalFunc] =
+    floatingPointNumber ^^ { case num => floatFunc(num) }
 
   def parseAttributeExpr(expression: String) = {
     parse(expression, attributeExpression)
@@ -243,7 +256,15 @@ class ExpressionParser extends JavaTokenParsers {
   //Takes a list of entities at the end of a pipeline and returns them in final format.
   private def outputEntityResult(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
     val dao = new GraphEntityDAO()
-    FinalResult( graphPipeline.toList.map( dao.loadEntity(_) ), "" )
+    FinalResult( graphPipeline.toList.map( dao.loadEntity ), "" )
+  }
+
+  private def stringFunc(str: String)(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
+    FinalResult( List(str.drop(1).dropRight(1)), "" )
+  }
+
+  private def floatFunc(dec: String)(context: ExpressionContext, graphPipeline: PipeType): FinalResult = {
+    FinalResult( List(BigDecimal(dec).bigDecimal), "" )
   }
 }
 
