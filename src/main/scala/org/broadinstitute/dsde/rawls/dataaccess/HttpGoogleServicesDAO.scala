@@ -471,7 +471,8 @@ class HttpGoogleServicesDAO(
     throwable match {
       case t: GoogleJsonResponseException => {
         ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
-          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid"))
+          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid")) ||
+          (t.getStatusCode == 404)
       }
       case h: HttpResponseException => when500(throwable)
       case _ => false
