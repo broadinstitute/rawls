@@ -147,7 +147,14 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
         )
 
         if (refreshedSubmission.workflows.forall(workflow => workflow.status.isDone)) {
-          containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
+          val originalStatus = containerDAO.submissionDAO.get(workspaceContext, refreshedSubmission.submissionId, txn).get.status
+          originalStatus match {
+            case SubmissionStatuses.Submitted =>
+              containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Done), txn)
+            case SubmissionStatuses.Aborting =>
+              containerDAO.submissionDAO.update(workspaceContext, refreshedSubmission.copy(status = SubmissionStatuses.Aborted), txn)
+            case _ => //We shouldn't ever reach this case, but match it for completeness. Then stop monitoring.
+          }
           stop(self)
         }
       }

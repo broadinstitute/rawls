@@ -106,6 +106,60 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     unwatch(monitorRef)
   }
 
+  it should "transition to running then aborting then aborted" in withDefaultTestDatabase { dataSource =>
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    watch(monitorRef)
+
+    val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
+
+    //Tell all the workflows to move to Running
+    testData.submission1.workflows.foreach { workflow =>
+      wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Aborting), None), testActor)
+    }
+
+    awaitCond({
+      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+        withWorkspaceContext(testData.workspace, txn) { context =>
+          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborting)
+        }
+      }
+    }, 15 seconds)
+
+    //Set the current status of the submission to Aborting
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        submissionDAO.update(context, testData.submission1.copy(status = SubmissionStatuses.Aborting), txn)
+      }
+    }
+
+    //Tell all of the workflows to move to Aborted
+    testData.submission1.workflows.foreach { workflow =>
+      wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Aborted), Option(Map("this.test" -> AttributeString(workflow.workflowId)))), testActor)
+    }
+
+    expectMsgClass(15 seconds, classOf[Terminated])
+
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        assertResult(true) {
+          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborted)
+        }
+        assertResult(SubmissionStatuses.Aborted) {
+          withWorkspaceContext(testData.workspace, txn) { context =>
+            submissionDAO.get(context, testData.submission1.submissionId, txn).get.status
+          }
+        }
+        testData.submission1.workflows.foreach { workflow =>
+          assertResult(Some(AttributeString(workflow.workflowId))) {
+            entityDAO.get(context, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).get.attributes.get("test")
+          }
+        }
+      }
+    }
+    unwatch(monitorRef)
+  }
+
+
   it should "save workflows with error messages" in withDefaultTestDatabase { dataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
