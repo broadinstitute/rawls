@@ -10,7 +10,8 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http.StatusCodes
-import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 
 /**
@@ -503,11 +504,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       authDAO.saveGroup(testGroup, txn)
     }
 
+    services.gcsDAO.createGoogleGroup(testGroup)
 
     Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userEmails = Option(Seq(user2.userEmail.value, user3.userEmail.value)), subGroupEmails = Option(Seq(subGroup2.groupEmail.value, subGroup3.groupEmail.value))))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent) { status }
+        assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
 
     services.dataSource.inTransaction() { txn =>
@@ -556,5 +558,66 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
+  }
+
+  it should "sync group membership" in withTestDataApiServices { services =>
+    val inGoogleGroup = RawlsGroup(
+      RawlsGroupName("google"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("google"))),
+      Set.empty[RawlsUserRef],
+      Set.empty[RawlsGroupRef])
+    val inBothGroup = RawlsGroup(
+      RawlsGroupName("both"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("both"))),
+      Set.empty[RawlsUserRef],
+      Set.empty[RawlsGroupRef])
+    val inGraphGroup = RawlsGroup(
+      RawlsGroupName("graph"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("graph"))),
+      Set.empty[RawlsUserRef],
+      Set.empty[RawlsGroupRef])
+
+    val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
+    val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
+    val inGraphUser = RawlsUser(RawlsUserSubjectId("graph"), RawlsUserEmail("graph@fc.org"))
+
+    val topGroup = RawlsGroup(
+      RawlsGroupName("synctest"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("synctest"))),
+      Set[RawlsUserRef](inBothUser, inGraphUser),
+      Set[RawlsGroupRef](inBothGroup, inGraphGroup))
+
+    Await.result(services.gcsDAO.createGoogleGroup(topGroup), Duration.Inf)
+    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inGoogleGroup)), Duration.Inf)
+    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inBothGroup)), Duration.Inf)
+    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inGoogleUser)), Duration.Inf)
+    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(inGoogleUser, txn)
+      containerDAO.authDAO.saveUser(inBothUser, txn)
+      containerDAO.authDAO.saveUser(inGraphUser, txn)
+
+      containerDAO.authDAO.saveGroup(inGoogleGroup, txn)
+      containerDAO.authDAO.saveGroup(inBothGroup, txn)
+      containerDAO.authDAO.saveGroup(inGraphGroup, txn)
+
+      containerDAO.authDAO.saveGroup(topGroup, txn)
+    }
+
+    Post(s"/admin/groups/${topGroup.groupName.value}/sync") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        assertResult(SyncReport(Set(
+          SyncReportItem("added", Option(inGraphUser), None, None),
+          SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
+          SyncReportItem("removed", Option(inGoogleUser), None, None),
+          SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
+        ))) {
+          responseAs[SyncReport]
+        }
+      }
+
   }
 }

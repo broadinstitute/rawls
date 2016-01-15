@@ -38,6 +38,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   def listAdmins(): Future[Seq[String]]
 
+  /**
+   *
+   * @param groupRef
+   * @return None if the google group does not exist, Some(Seq.empty) if there are no members
+   */
+  def listGroupMembers(groupRef: RawlsGroupRef): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]]
+
   def createProxyGroup(user: RawlsUser): Future[Unit]
 
   def addUserToProxyGroup(user: RawlsUser): Future[Unit]
