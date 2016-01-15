@@ -384,7 +384,8 @@ class RemoteServicesMockServer(port:Int) {
               |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
               |  "status": "Unknown",
               |  "submission": "2010-09-10T11:12:13.456Z",
-              |  "inputs": {},
+              |  "inputs": {"test": ["foo", "bar", "baz"]},
+              |  "outputs": {"test": ["baz", "bar", "foo"]},
               |  "calls": {}
               |}
             """.stripMargin)

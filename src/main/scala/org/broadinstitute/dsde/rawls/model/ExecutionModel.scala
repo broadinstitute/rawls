@@ -197,8 +197,8 @@ case class ExecutionMetadata
   submission: DateTime,
   start: Option[DateTime],
   end: Option[DateTime],
-  inputs: Map[String, String],
-  outputs: Option[Map[String, String]],
+  inputs: Map[String, Attribute],
+  outputs: Option[Map[String, Attribute]],
   calls: Map[String, Seq[CallMetadata]]
 )
 
