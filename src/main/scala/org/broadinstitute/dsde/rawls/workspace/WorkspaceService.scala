@@ -996,6 +996,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   private def abortSubmission(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Future[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, txn) { submission =>
+      containerDAO.submissionDAO.update(workspaceContext, submission.copy(status = SubmissionStatuses.Aborting), txn)
       val aborts = Future.traverse(submission.workflows)(wf =>
         Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
       )

@@ -417,6 +417,22 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
+  it should "204 No Content for a valid submission and change submission status to Aborting" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subGoodWorkflow")
+    val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
+    assertResult(StatusCodes.NoContent) {
+      status
+    }
+    val checkStatus = workspaceService.getSubmissionStatus(subTestData.wsName, "subGoodWorkflow")
+    Await.result(checkStatus, Duration.Inf) match {
+      case RequestComplete((submissionStatus: StatusCode, submissionData: Any)) => {
+        assertResult(StatusCodes.OK) { submissionStatus }
+        assertResult(SubmissionStatuses.Aborting) { submissionData.asInstanceOf[SubmissionStatusResponse].status }
+      }
+      case _ => fail("Unable to get submission status")
+    }
+  }
+
   it should "204 No Content for a valid submission with a workflow that's already terminated" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subTerminalWorkflow")
 //    val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode)]].response

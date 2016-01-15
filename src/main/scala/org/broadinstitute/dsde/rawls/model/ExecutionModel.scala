@@ -323,11 +323,15 @@ object SubmissionStatuses {
   def withName(name: String): SubmissionStatus = {
     name match {
       case "Submitted" => Submitted
+      case "Aborting" => Aborting
+      case "Aborted" => Aborted
       case "Done" => Done
       case _ => throw new RawlsException(s"invalid SubmissionStatus [${name}]")
     }
   }
 
   case object Submitted extends SubmissionStatus
+  case object Aborting extends SubmissionStatus
+  case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
 }
