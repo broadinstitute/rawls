@@ -56,16 +56,6 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
       gcsDAO
     ))
 
-    val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
-      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      gcsDAO,
-      submissionSupervisor,
-      bucketDeletionMonitor
-    )_
-
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
@@ -73,6 +63,17 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
       gcsDAO,
       containerDAO,
       directoryDAO
+    )_
+
+    val workspaceServiceConstructor = WorkspaceService.constructor(
+      dataSource,
+      containerDAO,
+      new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      gcsDAO,
+      submissionSupervisor,
+      bucketDeletionMonitor,
+      userServiceConstructor
     )_
 
     def cleanupSupervisor = {

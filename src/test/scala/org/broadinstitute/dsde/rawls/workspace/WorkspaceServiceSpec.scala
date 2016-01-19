@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
@@ -49,14 +50,24 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
 
+    val directoryDAO = new MockUserDirectoryDAO
+
+    val userServiceConstructor = UserService.constructor(
+      dataSource,
+      gcsDAO,
+      containerDAO,
+      directoryDAO
+    )_
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       dataSource,
       containerDAO,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      new MockGoogleServicesDAO("test"),
+      gcsDAO,
       submissionSupervisor,
-      bucketDeletionMonitor
+      bucketDeletionMonitor,
+      userServiceConstructor
     )_
 
     def cleanupSupervisor = {
@@ -218,6 +229,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       containerDAO.authDAO.saveGroup(group, txn)
     }
 
+    services.gcsDAO.createGoogleGroup(group)
+    testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
+
+
     //add ACL
     val aclAdd = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner), WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Read))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd), Duration.Inf)
@@ -289,6 +304,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     services.dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveGroup(group, txn)
     }
+    testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
 
     val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner), WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Read))
     val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates), Duration.Inf)

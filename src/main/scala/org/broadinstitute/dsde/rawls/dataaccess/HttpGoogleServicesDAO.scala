@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 
 import scala.concurrent.Future
 import scala.concurrent._
@@ -243,66 +242,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def getACL(workspaceId: String): Future[WorkspaceACL] = {
-    val bucketName = getBucketName(workspaceId)
-    val members = getGroupDirectory.members
-
-    // return the maximum access level for each user
-    val aclMap = Future.traverse(groupAccessLevelsAscending) { accessLevel: WorkspaceAccessLevel =>
-      val fetcher = members.list(toGroupId(bucketName, accessLevel))
-      val membersQuery = retry(when500)(() => Future {
-        blocking {
-          fetcher.execute
-        }
-      }) map { membersResult =>
-        // NB: if there are no members in this group, Google returns null instead of an empty list. fix that here.
-        Option(membersResult.getMembers).getOrElse(List.empty[Member].asJava)
-      }
-
-      membersQuery.map(membersResult => membersResult.map(_.getEmail -> accessLevel).toMap)
-    }
-
-    aclMap map { acls =>
-      WorkspaceACL(acls.reduceRight(_ ++ _)) // note that the reduction must go left-to-right so that higher access levels override lower ones
-    }
-  }
-
-  /**
-   * Try to apply a list of ACL updates
-   *
-   * @return a map from userId to error message (an empty map means everything was successful)
-   */
-  override def updateACL(currentUser: UserInfo, workspaceId: String, aclUpdates: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]): Future[Option[Seq[ErrorReport]]] = {
-    val directory = getGroupDirectory
-
-    val futureReports = Future.traverse(aclUpdates){
-      case (Left(ru:RawlsUser), level) => updateUserAccess(currentUser,toProxyFromUser(ru),ru.userEmail.value,level,workspaceId,directory)
-      case (Right(rg:RawlsGroup), level) => updateUserAccess(currentUser,rg.groupEmail.value,rg.groupEmail.value,level,workspaceId,directory)
-    }.map(_.collect{case Some(errorReport)=>errorReport})
-    futureReports.map { reports =>
-      if (reports.isEmpty) None
-      else Some(reports.toSeq)
-    }
-  }
-
-  override def getMaximumAccessLevel(email: String, workspaceId: String): Future[WorkspaceAccessLevel] = {
-    val bucketName = getBucketName(workspaceId)
-    val members = getGroupDirectory.members
-
-    Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-      retry(when500) { () =>
-        Future {
-          blocking { members.get(toGroupId(bucketName, accessLevel), email).execute() }
-          accessLevel
-        }
-      } recover {
-        case t => WorkspaceAccessLevels.NoAccess
-      }
-    } map { userAccessLevels =>
-      userAccessLevels.sorted[WorkspaceAccessLevel].last
-    }
-  }
-
   override def isAdmin(userId: String): Future[Boolean] = {
     val query = getGroupDirectory.members.get(adminGroupName,userId)
     retry(when500)(() => Future {
@@ -509,63 +448,6 @@ class HttpGoogleServicesDAO(
 
   private def retryWhen500[T]( op: () => T ) = {
     retry(when500)(()=>Future(blocking(op())))
-  }
-
-  //expects the email to be of a google group, i.e. that users have been converted to their proxies first.
-  //userFacingEmail is the pre-proxified email for display to users in errors.
-  private def updateUserAccess(currentUser: UserInfo, groupEmail: String, userFacingEmail: String, targetAccessLevel: WorkspaceAccessLevel, workspaceId: String, directory: Directory): Future[Option[ErrorReport]] = {
-    val members = directory.members
-
-    //Ask Google what it thinks this group's current access level is.
-    //It might be wrong, but we still need to delete it from that group and then add it to the new level.
-    getMaximumAccessLevel(groupEmail, workspaceId) flatMap { currentAccessLevel =>
-      if ( currentAccessLevel == targetAccessLevel )
-        Future.successful(None)
-      else if ( groupEmail.toLowerCase.equals(toProxyFromUser(currentUser).toLowerCase) && currentAccessLevel != targetAccessLevel )
-        Future.successful(Option(ErrorReport(s"Failed to change permissions for ${currentUser.userEmail}.  You cannot change your own permissions.",Seq.empty)))
-      else {
-        val bucketName = getBucketName(workspaceId)
-        val member = new Member().setEmail(groupEmail).setRole(groupMemberRole)
-        val currentGroupId = toGroupId(bucketName,currentAccessLevel)
-        val deleter = members.delete(currentGroupId, groupEmail)
-        val targetGroupId = toGroupId(bucketName, targetAccessLevel)
-        val inserter = members.insert(targetGroupId, member)
-
-        val deleteFuture: Future[Option[Throwable]] =
-          if (currentAccessLevel < WorkspaceAccessLevels.Read)
-            Future.successful(None)
-          else
-            retryWhen500(()=>deleter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
-
-        val insertFuture: Future[Option[Throwable]] =
-          if (targetAccessLevel < WorkspaceAccessLevels.Read)
-            Future.successful(None)
-          else
-            retryWhen500(()=>inserter.execute()).map(_=>None).recover{case throwable=>Some(throwable)}
-
-        val badThing = s"Unable to change permissions for $userFacingEmail from $currentAccessLevel to $targetAccessLevel access."
-        deleteFuture zip insertFuture flatMap { _ match {
-            case (None, None) => Future.successful(None) // delete and insert succeeded
-            case (None, Some(throwable)) => // delete ok, but insert failed: try to restore access
-              val cause = toErrorReport(throwable)
-              val restoreInserter = members.insert(currentGroupId, member)
-              retryWhen500(()=>restoreInserter.execute()).map{ _ =>
-                Some(ErrorReport(badThing, cause))}.recover{ case _ =>
-                Some(ErrorReport(s"$badThing They no longer have any access to the workspace. Please try re-adding them.", cause))
-              }
-            case (Some(throwable), None) => // delete failed, but insert succeeded -- user is now on two lists
-              val cause = toErrorReport(throwable)
-              val restoreDeleter = members.delete(targetGroupId, groupEmail)
-              retryWhen500(()=>restoreDeleter.execute()).map{ _ =>
-                Some(ErrorReport(badThing, cause))}.recover { case _ =>
-                Some(ErrorReport(s"Successfully granted $userFacingEmail $targetAccessLevel access, but failed to remove $currentAccessLevel access. This may result in inconsistent behavior, please try removing the user (may take more than 1 try) and re-adding.", cause))
-              }
-            case (Some(throwable1), Some(throwable2)) => // both operations failed
-              Future.successful(Some(ErrorReport(badThing,Seq(toErrorReport(throwable1),toErrorReport(throwable2)))))
-          }
-        }
-      }
-    }
   }
 
   def getStorage(credential: Credential) = {
