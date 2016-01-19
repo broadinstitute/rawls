@@ -60,6 +60,9 @@ object UserAuth {
 
 }
 
+case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
+case class SyncReport(items: Set[SyncReportItem])
+
 object UserAuthJsonSupport extends JsonSupport {
   trait UserAuthJsonFormatter[T <: UserAuthType] extends RootJsonFormat[T] {
     // TODO: a generic read.  May require reflection.
@@ -120,4 +123,8 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserInfoListFormat = jsonFormat1(RawlsUserInfoList)
 
+  import WorkspaceJsonSupport.ErrorReportFormat
+  implicit val SyncReportItemFormat = jsonFormat4(SyncReportItem)
+
+  implicit val SyncReportFormat = jsonFormat1(SyncReport)
 }

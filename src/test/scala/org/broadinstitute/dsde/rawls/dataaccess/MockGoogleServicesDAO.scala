@@ -6,13 +6,17 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
   private var token: String = null
   private var tokenDate: DateTime = null
+
+  private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     this.token = refreshToken
@@ -92,13 +96,37 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = Future.successful(mockProxyGroups.getOrElse(user, false))
 
-  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future.successful(Unit)
+  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future {
+    groups.putIfAbsent(groupRef, Set()) match {
+      case Some(_) => throw new RuntimeException(s"group $groupRef already exists")
+      case None =>
+    }
+  }
 
-  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future.successful(Unit)
+  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = Future {
+    groups.remove(groupRef)
+  }
 
-  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
+  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future {
+    groups.get(groupRef) match {
+      case Some(members) => groups.update(groupRef, members + member)
+      case None => throw new RuntimeException(s"group $groupRef does not exists")
+    }
+  }
 
-  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future.successful(Unit)
+  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]) = Future {
+    groups.get(groupRef) match {
+      case Some(members) => groups.update(groupRef, members - member)
+      case None => throw new RuntimeException(s"group $groupRef does not exists")
+    }
+  }
+
+  override def listGroupMembers(groupRef: RawlsGroupRef): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = Future {
+    groups.get(groupRef) map ( _.map {
+      case Left(user) => Left(RawlsUser.toRef(user))
+      case Right(group) => Right(RawlsGroup.toRef(group))
+    })
+  }
 
   override def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 

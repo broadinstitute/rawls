@@ -4,6 +4,8 @@ package org.broadinstitute.dsde.rawls.webservice
  * Created by tsharpe on 9/25/15.
  */
 
+import java.net.URLDecoder
+
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -113,6 +115,14 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.ListGroupMembers(groupName))
+      }
+    } ~
+    path("admin" / "groups" / Segment / "sync") { (groupNameRaw) =>
+      val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.SynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
     path("admin" / "users") {

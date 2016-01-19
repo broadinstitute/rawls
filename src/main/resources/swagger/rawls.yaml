@@ -410,6 +410,46 @@ paths:
              - openid
              - email
              - profile
+  '/api/admin/groups/{groupName}/sync':
+     post:
+       responses:
+         '200':
+           description: Successfully synchronized members
+           schema:
+             $ref: '#/definitions/SyncReport'
+         '403':
+           description: You must be an admin to call this end point
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Unable to group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '502':
+           description: Google reported error adding or removing member
+           schema:
+             $ref: '#/definitions/SyncReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively synchronize backing google group to rawls group
+       tags:
+         - admin
+         - groups
+       summary: synchronize backing google group to rawls group
+       operationId: adminGroupSync
+       parameters:
+         - in: path
+           description: group name
+           name: groupName
+           required: true
+           type: string
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
   '/api/admin/submissions':
     get:
       responses:
@@ -3635,3 +3675,21 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/MethodOutput'
+  SyncReportItem:
+    description: results of an attempt to synchronize a member
+    properties:
+      operation:
+        type: string
+      user:
+        $ref: '#/definitions/RawlsUser'
+      subGroup:
+        $ref: '#/definitions/RawlsGroupShort'
+      errorReport:
+        $ref: '#/definitions/ErrorReport'
+  SyncReport:
+    description: report of members added or removed
+    properties:
+      items:
+        type: array
+        items:
+          $ref: '#/definitions/SyncReportItem'

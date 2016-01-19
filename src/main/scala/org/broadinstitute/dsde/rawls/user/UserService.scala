@@ -58,6 +58,7 @@ object UserService {
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class SynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
@@ -90,6 +91,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to context.parent
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to context.parent
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to context.parent
+    case SynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) to context.parent
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -410,6 +412,70 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
           }
         }
       }
+    }
+  }
+
+  def synchronizeGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction() { txn =>
+        withGroup(groupRef, txn) { group =>
+          synchronizeGroupMembersInternal(group, txn) map { syncReport =>
+            val statusCode = if (syncReport.items.exists(_.errorReport.isDefined)) {
+              StatusCodes.BadGateway // status 500 is used for all other errors, 502 seems like the best otherwise
+            } else {
+              StatusCodes.OK
+            }
+            RequestComplete(statusCode, syncReport)
+          }
+        }
+      }
+    }
+  }
+
+  def synchronizeGroupMembersInternal(group: RawlsGroup, txn: RawlsTransaction): Future[SyncReport] = {
+    def loadRefs(refs: Set[Either[RawlsUserRef, RawlsGroupRef]]) = {
+      refs.map {
+        case Left(userRef) => Left(containerDAO.authDAO.loadUser(userRef, txn).getOrElse(throw new RawlsException(s"user $userRef not found")))
+        case Right(groupRef) => Right(containerDAO.authDAO.loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"group $groupRef not found")))
+      }
+    }
+
+    def toSyncReportItem(operation: String, member: Either[RawlsUser, RawlsGroup], result: Try[Unit]) = {
+      SyncReportItem(
+        operation,
+        member match {
+          case Left(user) => Option(user)
+          case _ => None
+        },
+        member match {
+          case Right(group) => Option(group.toRawlsGroupShort)
+          case _ => None
+        },
+        result match {
+          case Success(_) => None
+          case Failure(t) => Option(ErrorReport(t))
+        }
+      )
+    }
+
+    gcsDAO.listGroupMembers(group) flatMap {
+      case None => gcsDAO.createGoogleGroup(group) map (_ => Seq.empty[Either[RawlsUserRef, RawlsGroupRef]])
+      case Some(members) => Future.successful(members)
+    } flatMap { members =>
+
+      val toRemove = members.toSet -- group.users.map(Left(_)) -- group.subGroups.map(Right(_))
+
+      val removeFutures = loadRefs(toRemove).map { removeMember =>
+        toFutureTry(gcsDAO.removeMemberFromGoogleGroup(group, removeMember)).map(toSyncReportItem("removed", removeMember, _))
+      }
+
+      val realMembers: Set[Either[RawlsUserRef, RawlsGroupRef]] = group.users.map(Left(_)) ++ group.subGroups.map(Right(_))
+      val toAdd = realMembers -- members
+      val addFutures = loadRefs(toAdd).map { addMember =>
+        toFutureTry(gcsDAO.addMemberToGoogleGroup(group, addMember)).map(toSyncReportItem("added", addMember, _))
+      }
+
+      Future.sequence(removeFutures ++ addFutures) map (SyncReport(_))
     }
   }
 

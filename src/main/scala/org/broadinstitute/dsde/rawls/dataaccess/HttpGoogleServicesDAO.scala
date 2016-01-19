@@ -5,6 +5,7 @@ import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.http.{HttpResponseException, InputStreamContent}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
@@ -344,14 +345,41 @@ class HttpGoogleServicesDAO(
   }
 
   override def listAdmins(): Future[Seq[String]] = {
-    val fetcher = getGroupDirectory.members.list(adminGroupName)
-    retry(when500)(() => Future { blocking { fetcher.execute.getMembers } }) map { result =>
+    listGroupMembersInternal(adminGroupName) map(_.getOrElse(throw new RawlsException(s"$adminGroupName not found")))
+  }
+
+  private def listGroupMembersInternal(groupName: String): Future[Option[Seq[String]]] = {
+    val fetcher = getGroupDirectory.members.list(groupName)
+    retry(when500)(() => Future {
+      val result = blocking {
+        fetcher.execute.getMembers
+      }
+
       Option(result) match {
-        case None => Seq.empty
-        case Some(list) => list.map(_.getEmail)
+        case None => Option(Seq.empty)
+        case Some(list) => Option(list.map(_.getEmail))
+      }
+    }) recover {
+      case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
+    }
+  }
+
+  override def listGroupMembers(groupRef: RawlsGroupRef): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = {
+    val proxyPattern = s"PROXY_(.+)@${appsDomain}".r
+    val groupPattern = s"GROUP_(.+)@${appsDomain}".r
+
+    listGroupMembersInternal(toGoogleGroupName(groupRef.groupName)) map { membersOption =>
+      membersOption match {
+        case None => None
+        case Some(emails) => Option(emails map {
+          case proxyPattern(subjectId) => Left(RawlsUserRef(RawlsUserSubjectId(subjectId)))
+          case groupPattern(groupName) => Right(RawlsGroupRef(RawlsGroupName(groupName)))
+          case other => throw new RawlsException(s"Group member is neither a proxy or sub group: [$other]")
+        } toSet)
       }
     }
   }
+
 
   def createProxyGroup(user: RawlsUser): Future[Unit] = {
     val directory = getGroupDirectory
