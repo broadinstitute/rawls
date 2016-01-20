@@ -306,7 +306,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) { status }
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
       }
   }
 

@@ -303,11 +303,11 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listGroupMembers(groupRef: RawlsGroupRef): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = {
+  override def listGroupMembers(group: RawlsGroup): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = {
     val proxyPattern = s"PROXY_(.+)@${appsDomain}".r
     val groupPattern = s"GROUP_(.+)@${appsDomain}".r
 
-    listGroupMembersInternal(toGoogleGroupName(groupRef.groupName)) map { membersOption =>
+    listGroupMembersInternal(group.groupEmail.value) map { membersOption =>
       membersOption match {
         case None => None
         case Some(emails) => Option(emails map {
@@ -333,50 +333,51 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+  override def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup] = {
+    val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val directory = getGroupDirectory
     val groups = directory.groups
     retry(when500) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(toGoogleGroupName(groupRef.groupName)).setName(groupRef.groupName.value))
+        val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value))
         blocking {
           inserter.execute
         }
       }
-    }
+    } map { _ => newGroup}
   }
 
-  override def addMemberToGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+  override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
     val memberEmail = memberToAdd match {
       case Left(member) => new Member().setEmail(toProxyFromUser(member)).setRole(groupMemberRole)
       case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
     }
-    val inserter = getGroupDirectory.members.insert(toGoogleGroupName(groupRef.groupName), memberEmail)
+    val inserter = getGroupDirectory.members.insert(group.groupEmail.value, memberEmail)
     val insertFuture: Future[Unit] = retry(when500)(() => Future { blocking { inserter.execute } })
     insertFuture recover {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => Unit // it is ok of the email is already there
     }
   }
 
-  override def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
+  override def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
     val memberEmail = memberToAdd match {
       case Left(member) => toProxyFromUser(member.userSubjectId)
       case Right(member) => member.groupEmail.value
     }
-    val deleter = getGroupDirectory.members.delete(toGoogleGroupName(groupRef.groupName), memberEmail)
+    val deleter = getGroupDirectory.members.delete(group.groupEmail.value, memberEmail)
     val deleteFuture: Future[Unit] = retry(when500)(() => Future { blocking { deleter.execute } })
     deleteFuture recover {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // it is ok of the email is already missing
     }
   }
 
-  override def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit] = {
+  override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
     retry(when500) {
       () => Future {
         blocking {
-          groups.delete(toGoogleGroupName(groupRef.groupName)).execute()
+          groups.delete(group.groupEmail.value).execute()
         }
       }
     }

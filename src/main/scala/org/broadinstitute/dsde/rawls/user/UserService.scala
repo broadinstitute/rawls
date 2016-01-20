@@ -315,7 +315,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
   def createGroup(groupRef: RawlsGroupRef) = {
     asAdmin {
-      dataSource.inTransaction() { txn =>
+      dataSource.inFutureTransaction() { txn =>
         containerDAO.authDAO.loadGroup(groupRef, txn) match {
           case Some(_) => Future.successful(RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
           case None =>
@@ -326,8 +326,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   }
 
   private def createGroupInternal(groupRef: RawlsGroupRef, txn: RawlsTransaction): Future[RawlsGroup] = {
-    val rawlsGroup = containerDAO.authDAO.saveGroup(RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-    gcsDAO.createGoogleGroup(groupRef).map(_ => rawlsGroup)
+    gcsDAO.createGoogleGroup(groupRef).map { rawlsGroup =>
+      containerDAO.authDAO.saveGroup(rawlsGroup, txn)
+    }
   }
 
   def deleteGroup(groupRef: RawlsGroupRef) = {
@@ -335,7 +336,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       dataSource.inTransaction() { txn =>
         withGroup(groupRef, txn) { group =>
           containerDAO.authDAO.deleteGroup(groupRef, txn)
-          gcsDAO.deleteGoogleGroup(groupRef) map { _ => RequestComplete(StatusCodes.OK) }
+          gcsDAO.deleteGoogleGroup(group) map { _ => RequestComplete(StatusCodes.OK) }
         }
       }
     }
@@ -582,15 +583,15 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   }
 
   private sealed trait UpdateGroupMembersOp {
-    def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
+    def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
     def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup
   }
   private object AddGroupMembersOp extends UpdateGroupMembersOp {
-    override def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.addMemberToGoogleGroup(groupRef, member)
+    override def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.addMemberToGoogleGroup(group, member)
     override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users ++ users), subGroups = (group.subGroups ++ subGroups))
   }
   private object RemoveGroupMembersOp extends UpdateGroupMembersOp {
-    override def updateGoogle(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.removeMemberFromGoogleGroup(groupRef, member)
+    override def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.removeMemberFromGoogleGroup(group, member)
     override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users -- users), subGroups = (group.subGroups -- subGroups))
   }
 }
