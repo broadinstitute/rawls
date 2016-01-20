@@ -34,10 +34,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   /**
    *
-   * @param groupRef
+   * @param group
    * @return None if the google group does not exist, Some(Seq.empty) if there are no members
    */
-  def listGroupMembers(groupRef: RawlsGroupRef): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]]
+  def listGroupMembers(group: RawlsGroup): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]]
 
   def createProxyGroup(user: RawlsUser): Future[Unit]
 
@@ -47,13 +47,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
 
-  def createGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
+  def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup]
 
-  def addMemberToGoogleGroup(groupRef: RawlsGroupRef, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
+  def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
-  def removeMemberFromGoogleGroup(groupRef: RawlsGroupRef, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit]
+  def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
-  def deleteGoogleGroup(groupRef: RawlsGroupRef): Future[Unit]
+  def deleteGoogleGroup(group: RawlsGroup): Future[Unit]
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
@@ -62,7 +62,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String
-  def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def toErrorReport(throwable: Throwable) = {
     val SOURCE = "google"
