@@ -101,14 +101,14 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AddGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+            UserService.AdminAddGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
         }
       } ~
       delete {
         entity(as[RawlsGroupMemberList]) { memberList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.RemoveGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+            UserService.AdminRemoveGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
         }
       } ~
       get {
