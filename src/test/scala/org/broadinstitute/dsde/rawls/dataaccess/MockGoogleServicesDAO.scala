@@ -4,7 +4,7 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -59,23 +59,23 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = Future.successful(Unit)
+  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[GoogleWorkspaceInfo] = {
+    val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(s"fc-$workspaceId", groupAccessLevelsAscending.map { accessLevel =>
+      (accessLevel, RawlsGroup(RawlsGroupName(s"fc-$workspaceId-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), if (accessLevel == WorkspaceAccessLevels.Owner) Set(RawlsUser(userInfo)) else Set.empty, Set.empty))
+    }.toMap)
+    googleWorkspaceInfo.groupsByAccessLevel.values.foreach(createGoogleGroup(_))
+    Future.successful(googleWorkspaceInfo)
+  }
 
   override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = Future.successful("mockBucket")
 
-  override def deleteWorkspace(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
+  override def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef) = Future.successful(Unit)
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
   val adminList = scala.collection.mutable.Set("test_token")
 
   override def isAdmin(userId: String): Future[Boolean] = Future.successful(adminList.contains(userId))
-
-  override def addAdmin(userId: String): Future[Unit] = Future.successful(adminList += userId)
-
-  override def deleteAdmin(userId: String): Future[Unit] = Future.successful(adminList -= userId)
-
-  override def listAdmins(): Future[Seq[String]] = Future.successful(adminList.toSeq)
 
   override def createProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups += (user -> false)

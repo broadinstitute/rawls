@@ -16,7 +16,7 @@ import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Success, Try}
 
 import com.google.api.client.auth.oauth2.{TokenResponse, Credential}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
@@ -90,51 +90,32 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit] = {
+  private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
+
+  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[GoogleWorkspaceInfo] = {
     val bucketName = getBucketName(workspaceId)
-    val directory = getGroupDirectory
-    val groups = directory.groups
 
-    // tries to delete all groups expected to have been created whether they actually were or not
-    def rollbackGroups(t: Throwable): Throwable = {
-      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-        Future {
-          val deleter = groups.delete(newGroup(bucketName, workspaceName, accessLevel).getEmail)
-          blocking {
-            deleter.execute
-          }
-        }
-      }
-      t
-    }
+    val groupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
+      (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
+    }.toMap
 
-    def insertGroups(workspaceName: WorkspaceName, bucketName: String): Future[Seq[Try[Group]]] = {
-      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-        toFutureTry(retryExponentially(when500orGoogleError) {
-          () => Future {
-            val inserter = groups.insert(newGroup(bucketName, workspaceName, accessLevel))
-            blocking {
-              inserter.execute
-            }
-          }
-        })
+    def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
+      Future.traverse(groupInsertTries) {
+        case Success(group) => deleteGoogleGroup(group)
+        case _ => Future.successful(Unit)
       }
     }
 
-    def insertOwnerMember: (Seq[Try[Group]]) => Future[Member] = { _ =>
-      retryExponentially(when500orGoogleError) {
-        () => Future {
-          val ownersGroupId = toGroupId(bucketName, WorkspaceAccessLevels.Owner)
-          val owner = new Member().setEmail(toProxyFromUser(userInfo)).setRole(groupMemberRole)
-          val ownerInserter = directory.members.insert(ownersGroupId, owner)
-          blocking {
-            ownerInserter.execute
-          }
-        }
-      }
+    def insertGroups(workspaceGroupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef]): Future[Map[WorkspaceAccessLevel, Try[RawlsGroup]]] = {
+      Future.traverse(workspaceGroupRefsByAccess) { case (access, groupRef) => toFutureTry(createGoogleGroup(groupRef)).map(access -> _) }.map(_.toMap)
     }
 
-    def insertBucket: (Member) => Future[Unit] = { _ =>
+    def insertOwnerMember: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+      val ownerGroup = groupsByAccess(WorkspaceAccessLevels.Owner)
+      addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
+    }
+
+    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[GoogleWorkspaceInfo] = { groupsByAccess =>
       retryExponentially(when500orGoogleError) {
         () => Future {
           // bucket ACLs should be:
@@ -142,9 +123,9 @@ class HttpGoogleServicesDAO(
           //   workspace writer - bucket writer
           //   workspace reader - bucket reader
           //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl = Map(Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
+          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
-            groupAccessLevelsAscending.map(ac => newBucketAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), workspaceAccessToBucketAcl(ac))) :+
+            groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
               newBucketAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           // default object ACLs should be:
@@ -152,21 +133,31 @@ class HttpGoogleServicesDAO(
           //   workspace writer - object reader
           //   workspace reader - object reader
           //   bucket service account - object owner
-          val defaultObjectAcls = groupAccessLevelsAscending.map(ac => newObjectAccessControl(makeGroupEntityString(toGroupId(bucketName, ac)), "READER")) :+
-            newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
+          val defaultObjectAcls =
+            groupsByAccess.map { case (access, group) => newObjectAccessControl(makeGroupEntityString(group.groupEmail.value), "READER") }.toSeq :+
+              newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(projectId, bucket)
           blocking {
             inserter.execute
           }
+          GoogleWorkspaceInfo(bucketName, groupsByAccess)
         }
       }
     }
 
-    val doItAll = insertGroups(workspaceName, bucketName) flatMap assertSuccessfulTries flatMap insertOwnerMember flatMap insertBucket
-    doItAll.transform(f => f, rollbackGroups)
+    insertGroups(groupRefsByAccess) flatMap { insertGroupTries =>
+      assertSuccessfulTries(insertGroupTries) flatMap
+        insertOwnerMember flatMap
+        insertBucket recoverWith {
+          case regrets =>
+            rollbackGroups(insertGroupTries.values) flatMap(_ => Future.failed(regrets))
+        }
+    }
   }
+
+  def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = {
     val bucketName = getCromwellAuthBucketName(billingProject)
@@ -185,31 +176,14 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def newGroup(bucketName: String, workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
-    new Group().setEmail(toGroupId(bucketName,accessLevel)).setName(UserAuth.toWorkspaceAccessGroupName(workspaceName,accessLevel).take(60)) // group names have a 60 char limit
-
   private def newBucketAccessControl(entity: String, accessLevel: String) =
     new BucketAccessControl().setEntity(entity).setRole(accessLevel)
 
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteWorkspace(bucketName: String, monitorRef: ActorRef): Future[Any] = {
-    val groups = getGroupDirectory.groups
-
-    def deleteGroups(bucketName: String): Future[Seq[Unit]] = {
-      Future.traverse(groupAccessLevelsAscending) { accessLevel =>
-        retry[Unit](when500) {
-          () => Future {
-            blocking {
-              groups.delete(toGroupId(bucketName, accessLevel)).execute()
-            }
-          }
-        }
-      }
-    }
-
-    deleteGroups(bucketName) map { _ => monitorRef ! DeleteBucket(bucketName) }
+  override def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef): Future[Any] = {
+    Future.traverse(accessGroups) { deleteGoogleGroup } map { _ => monitorRef ! DeleteBucket(bucketName) }
   }
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
@@ -252,17 +226,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def addAdmin(userId: String): Future[Unit] = {
-    val member = new Member().setEmail(userId).setRole(groupMemberRole)
-    val inserter = getGroupDirectory.members.insert(adminGroupName,member)
-    retry(when500)(() => Future { blocking { inserter.execute } })
-  }
-
-  override def deleteAdmin(userId: String): Future[Unit] = {
-    val deleter = getGroupDirectory.members.delete(adminGroupName,userId)
-    retry(when500)(() => Future { blocking { deleter.execute } })
-  }
-
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
     val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
@@ -281,10 +244,6 @@ class HttpGoogleServicesDAO(
     } recover {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
     }) map { _.isDefined }
-  }
-
-  override def listAdmins(): Future[Seq[String]] = {
-    listGroupMembersInternal(adminGroupName) map(_.getOrElse(throw new RawlsException(s"$adminGroupName not found")))
   }
 
   private def listGroupMembersInternal(groupName: String): Future[Option[Seq[String]]] = {
@@ -337,9 +296,9 @@ class HttpGoogleServicesDAO(
     val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val directory = getGroupDirectory
     val groups = directory.groups
-    retry(when500) {
+    retryExponentially(when500orGoogleError) {
       () => Future {
-        val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value))
+        val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))) // group names have a 60 char limit
         blocking {
           inserter.execute
         }
@@ -353,7 +312,7 @@ class HttpGoogleServicesDAO(
       case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
     }
     val inserter = getGroupDirectory.members.insert(group.groupEmail.value, memberEmail)
-    val insertFuture: Future[Unit] = retry(when500)(() => Future { blocking { inserter.execute } })
+    val insertFuture: Future[Unit] = retryExponentially(when500orGoogleError)(() => Future { blocking { inserter.execute } })
     insertFuture recover {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => Unit // it is ok of the email is already there
     }
@@ -497,14 +456,6 @@ class HttpGoogleServicesDAO(
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
-  def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"
-  def fromGroupId(groupId: String): Option[WorkspacePermissionsPair] = {
-    val pattern = s"${groupsPrefix}-([0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+)-([a-zA-Z]+)@${appsDomain}".r
-    Try{
-      val pattern(workspaceId,accessLevelString) = groupId
-      WorkspacePermissionsPair(workspaceId,WorkspaceAccessLevels.withName(accessLevelString.toUpperCase))
-    }.toOption
-  }
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {

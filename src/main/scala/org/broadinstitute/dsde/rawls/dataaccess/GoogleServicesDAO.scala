@@ -12,25 +12,17 @@ import scala.concurrent.Future
 abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   // returns a workspaceID
-  def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[Unit]
+  def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[GoogleWorkspaceInfo]
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
-  def deleteWorkspace(bucketName: String, monitorRef: ActorRef): Future[Any]
+  def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef): Future[Any]
 
   def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any]
-
-  def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"
 
   def isAdmin(userId: String): Future[Boolean]
-
-  def addAdmin(userId: String): Future[Unit]
-
-  def deleteAdmin(userId: String): Future[Unit]
-
-  def listAdmins(): Future[Seq[String]]
 
   /**
    *
@@ -76,3 +68,5 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
 }
+
+case class GoogleWorkspaceInfo(bucketName: String, groupsByAccessLevel: Map[WorkspaceAccessLevel, RawlsGroup])

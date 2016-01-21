@@ -435,7 +435,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", httpJson(z1)) ~>
               sealRoute(services.entityRoutes) ~>
           check {
-            assertResult(StatusCodes.Created) {
+            assertResult(StatusCodes.Created, response.entity.asString) {
               status
             }
             services.dataSource.inTransaction(readLocks=Set(workspace2Name)) { txn =>

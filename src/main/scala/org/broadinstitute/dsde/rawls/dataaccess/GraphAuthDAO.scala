@@ -61,24 +61,6 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     getGroupVertexByEmail(db, groupEmail).map(loadObject[RawlsGroup])
   }
 
-  override def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
-    val user = RawlsUser(userInfo)
-    saveUser(user, txn)
-
-    // add user to Owner group only
-    val oGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Owner, Set[RawlsUserRef](user), Set.empty[RawlsGroupRef])
-    val wGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Write)
-    val rGroup = RawlsGroup(workspaceName, WorkspaceAccessLevels.Read)
-    saveGroup(oGroup, txn)
-    saveGroup(wGroup, txn)
-    saveGroup(rGroup, txn)
-
-    Map(
-      WorkspaceAccessLevels.Owner -> oGroup,
-      WorkspaceAccessLevels.Write -> wGroup,
-      WorkspaceAccessLevels.Read -> rGroup)
-  }
-
   private def isTargetWorkspace(wsId:String) = new PipeFunction[Vertex, java.lang.Boolean] {
     override def compute(v: Vertex) = {
       isVertexOfClass(VertexSchema.Workspace).compute(v) && hasPropertyValue("workspaceId", wsId).compute(v)
