@@ -100,6 +100,8 @@ object WorkspaceService {
 }
 
 class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+  implicit val timeout = Timeout(5 minutes)
+
   override def receive = {
     case CreateWorkspace(workspace) => pipe(createWorkspace(workspace)) to sender
     case GetWorkspace(workspaceName) => pipe(getWorkspace(workspaceName)) to sender
@@ -373,7 +375,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
                   val newUsers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
                   val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
 
-                  implicit val timeout = Timeout(1 minutes)
                   userServiceRef ? UserService.OverwriteGroupMembers(group, RawlsGroupMemberList(
                     userSubjectIds = Option((usersNotChanging ++ newUsers).map(_.userSubjectId.value).toSeq),
                     subGroupNames = Option((groupsNotChanging ++ newgroups).map(_.groupName.value).toSeq)
@@ -1135,10 +1136,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     asAdmin {
       dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
-
-          containerDAO.authDAO.saveGroup(readerGroup.copy(subGroups = readerGroup.subGroups + UserService.allUsersGroupRef), txn)
-          Future.successful(RequestComplete(StatusCodes.Created))
+          val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
+          (userServiceRef ? UserService.AddGroupMembers(
+            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]]
+        } map {
+          case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
+          case otherwise => otherwise
         }
       }
     }
@@ -1148,10 +1152,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     asAdmin {
       dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
         withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
-
-          containerDAO.authDAO.saveGroup(readerGroup.copy(subGroups = readerGroup.subGroups - UserService.allUsersGroupRef), txn)
-          Future.successful(RequestComplete(StatusCodes.OK))
+          val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
+          (userServiceRef ? UserService.RemoveGroupMembers(
+            workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]]
         }
       }
     }

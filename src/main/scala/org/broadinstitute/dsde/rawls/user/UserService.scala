@@ -57,7 +57,9 @@ object UserService {
   case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class SynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
@@ -91,6 +93,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to sender
     case AdminOverwriteGroupMembers(groupName, memberList) => adminOverwriteGroupMembers(groupName, memberList) to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
+    case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
     case SynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) to sender
@@ -406,15 +410,13 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   }
 
   def updateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, operation: UpdateGroupMembersOp): Future[PerRequestMessage] = {
-    asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        withGroup(groupRef, txn) { group =>
-          withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
-            updateGroupMembersInternal(group, users, subGroups, operation, txn) map {
-              _ match {
-                case None => RequestComplete(StatusCodes.OK)
-                case Some(error) => RequestComplete(error)
-              }
+    dataSource.inFutureTransaction() { txn =>
+      withGroup(groupRef, txn) { group =>
+        withMemberUsersAndGroups(memberList, txn) { (users, subGroups) =>
+          updateGroupMembersInternal(group, users, subGroups, operation, txn) map {
+            _ match {
+              case None => RequestComplete(StatusCodes.OK)
+              case Some(error) => RequestComplete(error)
             }
           }
         }

@@ -533,6 +533,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
     }
 
+    testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
+
     Get(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -548,6 +550,17 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
+
+    services.dataSource.inTransaction() { txn =>
+      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+
+      assertResult(Some(true)) {
+        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+          members.contains(Right(UserService.allUsersGroupRef))
+        }
+      }
+    }
+
     Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -558,6 +571,16 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
+    services.dataSource.inTransaction() { txn =>
+      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+
+      assertResult(Some(false)) {
+        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+          members.contains(Right(UserService.allUsersGroupRef))
+        }
+      }
+    }
+
   }
 
   it should "sync group membership" in withTestDataApiServices { services =>
