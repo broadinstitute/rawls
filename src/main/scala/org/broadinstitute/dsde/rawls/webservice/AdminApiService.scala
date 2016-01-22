@@ -85,7 +85,8 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
-    path("admin" / "groups" / Segment / "members") { (groupName) =>
+    path("admin" / "groups" / Segment / "members") { (groupNameRaw) =>
+      val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
       // there are 3 methods supported to modify group membership:
       // PUT = "set the group members to exactly this list"
       // POST = "add these things to the list"
