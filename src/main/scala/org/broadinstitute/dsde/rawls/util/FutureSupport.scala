@@ -18,13 +18,11 @@ trait FutureSupport {
   def toFutureTry[T](f: Future[T])(implicit executionContext: ExecutionContext): Future[Try[T]] = f map(Success(_)) recover { case t => Failure(t) }
 
   /**
-   * Returns a failed future if any of the input tries have failed, otherwise returns the input in a successful Future
-   * @tparam T
-   * @return
+   * Returns a failed future if any of the input tries have failed, otherwise returns the input with tries unwrapped in a successful Future
    */
-  def assertSuccessfulTries[T](implicit executionContext: ExecutionContext): (Seq[Try[T]]) => Future[Seq[Try[T]]] = { tries =>
-    val failures = tries.collect{ case Failure(t) => t }
-    if (failures.isEmpty) Future.successful(tries) else Future.failed(failures.head)
+  def assertSuccessfulTries[K, T](tries: Map[K, Try[T]])(implicit executionContext: ExecutionContext): Future[Map[K, T]] = {
+    val failures = tries.values.collect{ case Failure(t) => t }
+    if (failures.isEmpty) Future.successful(tries.map { case (k, v) => k -> v.get}) else Future.failed(failures.head)
   }
 
 

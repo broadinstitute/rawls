@@ -196,11 +196,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
         }
 
-        gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, bucketDeletionMonitor).map { _ =>
+        val accessGroups = workspaceContext.workspace.accessLevels.values.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
+        gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor).map { _ =>
           containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
           containerDAO.workspaceDAO.delete(workspaceName, txn)
 
-          RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)} will be deleted within 24h.")
+          RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
         }
       }
     }
@@ -1166,11 +1167,20 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         case Some(_) => Future.successful(PerRequest.RequestComplete(ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { _ =>
+          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { googleWorkspaceInfo =>
             val currentDate = DateTime.now
-            val accessLevels = containerDAO.authDAO.createWorkspaceAccessGroups(workspaceName, userInfo, txn)
+            googleWorkspaceInfo.groupsByAccessLevel.values.foreach(containerDAO.authDAO.saveGroup(_, txn))
 
-            val workspace = Workspace(workspaceRequest.namespace, workspaceRequest.name, workspaceId, gcsDAO.getBucketName(workspaceId), currentDate, currentDate, userInfo.userEmail, workspaceRequest.attributes, accessLevels)
+            val workspace = Workspace(workspaceRequest.namespace,
+              workspaceRequest.name,
+              workspaceId,
+              googleWorkspaceInfo.bucketName,
+              currentDate,
+              currentDate,
+              userInfo.userEmail,
+              workspaceRequest.attributes,
+              googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
+
             op(containerDAO.workspaceDAO.save(workspace, txn))
           }
       }
@@ -1266,7 +1276,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   private def buildWorkflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Future[Option[String]] = {
-    val bucketName = gcsDAO.getBucketName(workspaceContext.workspace.workspaceId)
+    val bucketName = workspaceContext.workspace.bucketName
     val billingProjectName = RawlsBillingProjectName(workspaceContext.workspace.namespace)
 
     // note: executes in a Future

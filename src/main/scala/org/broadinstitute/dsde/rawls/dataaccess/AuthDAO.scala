@@ -26,8 +26,6 @@ trait AuthDAO {
     (loadUserByEmail(email, txn).map(Left(_)) ++ loadGroupByEmail(email, txn).map(Right(_))).headOption
   }
 
-  def createWorkspaceAccessGroups(workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef]
-
   def deleteWorkspaceAccessGroups(workspace: Workspace, txn: RawlsTransaction) = {
     workspace.accessLevels foreach { case (_, group) =>
       deleteGroup(group, txn)

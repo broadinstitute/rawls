@@ -35,29 +35,12 @@ case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, us
 
 object RawlsGroup {
   implicit def toRef(g: RawlsGroup) = RawlsGroupRef(g.groupName)
-
-  // for Workspace Access Groups
-  def apply(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel): RawlsGroup =
-    apply(workspaceName, accessLevel, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-
-  // for Workspace Access Groups
-  def apply(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef]): RawlsGroup = {
-    val name = RawlsGroupName(UserAuth.toWorkspaceAccessGroupName(workspaceName, accessLevel))
-    RawlsGroup(name, RawlsGroupEmail(""), users, groups)
-  }
 }
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String) extends DomainObject {
   def idFields = Seq("projectName")
-}
-
-object UserAuth {
-
-  def toWorkspaceAccessGroupName(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) =
-    s"${workspaceName.namespace}/${workspaceName.name} ${accessLevel}"
-
 }
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])

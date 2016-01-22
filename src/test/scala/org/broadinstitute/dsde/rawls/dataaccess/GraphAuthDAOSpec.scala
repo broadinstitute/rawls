@@ -254,7 +254,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save Workspace Access Groups as map properties on a Workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
@@ -268,7 +268,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
           WorkspaceAccessLevels.groupAccessLevelsAscending foreach { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level)
+            val levelGroup = newRawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level)
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -285,7 +285,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "save the user to the Owner Workspace Access Group on a Workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
@@ -315,7 +315,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
 
   it should "delete Workspace Access Groups" in withEmptyTestDatabase { dataSource =>
     val context = dataSource.inTransaction() { txn =>
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
       workspaceDAO.save(workspace, txn)
     }
@@ -330,7 +330,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
           WorkspaceAccessLevels.groupAccessLevelsAscending map { level =>
             val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
 
-            val levelGroup = RawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+            val levelGroup = newRawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
             val levelVertices = getMatchingGroupVertices(graph, levelGroup)
 
             assertResult(1) {
@@ -387,7 +387,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveUser(user, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
       workspaceDAO.save(workspace, txn)
 
@@ -407,7 +407,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
       authDAO.saveGroup(group2, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
@@ -429,7 +429,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
       authDAO.saveGroup(group2, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
@@ -449,7 +449,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
       workspaceDAO.save(workspace, txn)
 
@@ -469,7 +469,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
       authDAO.saveGroup(group, txn)
 
-      val levels = authDAO.createWorkspaceAccessGroups(testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
       val workspace1 = testData.workspaceNoGroups.copy(name = "1", workspaceId = "1", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
       val workspace2 = testData.workspaceNoGroups.copy(name = "2", workspaceId = "2", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Write -> group))
       val workspace3 = testData.workspaceNoGroups.copy(name = "3", workspaceId = "3", accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Read -> group))
@@ -488,4 +488,34 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       }
     }
   }
+
+  def createWorkspaceAccessGroups(authDAO: AuthDAO, workspaceName: WorkspaceName, userInfo: UserInfo, txn: RawlsTransaction): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
+    val user = RawlsUser(userInfo)
+    authDAO.saveUser(user, txn)
+
+    // add user to Owner group only
+    val oGroup = newRawlsGroup(workspaceName, WorkspaceAccessLevels.Owner, Set[RawlsUserRef](user), Set.empty[RawlsGroupRef])
+    val wGroup = newRawlsGroup(workspaceName, WorkspaceAccessLevels.Write)
+    val rGroup = newRawlsGroup(workspaceName, WorkspaceAccessLevels.Read)
+    authDAO.saveGroup(oGroup, txn)
+    authDAO.saveGroup(wGroup, txn)
+    authDAO.saveGroup(rGroup, txn)
+
+    Map(
+      WorkspaceAccessLevels.Owner -> oGroup,
+      WorkspaceAccessLevels.Write -> wGroup,
+      WorkspaceAccessLevels.Read -> rGroup)
+  }
+
+
+  // for Workspace Access Groups
+  def newRawlsGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel): RawlsGroup =
+    newRawlsGroup(workspaceName, accessLevel, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+
+  // for Workspace Access Groups
+  def newRawlsGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef]): RawlsGroup = {
+    val name = RawlsGroupName(s"${workspaceName.namespace}-${workspaceName.name}-${accessLevel.toString}")
+    RawlsGroup(name, RawlsGroupEmail(""), users, groups)
+  }
+
 }
