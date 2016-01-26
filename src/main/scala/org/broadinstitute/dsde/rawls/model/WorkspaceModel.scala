@@ -202,6 +202,7 @@ object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],S
   }
 }
 
+case class ApplicationVersion(gitHash: String, buildNumber: String, version: String)
 
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
@@ -312,4 +313,6 @@ object WorkspaceJsonSupport extends JsonSupport {
   }
 
   implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport,"source","message","statusCode","causes","stackTrace")))
+
+  implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }

@@ -12,6 +12,18 @@ info:
   termsOfService: 'http://www.github.com/broadinstitute/rawls'
 
 paths:
+  '/version':
+    get:
+      responses:
+        '200':
+          description: Version information of this application
+          schema:
+            $ref: '#/definitions/ApplicationVersion'
+      description: get version information of this application
+      tags:
+        - version
+      summary: get version information of this application
+      operationId: version
   '/api/admin/billing/list/{userEmail}':
     get:
       responses:
@@ -3693,3 +3705,12 @@ definitions:
         type: array
         items:
           $ref: '#/definitions/SyncReportItem'
+  ApplicationVersion:
+    description: version of the application
+    properties:
+      gitHash:
+        type: string
+      buildNumber:
+        type: string
+      version:
+        type: string

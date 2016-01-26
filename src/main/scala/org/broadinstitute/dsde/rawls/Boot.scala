@@ -11,7 +11,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.datamigration.DataMigration
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
-import org.broadinstitute.dsde.rawls.model.UserInfo
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor.{BootMonitors, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
@@ -98,7 +98,8 @@ object Boot extends App {
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),
-                    userServiceConstructor),
+                    userServiceConstructor,
+                    ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version"))),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
