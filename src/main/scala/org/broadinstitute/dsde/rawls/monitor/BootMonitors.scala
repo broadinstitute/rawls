@@ -1,8 +1,9 @@
-package org.broadinstitute.dsde.rawls
+package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorRef
 import akka.pattern._
 import com.typesafe.scalalogging.slf4j.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, GraphContainerDAO, DataSource}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.{PendingBucketDeletions, WorkspaceName}

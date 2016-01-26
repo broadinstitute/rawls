@@ -7,6 +7,7 @@ import com.tinkerpop.blueprints.{Edge, Direction, Graph, Vertex}
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.branch.LoopPipe
+import org.broadinstitute.dsde.rawls.datamigration.DataMigration
 import org.broadinstitute.dsde.rawls.model.RawlsEnumeration
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
@@ -37,7 +38,10 @@ object VertexSchema {
   // container types
   val Map = vertexClassOf[scala.collection.Map[String,Attribute]]
 
-  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, PendingBucketDeletions, Map)
+  // migration
+  val MigrationEntry = vertexClassOf[org.broadinstitute.dsde.rawls.datamigration.MigrationEntry]
+
+  val allClasses = Seq(Workspace, Entity, MethodConfig, MethodRepoMethod, Submission, Workflow, WorkflowFailure, User, Group, BillingProject, PendingBucketDeletions, Map, MigrationEntry)
 
   def vertexClassOf[T :TypeTag]: String = typeOf[T].typeSymbol.name.decodedName.toString
   def vertexClassOf(tpe: Type): String  = tpe.typeSymbol.name.decodedName.toString

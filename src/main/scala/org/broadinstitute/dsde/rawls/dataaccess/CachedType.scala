@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import org.broadinstitute.dsde.rawls.datamigration.MigrationEntry
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 
@@ -106,6 +107,7 @@ object CachedTypes {
   implicit val rawlsUserInfoType = new CachedType[RawlsUserInfo]
   implicit val rawlsUserInfoListType = new CachedType[RawlsUserInfoList]
   implicit val pendingBucketDeletionsType = new CachedType[PendingBucketDeletions]
+  implicit val migrationEntryType = new CachedType[MigrationEntry]
 
   /** utility to extract the cachedType implicit */
   def cachedTypeOf[T](implicit cachedType: CachedType[T]) = cachedType

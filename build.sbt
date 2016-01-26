@@ -110,3 +110,15 @@ test in assembly := {}
 val buildSettings = Defaults.defaultSettings ++ Seq(
   javaOptions += "-Xmx2G"
 )
+
+// generate version.conf
+resourceGenerators in Compile <+= Def.task {
+  val file = (resourceManaged in Compile).value / "version.conf"
+  // jenkins sets BUILD_NUMBER and GIT_COMMIT environment variables
+  val buildNumber = sys.env.getOrElse("BUILD_NUMBER", default = "None")
+  val gitHash = sys.env.getOrElse("GIT_COMMIT", default = "None")
+  val contents = "version {\nbuild.number=%s\ngit.hash=%s\nversion=%s\n}".format(buildNumber, gitHash, version.value)
+  IO.write(file, contents)
+  Seq(file)
+}
+
