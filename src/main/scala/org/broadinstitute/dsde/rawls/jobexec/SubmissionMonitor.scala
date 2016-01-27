@@ -114,8 +114,9 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
             entityAttributes = entityAttributes.map({ case (k, v) => (k.stripPrefix("this."), v) })
             workspaceAttributes = workspaceAttributes.map({ case (k, v) => (k.stripPrefix("workspace."), v) })
 
-            val entity = containerDAO.entityDAO.get(workspaceContext, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).getOrElse {
-              throw new RawlsException(s"Could not find ${workflow.workflowEntity.entityType} ${workflow.workflowEntity.entityName}, was it deleted?")
+            val workflowEntity = workflow.workflowEntity.getOrElse(throw new RawlsException("Workflow entity no longer exists, was it deleted?"))
+            val entity = containerDAO.entityDAO.get(workspaceContext, workflowEntity.entityType, workflowEntity.entityName, txn).getOrElse {
+              throw new RawlsException(s"Could not find ${workflowEntity.entityType} ${workflowEntity.entityName}, was it deleted?")
             }
 
             //Update entity and workspace with expression values.

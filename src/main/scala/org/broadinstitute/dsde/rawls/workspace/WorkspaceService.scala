@@ -943,7 +943,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
           val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
           val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
-          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName), inputResolutions = entityInputs.inputResolutions))
+          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions))
         }))
 
         submittedWorkflowsFuture map { submittedWorkflows =>
@@ -957,7 +957,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             submitter = RawlsUser(userInfo),
             methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
             methodConfigurationName = submissionRequest.methodConfigurationName,
-            submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
+            submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
             workflows = submittedWorkflows,
             notstarted = failedWorkflows,
             status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
@@ -965,7 +965,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
           containerDAO.submissionDAO.save(workspaceContext, submission, txn)
           val workflowReports = submittedWorkflows.map { workflow =>
-            WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.entityName, workflow.inputResolutions)
+            WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
           }
 
           RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))

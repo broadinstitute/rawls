@@ -98,7 +98,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         }
         testData.submission1.workflows.foreach { workflow =>
           assertResult(Some(AttributeString(workflow.workflowId))) {
-            entityDAO.get(context, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).get.attributes.get("test")
+            entityDAO.get(context, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName, txn).get.attributes.get("test")
           }
         }
       }
@@ -151,7 +151,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
         }
         testData.submission1.workflows.foreach { workflow =>
           assertResult(Some(AttributeString(workflow.workflowId))) {
-            entityDAO.get(context, workflow.workflowEntity.entityType, workflow.workflowEntity.entityName, txn).get.attributes.get("test")
+            entityDAO.get(context, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName, txn).get.attributes.get("test")
           }
         }
       }
@@ -224,8 +224,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       withWorkspaceContext(testData.workspace, txn) { wsCtx =>
         val entity = entityDAO.get(
           wsCtx,
-          testData.submissionUpdateEntity.submissionEntity.entityType,
-          testData.submissionUpdateEntity.submissionEntity.entityName,
+          testData.submissionUpdateEntity.submissionEntity.get.entityType,
+          testData.submissionUpdateEntity.submissionEntity.get.entityName,
           txn).get
         assertResult(AttributeString("foo"), entity.attributes) {
           entity.attributes.getOrElse("myAttribute", None)

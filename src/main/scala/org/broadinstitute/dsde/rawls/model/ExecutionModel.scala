@@ -64,7 +64,7 @@ case class Workflow(
   workflowId: String,
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  workflowEntity: AttributeEntityReference,
+  workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty
 ) extends DomainObject {
@@ -98,7 +98,7 @@ case class Submission(
   submitter: RawlsUserRef,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
@@ -112,7 +112,7 @@ case class SubmissionStatusResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: AttributeEntityReference,
+  submissionEntity: Option[AttributeEntityReference],
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus

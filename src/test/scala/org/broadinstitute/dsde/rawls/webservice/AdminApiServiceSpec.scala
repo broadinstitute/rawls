@@ -63,6 +63,33 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    Get(s"/admin/submissions") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[ActiveSubmission]] should contain
+        theSameElementsAs(Array(ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission1),
+          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission2),
+          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest)))
+      }
+  }
+
   it should "return 204 when aborting an active submission" in withTestDataApiServices { services =>
     Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}") ~>
       sealRoute(services.adminRoutes) ~>

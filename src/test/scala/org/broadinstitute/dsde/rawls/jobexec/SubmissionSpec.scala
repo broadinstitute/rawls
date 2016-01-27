@@ -64,32 +64,32 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val existingWorkflowId = "69d1d92f-3895-4a7b-880a-82535e9a096e"
     val nonExistingWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c9999"
     val alreadyTerminatedWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c8778"
-    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow("malformed_workflow",WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+      Seq(Workflow("malformed_workflow",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
-      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(
-        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions),
-        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions),
+        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, testData.userOwner, "std","someMethod",AttributeEntityReference(sample1.entityType, sample1.name),
+    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(
-        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions),
-        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), testData.inputResolutions)),
+        Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions),
+        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
