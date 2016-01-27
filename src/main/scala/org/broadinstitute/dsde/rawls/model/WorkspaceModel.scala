@@ -166,6 +166,8 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
+case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
+
 case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement])
 
 object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],Seq[StackTraceElement]) => ErrorReport) {
@@ -247,6 +249,8 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceFormat = jsonFormat10(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
+
+  implicit val WorkspaceStatusFormat = jsonFormat2(WorkspaceStatus)
 
   implicit val MethodConfigurationNameFormat = jsonFormat3(MethodConfigurationName)
 

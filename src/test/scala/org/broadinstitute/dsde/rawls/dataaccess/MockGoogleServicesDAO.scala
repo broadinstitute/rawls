@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
+import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
@@ -73,6 +75,12 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
+  override def getBucket(bucketName: String): Future[Option[Bucket]] = Future.successful(Some(new Bucket))
+
+  override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
+
+  override def diagnosticBucketWrite(user: RawlsUser, bucketName: String) = Future.successful(None)
+
   val adminList = scala.collection.mutable.Set("test_token")
 
   override def isAdmin(userId: String): Future[Boolean] = Future.successful(adminList.contains(userId))
@@ -96,6 +104,9 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
       case None => RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     }
   }
+  override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = Future.successful(true)
+
+  override def getGoogleGroup(groupName: String): Future[Option[Group]] = Future.successful(Some(new Group))
 
   override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = Future {
     groups.remove(group)

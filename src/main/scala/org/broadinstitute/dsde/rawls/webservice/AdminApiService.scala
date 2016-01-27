@@ -156,6 +156,15 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.RevokeAllUserReadAccess(WorkspaceName(workspaceNamespace, workspaceName)))
       }
+    } ~
+    path("admin" / "validate" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+      get {
+        parameters('userSubjectId.?) { (userSubjectId) =>
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId))
+        }
+      }
     }
   }
 }

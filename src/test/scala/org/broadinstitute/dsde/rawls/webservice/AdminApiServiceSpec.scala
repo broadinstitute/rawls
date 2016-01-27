@@ -7,6 +7,7 @@ import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http.StatusCodes
@@ -641,6 +642,34 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           responseAs[SyncReport]
         }
       }
+  }
 
+  it should "get the status of a workspace" in withTestDataApiServices { services =>
+    val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveUser(testUser, txn)
+    }
+
+    Get(s"/admin/validate/${testData.workspace.namespace}/${testData.workspace.name}?userSubjectId=${testUser.userSubjectId.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(WorkspaceStatus(WorkspaceName(testData.workspace.namespace, testData.workspace.name),
+          Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
+            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
+            "GOOGLE_GROUP: dummy@example.com" -> "FOUND",
+            "GOOGLE_BUCKET: aBucket" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: dummy@example.com" -> "FOUND",
+            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND"))) {
+          responseAs[WorkspaceStatus]
+        }
+      }
   }
 }

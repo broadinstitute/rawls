@@ -3,6 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -40,6 +42,16 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
   def isUserInProxyGroup(user: RawlsUser): Future[Boolean]
 
   def createGoogleGroup(groupRef: RawlsGroupRef): Future[RawlsGroup]
+
+  def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean]
+
+  def getGoogleGroup(groupName: String): Future[Option[Group]]
+
+  def getBucket(bucketName: String): Future[Option[Bucket]]
+
+  def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
+
+  def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
 
   def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
