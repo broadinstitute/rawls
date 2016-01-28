@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
@@ -50,6 +51,7 @@ object WorkspaceService {
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UnlockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
@@ -113,6 +115,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
     case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
+    case GetWorkspaceStatus(workspaceName, userSubjectId) => pipe(getWorkspaceStatus(workspaceName, userSubjectId)) to sender
 
     case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
     case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to sender
@@ -1156,6 +1159,104 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           (userServiceRef ? UserService.RemoveGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
             RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]]
+        }
+      }
+    }
+  }
+
+
+  def getWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]): Future[PerRequestMessage] = {
+    asAdmin {
+      dataSource.inFutureTransaction(readLocks = Set(workspaceName)) { txn =>
+        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+          val STATUS_FOUND = "FOUND"
+          val STATUS_NOT_FOUND = "NOT_FOUND"
+          val STATUS_CAN_WRITE = "USER_CAN_WRITE"
+          val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
+          val STATUS_NA = "NOT_AVAILABLE"
+
+          val bucketName = workspaceContext.workspace.bucketName
+          val rawlsGroupRefs = workspaceContext.workspace.accessLevels
+          val googleGroupRefs = rawlsGroupRefs map { case (accessLevel, groupRef) =>
+            accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
+          }
+
+          val userRef = userSubjectId.map(id =>
+            containerDAO.authDAO.loadUser(RawlsUserRef(RawlsUserSubjectId(id)), txn)).getOrElse(throw new RawlsException("Unable to load user"))
+
+          val userStatus = userRef match {
+            case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
+            case None => userSubjectId match {
+              case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
+              case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
+            }
+          }
+
+          val rawlsGroupStatuses = rawlsGroupRefs map { case (_, groupRef) =>
+            containerDAO.authDAO.loadGroup(groupRef, txn) match {
+              case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
+              case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+            }
+          }
+
+          val googleGroupStatuses = googleGroupRefs map { case (_, groupRef) =>
+            val groupEmail = groupRef.get.groupEmail.value
+            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+              case Some(_) => "GOOGLE_GROUP: " + groupEmail -> STATUS_FOUND
+              case None => "GOOGLE_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+            }))
+          }
+
+          val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
+            case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
+            case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+          }))
+
+          val bucketWriteStatus = userStatus match {
+            case (_, STATUS_FOUND) => {
+              toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
+                case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
+                case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
+              }))
+            }
+            case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
+          }
+
+          val userProxyStatus = userStatus match {
+            case (_, STATUS_FOUND) => {
+              toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
+                if(status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
+                else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
+              })
+            }
+            case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
+          }
+
+          val userAccessLevel = userStatus match {
+            case (_, STATUS_FOUND) =>
+              "WORKSPACE_USER_ACCESS_LEVEL" -> containerDAO.authDAO.getMaximumAccessLevel(userRef.get, workspaceContext.workspace.workspaceId, txn).toString
+            case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+          }
+
+          val googleAccessLevel = userStatus match {
+            case (_, STATUS_FOUND) => {
+              val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(userRef.get, workspaceContext.workspace.workspaceId, txn)
+              if(accessLevel >= WorkspaceAccessLevels.Read) {
+                val groupEmail = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels.get(accessLevel).get, txn).get.groupEmail.value
+                toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
+                  if(status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
+                  else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
+                })
+              }
+              else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
+            }
+            case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
+          }
+
+          Future.sequence(googleGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
+            val statuses = tries.collect { case Success(s) => s }.toSeq
+            RequestComplete(WorkspaceStatus(workspaceName, (rawlsGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
+          }
         }
       }
     }
