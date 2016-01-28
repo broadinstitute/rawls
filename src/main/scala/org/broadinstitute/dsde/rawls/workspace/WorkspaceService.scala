@@ -1181,8 +1181,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
           }
 
-          val userRef = userSubjectId.map(id =>
-            containerDAO.authDAO.loadUser(RawlsUserRef(RawlsUserSubjectId(id)), txn)).getOrElse(throw new RawlsException("Unable to load user"))
+          val userRef = userSubjectId.flatMap(id =>
+            containerDAO.authDAO.loadUser(RawlsUserRef(RawlsUserSubjectId(id)), txn))
 
           val userStatus = userRef match {
             case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
