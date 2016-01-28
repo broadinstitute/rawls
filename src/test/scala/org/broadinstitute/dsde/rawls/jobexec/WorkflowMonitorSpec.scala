@@ -37,7 +37,7 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   }
 
   "WorkflowMonitor" should "throw exception for non-existent workflow" in withDefaultTestDatabase { dataSource =>
-    val workflow = Workflow("id-string", WorkflowStatuses.Running, new DateTime(0), AttributeEntityReference("entityType", "entity"), testData.inputResolutions)
+    val workflow = Workflow("id-string", WorkflowStatuses.Running, new DateTime(0), Option(AttributeEntityReference("entityType", "entity")), testData.inputResolutions)
     val monitorRef = TestActorRef[WorkflowMonitor](WorkflowMonitor.props(1 millisecond, containerDAO, new WorkflowTestExecutionServiceDAO(WorkflowStatuses.Running.toString), dataSource, mockCredential)(testActor, testData.wsName, testData.submission1.submissionId, workflow))
     intercept[RawlsException] {
       monitorRef.underlyingActor.updateWorkflowStatus(ExecutionServiceStatus(workflow.workflowId, "Succeeded"))
