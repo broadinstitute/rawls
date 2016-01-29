@@ -7,9 +7,22 @@
         </encoder>
     </appender>
 
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- See http://logback.qos.ch/manual/layouts.html -->
+            <!-- See http://doc.akka.io/docs/akka/2.0/scala/logging.html -->
+            <pattern>[%level] [%d{HH:mm:ss.SSS}] [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="FILE"/>
     </root>
+
+    <logger name="org.broadinstitute.dsde" level="info" additivity="false">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="console"/>
+    </logger>
 
     <!-- netty (mock server) produces a huge amount of DEBUG output during tests without this line -->
     <logger name="io.netty" level="WARN"/>
