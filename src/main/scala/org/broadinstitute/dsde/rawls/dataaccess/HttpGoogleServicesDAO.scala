@@ -6,19 +6,23 @@ import java.util.UUID
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import akka.actor.{ActorRef, ActorSystem}
-import com.google.api.client.http.{HttpResponseException, InputStreamContent}
+import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
+import com.google.api.client.http.json.JsonHttpContent
+import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
+import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
+import spray.json.JsValue
 
 import scala.collection.JavaConversions._
 
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 import com.google.api.client.auth.oauth2.{TokenResponse, Credential}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
@@ -47,7 +51,7 @@ class HttpGoogleServicesDAO(
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
   tokenEncryptionKey: String,
-  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport {
+  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -74,11 +78,11 @@ class HttpGoogleServicesDAO(
         val logBucket = new Bucket().
           setName(tokenBucketName + "-logs")
         val logInserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, logBucket)
-        logInserter.execute
+        executeGoogleRequest(logInserter)
 
         // add cloud-storage-analytics@google.com as a writer so it can write logs
         // do it as a separate call so bucket gets default permissions plus this one
-        getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(logBucket.getName, new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")).execute()
+        executeGoogleRequest(getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(logBucket.getName, new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")))
 
         val bucketAcls = List(new BucketAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
         val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
@@ -88,7 +92,7 @@ class HttpGoogleServicesDAO(
           setDefaultObjectAcl(defaultObjectAcls).
           setLogging(new Logging().setLogBucket(logBucket.getName))
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, bucket)
-        inserter.execute
+        executeGoogleRequest(inserter)
     }
   }
 
@@ -142,7 +146,7 @@ class HttpGoogleServicesDAO(
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(projectId, bucket)
           blocking {
-            inserter.execute
+            executeGoogleRequest(inserter)
           }
           GoogleWorkspaceInfo(bucketName, groupsByAccess)
         }
@@ -168,7 +172,7 @@ class HttpGoogleServicesDAO(
         val bucket = new Bucket().setName(bucketName)
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(billingProject.value, bucket)
         blocking {
-          inserter.execute
+          executeGoogleRequest(inserter)
         }
 
         bucketName
@@ -192,7 +196,7 @@ class HttpGoogleServicesDAO(
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
     retry(when500)(() => Future {
-      blocking { deleter.execute }
+      blocking { executeGoogleRequest(deleter) }
       monitorRef ! BucketDeleted(bucketName)
     }) recover {
       //Google returns 409 Conflict if the bucket isn't empty.
@@ -206,7 +210,7 @@ class HttpGoogleServicesDAO(
           .setCondition(new Condition().setAge(0))
         val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
         val fetcher = buckets.get(bucketName)
-        val bucketFuture = retry(when500)(() => Future { blocking { fetcher.execute } })
+        val bucketFuture = retry(when500)(() => Future { blocking { executeGoogleRequest(fetcher) } })
         bucketFuture.map(bucket => bucket.setLifecycle(lifecycle))
 
         system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds, monitorRef, DeleteBucket(bucketName))
@@ -221,7 +225,7 @@ class HttpGoogleServicesDAO(
   override def isAdmin(userId: String): Future[Boolean] = {
     val query = getGroupDirectory.members.get(adminGroupName,userId)
     retry(when500)(() => Future {
-      blocking { query.execute }
+      blocking { executeGoogleRequest(query) }
       true
     }) recover {
         case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => false
@@ -231,12 +235,12 @@ class HttpGoogleServicesDAO(
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = {
     val member = new Member().setEmail(user.userEmail.value).setRole(groupMemberRole)
     val inserter = getGroupDirectory.members.insert(toProxyFromUser(user.userSubjectId), member)
-    retry(when500)(() => Future { blocking { inserter.execute } })
+    retry(when500)(() => Future { blocking { executeGoogleRequest(inserter) } })
   }
 
   override def removeUserFromProxyGroup(user: RawlsUser): Future[Unit] = {
     val deleter = getGroupDirectory.members.delete(toProxyFromUser(user.userSubjectId), user.userEmail.value)
-    retry(when500)(() => Future { blocking { deleter.execute } })
+    retry(when500)(() => Future { blocking { executeGoogleRequest(deleter) } })
   }
 
   override def isUserInProxyGroup(user: RawlsUser): Future[Boolean] = {
@@ -246,7 +250,7 @@ class HttpGoogleServicesDAO(
   override def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean] = {
     val getter = getGroupDirectory.members.get(groupName, email)
     retry(when500)(() => Future {
-      blocking { Option(getter.execute) }
+      blocking { Option(executeGoogleRequest(getter)) }
     } recover {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
     }) map { _.isDefined }
@@ -255,7 +259,7 @@ class HttpGoogleServicesDAO(
   override def getGoogleGroup(groupName: String): Future[Option[Group]] = {
     val getter = getGroupDirectory.groups().get(groupName)
     retry(when500)(() => Future {
-      blocking { Option(getter.execute) }
+      blocking { Option(executeGoogleRequest(getter)) }
     } recover {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
     })
@@ -264,7 +268,7 @@ class HttpGoogleServicesDAO(
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
     val aclGetter = getStorage(getBucketServiceAccountCredential).bucketAccessControls().list(bucketName)
     retry(when500)(() => Future {
-      blocking { Option(aclGetter.execute.getItems.toList) }
+      blocking { Option(executeGoogleRequest(aclGetter).getItems.toList) }
     } recover {
       case e: HttpResponseException => None
     })
@@ -273,7 +277,7 @@ class HttpGoogleServicesDAO(
   override def getBucket(bucketName: String): Future[Option[Bucket]] = {
     val getter = getStorage(getBucketServiceAccountCredential).buckets().get(bucketName)
     retry(when500)(() => Future {
-      blocking { Option(getter.execute) }
+      blocking { Option(executeGoogleRequest(getter)) }
     } recover {
       case e: HttpResponseException => None
     })
@@ -283,7 +287,7 @@ class HttpGoogleServicesDAO(
     val fetcher = getGroupDirectory.members.list(groupName)
     retry(when500)(() => Future {
       val result = blocking {
-        fetcher.execute.getMembers
+        executeGoogleRequest(fetcher).getMembers
       }
 
       Option(result) match {
@@ -319,7 +323,7 @@ class HttpGoogleServicesDAO(
       () => Future {
         val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
         blocking {
-          inserter.execute
+          executeGoogleRequest(inserter)
         }
       }
     }
@@ -333,7 +337,7 @@ class HttpGoogleServicesDAO(
       () => Future {
         val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))) // group names have a 60 char limit
         blocking {
-          inserter.execute
+          executeGoogleRequest(inserter)
         }
       }
     } map { _ => newGroup}
@@ -345,7 +349,7 @@ class HttpGoogleServicesDAO(
       case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
     }
     val inserter = getGroupDirectory.members.insert(group.groupEmail.value, memberEmail)
-    val insertFuture: Future[Unit] = retryExponentially(when500orGoogleError)(() => Future { blocking { inserter.execute } })
+    val insertFuture: Future[Unit] = retryExponentially(when500orGoogleError)(() => Future { blocking { executeGoogleRequest(inserter) } })
     insertFuture recover {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => Unit // it is ok of the email is already there
     }
@@ -357,7 +361,7 @@ class HttpGoogleServicesDAO(
       case Right(member) => member.groupEmail.value
     }
     val deleter = getGroupDirectory.members.delete(group.groupEmail.value, memberEmail)
-    val deleteFuture: Future[Unit] = retry(when500)(() => Future { blocking { deleter.execute } })
+    val deleteFuture: Future[Unit] = retry(when500)(() => Future { blocking { executeGoogleRequest(deleter) } })
     deleteFuture recover {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // it is ok of the email is already missing
     }
@@ -369,7 +373,7 @@ class HttpGoogleServicesDAO(
     retry(when500) {
       () => Future {
         blocking {
-          groups.delete(group.groupEmail.value).execute()
+          executeGoogleRequest(groups.delete(group.groupEmail.value))
         }
       }
     }
@@ -392,9 +396,9 @@ class HttpGoogleServicesDAO(
           val getter = getStorage(credential).objects().get(bucketName, uuid)
           val remover = getStorage(credential).objects().delete(bucketName, uuid)
           try {
-            inserter.execute()
-            getter.execute()
-            remover.execute()
+            executeGoogleRequest(inserter)
+            executeGoogleRequest(getter)
+            executeGoogleRequest(remover)
             None
           } catch {
             case t: HttpResponseException => Some(ErrorReport(new RawlsException(t.getMessage)))
@@ -413,7 +417,7 @@ class HttpGoogleServicesDAO(
       val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
       val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
       inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
-      inserter.execute()
+      executeGoogleRequest(inserter)
     } )
   }
 
@@ -424,7 +428,7 @@ class HttpGoogleServicesDAO(
       val tokenBytes = new ByteArrayOutputStream()
       try {
         get.executeMediaAndDownloadTo(tokenBytes)
-        val so = get.execute()
+        val so = executeGoogleRequest(get)
         Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
       } catch {
         case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
@@ -436,7 +440,7 @@ class HttpGoogleServicesDAO(
     retryWhen500(() => {
       val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userInfo.userSubjectId)
       try {
-        Option(new time.DateTime(get.execute().getUpdated.getValue))
+        Option(new time.DateTime(executeGoogleRequest(get).getUpdated.getValue))
       } catch {
         case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
       }
@@ -445,7 +449,7 @@ class HttpGoogleServicesDAO(
 
   override def deleteToken(userInfo: UserInfo): Future[Unit] = {
     retryWhen500(() => {
-      getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, userInfo.userSubjectId).execute()
+      executeGoogleRequest(getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, userInfo.userSubjectId))
     } )
   }
 
@@ -515,7 +519,7 @@ class HttpGoogleServicesDAO(
   def toProxyFromUser(userInfo: UserInfo) = toProxyFromUserSubjectId(userInfo.userSubjectId)
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
   def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
-  def toUserFromProxy(proxy: String) = getGroupDirectory.groups().get(proxy).execute().getName
+  def toUserFromProxy(proxy: String) = executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
@@ -531,4 +535,44 @@ class HttpGoogleServicesDAO(
       }
     }
   }
+
+  private def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
+    import spray.json._
+    import GoogleRequestJsonSupport._
+
+    if (logger.underlying.isDebugEnabled) {
+      val payload = Option(request.getHttpContent) match {
+        case Some(content: JsonHttpContent) =>
+          Try {
+            val outputStream = new ByteArrayOutputStream()
+            content.writeTo(outputStream)
+            outputStream.toString.parseJson
+          }.toOption
+        case _ => None
+      }
+
+      val start = System.currentTimeMillis()
+      Try {
+        request.executeUnparsed()
+      } match {
+        case Success(response) =>
+          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(response.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
+          response.parseAs(request.getResponseClass)
+        case Failure(httpRegrets: HttpResponseException) =>
+          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(httpRegrets.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
+          throw httpRegrets
+        case Failure(regrets) =>
+          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, None, Option(ErrorReport(regrets))).toJson(GoogleRequestFormat).compactPrint)
+          throw regrets
+      }
+    } else {
+      request.execute()
+    }
+  }
+}
+
+private case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
+private object GoogleRequestJsonSupport extends JsonSupport {
+  import WorkspaceJsonSupport.ErrorReportFormat
+  val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }
