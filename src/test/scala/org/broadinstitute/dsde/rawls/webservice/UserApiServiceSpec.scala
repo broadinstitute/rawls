@@ -9,12 +9,6 @@ import spray.http._
 
 import scala.concurrent.ExecutionContext
 
-import com.tinkerpop.blueprints.{Vertex, Graph}
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-
-import scala.collection.JavaConversions._
-
-
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -39,13 +33,6 @@ class UserApiServiceSpec extends ApiServiceSpec {
   def userFromId(subjectId: String) =
     RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
 
-  def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
-    graph.getVertices.filter(v => {
-      v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
-    })
-
-
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
     Put("/user/refreshToken", httpJson(UserRefreshToken("gobblegobble"))) ~>
       sealRoute(services.userRoutes) ~>
@@ -62,20 +49,19 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource =>
+  it should "create a DB user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
+      assert {
+        ! userInDb(dataSource, user)
+      }
+
       dataSource.inTransaction() { txn =>
-        txn.withGraph { graph =>
-          assert {
-            getMatchingUserVertices(graph, user).isEmpty
-          }
-          assert {
-            containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn).isEmpty
-          }
+        assert {
+          containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn).isEmpty
         }
       }
 
@@ -94,15 +80,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
+      assert {
+        userInDb(dataSource, user)
+      }
+
       dataSource.inTransaction() { txn =>
-        txn.withGraph { graph =>
-          assert {
-            getMatchingUserVertices(graph, user).nonEmpty
-          }
-          assert {
-            val group = containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn)
-            group.isDefined && group.get.users.contains(user)
-          }
+        assert {
+          val group = containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn)
+          group.isDefined && group.get.users.contains(user)
         }
       }
 
@@ -197,7 +182,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "list a user's billing projects" in withTestDataApiServices { services =>
 
-    // first add the project and user to the graph
+    // first add the project and user to the DB
 
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")

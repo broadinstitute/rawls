@@ -7,6 +7,7 @@ import akka.testkit.{TestKit, TestActorRef}
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.db.TestData
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
@@ -18,7 +19,6 @@ import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.json._
-import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
 
 import scala.concurrent.{Future, Await}
