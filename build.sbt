@@ -25,6 +25,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
+    "com.typesafe.slick" %% "slick" % "3.1.1",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing" % sprayV,
     "io.spray" %% "spray-client" % sprayV,
