@@ -10,7 +10,7 @@ import com.tinkerpop.pipes.branch.LoopPipe
 import org.broadinstitute.dsde.rawls.datamigration.DataMigration
 import org.broadinstitute.dsde.rawls.model.RawlsEnumeration
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.joda.time.DateTime
 import spray.http.StatusCodes
 
@@ -97,12 +97,12 @@ trait GraphDAO {
 
   //in general, we only support alphanumeric, spaces, _, and - for user-input
   def validateUserDefinedString(s: String) = {
-    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithStatusCode(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest)
+    if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
   }
 
   def validateAttributeName(name: String) = {
     if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(name))) {
-      throw new RawlsExceptionWithStatusCode(message = s"Attribute name $name is reserved", statusCode = StatusCodes.BadRequest)
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name $name is reserved", statusCode = StatusCodes.BadRequest))
     }
   }
 
