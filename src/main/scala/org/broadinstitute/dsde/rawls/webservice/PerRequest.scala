@@ -5,7 +5,7 @@ import akka.actor._
 import akka.actor.SupervisorStrategy.Stop
 import akka.event.Logging
 import akka.event.Logging.LogLevel
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithStatusCode, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
@@ -116,11 +116,11 @@ trait PerRequest extends Actor {
   def handleException(e: Throwable): Unit = {
     system.log.error(e, "error processing request: " + r.request.uri)
     import spray.httpx.SprayJsonSupport._
-    val code = e match {
-      case e: RawlsExceptionWithStatusCode => e.getCode
-      case _ => InternalServerError
+    e match {
+      case e: RawlsExceptionWithErrorReport =>
+        r.complete(e.errorReport.statusCode.get, e.errorReport)
+      case _ => r.complete(InternalServerError, ErrorReport(e,InternalServerError))
     }
-    r.complete(code, ErrorReport(e,code))
   }
 }
 

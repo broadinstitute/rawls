@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
@@ -106,7 +106,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
 
   def getRefreshTokenDate(): Future[PerRequestMessage] = {
     gcsDAO.getTokenDate(userInfo).map( _ match {
-      case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
+      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     })
   }
@@ -154,7 +154,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
         addUsersToAllUsersGroup(users.toSet, txn)
       } map(_ match {
         case None => RequestComplete(StatusCodes.Created)
-        case Some(error) => RequestComplete(error)
+        case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
       })
     }
   }
@@ -162,7 +162,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   def getUserGroup(rawlsGroupRef: RawlsGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.loadGroupIfMember(rawlsGroupRef, RawlsUser(userInfo), txn) match {
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group")))
+        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group")))
         case Some(group) => Future.successful(RequestComplete(group.toRawlsGroupShort))
       }
     }
@@ -251,7 +251,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       containerDAO.billingDAO.loadProject(projectName, txn) match {
         case Some(_) =>
           Future {
-            RequestComplete(ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists"))
+            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists"))
           }
         case None =>
           // note: executes in a Future
@@ -269,7 +269,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       dataSource.inFutureTransaction() { txn =>
         Future {
           if (containerDAO.billingDAO.deleteProject(project, txn)) RequestComplete(StatusCodes.OK)
-          else RequestComplete(ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+          else throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
         }
       }
     }
@@ -306,7 +306,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       dataSource.inFutureTransaction() { txn =>
         Future {
           containerDAO.authDAO.loadGroup(RawlsGroupRef(RawlsGroupName(groupName)), txn) match {
-            case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
+            case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist"))
             case Some(group) =>
               val memberUsers = group.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
               val memberGroups = group.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
@@ -321,7 +321,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     asAdmin {
       dataSource.inFutureTransaction() { txn =>
         containerDAO.authDAO.loadGroup(groupRef, txn) match {
-          case Some(_) => Future.successful(RequestComplete(ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
+          case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
           case None =>
             createGroupInternal(groupRef, txn) map { _ => RequestComplete(StatusCodes.Created) }
         }
@@ -382,7 +382,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
           addMembersFuture.map {
             _ match {
               case None => RequestComplete(StatusCodes.NoContent)
-              case Some(error) => RequestComplete(error)
+              case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
             }
           }
         }
@@ -403,9 +403,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
       case (Seq(), Seq()) => op(users.map(_._2.get).toSet, subGroups.map(_._2.get).toSet)
 
       // failure cases, some users and/or groups not found
-      case (Seq(), missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
-      case (missingUsers, Seq()) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
-      case (missingUsers, missingGroups) => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
+      case (Seq(), missingGroups) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
+      case (missingUsers, Seq()) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
+      case (missingUsers, missingGroups) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
     }
   }
 
@@ -416,7 +416,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
           updateGroupMembersInternal(group, users, subGroups, operation, txn) map {
             _ match {
               case None => RequestComplete(StatusCodes.OK)
-              case Some(error) => RequestComplete(error)
+              case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
             }
           }
         }
@@ -531,7 +531,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.loadUser(rawlsUserRef, txn)
     } match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId.value}] not found")))
+      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId.value}] not found")))
       case Some(user) => op(user)
     }
   }
@@ -540,14 +540,14 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     dataSource.inTransaction() { txn =>
       containerDAO.authDAO.loadUserByEmail(userEmail.value, txn)
     } match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"user [${userEmail.value}] not found")))
+      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${userEmail.value}] not found")))
       case Some(user) => op(user)
     }
   }
 
   private def withGroup(rawlsGroupRef: RawlsGroupRef, txn: RawlsTransaction)(op: RawlsGroup => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     containerDAO.authDAO.loadGroup(rawlsGroupRef, txn) match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found")))
+      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found")))
       case Some(group) => op(group)
     }
   }
@@ -556,7 +556,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     dataSource.inTransaction() { txn =>
       containerDAO.billingDAO.loadProject(projectName, txn)
     } match {
-      case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")))
+      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")))
       case Some(project) => op(project)
     }
   }
@@ -581,7 +581,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   }
 
   private def handleException(message: String)(exceptions: Seq[Throwable]): PerRequestMessage = {
-    RequestComplete(ErrorReport(StatusCodes.InternalServerError, message, exceptions.map(ErrorReport(_))))
+    throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, message, exceptions.map(ErrorReport(_))))
   }
 
   private sealed trait UpdateGroupMembersOp {

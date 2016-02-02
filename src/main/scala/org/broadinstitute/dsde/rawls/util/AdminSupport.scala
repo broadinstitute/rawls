@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.util
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.model.{UserInfo, ErrorReport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestComplete, PerRequestMessage}
@@ -23,7 +23,7 @@ trait AdminSupport {
 
   def asAdmin(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     tryIsAdmin(userInfo.userEmail) flatMap { isAdmin =>
-      if (isAdmin) op else Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
+      if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
     }
   }
 }
