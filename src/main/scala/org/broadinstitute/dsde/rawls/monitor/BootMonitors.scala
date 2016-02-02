@@ -4,7 +4,7 @@ import akka.actor.ActorRef
 import akka.pattern._
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, GraphContainerDAO, DataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, DbContainerDAO, DataSource}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.{PendingBucketDeletions, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
@@ -15,12 +15,12 @@ import scala.util.{Failure, Success}
 // handles monitors which need to be started at boot time
 object BootMonitors extends LazyLogging {
 
-  def restartMonitors(dataSource: DataSource, containerDAO: GraphContainerDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef) = {
+  def restartMonitors(dataSource: DataSource, containerDAO: DbContainerDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef) = {
     startBucketDeletionMonitor(dataSource, containerDAO, bucketDeletionMonitor)
     startSubmissionMonitor(dataSource, containerDAO, gcsDAO, submissionSupervisor)
   }
 
-  private def startBucketDeletionMonitor(dataSource: DataSource, containerDAO: GraphContainerDAO, bucketDeletionMonitor: ActorRef) = {
+  private def startBucketDeletionMonitor(dataSource: DataSource, containerDAO: DbContainerDAO, bucketDeletionMonitor: ActorRef) = {
     dataSource.inTransaction() { txn =>
       containerDAO.workspaceDAO.loadPendingBucketDeletions(txn) match {
         case Some(pendingDeletions) => pendingDeletions.buckets foreach {
@@ -31,7 +31,7 @@ object BootMonitors extends LazyLogging {
     }
   }
 
-  private def startSubmissionMonitor(dataSource: DataSource, containerDAO: GraphContainerDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef) = {
+  private def startSubmissionMonitor(dataSource: DataSource, containerDAO: DbContainerDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef) = {
     dataSource.inTransaction() { txn =>
       containerDAO.submissionDAO.listAllActiveSubmissions(txn) foreach { activeSub =>
         val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)

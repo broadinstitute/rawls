@@ -97,11 +97,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+  def constructor(dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: GraphContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   implicit val timeout = Timeout(5 minutes)
 
   override def receive = {
