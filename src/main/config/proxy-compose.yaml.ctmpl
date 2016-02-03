@@ -15,6 +15,7 @@ proxy:
   {{ $proxy_ports }}
   {{ $proxy_volumes }}
   {{ $log_driver }}
+  restart: always
   environment:
     CALLBACK_URI: {{ $env_callback_uri }}
     LOG_LEVEL: {{ $env_log_level }}

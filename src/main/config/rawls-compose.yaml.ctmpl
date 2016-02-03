@@ -8,6 +8,7 @@ app:
   {{.Data.app_volumes}}
   {{.Data.app_ports}}
   {{.Data.log_driver}}
+  restart: always
 proxy:
   extends:
     file: proxy-compose.yaml
