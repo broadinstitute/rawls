@@ -2,17 +2,17 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 trait AllComponents
   extends PendingBucketDeletionComponent
-  // with OtherComponent
-  // with OtherComponent
-  {
+    with RawlsUserComponent
+    with RawlsGroupComponent
+    with RawlsBillingProjectComponent {
 
   this: DriverComponent =>
 
   import driver.api._
 
   lazy val allSchemas =
-    pendingBucketDeletionQuery.schema
-    // ++ otherQuery.schema
-    // ++ otherQuery.schema
-
+    pendingBucketDeletionQuery.schema ++
+    rawlsUserQuery.schema ++
+    rawlsGroupQuery.schema ++
+    rawlsBillingProjectQuery.schema
 }
