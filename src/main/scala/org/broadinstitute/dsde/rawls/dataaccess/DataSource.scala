@@ -3,6 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
 import java.util.concurrent.locks.{Lock, StampedLock, ReadWriteLock, ReentrantReadWriteLock}
 
+import _root_.slick.backend.DatabaseConfig
+import _root_.slick.dbio.Effect.Transactional
+import _root_.slick.driver.JdbcProfile
 import com.tinkerpop.blueprints.Element
 import com.tinkerpop.blueprints.impls.orient.OrientElement
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException
@@ -11,6 +14,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessComponent
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.concurrent.TrieMap
@@ -38,6 +42,10 @@ object DataSource {
     new DataSource(factory)
   }
 
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile]): SlickDataSource = {
+    new SlickDataSource(databaseConfig)
+  }
+
   def createFactory(url: String, user: String, password: String): OrientGraphFactory = {
     val factory = new OrientGraphFactory(url, user, password)
     factory.setThreadMode(THREAD_MODE.MANUAL)
@@ -45,6 +53,14 @@ object DataSource {
     factory.setUseClassForEdgeLabel(false)
     factory.setUseLightweightEdges(true)
     factory
+  }
+}
+
+class SlickDataSource(databaseConfig: DatabaseConfig[JdbcProfile]) {
+  val dataAccess = new DataAccessComponent(databaseConfig.driver)
+  import dataAccess.driver.api._
+  def inTransaction[T](f: (DataAccessComponent) => DBIOAction[T, NoStream, Transactional]): Future[T] = {
+    databaseConfig.db.run(f(dataAccess).transactionally)
   }
 }
 
