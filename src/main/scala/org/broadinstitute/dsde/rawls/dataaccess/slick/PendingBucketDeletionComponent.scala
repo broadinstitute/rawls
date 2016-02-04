@@ -7,16 +7,24 @@ trait PendingBucketDeletionComponent {
 
   import driver.api._
 
-  class PendingBucketDeletions(tag: Tag) extends Table[PendingBucketDeletion](tag, "BUCKET_DELETION") {
-    def bucket = column[String]("bucket")
+  class PendingBucketDeletionTable(tag: Tag) extends Table[PendingBucketDeletion](tag, "BUCKET_DELETION") {
+    def bucket = column[String]("bucket", O.PrimaryKey)
 
     def * = (bucket) <> (PendingBucketDeletion.apply _, PendingBucketDeletion.unapply)
   }
 
-  val pendingBucketDeletions = TableQuery[PendingBucketDeletions]
+  val pendingBucketDeletionQuery = TableQuery[PendingBucketDeletionTable]
 
 
-  def save(pendingBucketDeletion: PendingBucketDeletion) = {
-    pendingBucketDeletions += pendingBucketDeletion
+  def savePendingBucketDeletion(pendingBucketDeletion: PendingBucketDeletion) = {
+    pendingBucketDeletionQuery insertOrUpdate pendingBucketDeletion map(_ => pendingBucketDeletion)
+  }
+
+  def listPendingBucketDeletion() = {
+    pendingBucketDeletionQuery.result
+  }
+
+  def deletePendingBucketDeletion(pendingBucketDeletion: PendingBucketDeletion) = {
+    pendingBucketDeletionQuery.filter(_.bucket === pendingBucketDeletion.bucket).delete
   }
 }

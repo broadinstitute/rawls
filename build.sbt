@@ -35,6 +35,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
+    "com.h2database" % "h2" % "1.4.191" % "test",
     "com.orientechnologies" % "orientdb-core" % orientV,
     "com.orientechnologies" % "orientdb-graphdb" % orientV,
     "com.orientechnologies" % "orientdb-server" % orientV,
