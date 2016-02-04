@@ -42,7 +42,7 @@ object DataSource {
     new DataSource(factory)
   }
 
-  def apply(databaseConfig: DatabaseConfig[JdbcProfile]): SlickDataSource = {
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {
     new SlickDataSource(databaseConfig)
   }
 
@@ -56,7 +56,7 @@ object DataSource {
   }
 }
 
-class SlickDataSource(databaseConfig: DatabaseConfig[JdbcProfile]) {
+class SlickDataSource(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
   val dataAccess = new DataAccessComponent(databaseConfig.driver)
   import dataAccess.driver.api._
   def inTransaction[T](f: (DataAccessComponent) => DBIOAction[T, NoStream, Transactional]): Future[T] = {
