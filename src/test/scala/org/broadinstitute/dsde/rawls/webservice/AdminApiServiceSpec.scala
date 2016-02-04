@@ -2,8 +2,6 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -39,16 +37,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   import scala.collection.JavaConversions._
-
-  def getMatchingBillingProjectVertices(dataSource: DataSource, project: RawlsBillingProject): Iterable[Vertex] =
-    dataSource.inTransaction() { txn =>
-      txn.withGraph { graph =>
-        graph.getVertices.filter(v => {
-          v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.BillingProject) &&
-            v.getProperty[String]("projectName") == project.projectName.value
-        })
-      }
-    }
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
 
@@ -111,7 +99,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val project = billingProjectFromName("new_project")
 
     assert {
-      getMatchingBillingProjectVertices(services.dataSource, project).isEmpty
+      ! billingProjectInDb(services.dataSource, project)
     }
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
@@ -122,7 +110,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
         assert {
-          getMatchingBillingProjectVertices(services.dataSource, project).nonEmpty
+          billingProjectInDb(services.dataSource, project)
         }
       }
   }
@@ -148,7 +136,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
-          getMatchingBillingProjectVertices(services.dataSource, project).nonEmpty
+          billingProjectInDb(services.dataSource, project)
         }
 
         Delete(s"/admin/billing/${project.projectName.value}") ~>
@@ -158,7 +146,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
               status
             }
             assert {
-              getMatchingBillingProjectVertices(services.dataSource, project).isEmpty
+              ! billingProjectInDb(services.dataSource, project)
             }
           }
       }
@@ -622,21 +610,21 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("both"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
-    val inGraphGroup = RawlsGroup(
-      RawlsGroupName("graph"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("graph"))),
+    val inDbGroup = RawlsGroup(
+      RawlsGroupName("db"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("db"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
 
     val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
     val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
-    val inGraphUser = RawlsUser(RawlsUserSubjectId("graph"), RawlsUserEmail("graph@fc.org"))
+    val inDbUser = RawlsUser(RawlsUserSubjectId("db"), RawlsUserEmail("db@fc.org"))
 
     val topGroup = RawlsGroup(
       RawlsGroupName("synctest"),
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("synctest"))),
-      Set[RawlsUserRef](inBothUser, inGraphUser),
-      Set[RawlsGroupRef](inBothGroup, inGraphGroup))
+      Set[RawlsUserRef](inBothUser, inDbUser),
+      Set[RawlsGroupRef](inBothGroup, inDbGroup))
 
     Await.result(services.gcsDAO.createGoogleGroup(topGroup), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inGoogleGroup)), Duration.Inf)
@@ -647,11 +635,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     services.dataSource.inTransaction() { txn =>
       containerDAO.authDAO.saveUser(inGoogleUser, txn)
       containerDAO.authDAO.saveUser(inBothUser, txn)
-      containerDAO.authDAO.saveUser(inGraphUser, txn)
+      containerDAO.authDAO.saveUser(inDbUser, txn)
 
       containerDAO.authDAO.saveGroup(inGoogleGroup, txn)
       containerDAO.authDAO.saveGroup(inBothGroup, txn)
-      containerDAO.authDAO.saveGroup(inGraphGroup, txn)
+      containerDAO.authDAO.saveGroup(inDbGroup, txn)
 
       containerDAO.authDAO.saveGroup(topGroup, txn)
     }
@@ -661,8 +649,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         assertResult(SyncReport(Set(
-          SyncReportItem("added", Option(inGraphUser), None, None),
-          SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
+          SyncReportItem("added", Option(inDbUser), None, None),
+          SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
           SyncReportItem("removed", Option(inGoogleUser), None, None),
           SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
         ))) {

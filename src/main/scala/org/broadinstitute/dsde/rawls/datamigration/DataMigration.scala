@@ -20,7 +20,7 @@ import scala.collection.JavaConversions._
  */
 object DataMigration extends LazyLogging {
 
-  def migrateData(config: Config, containerDAO: GraphContainerDAO, dataSource: DataSource): Unit = {
+  def migrateData(config: Config, containerDAO: DbContainerDAO, dataSource: DataSource): Unit = {
     val duplicateMigrationIds = dataMigrations.groupBy(_.migrationId).collect { case (id, migrations) if migrations.size > 1 => (id, migrations) }
     if (!duplicateMigrationIds.isEmpty) {
       throw new RawlsException(s"duplicate migration keys exist for $duplicateMigrationIds")
@@ -58,7 +58,7 @@ object DataMigration extends LazyLogging {
 
 trait DataMigration {
   val migrationId: String
-  def migrate(config: Config, containerDAO: GraphContainerDAO, txn: RawlsTransaction): Unit
+  def migrate(config: Config, containerDAO: DbContainerDAO, txn: RawlsTransaction): Unit
 }
 
 case class MigrationEntry(migrationId: String, runDate: DateTime, buildNumber: String, gitHash: String, rawlsVersion: String) extends DomainObject {

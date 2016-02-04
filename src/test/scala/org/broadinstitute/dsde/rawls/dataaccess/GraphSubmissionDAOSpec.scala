@@ -11,9 +11,7 @@ import org.scalatest.{Matchers, FlatSpec}
 
 class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
   val workspace = testData.workspace
-  val dao = new GraphSubmissionDAO
-  val workflowDAO = new GraphWorkflowDAO(dao)
-  
+
   def withSubmissionData(testCode: (WorkspaceContext, RawlsTransaction) => Any):Unit = {
     withDefaultTestDatabase { dataSource =>
       dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
@@ -28,35 +26,35 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
   private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
 
   "GraphSubmissionDAO" should "save, get, list, and delete a submission status" in withSubmissionData { (context, txn) =>
-    dao.save(context, submission3, txn)
+    submissionDAO.save(context, submission3, txn)
     assertResult(Some(submission3)) {
-      dao.get(context, submission3.submissionId, txn)
+      submissionDAO.get(context, submission3.submissionId, txn)
     }
-    assert(dao.list(context, txn).toSet.contains(submission3))
+    assert(submissionDAO.list(context, txn).toSet.contains(submission3))
 
-    assert(dao.delete(context, submission3.submissionId, txn))
+    assert(submissionDAO.delete(context, submission3.submissionId, txn))
     assertResult(None) {
-      dao.get(context, submission3.submissionId, txn)
+      submissionDAO.get(context, submission3.submissionId, txn)
     }
-    assert(!dao.list(context, txn).toSet.contains(submission3))
+    assert(!submissionDAO.list(context, txn).toSet.contains(submission3))
   }
 
   it should "save, get, list, and delete two submission statuses" in withSubmissionData { (context, txn) =>
-    dao.save(context, submission3, txn)
-    dao.save(context, submission4, txn)
+    submissionDAO.save(context, submission3, txn)
+    submissionDAO.save(context, submission4, txn)
     assertResult(Some(submission3)) {
-      dao.get(context, submission3.submissionId, txn) }
+      submissionDAO.get(context, submission3.submissionId, txn) }
     assertResult(Some(submission4)) {
-      dao.get(context, submission4.submissionId, txn) }
+      submissionDAO.get(context, submission4.submissionId, txn) }
 
-    assert(dao.list(context, txn).toSet.contains(submission3))
-    assert(dao.list(context, txn).toSet.contains(submission4))
+    assert(submissionDAO.list(context, txn).toSet.contains(submission3))
+    assert(submissionDAO.list(context, txn).toSet.contains(submission4))
 
-    assert(dao.delete(context, submission3.submissionId, txn))
-    assert(dao.delete(context, submission4.submissionId, txn))
+    assert(submissionDAO.delete(context, submission3.submissionId, txn))
+    assert(submissionDAO.delete(context, submission4.submissionId, txn))
 
-    assert(!dao.list(context, txn).toSet.contains(submission3))
-    assert(!dao.list(context, txn).toSet.contains(submission4))
+    assert(!submissionDAO.list(context, txn).toSet.contains(submission3))
+    assert(!submissionDAO.list(context, txn).toSet.contains(submission4))
   }
 
   // TODO make this work
@@ -67,13 +65,13 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
 //  }
 
   it should "fail to delete submissions that don't exist" in withSubmissionData { (context, txn) =>
-    assert(!dao.delete(context,"doesn't exist", txn))
+    assert(!submissionDAO.delete(context,"doesn't exist", txn))
   }
 
   it should "update submissions" in withSubmissionData { (context, txn) =>
-    dao.update(context, testData.submission1.copy(status = SubmissionStatuses.Done), txn)
+    submissionDAO.update(context, testData.submission1.copy(status = SubmissionStatuses.Done), txn)
     assertResult(Option(testData.submission1.copy(status = SubmissionStatuses.Done))) {
-      dao.get(context, testData.submission1.submissionId, txn)
+      submissionDAO.get(context, testData.submission1.submissionId, txn)
     }
   }
 
@@ -98,7 +96,7 @@ class GraphSubmissionDAOSpec extends FlatSpec with Matchers with OrientDbTestFix
       assert(workflowDAO.delete(context, testData.submission1.submissionId, workflow3.workflowId, txn))
       val submission = testData.submission1.copy(workflows=Seq(workflow0, workflow2))
       assertResult(Some(submission)) {
-        dao.get(context, submission.submissionId, txn)
+        submissionDAO.get(context, submission.submissionId, txn)
       }
     }
 }

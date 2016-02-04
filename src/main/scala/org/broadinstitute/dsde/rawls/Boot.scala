@@ -69,7 +69,7 @@ object Boot extends App {
       dataSource.shutdown()
     }
 
-    val containerDAO = GraphContainerDAO(
+    val containerDAO = DbContainerDAO(
       new GraphWorkflowDAO(new GraphSubmissionDAO()),
       new GraphWorkspaceDAO(),
       new GraphEntityDAO(),

@@ -36,7 +36,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 //  override implicit def executor = TestExecutionContext.testExecutionContext
   implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  val containerDAO = GraphContainerDAO(
+  val containerDAO = DbContainerDAO(
     new GraphWorkflowDAO(new GraphSubmissionDAO()),
     new GraphWorkspaceDAO(),
     new GraphEntityDAO(),

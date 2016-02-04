@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, RawlsTransaction}
+import org.broadinstitute.dsde.rawls.db.TestData
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime

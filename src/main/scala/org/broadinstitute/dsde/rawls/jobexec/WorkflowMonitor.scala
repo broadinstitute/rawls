@@ -19,7 +19,7 @@ import akka.pattern.pipe
  */
 object WorkflowMonitor {
   def props(pollInterval: Duration,
-    containerDAO: GraphContainerDAO,
+    containerDAO: DbContainerDAO,
     executionServiceDAO: ExecutionServiceDAO,
     datasource: DataSource,
     credential: Credential)
@@ -44,7 +44,7 @@ class WorkflowMonitor(parent: ActorRef,
                       workspaceName: WorkspaceName,
                       submissionId: String,
                       workflow: Workflow,
-                      containerDAO: GraphContainerDAO,
+                      containerDAO: DbContainerDAO,
                       executionServiceDAO: ExecutionServiceDAO,
                       datasource: DataSource,
                       credential: Credential) extends Actor {

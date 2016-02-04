@@ -29,7 +29,7 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, googleServicesDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+  def constructor(dataSource: DataSource, googleServicesDAO: GoogleServicesDAO, containerDAO: DbContainerDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
     new UserService(userInfo, dataSource, googleServicesDAO, containerDAO, userDirectoryDAO)
 
   sealed trait UserServiceMessage
@@ -64,7 +64,7 @@ object UserService {
   case class SynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: DbContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
     case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender

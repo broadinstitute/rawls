@@ -18,7 +18,7 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: String, credential: Credential)
 
-  def props(containerDAO: GraphContainerDAO,
+  def props(containerDAO: DbContainerDAO,
             executionServiceDAO: ExecutionServiceDAO,
             datasource: DataSource,
             workflowPollInterval: Duration = 1 minutes,
@@ -37,7 +37,7 @@ object SubmissionSupervisor {
  * @param workflowPollInterval
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(containerDAO: GraphContainerDAO,
+class SubmissionSupervisor(containerDAO: DbContainerDAO,
                            executionServiceDAO: ExecutionServiceDAO,
                            datasource: DataSource,
                            workflowPollInterval: Duration,

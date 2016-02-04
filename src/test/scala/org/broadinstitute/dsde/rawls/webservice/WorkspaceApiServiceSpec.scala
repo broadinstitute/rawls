@@ -13,6 +13,7 @@ import spray.http._
 import spray.json._
 import spray.routing._
 import scala.concurrent.ExecutionContext
+import org.broadinstitute.dsde.rawls.db.TestData
 
 /**
  * Created by dvoet on 4/24/15.

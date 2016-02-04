@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.datamigration
 
 import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, GraphContainerDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, DbContainerDAO}
 import org.broadinstitute.dsde.rawls.model.RawlsGroupEmail
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 
@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 object AddWorkspaceGroupEmailMigration extends DataMigration {
   override val migrationId: String = "AddWorkspaceGroupEmailMigration"
 
-  override def migrate(config: Config, containerDAO: GraphContainerDAO, txn: RawlsTransaction): Unit = {
+  override def migrate(config: Config, containerDAO: DbContainerDAO, txn: RawlsTransaction): Unit = {
     val appsDomain = config.getString("gcs.appsDomain")
     def toGroupId(bucketName: String, accessLevel: WorkspaceAccessLevel) = s"${bucketName}-${accessLevel.toString}@${appsDomain}"
 

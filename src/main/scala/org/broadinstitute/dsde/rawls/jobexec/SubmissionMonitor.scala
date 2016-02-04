@@ -19,7 +19,7 @@ import scala.util.{Success, Try, Failure}
 object SubmissionMonitor {
   def props(workspaceName: WorkspaceName,
             submissionId: String,
-            containerDAO: GraphContainerDAO,
+            containerDAO: DbContainerDAO,
             datasource: DataSource,
             workflowPollInterval: Duration,
             submissionPollInterval: Duration,
@@ -49,7 +49,7 @@ object SubmissionMonitor {
  */
 class SubmissionMonitor(workspaceName: WorkspaceName,
                         submissionId: String,
-                        containerDAO: GraphContainerDAO,
+                        containerDAO: DbContainerDAO,
                         datasource: DataSource,
                         workflowPollInterval: Duration,
                         submissionPollInterval: Duration,

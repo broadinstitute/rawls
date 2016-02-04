@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, GoogleServicesDAO, DataSource, GraphContainerDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, GoogleServicesDAO, DataSource, DbContainerDAO}
 import org.broadinstitute.dsde.rawls.model.PendingBucketDeletions
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 
 object BucketDeletionMonitor {
-  def props(datasource: DataSource, containerDAO: GraphContainerDAO, gcsDAO: GoogleServicesDAO): Props = {
+  def props(datasource: DataSource, containerDAO: DbContainerDAO, gcsDAO: GoogleServicesDAO): Props = {
     Props(new BucketDeletionMonitor(datasource, containerDAO, gcsDAO))
   }
 
@@ -16,7 +16,7 @@ object BucketDeletionMonitor {
   case class BucketDeleted(bucketName: String) extends BucketDeletionsMessage
 }
 
-class BucketDeletionMonitor(datasource: DataSource, containerDAO: GraphContainerDAO, gcsDAO: GoogleServicesDAO) extends Actor {
+class BucketDeletionMonitor(datasource: DataSource, containerDAO: DbContainerDAO, gcsDAO: GoogleServicesDAO) extends Actor {
 
   override def receive = {
     case DeleteBucket(bucketName) => deleteBucket(bucketName)
