@@ -20,6 +20,7 @@ libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
   val orientV = "2.0.8"
+  val slickV = "3.1.1"
   Seq(
     "com.gettyimages" %% "spray-swagger" % "0.5.0",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
@@ -48,7 +49,11 @@ libraryDependencies ++= {
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
-    ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0")
+    ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0"),
+    "com.typesafe.slick" %% "slick" % slickV,
+    "com.typesafe.slick" %% "slick-hikaricp" % slickV,
+    "org.slf4j" % "slf4j-nop" % "1.6.4",
+    "mysql" % "mysql-connector-java" % "5.1.38"
   )
 }
 

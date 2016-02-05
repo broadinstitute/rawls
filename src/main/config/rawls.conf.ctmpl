@@ -4,6 +4,13 @@ orientdb {
   rootUser = "{{.Data.orientdb_rootUser}}"
   rootPassword = "{{.Data.orientdb_rootPassword}}"
 }
+database = {
+  db.url = "{{.Data.database_db.url}}"
+  db.driver = "{{.Data.database_db.driver}"
+  db.user = "{{.Data.database_db.user}}
+  db.password = "{{.Data.database_db.password}}"
+  driver = "{{.Data.database_driver}}"
+}
 gcs {
   deletedBucketCheckSeconds = "{{.Data.gcs_deletedBucketCheckSeconds}}"
   appName = "{{.Data.gcs_appName}}"

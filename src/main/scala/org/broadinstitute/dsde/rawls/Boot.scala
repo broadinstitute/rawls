@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls
 
 import java.io.File
 
+import _root_.slick.backend.DatabaseConfig
+import _root_.slick.driver.JdbcProfile
 import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
@@ -38,6 +40,8 @@ object Boot extends App {
     val dataSource = DataSource(dbConnectionUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
 
     dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
+
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("database", conf))
 
     val gcsConfig = conf.getConfig("gcs")
     val gcsDAO = new HttpGoogleServicesDAO(
