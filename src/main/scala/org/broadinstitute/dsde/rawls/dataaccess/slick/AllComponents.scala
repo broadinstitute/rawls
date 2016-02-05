@@ -4,7 +4,10 @@ trait AllComponents
   extends PendingBucketDeletionComponent
     with RawlsUserComponent
     with RawlsGroupComponent
-    with RawlsBillingProjectComponent {
+    with RawlsBillingProjectComponent
+    with WorkspaceComponent
+    with EntityComponent
+    with AttributeComponent {
 
   this: DriverComponent =>
 
@@ -14,5 +17,11 @@ trait AllComponents
     pendingBucketDeletionQuery.schema ++
     rawlsUserQuery.schema ++
     rawlsGroupQuery.schema ++
-    rawlsBillingProjectQuery.schema
+    rawlsBillingProjectQuery.schema ++
+    attributeQuery.schema ++
+    workspaceQuery.schema ++
+    workspaceAttributeQuery.schema ++
+    workspaceAccessQuery.schema ++
+    entityQuery.schema ++
+    entityAttributeQuery.schema
 }
