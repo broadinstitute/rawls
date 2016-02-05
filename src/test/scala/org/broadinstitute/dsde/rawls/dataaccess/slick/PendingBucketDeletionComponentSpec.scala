@@ -1,16 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
-
 /**
  * Created by dvoet on 2/3/16.
  */
-class PendingBucketDeletionComponentSpec extends FlatSpec with Matchers with TestDriverComponent with PendingBucketDeletionComponent with BeforeAndAfterAll {
-  import driver.api._
-
-  override def beforeAll: Unit = {
-    runAndWait(pendingBucketDeletionQuery.schema.create)
-  }
+class PendingBucketDeletionComponentSpec extends TestDriverComponent {
 
   "PendingBucketDeletionComponent" should "create, list and delete" in {
     val deletion = PendingBucketDeletion("foo")
