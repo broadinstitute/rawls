@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
 import java.util.concurrent.locks.{Lock, StampedLock, ReadWriteLock, ReentrantReadWriteLock}
 
@@ -52,10 +53,14 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
 
   private def lockTxn(txn: RawlsTransaction): Unit = {
     txn.readLocks.foreach { readWs =>
-      DataSource.getLock(readWs).readLock()
+      if (DataSource.getLock(readWs).tryReadLock(5, TimeUnit.SECONDS) == 0) {
+        throw new RawlsException(s"Could not acquire read lock for $readWs")
+      }
     }
     txn.writeLocks.foreach { writeWs =>
-      DataSource.getLock(writeWs).writeLock()
+      if (DataSource.getLock(writeWs).tryWriteLock(30, TimeUnit.SECONDS) == 0) {
+        throw new RawlsException(s"Could not acquire write lock for $writeWs")
+      }
     }
   }
 
