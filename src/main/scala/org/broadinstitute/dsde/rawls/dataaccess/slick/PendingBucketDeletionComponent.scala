@@ -13,7 +13,7 @@ trait PendingBucketDeletionComponent {
     def * = (bucket) <> (PendingBucketDeletion.apply _, PendingBucketDeletion.unapply)
   }
 
-  val pendingBucketDeletionQuery = TableQuery[PendingBucketDeletionTable]
+  protected val pendingBucketDeletionQuery = TableQuery[PendingBucketDeletionTable]
 
 
   def savePendingBucketDeletion(pendingBucketDeletion: PendingBucketDeletion) = {
