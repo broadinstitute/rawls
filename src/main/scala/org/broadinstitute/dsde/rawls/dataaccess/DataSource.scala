@@ -54,12 +54,12 @@ class DataSource(graphFactory: OrientGraphFactory)(implicit executionContext: Ex
   private def lockTxn(txn: RawlsTransaction): Unit = {
     txn.readLocks.foreach { readWs =>
       if (DataSource.getLock(readWs).tryReadLock(5, TimeUnit.SECONDS) == 0) {
-        throw new RawlsException(s"Could not acquire read lock for $readWs")
+        throw new RawlsException(s"Could not acquire read lock for $readWs, please try again.")
       }
     }
     txn.writeLocks.foreach { writeWs =>
       if (DataSource.getLock(writeWs).tryWriteLock(30, TimeUnit.SECONDS) == 0) {
-        throw new RawlsException(s"Could not acquire write lock for $writeWs")
+        throw new RawlsException(s"Could not acquire write lock for $writeWs, please try again.")
       }
     }
   }
