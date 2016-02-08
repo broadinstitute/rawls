@@ -8,23 +8,23 @@ class PendingBucketDeletionComponentSpec extends TestDriverComponent {
   "PendingBucketDeletionComponent" should "create, list and delete" in {
     val deletion = PendingBucketDeletion("foo")
     assertResult(Seq()) {
-      runAndWait(listPendingBucketDeletion())
+      runAndWait(pendingBucketDeletionQuery.list())
     }
 
     assertResult(deletion) {
-      runAndWait(savePendingBucketDeletion(deletion))
+      runAndWait(pendingBucketDeletionQuery.save(deletion))
     }
 
     assertResult(Seq(deletion)) {
-      runAndWait(listPendingBucketDeletion())
+      runAndWait(pendingBucketDeletionQuery.list())
     }
 
     assertResult(1) {
-      runAndWait(deletePendingBucketDeletion(deletion))
+      runAndWait(pendingBucketDeletionQuery.delete(deletion))
     }
 
     assertResult(Seq()) {
-      runAndWait(listPendingBucketDeletion())
+      runAndWait(pendingBucketDeletionQuery.list())
     }
   }
 }

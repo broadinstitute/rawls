@@ -3,7 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
+import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import slick.dbio.Effect.{Read, Write}
+import slick.profile.FixedSqlAction
 
 /**
  * Created by dvoet on 2/4/16.
@@ -22,7 +27,7 @@ case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: Long)
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String)
 
 trait WorkspaceComponent {
-  this: DriverComponent with AttributeComponent with RawlsGroupComponent =>
+  this: DriverComponent with AttributeComponent with RawlsGroupComponent with EntityComponent =>
 
   import driver.api._
 
@@ -35,6 +40,8 @@ trait WorkspaceComponent {
     def lastModified = column[Timestamp]("last_modified")
     def createdBy = column[String]("created_by")
     def isLocked = column[Boolean]("is_locked")
+
+    def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
@@ -57,12 +64,124 @@ trait WorkspaceComponent {
     def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def group = foreignKey("FK_WS_ACCESS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
-    def x = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel))
+    def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel))
 
     def * = (workspaceId, groupName, accessLevel) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
   }
 
-  protected val workspaceQuery = TableQuery[WorkspaceTable]
   protected val workspaceAttributeQuery = TableQuery[WorkspaceAttributeTable]
   protected val workspaceAccessQuery = TableQuery[WorkspaceAccessTable]
+
+  object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
+    private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
+
+    def save(workspace: Workspace): DBIOAction[Workspace, NoStream, Effect.Read with Effect.Write] = {
+      val workspaceRecord = marshalWorkspace(workspace)
+
+      workspaceQuery insertOrUpdate workspaceRecord andThen {
+        DBIO.seq(workspace.accessLevels.map { case (accessLevel, group) =>
+          workspaceAccessQuery insertOrUpdate WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString)
+        }.toSeq: _*)
+
+      } andThen {
+        workspaceAttributes(workspaceRecord.id).result.flatMap { attributeRecords =>
+          // clear existing attributes, any concurrency locking should be handled at the workspace level
+          val deleteActions = deleteWorkspaceAttributes(attributeRecords)
+
+          // insert attributes
+          val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
+            attributeQuery.insertAttributeRecords(name, attribute, workspaceRecord.id).map(_.flatMap{ attrId =>
+              insertWorkspaceAttributeMapping(workspaceRecord, attrId)
+            })
+          }
+
+          DBIO.seq(deleteActions ++ insertActions:_*)
+        }
+      } map(_ => workspace)
+    }
+
+    def findByName(workspaceName: WorkspaceName): DBIOAction[Option[Workspace], NoStream, Effect.Read] = {
+      loadWorkspace(findByNameQuery(workspaceName))
+    }
+
+    def findById(workspaceId: String): DBIOAction[Option[Workspace], NoStream, Effect.Read] = {
+      loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
+    }
+
+    def delete(workspaceName: WorkspaceName): DBIOAction[Boolean, NoStream, Effect.Read with Effect.Write] = {
+      findByNameQuery(workspaceName).result.flatMap {
+        case Seq() => DBIO.successful(false)
+        case Seq(workspaceRecord) =>
+          workspaceAttributes(workspaceRecord.id).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs):_*)) flatMap { _ =>
+            workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
+          } flatMap { _ =>
+            findByIdQuery(workspaceRecord.id).delete
+          } map { count =>
+            count > 0
+          }
+        case tooMany => throw new RawlsException(s"more than one record found for workspace query: $tooMany")
+      }
+    }
+
+    private def workspaceAttributes(workspaceId: UUID) = for {
+      workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId === workspaceId
+      attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id
+    } yield (attributeRec)
+
+    private def workspaceAttributesWithReferences(workspaceId: UUID) = {
+      workspaceAttributes(workspaceId) joinLeft entityQuery on (_.valueEntityRef === _.id)
+    }
+
+    private def deleteWorkspaceAttributes(attributeRecords: Seq[AttributeRecord]) = {
+      Seq(deleteWorkspaceAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
+    }
+
+    private def insertWorkspaceAttributeMapping(workspaceRecord: WorkspaceRecord, attrId: Long): FixedSqlAction[Int, driver.api.NoStream, Write] = {
+      workspaceAttributeQuery += WorkspaceAttributeRecord(workspaceRecord.id, attrId)
+    }
+
+    private def deleteWorkspaceAttributeMappings(attributeRecords: Seq[AttributeRecord]): FixedSqlAction[Int, driver.api.NoStream, Write] = {
+      workspaceAttributeQuery.filter(_.attributeId inSet (attributeRecords.map(_.id))).delete
+    }
+
+    private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {
+      workspaceQuery.filter(rec => rec.namespace === workspaceName.namespace && rec.name === workspaceName.name)
+    }
+
+    private def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
+      workspaceQuery.filter(_.id === workspaceId)
+    }
+
+    private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
+      lookup.result.flatMap {
+        case Seq() => DBIO.successful(None)
+        case Seq(workspaceRec) =>
+          for (
+            attributes <- loadAttributes(workspaceRec.id);
+            accessGroups <- loadAccessGroupRefs(workspaceRec.id)
+          ) yield Option(unmarshalWorkspace(workspaceRec, attributes, accessGroups))
+        case tooMany => throw new RawlsException(s"more than one record found for workspace query: $tooMany")
+      }
+    }
+
+    private def marshalWorkspace(workspace: Workspace) = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked)
+    }
+
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[String, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
+      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, workspaceRec.isLocked)
+    }
+
+    private def loadAttributes(workspaceId: UUID) = {
+      workspaceAttributesWithReferences(workspaceId).result.map(attributeQuery.unmarshalAttributes)
+    }
+
+    private def loadAccessGroupRefs(workspaceId: UUID) = {
+      (workspaceAccessQuery filter (_.workspaceId === workspaceId)).result.map(unmarshalRawlsGroupRefs)
+    }
+
+    private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
+      workspaceAccessRecords.map(rec => WorkspaceAccessLevels.withName(rec.accessLevel) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
+    }
+  }
 }
