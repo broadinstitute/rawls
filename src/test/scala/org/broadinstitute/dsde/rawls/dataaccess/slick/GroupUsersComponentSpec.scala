@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-class UserMembershipComponentSpec extends TestDriverComponent {
+class GroupUsersComponentSpec extends TestDriverComponent {
 
-  "UserMembershipComponent" should "create, load and delete" in {
+  "GroupUsersComponent" should "create, load and delete" in {
     val (subjId1, subjId2, subjId3) = ("mySubjectId1", "mySubjectId2", "mySubjectId3")
     val (name1, name2, name3) = ("myName1", "myName2", "myName3")
 
@@ -24,24 +24,24 @@ class UserMembershipComponentSpec extends TestDriverComponent {
       saveRawlsGroup(group3)
     ))
 
-    val membership11 = UserMembershipRecord(subjId1, name1)
-    val membership12 = UserMembershipRecord(subjId1, name2)
-    val membership13 = UserMembershipRecord(subjId1, name3)
-    val membership22 = UserMembershipRecord(subjId2, name2)
-    val membership23 = UserMembershipRecord(subjId2, name3)
-    val membership33 = UserMembershipRecord(subjId3, name3)
+    val membership11 = GroupUsersRecord(subjId1, name1)
+    val membership12 = GroupUsersRecord(subjId1, name2)
+    val membership13 = GroupUsersRecord(subjId1, name3)
+    val membership22 = GroupUsersRecord(subjId2, name2)
+    val membership23 = GroupUsersRecord(subjId2, name3)
+    val membership33 = GroupUsersRecord(subjId3, name3)
 
     // start empty
 
     Seq(subjId1, subjId2, subjId3) foreach { case id =>
       assertResult(Seq()) {
-        runAndWait(loadUserMembershipBySubjectId(id))
+        runAndWait(loadGroupUsersBySubjectId(id))
       }
     }
 
     Seq(name1, name2, name3) foreach { case name =>
       assertResult(Seq()) {
-        runAndWait(loadUserMembershipByGroupName(name))
+        runAndWait(loadGroupUsersByGroupName(name))
       }
     }
 
@@ -49,53 +49,53 @@ class UserMembershipComponentSpec extends TestDriverComponent {
 
     Seq(membership11, membership12, membership13, membership22, membership23, membership33) foreach { case mem =>
       assertResult(mem) {
-        runAndWait(saveUserMembership(mem))
+        runAndWait(saveGroupUsers(mem))
       }
     }
 
     // query by subject ID
 
     assertResult(Seq(membership11, membership12, membership13)) {
-      runAndWait(loadUserMembershipBySubjectId(subjId1))
+      runAndWait(loadGroupUsersBySubjectId(subjId1))
     }
 
     // query by group name
 
     assertResult(Seq(membership12, membership22)) {
-      runAndWait(loadUserMembershipByGroupName(name2))
+      runAndWait(loadGroupUsersByGroupName(name2))
     }
 
     // delete by subject ID
 
     assertResult(2) {
       // mem 2/2 and mem 2/3
-      runAndWait(deleteUserMembershipBySubjectId(subjId2))
+      runAndWait(deleteGroupUsersBySubjectId(subjId2))
     }
 
     // delete by group name
 
     assertResult(2) {
       // mem 1/3 and mem 2/3 because mem 2/3 was just deleted
-      runAndWait(deleteUserMembershipByGroupName(name3))
+      runAndWait(deleteGroupUsersByGroupName(name3))
     }
 
     // delete by case class
 
     assertResult(2) {
-      runAndWait(deleteUserMembership(membership11)) + runAndWait(deleteUserMembership(membership12))
+      runAndWait(deleteGroupUsers(membership11)) + runAndWait(deleteGroupUsers(membership12))
     }
 
     // finish empty
 
     Seq(subjId1, subjId2, subjId3) foreach { case id =>
       assertResult(Seq()) {
-        runAndWait(loadUserMembershipBySubjectId(id))
+        runAndWait(loadGroupUsersBySubjectId(id))
       }
     }
 
     Seq(name1, name2, name3) foreach { case name =>
       assertResult(Seq()) {
-        runAndWait(loadUserMembershipByGroupName(name))
+        runAndWait(loadGroupUsersByGroupName(name))
       }
     }
   }

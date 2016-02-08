@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-class ProjectMembershipComponentSpec extends TestDriverComponent {
+class ProjectUsersComponentSpec extends TestDriverComponent {
 
-  "ProjectMembershipComponent" should "create, load and delete" in {
+  "ProjectUsersComponent" should "create, load and delete" in {
     val (subjId1, subjId2, subjId3) = ("mySubjectId1", "mySubjectId2", "mySubjectId3")
     val (name1, name2, name3) = ("myName1", "myName2", "myName3")
 
@@ -24,24 +24,24 @@ class ProjectMembershipComponentSpec extends TestDriverComponent {
       saveBillingProject(proj3)
     ))
 
-    val membership11 = ProjectMembershipRecord(subjId1, name1)
-    val membership12 = ProjectMembershipRecord(subjId1, name2)
-    val membership13 = ProjectMembershipRecord(subjId1, name3)
-    val membership22 = ProjectMembershipRecord(subjId2, name2)
-    val membership23 = ProjectMembershipRecord(subjId2, name3)
-    val membership33 = ProjectMembershipRecord(subjId3, name3)
+    val membership11 = ProjectUsersRecord(subjId1, name1)
+    val membership12 = ProjectUsersRecord(subjId1, name2)
+    val membership13 = ProjectUsersRecord(subjId1, name3)
+    val membership22 = ProjectUsersRecord(subjId2, name2)
+    val membership23 = ProjectUsersRecord(subjId2, name3)
+    val membership33 = ProjectUsersRecord(subjId3, name3)
 
     // start empty
 
     Seq(subjId1, subjId2, subjId3) foreach { case id =>
       assertResult(Seq()) {
-        runAndWait(loadProjectMembershipBySubjectId(id))
+        runAndWait(loadProjectUsersBySubjectId(id))
       }
     }
 
     Seq(name1, name2, name3) foreach { case name =>
       assertResult(Seq()) {
-        runAndWait(loadProjectMembershipByProjectName(name))
+        runAndWait(loadProjectUsersByProjectName(name))
       }
     }
 
@@ -49,51 +49,51 @@ class ProjectMembershipComponentSpec extends TestDriverComponent {
 
     Seq(membership11, membership12, membership13, membership22, membership23, membership33) foreach { case mem =>
       assertResult(mem) {
-        runAndWait(saveProjectMembership(mem))
+        runAndWait(saveProjectUsers(mem))
       }
     }
 
     // query by subject ID
 
     assertResult(Seq(membership11, membership12, membership13)) {
-      runAndWait(loadProjectMembershipBySubjectId(subjId1))
+      runAndWait(loadProjectUsersBySubjectId(subjId1))
     }
 
     // query by project name
 
     assertResult(Seq(membership12, membership22)) {
-      runAndWait(loadProjectMembershipByProjectName(name2))
+      runAndWait(loadProjectUsersByProjectName(name2))
     }
 
     // delete by subject ID
 
     assertResult(2) {   // mem 2/2 and mem 2/3
-      runAndWait(deleteProjectMembershipBySubjectId(subjId2))
+      runAndWait(deleteProjectUsersBySubjectId(subjId2))
     }
 
     // delete by project name
 
     assertResult(2) {   // mem 1/3 and mem 2/3 because mem 2/3 was just deleted
-      runAndWait(deleteProjectMembershipByProjectName(name3))
+      runAndWait(deleteProjectUsersByProjectName(name3))
     }
 
     // delete by case class
 
     assertResult(2) {
-      runAndWait(deleteProjectMembership(membership11)) + runAndWait(deleteProjectMembership(membership12))
+      runAndWait(deleteProjectUsers(membership11)) + runAndWait(deleteProjectUsers(membership12))
     }
 
     // finish empty
 
     Seq(subjId1, subjId2, subjId3) foreach { case id =>
       assertResult(Seq()) {
-        runAndWait(loadProjectMembershipBySubjectId(id))
+        runAndWait(loadProjectUsersBySubjectId(id))
       }
     }
 
     Seq(name1, name2, name3) foreach { case name =>
       assertResult(Seq()) {
-        runAndWait(loadProjectMembershipByProjectName(name))
+        runAndWait(loadProjectUsersByProjectName(name))
       }
     }
   }

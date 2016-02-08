@@ -5,9 +5,9 @@ trait AllComponents
   with RawlsUserComponent
   with RawlsGroupComponent
   with RawlsBillingProjectComponent
-  with UserMembershipComponent
-  with SubgroupMembershipComponent
-  with ProjectMembershipComponent
+  with GroupUsersComponent
+  with GroupSubgroupsComponent
+  with ProjectUsersComponent
   with WorkspaceComponent
   with EntityComponent
   with AttributeComponent {
@@ -20,9 +20,9 @@ trait AllComponents
     rawlsUserQuery.schema ++
     rawlsGroupQuery.schema ++
     rawlsBillingProjectQuery.schema ++
-    userMembershipQuery.schema ++
-    subgroupMembershipQuery.schema ++
-    projectMembershipQuery.schema ++
+    groupUsersQuery.schema ++
+    groupSubgroupsQuery.schema ++
+    projectUsersQuery.schema ++
     attributeQuery.schema ++
     workspaceQuery.schema ++
     workspaceAttributeQuery.schema ++

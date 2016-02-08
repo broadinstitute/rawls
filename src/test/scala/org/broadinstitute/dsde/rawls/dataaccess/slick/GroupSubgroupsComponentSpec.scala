@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-class SubgroupMembershipComponentSpec extends TestDriverComponent {
+class GroupSubgroupsComponentSpec extends TestDriverComponent {
 
-  "SubgroupMembershipComponent" should "create, load and delete" in {
+  "GroupSubgroupsComponent" should "create, load and delete" in {
     val (parent1, parent2, parent3) = ("parent1", "parent2", "parent3")
     val (child1, child2, child3) = ("child1", "child2", "child3")
 
@@ -18,24 +18,24 @@ class SubgroupMembershipComponentSpec extends TestDriverComponent {
       runAndWait(saveRawlsGroup(group))
     }
 
-    val membership11 = SubgroupMembershipRecord(parent1, child1)
-    val membership12 = SubgroupMembershipRecord(parent1, child2)
-    val membership13 = SubgroupMembershipRecord(parent1, child3)
-    val membership22 = SubgroupMembershipRecord(parent2, child2)
-    val membership23 = SubgroupMembershipRecord(parent2, child3)
-    val membership33 = SubgroupMembershipRecord(parent3, child3)
+    val membership11 = GroupSubgroupsRecord(parent1, child1)
+    val membership12 = GroupSubgroupsRecord(parent1, child2)
+    val membership13 = GroupSubgroupsRecord(parent1, child3)
+    val membership22 = GroupSubgroupsRecord(parent2, child2)
+    val membership23 = GroupSubgroupsRecord(parent2, child3)
+    val membership33 = GroupSubgroupsRecord(parent3, child3)
 
     // start empty
 
     Seq(parent1, parent2, parent3) foreach { case parent =>
       assertResult(Seq()) {
-        runAndWait(loadSubgroupMembershipByParent(parent))
+        runAndWait(loadGroupSubgroupsByParent(parent))
       }
     }
 
     Seq(child1, child2, child3) foreach { case child =>
       assertResult(Seq()) {
-        runAndWait(loadSubgroupMembershipByChild(child))
+        runAndWait(loadGroupSubgroupsByChild(child))
       }
     }
 
@@ -43,51 +43,51 @@ class SubgroupMembershipComponentSpec extends TestDriverComponent {
 
     Seq(membership11, membership12, membership13, membership22, membership23, membership33) foreach { case mem =>
       assertResult(mem) {
-        runAndWait(saveSubgroupMembership(mem))
+        runAndWait(saveGroupSubgroups(mem))
       }
     }
 
     // query by parent
 
     assertResult(Seq(membership11, membership12, membership13)) {
-      runAndWait(loadSubgroupMembershipByParent(parent1))
+      runAndWait(loadGroupSubgroupsByParent(parent1))
     }
 
     // query by child
 
     assertResult(Seq(membership12, membership22)) {
-      runAndWait(loadSubgroupMembershipByChild(child2))
+      runAndWait(loadGroupSubgroupsByChild(child2))
     }
 
     // delete by parent
 
     assertResult(2) {   // mem 2/2 and mem 2/3
-      runAndWait(deleteSubgroupMembershipByParent(parent2))
+      runAndWait(deleteGroupSubgroupsByParent(parent2))
     }
 
     // delete by child
 
     assertResult(2) {   // mem 1/3 and mem 2/3 because mem 2/3 was just deleted
-      runAndWait(deleteSubgroupMembershipByChild(child3))
+      runAndWait(deleteGroupSubgroupsByChild(child3))
     }
 
     // delete by case class
 
     assertResult(2) {
-      runAndWait(deleteSubgroupMembership(membership11)) + runAndWait(deleteSubgroupMembership(membership12))
+      runAndWait(deleteGroupSubgroups(membership11)) + runAndWait(deleteGroupSubgroups(membership12))
     }
 
     // finish empty
 
     Seq(parent1, parent2, parent3) foreach { case parent =>
       assertResult(Seq()) {
-        runAndWait(loadSubgroupMembershipByParent(parent))
+        runAndWait(loadGroupSubgroupsByParent(parent))
       }
     }
 
     Seq(child1, child2, child3) foreach { case child =>
       assertResult(Seq()) {
-        runAndWait(loadSubgroupMembershipByChild(child))
+        runAndWait(loadGroupSubgroupsByChild(child))
       }
     }
   }
