@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-class RawlsBillingProjectComponentSpec extends TestDriverComponent with RawlsBillingProjectComponent with RawlsUserComponent {
+class RawlsBillingProjectComponentSpec extends TestDriverComponent {
 
   "RawlsBillingProjectComponent" should "create, load and delete" in {
     val projectName = "arbitrary"

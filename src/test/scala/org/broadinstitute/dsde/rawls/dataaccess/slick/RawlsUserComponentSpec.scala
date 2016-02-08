@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-class RawlsUserComponentSpec extends TestDriverComponent with RawlsUserComponent {
+class RawlsUserComponentSpec extends TestDriverComponent {
 
   "RawlsUserComponent" should "create, load and delete" in {
     val userSubjectId = UUID.randomUUID.toString   // subject ID is not a UUID but it's close enough here

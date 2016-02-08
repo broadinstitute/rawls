@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-class RawlsGroupComponentSpec extends TestDriverComponent with RawlsGroupComponent with RawlsUserComponent {
+class RawlsGroupComponentSpec extends TestDriverComponent {
 
   "RawlsGroupComponent" should "create, load and delete" in {
     val groupName = "arbitrary"
