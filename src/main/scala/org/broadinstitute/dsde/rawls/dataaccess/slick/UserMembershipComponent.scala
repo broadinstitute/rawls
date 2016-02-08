@@ -17,7 +17,7 @@ trait UserMembershipComponent {
 
     def user = foreignKey("FK_USER_MEMBERSHIP_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
     def group = foreignKey("FK_USER_MEMBERSHIP_GROUP", groupName, rawlsGroupQuery)(_.groupName)
-    def uniqueIdx = index("IDX_USER_MEMBERSHIP_UNIQUE", (userSubjectId, groupName), unique = true)
+    def pk = primaryKey("PK_USER_MEMBERSHIP", (userSubjectId, groupName))
   }
 
   val userMembershipQuery = TableQuery[UserMembershipTable]

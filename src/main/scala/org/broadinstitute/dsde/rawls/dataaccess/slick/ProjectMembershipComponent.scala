@@ -17,7 +17,7 @@ trait ProjectMembershipComponent {
 
     def user = foreignKey("FK_PROJECT_MEMBERSHIP_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
     def project = foreignKey("FK_PROJECT_MEMBERSHIP_PROJECT", projectName, rawlsBillingProjectQuery)(_.projectName)
-    def uniqueIdx = index("IDX_PROJECT_MEMBERSHIP_UNIQUE", (userSubjectId, projectName), unique = true)
+    def pk = primaryKey("PK_PROJECT_MEMBERSHIP", (userSubjectId, projectName))
   }
 
   val projectMembershipQuery = TableQuery[ProjectMembershipTable]

@@ -16,7 +16,7 @@ trait SubgroupMembershipComponent {
 
     def parentGroup = foreignKey("FK_SUBGROUP_MEMBERSHIP_PARENT", parentGroupName, rawlsGroupQuery)(_.groupName)
     def childGroup = foreignKey("FK_SUBGROUP_MEMBERSHIP_CHILD", childGroupName, rawlsGroupQuery)(_.groupName)
-    def uniqueIdx = index("IDX_SUBGROUP_MEMBERSHIP_UNIQUE", (parentGroupName, childGroupName), unique = true)
+    def pk = primaryKey("PK_SUBGROUP_MEMBERSHIP", (parentGroupName, childGroupName))
   }
 
   val subgroupMembershipQuery = TableQuery[SubgroupMembershipTable]
