@@ -10,13 +10,15 @@ trait AllComponents
   with ProjectUsersComponent
   with WorkspaceComponent
   with EntityComponent
-  with AttributeComponent {
+  with AttributeComponent
+  with MethodConfigurationComponent {
 
   this: DriverComponent =>
 
   import driver.api._
 
-  lazy val allSchemas = pendingBucketDeletionQuery.schema ++
+  lazy val allSchemas = 
+    pendingBucketDeletionQuery.schema ++
     rawlsUserQuery.schema ++
     rawlsGroupQuery.schema ++
     rawlsBillingProjectQuery.schema ++
@@ -28,5 +30,9 @@ trait AllComponents
     workspaceAttributeQuery.schema ++
     workspaceAccessQuery.schema ++
     entityQuery.schema ++
-    entityAttributeQuery.schema
+    entityAttributeQuery.schema ++
+    methodConfigurationQuery.schema ++
+    methodConfigurationInputQuery.schema ++
+    methodConfigurationOutputQuery.schema ++
+    methodConfigurationPrereqQuery.schema
 }
