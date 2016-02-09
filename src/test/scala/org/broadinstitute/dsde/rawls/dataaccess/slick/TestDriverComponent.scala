@@ -46,7 +46,7 @@ trait TestDriverComponent extends FlatSpec with DriverComponent with Matchers wi
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
-    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail("dummy@example.com"), users, Set.empty)
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
 
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
