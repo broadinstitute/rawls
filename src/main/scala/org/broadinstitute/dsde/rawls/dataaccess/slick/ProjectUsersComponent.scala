@@ -20,37 +20,5 @@ trait ProjectUsersComponent {
     def pk = primaryKey("PK_PROJECT_USERS", (userSubjectId, projectName))
   }
 
-  val projectUsersQuery = TableQuery[ProjectUsersTable]
-
-  def projectUsersBySubjectIdQuery(userSubjectId: String) = Compiled {
-    projectUsersQuery.filter(_.userSubjectId === userSubjectId)
-  }
-
-  def projectUsersByProjectNameQuery(projectName: String) = Compiled {
-    projectUsersQuery.filter(_.projectName === projectName)
-  }
-
-  def saveProjectUsers(membership: ProjectUsersRecord) = {
-    (projectUsersQuery += membership) map { _ => membership }
-  }
-
-  def loadProjectUsersBySubjectId(userSubjectId: String) = {
-    projectUsersBySubjectIdQuery(userSubjectId).result
-  }
-
-  def loadProjectUsersByProjectName(projectName: String) = {
-    projectUsersByProjectNameQuery(projectName).result
-  }
-
-  def deleteProjectUsers(membership: ProjectUsersRecord) = {
-    projectUsersQuery.filter(q => q.userSubjectId === membership.userSubjectId && q.projectName === membership.projectName).delete
-  }
-
-  def deleteProjectUsersBySubjectId(userSubjectId: String) = {
-    projectUsersBySubjectIdQuery(userSubjectId).delete
-  }
-
-  def deleteProjectUsersByProjectName(projectName: String) = {
-    projectUsersByProjectNameQuery(projectName).delete
-  }
+  protected val projectUsersQuery = TableQuery[ProjectUsersTable]
 }
