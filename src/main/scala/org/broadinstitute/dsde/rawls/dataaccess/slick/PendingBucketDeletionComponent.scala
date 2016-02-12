@@ -13,18 +13,17 @@ trait PendingBucketDeletionComponent {
     def * = (bucket) <> (PendingBucketDeletion.apply _, PendingBucketDeletion.unapply)
   }
 
-  protected val pendingBucketDeletionQuery = TableQuery[PendingBucketDeletionTable]
+  object pendingBucketDeletionQuery extends TableQuery(new PendingBucketDeletionTable(_)) {
+    def save(pendingBucketDeletion: PendingBucketDeletion) = {
+      pendingBucketDeletionQuery insertOrUpdate pendingBucketDeletion map(_ => pendingBucketDeletion)
+    }
 
+    def list() = {
+      pendingBucketDeletionQuery.result
+    }
 
-  def savePendingBucketDeletion(pendingBucketDeletion: PendingBucketDeletion) = {
-    pendingBucketDeletionQuery insertOrUpdate pendingBucketDeletion map(_ => pendingBucketDeletion)
-  }
-
-  def listPendingBucketDeletion() = {
-    pendingBucketDeletionQuery.result
-  }
-
-  def deletePendingBucketDeletion(pendingBucketDeletion: PendingBucketDeletion) = {
-    pendingBucketDeletionQuery.filter(_.bucket === pendingBucketDeletion.bucket).delete
+    def delete(pendingBucketDeletion: PendingBucketDeletion) = {
+      pendingBucketDeletionQuery.filter(_.bucket === pendingBucketDeletion.bucket).delete
+    }
   }
 }

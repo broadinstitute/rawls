@@ -37,4 +37,9 @@ trait EntityComponent {
 
   protected val entityQuery = TableQuery[EntityTable]
   protected val entityAttributeQuery = TableQuery[EntityAttributeTable]
+
+  def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): driver.api.Query[EntityTable, EntityRecord, Seq] = {
+    entityQuery.filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
+  }
+
 }
