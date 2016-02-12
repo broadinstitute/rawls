@@ -7,7 +7,6 @@ trait AllComponents
   with RawlsBillingProjectComponent
   with GroupUsersComponent
   with GroupSubgroupsComponent
-  with ProjectUsersComponent
   with WorkspaceComponent
   with EntityComponent
   with AttributeComponent
