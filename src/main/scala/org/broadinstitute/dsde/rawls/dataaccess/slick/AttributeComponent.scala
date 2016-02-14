@@ -47,9 +47,9 @@ trait AttributeComponent {
      * @param name
      * @param attribute
      * @param workspaceId used only for AttributeEntityReferences (or lists of them) to resolve the reference within the workspace
-     * @return
+     * @return a sequence of write actions the resulting value being the attribute id inserted
      */
-    def insertAttributeRecords(name: String, attribute: Attribute, workspaceId: UUID) = {
+    def insertAttributeRecords(name: String, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Long]] = {
       attribute match {
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
@@ -63,8 +63,8 @@ trait AttributeComponent {
       }
     }
 
-    private def insertAttributeRef(name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None) = {
-      findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
+    private def insertAttributeRef(name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None): ReadWriteAction[Long] = {
+      entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
         case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")
         case Seq(entityRecord) => (attributeQuery returning attributeQuery.map(_.id)) += marshalAttributeEntityReference(name, listIndex, entityRecord)
       }

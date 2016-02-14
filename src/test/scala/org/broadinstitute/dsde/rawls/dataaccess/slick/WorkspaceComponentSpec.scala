@@ -20,7 +20,7 @@ class WorkspaceComponentSpec extends TestDriverComponent with WorkspaceComponent
     runAndWait(saveRawlsGroup(RawlsGroupRecord("owner2", "owner2@foo.com")))
   }
 
-  "WorkspaceComponent" should "crud workspaces" in {
+  "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {
     insertTestGroups
 
     val workspaceId: UUID = UUID.randomUUID()

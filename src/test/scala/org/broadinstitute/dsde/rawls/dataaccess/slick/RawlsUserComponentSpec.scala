@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserRef, RawlsUser, RawlsUserSu
 class RawlsUserComponentSpec extends TestDriverComponent {
   import driver.api._
 
-  "RawlsUserComponent" should "save and load users" in {
+  "RawlsUserComponent" should "save and load users" in withEmptyTestDatabase {
     val subjId1 = RawlsUserSubjectId("Subject Number One")
     val email1 = RawlsUserEmail("email@one-direction.net")
     val user1 = RawlsUser(subjId1, email1)
@@ -31,7 +31,7 @@ class RawlsUserComponentSpec extends TestDriverComponent {
     }
   }
 
-  it should "load users by reference and by email" in {
+  it should "load users by reference and by email" in withEmptyTestDatabase {
     val subjId = RawlsUserSubjectId("Subject")
     val email = RawlsUserEmail("email@hotmail.com")
     val user = RawlsUser(subjId, email)

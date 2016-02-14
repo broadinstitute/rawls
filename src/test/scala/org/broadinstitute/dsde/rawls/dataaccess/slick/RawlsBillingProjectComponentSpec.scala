@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model._
 class RawlsBillingProjectComponentSpec extends TestDriverComponent {
   import driver.api._
 
-  "RawlsBillingProjectComponent" should "save, load and delete" in {
+  "RawlsBillingProjectComponent" should "save, load and delete" in withEmptyTestDatabase {
     val subjId = RawlsUserSubjectId("17, the most random number")
     val user = RawlsUser(subjId, RawlsUserEmail("email@email.com"))
     val userRef = RawlsUserRef(subjId)
@@ -40,7 +40,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponent {
     }
   }
 
-  it should "add and remove users to projects, and list projects for users" in {
+  it should "add and remove users to projects, and list projects for users" in withEmptyTestDatabase {
     val subjId1 = RawlsUserSubjectId("subject ID #1")
     val subjId2 = RawlsUserSubjectId("This is subject two")
     val subjId3 = RawlsUserSubjectId("3")
