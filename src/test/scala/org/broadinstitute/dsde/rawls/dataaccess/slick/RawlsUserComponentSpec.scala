@@ -36,10 +36,6 @@ class RawlsUserComponentSpec extends TestDriverComponent {
     val email = RawlsUserEmail("email@hotmail.com")
     val user = RawlsUser(subjId, email)
 
-    // drop the DB since there's no delete user functionality
-
-    runAndWait(allSchemas.drop andThen allSchemas.create)
-
     assertResult(Seq.empty) {
       runAndWait(rawlsUserQuery.loadAllUsers())
     }

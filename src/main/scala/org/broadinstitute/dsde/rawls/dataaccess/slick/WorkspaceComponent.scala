@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -116,9 +115,9 @@ trait WorkspaceComponent {
     }
 
     def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
-      findByNameQuery(workspaceName).result.flatMap {
-        case Seq() => DBIO.successful(false)
-        case Seq(workspaceRecord) =>
+      uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
+        case None => DBIO.successful(false)
+        case Some(workspaceRecord) =>
           workspaceAttributes(workspaceRecord.id).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs):_*)) flatMap { _ =>
             workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
           } flatMap { _ =>
@@ -126,7 +125,6 @@ trait WorkspaceComponent {
           } map { count =>
             count > 0
           }
-        case tooMany => throw new RawlsException(s"more than one record found for workspace query: $tooMany")
       }
     }
 
@@ -152,22 +150,21 @@ trait WorkspaceComponent {
     }
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {
-      workspaceQuery.filter(rec => rec.namespace === workspaceName.namespace && rec.name === workspaceName.name)
+      filter(rec => rec.namespace === workspaceName.namespace && rec.name === workspaceName.name)
     }
 
     private def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
-      workspaceQuery.filter(_.id === workspaceId)
+      filter(_.id === workspaceId)
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
-      lookup.result.flatMap {
-        case Seq() => DBIO.successful(None)
-        case Seq(workspaceRec) =>
+      uniqueResult[WorkspaceRecord](lookup).flatMap {
+        case None => DBIO.successful(None)
+        case Some(workspaceRec) =>
           for (
             attributes <- loadAttributes(workspaceRec.id);
             accessGroups <- loadAccessGroupRefs(workspaceRec.id)
           ) yield Option(unmarshalWorkspace(workspaceRec, attributes, accessGroups))
-        case tooMany => throw new RawlsException(s"more than one record found for workspace query: $tooMany")
       }
     }
 

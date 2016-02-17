@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserEmail, RawlsUser, RawlsUserRef}
 
 case class RawlsUserRecord(userSubjectId: String, userEmail: String)
@@ -26,12 +25,7 @@ trait RawlsUserComponent {
     }
 
     def load(ref: RawlsUserRef): ReadAction[Option[RawlsUser]] = {
-      val subjId = ref.userSubjectId.value
-      findUserBySubjectId(subjId).result.map {
-        case Seq() => None
-        case Seq(rec) => Option(unmarshalRawlsUser(rec))
-        case _ => throw new RawlsException(s"Primary key violation: found multiple records for user subject ID '$subjId'")
-      }
+      loadCommon(findUserBySubjectId(ref.userSubjectId.value))
     }
 
     def loadAllUsers(): ReadAction[Seq[RawlsUser]] = {
@@ -39,12 +33,14 @@ trait RawlsUserComponent {
     }
 
     def loadUserByEmail(userEmail: RawlsUserEmail): ReadAction[Option[RawlsUser]] = {
-      val email = userEmail.value
-      findUserByEmail(email).result.map {
-        case Seq() => None
-        case Seq(rec) => Option(unmarshalRawlsUser(rec))
-        case _ => throw new RawlsException(s"Primary key violation: found multiple records for user email '$email'")
-      }
+      loadCommon(findUserByEmail(userEmail.value))
+    }
+  }
+
+  private def loadCommon(query: RawlsUserQuery): ReadAction[Option[RawlsUser]] = {
+    uniqueResult[RawlsUserRecord](query).map {
+      case None => None
+      case Some(rec) => Option(unmarshalRawlsUser(rec))
     }
   }
 

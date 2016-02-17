@@ -260,7 +260,7 @@ trait EntityComponent {
     }
 
     private def deleteEntityAttributeMappings(attributeRecords: Seq[AttributeRecord]): WriteAction[Int] = {
-      entityAttributeQuery.filter(_.attributeId inSet (attributeRecords.map(_.id))).delete
+      entityAttributeQuery.filter(_.attributeId inSetBind attributeRecords.map(_.id)).delete
     }
   }
 }
