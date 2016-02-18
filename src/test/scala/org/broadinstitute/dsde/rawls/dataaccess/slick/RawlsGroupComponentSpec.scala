@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
+import org.h2.jdbc.JdbcSQLException
 
 class RawlsGroupComponentSpec extends TestDriverComponent {
 
@@ -37,6 +38,11 @@ class RawlsGroupComponentSpec extends TestDriverComponent {
       runAndWait(rawlsGroupQuery.save(group))
     }
 
+    // a second save is an update, not a duplication
+    assertResult(group) {
+      runAndWait(rawlsGroupQuery.save(group))
+    }
+
     assertResult(Some(group)) {
       runAndWait(rawlsGroupQuery.load(groupRef))
     }
@@ -46,6 +52,11 @@ class RawlsGroupComponentSpec extends TestDriverComponent {
     }
 
     assertResult(true) {
+      runAndWait(rawlsGroupQuery.delete(groupRef))
+    }
+
+    // a second delete will fail
+    assertResult(false) {
       runAndWait(rawlsGroupQuery.delete(groupRef))
     }
 
@@ -239,6 +250,64 @@ class RawlsGroupComponentSpec extends TestDriverComponent {
       assertResult(None) {
         runAndWait(rawlsGroupQuery.loadGroupIfMember(group, user2))
       }
+    }
+  }
+
+  val userSubjId = "dummy-ID"
+  val userEmail = "dummy-email@example.com"
+  val testUser = RawlsUser(RawlsUserSubjectId(userSubjId), RawlsUserEmail(userEmail))
+
+  def userFromId(subjectId: String) =
+    RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
+
+  it should "save a User to multiple Groups but not save two copies of the same User" in withEmptyTestDatabase {
+
+    val group1 = makeRawlsGroup("Group 1 For User", Set(testUser))
+    val group2 = makeRawlsGroup("Group 2 For User", Set(testUser))
+
+    runAndWait(rawlsUserQuery.save(testUser))
+    runAndWait(rawlsGroupQuery.save(group1))
+    runAndWait(rawlsGroupQuery.save(group2))
+
+    assertResult(Seq(testUser)) {
+      runAndWait(rawlsUserQuery.loadAllUsers())
+    }
+
+    assertResult(Some(group1)) {
+      runAndWait(rawlsGroupQuery.load(group1))
+    }
+
+    assertResult(Some(group2)) {
+      runAndWait(rawlsGroupQuery.load(group2))
+    }
+  }
+
+  it should "not save a new Group with missing users" in withEmptyTestDatabase {
+    val user1 = userFromId("subjectId1")
+    val user2 = userFromId("subjectId2")
+    val group = makeRawlsGroup("Two User Group", Set(user1, user2))
+
+    intercept[JdbcSQLException] {
+      // note that the users have not first been saved
+      runAndWait(rawlsGroupQuery.save(group))
+    }
+
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.load(group))
+    }
+  }
+
+  it should "not save a new Group with missing groups" in withEmptyTestDatabase {
+    val group1 = makeRawlsGroup("Group One", Set.empty)
+    val group2 = makeRawlsGroup("Group Two", Set.empty).copy(subGroups = Set(group1))
+
+    intercept[JdbcSQLException] {
+      // note that group1 has not first been saved
+      runAndWait(rawlsGroupQuery.save(group2))
+    }
+
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.load(group2))
     }
   }
 

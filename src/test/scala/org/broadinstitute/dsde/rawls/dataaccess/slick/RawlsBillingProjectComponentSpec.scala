@@ -35,6 +35,10 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponent {
       runAndWait(rawlsBillingProjectQuery.delete(project))
     }
 
+    assertResult(false) {
+      runAndWait(rawlsBillingProjectQuery.delete(project))
+    }
+
     assertResult(None) {
       runAndWait(rawlsBillingProjectQuery.load(projectName))
     }
@@ -49,9 +53,9 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponent {
     val userRef2 = RawlsUserRef(subjId2)
     val userRef3 = RawlsUserRef(subjId3)
 
-    val userRecord1 = RawlsUserRecord(subjId1.value, "my@email.address")
-    val userRecord2 = RawlsUserRecord(subjId2.value, "my@email.address")
-    val userRecord3 = RawlsUserRecord(subjId3.value, "my@email.address")
+    val userRecord1 = RawlsUserRecord(subjId1.value, "my1@email.address")
+    val userRecord2 = RawlsUserRecord(subjId2.value, "my2@email.address")
+    val userRecord3 = RawlsUserRecord(subjId3.value, "my3@email.address")
 
     runAndWait(rawlsUserQuery += userRecord1)
     runAndWait(rawlsUserQuery += userRecord2)
@@ -78,6 +82,10 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponent {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef3))
     }
 
+    assertResult(Some(project2)) {
+      runAndWait(rawlsBillingProjectQuery.load(projectName2))
+    }
+
     val record = ProjectUsersRecord(subjId1.value, projectName2.value)
     assertResult(record) {
       runAndWait(rawlsBillingProjectQuery.addUserToProject(userRef1, project2))
@@ -102,6 +110,10 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponent {
 
     assertResult(Some(project2)) {
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
+    }
+
+    assertResult(Seq(projectName1)) {
+      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
   }
