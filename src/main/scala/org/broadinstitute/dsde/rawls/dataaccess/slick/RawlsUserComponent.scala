@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserEmail, 
 
 case class RawlsUserRecord(userSubjectId: String, userEmail: String)
 
-trait RawlsUserComponent extends Actions {
+trait RawlsUserComponent {
   this: DriverComponent =>
 
   import driver.api._

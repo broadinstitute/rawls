@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserRef, Ra
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String)
 case class ProjectUsersRecord(userSubjectId: String, projectName: String)
 
-trait RawlsBillingProjectComponent extends Actions {
+trait RawlsBillingProjectComponent {
   this: DriverComponent
     with RawlsUserComponent =>
 

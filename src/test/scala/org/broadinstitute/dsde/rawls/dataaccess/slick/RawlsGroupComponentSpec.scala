@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 class RawlsGroupComponentSpec extends TestDriverComponent {
 
-  "RawlsGroupComponent" should "create, load and delete" in {
+  "RawlsGroupComponent" should "create, load and delete" in withEmptyTestDatabase {
     val groupName = "arbitrary"
     val group = RawlsGroupRecord(groupName, "rawls@group.example.com")
 

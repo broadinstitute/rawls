@@ -75,7 +75,14 @@ trait WorkspaceComponent {
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
 
-    def save(workspace: Workspace): DBIOAction[Workspace, NoStream, Effect.Read with Effect.Write] = {
+    def save(workspace: Workspace): ReadWriteAction[Workspace] = {
+      validateUserDefinedString(workspace.namespace)
+      validateUserDefinedString(workspace.name)
+      workspace.attributes.keys.foreach { value =>
+        validateUserDefinedString(value)
+        validateAttributeName(value)
+      }
+
       val workspaceRecord = marshalWorkspace(workspace)
 
       workspaceQuery insertOrUpdate workspaceRecord andThen {
@@ -100,15 +107,15 @@ trait WorkspaceComponent {
       } map(_ => workspace)
     }
 
-    def findByName(workspaceName: WorkspaceName): DBIOAction[Option[Workspace], NoStream, Effect.Read] = {
+    def findByName(workspaceName: WorkspaceName): ReadAction[Option[Workspace]] = {
       loadWorkspace(findByNameQuery(workspaceName))
     }
 
-    def findById(workspaceId: String): DBIOAction[Option[Workspace], NoStream, Effect.Read] = {
+    def findById(workspaceId: String): ReadAction[Option[Workspace]] = {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
     }
 
-    def delete(workspaceName: WorkspaceName): DBIOAction[Boolean, NoStream, Effect.Read with Effect.Write] = {
+    def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
       findByNameQuery(workspaceName).result.flatMap {
         case Seq() => DBIO.successful(false)
         case Seq(workspaceRecord) =>
@@ -141,7 +148,7 @@ trait WorkspaceComponent {
     }
 
     private def deleteWorkspaceAttributeMappings(attributeRecords: Seq[AttributeRecord]): FixedSqlAction[Int, driver.api.NoStream, Write] = {
-      workspaceAttributeQuery.filter(_.attributeId inSet (attributeRecords.map(_.id))).delete
+      workspaceAttributeQuery.filter(_.attributeId inSetBind (attributeRecords.map(_.id))).delete
     }
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {

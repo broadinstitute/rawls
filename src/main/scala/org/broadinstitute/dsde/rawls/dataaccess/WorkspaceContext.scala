@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.util.UUID
+
 import com.tinkerpop.blueprints.impls.orient.{OrientVertex, OrientGraph}
 import com.tinkerpop.blueprints.{Graph, Vertex}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
 
 /**
@@ -19,4 +22,8 @@ case class WorkspaceContext(workspace: Workspace, _workspaceVertex: Vertex) {
     graph.makeActive()
     _workspaceVertex
   }
+}
+
+case class SlickWorkspaceContext(workspace: Workspace) {
+  val workspaceId = UUID.fromString(workspace.workspaceId)
 }

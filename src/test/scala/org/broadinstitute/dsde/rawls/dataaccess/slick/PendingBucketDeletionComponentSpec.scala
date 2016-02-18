@@ -5,7 +5,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
  */
 class PendingBucketDeletionComponentSpec extends TestDriverComponent {
 
-  "PendingBucketDeletionComponent" should "create, list and delete" in {
+  "PendingBucketDeletionComponent" should "create, list and delete" in withEmptyTestDatabase {
     val deletion = PendingBucketDeletion("foo")
     assertResult(Seq()) {
       runAndWait(pendingBucketDeletionQuery.list())
