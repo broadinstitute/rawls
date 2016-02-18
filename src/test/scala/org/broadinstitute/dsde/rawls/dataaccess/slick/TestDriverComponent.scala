@@ -268,14 +268,14 @@ trait TestDriverComponent extends FlatSpec with DriverComponent with Matchers wi
                 entityQuery.save(context, sset3),
                 entityQuery.save(context, sset4),
                 entityQuery.save(context, sset_empty),
-                entityQuery.save(context, indiv1)
+                entityQuery.save(context, indiv1),
 
-  //              methodConfigDAO.save(context, methodConfig, txn)
-  //              methodConfigDAO.save(context, methodConfig2, txn)
-  //              methodConfigDAO.save(context, methodConfigValid, txn)
-  //              methodConfigDAO.save(context, methodConfigUnparseable, txn)
-  //              methodConfigDAO.save(context, methodConfigNotAllSamples, txn)
-  //              methodConfigDAO.save(context, methodConfigAttrTypeMixup, txn)
+                methodConfigurationQuery.save(context, methodConfig),
+                methodConfigurationQuery.save(context, methodConfig2),
+                methodConfigurationQuery.save(context, methodConfigValid),
+                methodConfigurationQuery.save(context, methodConfigUnparseable),
+                methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup)
   //
   //              submissionDAO.save(context, submissionTerminateTest, txn)
   //              submissionDAO.save(context, submission1, txn)
