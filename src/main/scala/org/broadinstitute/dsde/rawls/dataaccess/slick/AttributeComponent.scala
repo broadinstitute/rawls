@@ -97,7 +97,7 @@ trait AttributeComponent {
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[AttributeRecord]): DBIOAction[Int, NoStream, Write] = {
-      attributeQuery.filter(_.id inSet (attributeRecords.map(_.id))).delete
+      filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
     def unmarshalAttributes(allAttributeRecsWithRef: Seq[(AttributeRecord, Option[EntityRecord])]): Map[String, Attribute] = {

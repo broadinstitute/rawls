@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserRef, RawlsBillingProjectName, RawlsBillingProject}
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String)
@@ -47,13 +46,12 @@ trait RawlsBillingProjectComponent {
 
     def load(rawlsProjectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
       val name = rawlsProjectName.value
-      findBillingProjectByName(name).result.flatMap {
-        case Seq() => DBIO.successful(None)
-        case Seq(projectRec) =>
+      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(name)).flatMap {
+        case None => DBIO.successful(None)
+        case Some(projectRec) =>
           for {
             users <- findUsersByProjectName(name).result
           } yield Option(unmarshalBillingProject(projectRec, users.toSet))
-        case _ => throw new RawlsException(s"Primary key violation: found multiple records for billing project '$name'")
       }
     }
 
@@ -61,11 +59,10 @@ trait RawlsBillingProjectComponent {
       val name = billingProject.projectName.value
       val projectQuery = findBillingProjectByName(name)
 
-      projectQuery.result.flatMap {
-        case Seq() => DBIO.successful(false)
-        case Seq(projectRec) =>
+      uniqueResult[RawlsBillingProjectRecord](projectQuery).flatMap {
+        case None => DBIO.successful(false)
+        case Some(projectRec) =>
           findUsersByProjectName(name).delete andThen projectQuery.delete map { count => count > 0 }
-        case _ => throw new RawlsException(s"Primary key violation: found multiple records for billing project '$name'")
       }
     }
 
@@ -99,7 +96,7 @@ trait RawlsBillingProjectComponent {
     }
 
     private def findBillingProjectByName(name: String): RawlsBillingProjectQuery = {
-      rawlsBillingProjectQuery.filter(_.projectName === name)
+      filter(_.projectName === name)
     }
 
     private def findUsersByProjectName(name: String): ProjectUsersQuery = {
