@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUserRef, RawlsUser, RawlsUserSubjectId, RawlsUserEmail}
+import org.broadinstitute.dsde.rawls.model._
 
 class RawlsUserComponentSpec extends TestDriverComponent {
   import driver.api._
@@ -18,6 +18,11 @@ class RawlsUserComponentSpec extends TestDriverComponent {
       runAndWait(rawlsUserQuery.loadAllUsers())
     }
 
+    assertResult(user1) {
+      runAndWait(rawlsUserQuery.save(user1))
+    }
+
+    // second save is update, not duplicate
     assertResult(user1) {
       runAndWait(rawlsUserQuery.save(user1))
     }

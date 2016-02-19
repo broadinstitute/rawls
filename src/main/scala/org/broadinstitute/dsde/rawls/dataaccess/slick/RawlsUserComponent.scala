@@ -14,6 +14,8 @@ trait RawlsUserComponent {
     def userEmail = column[String]("EMAIL")
 
     def * = (userSubjectId, userEmail) <> (RawlsUserRecord.tupled, RawlsUserRecord.unapply)
+
+    def uniqueEmail = index("IDX_USER_EMAIL", userEmail, unique = true)
   }
 
   private type RawlsUserQuery = Query[RawlsUserTable, RawlsUserRecord, Seq]
