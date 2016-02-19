@@ -11,13 +11,17 @@ import org.joda.time.DateTime
 class WorkspaceComponentSpec extends TestDriverComponent with WorkspaceComponent {
   import driver.api._
 
+  private def saveRawlsGroup(name: String, email: String) = {
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(email), Set.empty, Set.empty)))
+  }
+
   private def insertTestGroups: Unit = {
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("reader", "reader@foo.com")))
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("writer", "writer@foo.com")))
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("owner", "owner@foo.com")))
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("reader2", "reader2@foo.com")))
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("writer2", "writer2@foo.com")))
-    runAndWait(saveRawlsGroup(RawlsGroupRecord("owner2", "owner2@foo.com")))
+    saveRawlsGroup("reader", "reader@foo.com")
+    saveRawlsGroup("writer", "writer@foo.com")
+    saveRawlsGroup("owner", "owner@foo.com")
+    saveRawlsGroup("reader2", "reader2@foo.com")
+    saveRawlsGroup("writer2", "writer2@foo.com")
+    saveRawlsGroup("owner2", "owner2@foo.com")
   }
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {

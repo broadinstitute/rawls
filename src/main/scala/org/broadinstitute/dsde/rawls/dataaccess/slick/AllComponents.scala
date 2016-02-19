@@ -5,8 +5,6 @@ trait AllComponents
   with RawlsUserComponent
   with RawlsGroupComponent
   with RawlsBillingProjectComponent
-  with GroupUsersComponent
-  with GroupSubgroupsComponent
   with WorkspaceComponent
   with EntityComponent
   with AttributeComponent
