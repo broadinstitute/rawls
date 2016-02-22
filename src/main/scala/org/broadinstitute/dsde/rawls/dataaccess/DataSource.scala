@@ -14,7 +14,7 @@ import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, DataAccessComponent}
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.concurrent.TrieMap
@@ -59,7 +59,7 @@ object DataSource {
 class SlickDataSource(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
   val dataAccess = new DataAccessComponent(databaseConfig.driver)
   import dataAccess.driver.api._
-  def inTransaction[T](f: (DataAccessComponent) => DBIOAction[T, NoStream, Transactional]): Future[T] = {
+  def inTransaction[T](f: (DataAccess) => DBIOAction[T, NoStream, _]): Future[T] = {
     databaseConfig.db.run(f(dataAccess).transactionally)
   }
 }

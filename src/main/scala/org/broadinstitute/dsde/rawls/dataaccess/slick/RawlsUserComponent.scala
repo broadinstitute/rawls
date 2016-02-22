@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserEmail, RawlsUser, RawlsUserRef}
+import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsUserRecord(userSubjectId: String, userEmail: String)
 
 trait RawlsUserComponent {
-  this: DriverComponent =>
+  this: DriverComponent with RawlsBillingProjectComponent =>
 
   import driver.api._
 
@@ -36,6 +36,19 @@ trait RawlsUserComponent {
 
     def loadUserByEmail(userEmail: RawlsUserEmail): ReadAction[Option[RawlsUser]] = {
       loadCommon(findUserByEmail(userEmail.value))
+    }
+
+    def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
+      val usersAndProjects = for {
+        user <- rawlsUserQuery
+        userProject <- projectUsersQuery if user.userSubjectId === userProject.userSubjectId
+      } yield (user, userProject.projectName)
+
+      usersAndProjects.result.map { results =>
+        results.groupBy(_._1) map {
+          case (userRec, userAndProjects) => unmarshalRawlsUser(userRec) -> userAndProjects.map(userAndProject => RawlsBillingProjectName(userAndProject._2))
+        }
+      }
     }
   }
 

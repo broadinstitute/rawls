@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.user
 
+import _root_.slick.dbio._
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -29,8 +31,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, googleServicesDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, containerDAO, userDirectoryDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -64,7 +66,7 @@ object UserService {
   case class SynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, dataSource: DataSource, protected val gcsDAO: GoogleServicesDAO, containerDAO: GraphContainerDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
   override def receive = {
     case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
@@ -118,9 +120,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.createProxyGroup(user)),
-      toFutureTry(dataSource.inFutureTransaction() { txn =>
-        Future(containerDAO.authDAO.saveUser(user, txn)).
-          flatMap(user => addUsersToAllUsersGroup(Set(user), txn)) }),
+      toFutureTry(dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user).flatMap(user => addUsersToAllUsersGroup(Set(user), dataAccess)) }),
       toFutureTry(userDirectoryDAO.createUser(user))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
@@ -131,27 +131,32 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
 
   def listUsers(): Future[PerRequestMessage] = asAdmin {
-    Future(dataSource.inTransaction() { txn =>
-      val users = containerDAO.authDAO.loadAllUsers(txn)
-      val userInfoList = users.map(u => RawlsUserInfo(u, containerDAO.billingDAO.listUserProjects(u, txn).toSeq))
-      RequestComplete(RawlsUserInfoList(userInfoList))
-    })
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsUserQuery.loadAllUsersWithProjects map { projectsByUser =>
+        val userInfoList = projectsByUser map {
+          case (user, projectNames) => RawlsUserInfo(user, projectNames.toSeq)
+        }
+        RequestComplete(RawlsUserInfoList(userInfoList.toSeq))
+      }
+    }
   }
 
   //imports the response from the above listUsers
   def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = asAdmin {
-    dataSource.inFutureTransaction() { txn =>
-      Future { 
-        val userInfos = rawlsUserInfoList.userInfoList
+    dataSource.inTransaction { dataAccess =>
+      val userInfos = rawlsUserInfoList.userInfoList
+      DBIO.sequence(
         userInfos.map { u =>
-          val user = containerDAO.authDAO.saveUser(u.user, txn)
-          u.billingProjects.foreach(b =>
-            containerDAO.billingDAO.addUserToProject(u.user, containerDAO.billingDAO.loadProject(b, txn).get, txn)
-          )
-          user
+          dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
+            DBIO.seq(u.billingProjects.map(b =>
+              dataAccess.rawlsBillingProjectQuery.load(b) flatMap { project =>
+                dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, project.get)
+              }
+            ):_*) map (_=> user)
+          }
         }
-      } flatMap { users =>
-        addUsersToAllUsersGroup(users.toSet, txn)
+      ) flatMap { users =>
+        addUsersToAllUsersGroup(users.toSet, dataAccess)
       } map(_ match {
         case None => RequestComplete(StatusCodes.Created)
         case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
@@ -168,21 +173,22 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  private def addUsersToAllUsersGroup(users: Set[RawlsUser], txn: RawlsTransaction): Future[Option[ErrorReport]] = {
-    getOrCreateAllUsersGroup(txn) flatMap { allUsersGroup =>
-      updateGroupMembersInternal(allUsersGroup, users, Set.empty, AddGroupMembersOp, txn)
+  private def addUsersToAllUsersGroup(users: Set[RawlsUser], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
+    getOrCreateAllUsersGroup(dataAccess) flatMap { allUsersGroup =>
+      updateGroupMembersInternal(allUsersGroup, users, Set.empty, AddGroupMembersOp, dataAccess)
     }
   }
 
-  private def getOrCreateAllUsersGroup(txn: RawlsTransaction): Future[RawlsGroup] = {
-    Future {
-      containerDAO.authDAO.loadGroup(allUsersGroupRef, txn)
-    } flatMap (_ match {
-      case Some(g) => Future.successful(g)
-      case None => createGroupInternal(allUsersGroupRef, txn).recover {
-        // this case is where the group was not in our db but already in google, the recovery code makes the assumption
-        // that createGroupInternal saves the group in our db before creating the group in google so loadGroup should work
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => containerDAO.authDAO.loadGroup(allUsersGroupRef, txn).get
+  private def getOrCreateAllUsersGroup(dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
+    dataAccess.rawlsGroupQuery.load(allUsersGroupRef) flatMap (_ match {
+      case Some(g) => DBIO.successful(g)
+      case None => createGroupInternal(allUsersGroupRef, dataAccess).asTry flatMap {
+        case Success(group) => DBIO.successful(group)
+        case Failure(t: HttpResponseException) if t.getStatusCode == StatusCodes.Conflict.intValue =>
+          // this case is where the group was not in our db but already in google, the recovery code makes the assumption
+          // that createGroupInternal saves the group in our db before creating the group in google so loadGroup should work
+          dataAccess.rawlsGroupQuery.load(allUsersGroupRef).map(_.get)
+        case Failure(regrets) => DBIO.failed(regrets)
       }
     })
   }
@@ -329,9 +335,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
   }
 
-  private def createGroupInternal(groupRef: RawlsGroupRef, txn: RawlsTransaction): Future[RawlsGroup] = {
-    gcsDAO.createGoogleGroup(groupRef).map { rawlsGroup =>
-      containerDAO.authDAO.saveGroup(rawlsGroup, txn)
+  private def createGroupInternal(groupRef: RawlsGroupRef, dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
+    DBIO.from(gcsDAO.createGoogleGroup(groupRef)).flatMap { rawlsGroup =>
+      dataAccess.rawlsGroupQuery.save(rawlsGroup)
     }
   }
 
@@ -495,10 +501,10 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
    * @param users users to add or remove from the group
    * @param subGroups sub groups to add or remove from the group
    * @param operation which update operation to perform
-   * @param txn the transaction to operate within
+   * @param dataAccess
    * @return Future(None) if all went well
    */
-  private def updateGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], operation: UpdateGroupMembersOp, txn: RawlsTransaction): Future[Option[ErrorReport]] = {
+  private def updateGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], operation: UpdateGroupMembersOp, dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
     // update the google group, each update happens in the future and may or may not succeed.
     val googleUpdateTrials: Set[Future[Try[Either[RawlsUser, RawlsGroup]]]] = users.map { user =>
       toFutureTry(operation.updateGoogle(group, Left(user))).map(_ match {
@@ -513,16 +519,16 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     }
 
     // wait for all google updates to finish then for each successful update change the rawls database
-    Future.sequence(googleUpdateTrials).map { tries =>
-      val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }.toSet
-      val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }.toSet
-      containerDAO.authDAO.saveGroup(operation.updateGroupObject(group, successfulUsers, successfulGroups), txn)
-
-      val exceptions = tries.collect { case Failure(t) => t }
-      if (exceptions.isEmpty) {
-        None
-      } else {
-        Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
+    DBIO.from(Future.sequence(googleUpdateTrials)).flatMap { tries =>
+      val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
+      val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
+      dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
+        val exceptions = tries.collect { case Failure(t) => t }
+        if (exceptions.isEmpty) {
+          None
+        } else {
+          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
+        }
       }
     }
   }
