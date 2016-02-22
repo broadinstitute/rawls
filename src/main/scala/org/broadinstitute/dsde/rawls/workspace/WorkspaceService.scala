@@ -268,7 +268,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(sourceWorkspaceName), writeLocks=Set(destWorkspaceName)) { txn =>
       withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read,txn) { sourceWorkspaceContext =>
-        withNewWorkspaceContext(WorkspaceRequest(destWorkspaceName.namespace,destWorkspaceName.name,sourceWorkspaceContext.workspace.attributes),txn) { destWorkspaceContext =>
+        withNewWorkspaceContext(
+          WorkspaceRequest(
+            namespace = destWorkspaceName.namespace,
+            name = destWorkspaceName.name,
+            realm = sourceWorkspaceContext.workspace.realm,
+            attributes = sourceWorkspaceContext.workspace.attributes),txn) { destWorkspaceContext =>
           containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
           // TODO add a method for cloning all method configs, instead of doing this
           containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
@@ -1274,15 +1279,17 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             val currentDate = DateTime.now
             googleWorkspaceInfo.groupsByAccessLevel.values.foreach(containerDAO.authDAO.saveGroup(_, txn))
 
-            val workspace = Workspace(workspaceRequest.namespace,
-              workspaceRequest.name,
-              workspaceId,
-              googleWorkspaceInfo.bucketName,
-              currentDate,
-              currentDate,
-              userInfo.userEmail,
-              workspaceRequest.attributes,
-              googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
+            val workspace = Workspace(
+              namespace = workspaceRequest.namespace,
+              name = workspaceRequest.name,
+              realm = workspaceRequest.realm,
+              workspaceId = workspaceId,
+              bucketName = googleWorkspaceInfo.bucketName,
+              createdDate = currentDate,
+              lastModified = currentDate,
+              createdBy = userInfo.userEmail,
+              attributes = workspaceRequest.attributes,
+              accessLevels = googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
 
             op(containerDAO.workspaceDAO.save(workspace, txn))
           }
