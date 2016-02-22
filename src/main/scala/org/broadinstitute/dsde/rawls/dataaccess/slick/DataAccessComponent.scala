@@ -5,4 +5,4 @@ import slick.driver.JdbcProfile
 import scala.concurrent.ExecutionContext
 
 class DataAccessComponent(val driver: JdbcProfile)(implicit val executionContext: ExecutionContext)
-extends DriverComponent with AllComponents
+extends DriverComponent with DataAccess
