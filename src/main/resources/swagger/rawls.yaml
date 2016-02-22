@@ -3410,6 +3410,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
+      realm:
+        $ref: '#/definitions/RawlsGroupRef'
+        description: An optional realm for the workspace
       workspaceId:
         type: string
         description: A UUID associated with the workspace
@@ -3467,6 +3470,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
+      realm:
+        $ref: '#/definitions/RawlsGroupRef'
+        description: An optional realm for the workspace
       attributes:
         $ref: ''
 

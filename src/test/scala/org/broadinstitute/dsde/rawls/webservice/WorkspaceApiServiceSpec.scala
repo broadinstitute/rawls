@@ -83,11 +83,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner), Set.empty)
     val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty, Set.empty)
 
-    val workspace = Workspace(workspaceName.namespace, workspaceName.name, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup))
-    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
+    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
@@ -173,6 +173,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
+      None,
       Map.empty
     )
 
@@ -185,12 +186,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.dataSource.inTransaction() { txn =>
           assertResult(newWorkspace) {
             val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
+            WorkspaceRequest(ws.namespace, ws.name, None, ws.attributes)
           }
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, None, ws.attributes)
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
@@ -633,6 +634,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
+      None,
       Map.empty
     )
 
@@ -652,6 +654,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
+      None,
       Map.empty
     )
 
