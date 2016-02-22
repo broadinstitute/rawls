@@ -39,7 +39,7 @@ trait MethodConfigurationComponent {
     def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def namespaceNameIdx = index("IDX_CONFIG", (namespace, name), unique = true)
+    def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name), unique = true)
   }
 
   class MethodConfigurationInputTable(tag: Tag) extends Table[MethodConfigurationInputRecord](tag, "METHOD_CONFIG_INPUT") {
@@ -133,10 +133,7 @@ trait MethodConfigurationComponent {
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) => {
-          findInputsByConfigId(methodConfigRec.id).delete andThen
-            findOutputsByConfigId(methodConfigRec.id).delete andThen
-            findPrereqsByConfigId(methodConfigRec.id).delete andThen
-            findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).delete
+          deleteMethodConfigurationAction(methodConfigRec.id)
         } map { count =>
           count > 0
         }
@@ -145,6 +142,13 @@ trait MethodConfigurationComponent {
 
     def list(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
       findByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
+    }
+
+    def deleteMethodConfigurationAction(id: Long): ReadWriteAction[Int] = {
+      findInputsByConfigId(id).delete andThen
+        findOutputsByConfigId(id).delete andThen
+        findPrereqsByConfigId(id).delete andThen
+        findById(id).delete
     }
 
     /*

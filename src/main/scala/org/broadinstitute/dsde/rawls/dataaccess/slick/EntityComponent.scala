@@ -42,7 +42,7 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
 
-    private def entityAttributes(entityId: Long) = for {
+    def entityAttributes(entityId: Long) = for {
       entityAttrRec <- entityAttributeQuery if entityAttrRec.entityId === entityId
       attributeRec <- attributeQuery if entityAttrRec.attributeId === attributeRec.id
     } yield attributeRec
@@ -252,7 +252,7 @@ trait EntityComponent {
       attributeInserts.toSeq
     }
 
-    private def deleteEntityAttributes(attributeRecords: Seq[AttributeRecord]) = {
+    def deleteEntityAttributes(attributeRecords: Seq[AttributeRecord]) = {
       Seq(deleteEntityAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
     }
 

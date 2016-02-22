@@ -218,7 +218,7 @@ class SimpleExpressionParserTest extends FunSuite with OrientDbTestFixture {
       assert(parser.parseOutputExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
       assert(parser.parseOutputExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
       assert(parser.parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
-      
+
       assert(parser.parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
     }
   }

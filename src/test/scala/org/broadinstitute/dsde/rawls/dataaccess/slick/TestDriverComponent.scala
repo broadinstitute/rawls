@@ -18,13 +18,14 @@ import scala.concurrent.Await
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends DriverComponent with AllComponents {
+trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
   val databaseConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig[JdbcProfile]("h2mem1")
   override val driver: JdbcProfile = databaseConfig.driver
   val database = databaseConfig.db
+  val slickDataSource = new SlickDataSource(databaseConfig)
 
   val testDate = new DateTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -142,6 +143,7 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
     val sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
     val sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
     val sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
+    val sample8 = Entity("sample8", "Sample", Map("type" -> AttributeString("tumor")))
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -231,7 +233,7 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
     val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
     val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
 
-    val submissionTerminateTest = Submission("submissionTerminate",testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
       Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
         Workflow("workflowB",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
         Workflow("workflowC",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
@@ -260,6 +262,7 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
                 entityQuery.save(context, sample5),
                 entityQuery.save(context, sample6),
                 entityQuery.save(context, sample7),
+                entityQuery.save(context, sample8),
                 entityQuery.save(context, pair1),
                 entityQuery.save(context, pair2),
                 entityQuery.save(context, ps1),
@@ -272,16 +275,17 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
 
                 methodConfigurationQuery.save(context, methodConfig),
                 methodConfigurationQuery.save(context, methodConfig2),
+                methodConfigurationQuery.save(context, methodConfig3),
                 methodConfigurationQuery.save(context, methodConfigValid),
                 methodConfigurationQuery.save(context, methodConfigUnparseable),
                 methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup)
-  //
-  //              submissionDAO.save(context, submissionTerminateTest, txn)
-  //              submissionDAO.save(context, submission1, txn)
-  //              submissionDAO.save(context, submission2, txn)
-  //              submissionDAO.save(context, submissionUpdateEntity, txn)
-  //              submissionDAO.save(context, submissionUpdateWorkspace, txn)
+                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+  
+                submissionQuery.create(context, submissionTerminateTest),
+                submissionQuery.create(context, submission1),
+                submissionQuery.create(context, submission2),
+                submissionQuery.create(context, submissionUpdateEntity),
+                submissionQuery.create(context, submissionUpdateWorkspace)
           )
         })
       )
@@ -297,14 +301,22 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
       }
     }
 
-    withCustomTestDatabase(emptyData)(testCode)
+    withCustomTestDatabaseInternal(emptyData)(testCode)
   }
 
   def withDefaultTestDatabase(testCode: => Any):Unit = {
-    withCustomTestDatabase(testData)(testCode)
+    withCustomTestDatabaseInternal(testData)(testCode)
   }
 
-  def withCustomTestDatabase(data:TestData)(testCode: => Any):Unit = {
+  def withDefaultTestDatabase(testCode:SlickDataSource => Any):Unit = {
+    withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
+  }
+
+  def withCustomTestDatabase(data:TestData)(testCode:SlickDataSource => Any):Unit = {
+    withCustomTestDatabaseInternal(data)(testCode(slickDataSource))
+  }
+
+  def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
     try {
       runAndWait(allSchemas.create)
       runAndWait(data.save())

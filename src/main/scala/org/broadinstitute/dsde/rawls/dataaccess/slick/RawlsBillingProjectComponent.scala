@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserRef, RawlsBillingProjectName, RawlsBillingProject}
+import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String)
 case class ProjectUsersRecord(userSubjectId: String, projectName: String)
@@ -38,7 +38,7 @@ trait RawlsBillingProjectComponent {
     def save(billingProject: RawlsBillingProject): WriteAction[RawlsBillingProject] = {
       val projectInsert = rawlsBillingProjectQuery insertOrUpdate marshalBillingProject(billingProject)
       val userInserts = billingProject.users.toSeq.map {
-        projectUsersQuery insertOrUpdate marshalProjectUsers(_, billingProject)
+        projectUsersQuery insertOrUpdate marshalProjectUsers(_, billingProject.projectName)
       }
 
       projectInsert andThen findUsersByProjectName(billingProject.projectName.value).delete andThen DBIO.seq(userInserts: _*) map { _ => billingProject }
@@ -66,8 +66,8 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def addUserToProject(userRef: RawlsUserRef, billingProject: RawlsBillingProject): WriteAction[ProjectUsersRecord] = {
-      val record = marshalProjectUsers(userRef, billingProject)
+    def addUserToProject(userRef: RawlsUserRef, billingProjectName: RawlsBillingProjectName): WriteAction[ProjectUsersRecord] = {
+      val record = marshalProjectUsers(userRef, billingProjectName)
       projectUsersQuery insertOrUpdate record map { _ => record }
     }
 
@@ -82,6 +82,20 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
+      val usersAndProjects = for {
+        (user, userProject) <- rawlsUserQuery joinLeft projectUsersQuery on (_.userSubjectId === _.userSubjectId)
+      } yield (user, userProject.map(_.projectName))
+
+      usersAndProjects.result.map { results =>
+        results.groupBy(_._1) map {
+          case (userRec, userAndProjectOps) =>
+            val projects = userAndProjectOps.flatMap(_._2.map(RawlsBillingProjectName))
+            rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
+        }
+      }
+    }
+
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
       RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl)
     }
@@ -91,8 +105,8 @@ trait RawlsBillingProjectComponent {
       RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), userRefs, projectRecord.cromwellAuthBucketUrl)
     }
 
-    private def marshalProjectUsers(userRef: RawlsUserRef, billingProject: RawlsBillingProject): ProjectUsersRecord = {
-      ProjectUsersRecord(userRef.userSubjectId.value, billingProject.projectName.value)
+    private def marshalProjectUsers(userRef: RawlsUserRef, projectName: RawlsBillingProjectName): ProjectUsersRecord = {
+      ProjectUsersRecord(userRef.userSubjectId.value, projectName.value)
     }
 
     private def findBillingProjectByName(name: String): RawlsBillingProjectQuery = {

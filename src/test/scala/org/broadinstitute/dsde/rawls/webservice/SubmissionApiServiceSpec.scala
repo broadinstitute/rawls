@@ -6,17 +6,17 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-
 import scala.concurrent.ExecutionContext
+import java.util.UUID
 
 /**
  * Created by dvoet on 4/24/15.
  */
 class SubmissionApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: DataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: SlickDataSource)(testCode: TestApiService => Any): Unit = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
     gcsDAO.storeToken(userInfo, "test_token")
@@ -30,7 +30,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
@@ -127,6 +127,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {status}
+      }
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${UUID.randomUUID}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}

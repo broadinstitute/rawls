@@ -281,7 +281,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 }
 
 class SlickExpressionEvaluator(parser: SlickExpressionParser)(implicit executionContext: ExecutionContext)  {
-  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, rootType:String, rootName:String, expression:String): Try[ReadAction[Iterable[Attribute]]] = {
+  def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, rootType:String, rootName:String, expression:String): Try[ReadAction[Iterable[AttributeValue]]] = {
     parser.parseAttributeExpr(expression).map( runPipe(SlickExpressionContext(workspaceContext, rootType, rootName), _).map(_.collect {
       case AttributeNull => Seq.empty
       case AttributeEmptyList => Seq.empty
