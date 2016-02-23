@@ -180,9 +180,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     } flatMap (_ match {
       case Some(g) => Future.successful(g)
       case None => createGroupInternal(allUsersGroupRef, txn).recover {
-        // this case is where the group was not in our db but already in google, the recovery code makes the assumption
-        // that createGroupInternal saves the group in our db before creating the group in google so loadGroup should work
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => containerDAO.authDAO.loadGroup(allUsersGroupRef, txn).get
+        // this case is where the group was not in our db but already in google
+        case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => containerDAO.authDAO.saveGroup(
+          RawlsGroup(allUsersGroupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(allUsersGroupRef.groupName)), Set.empty, Set.empty), txn)
       }
     })
   }
