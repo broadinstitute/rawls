@@ -25,6 +25,7 @@ trait TestDriverComponent extends DriverComponent with AllComponents {
   val databaseConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig[JdbcProfile]("h2mem1")
   override val driver: JdbcProfile = databaseConfig.driver
   val database = databaseConfig.db
+  val slickDataSource = new SlickDataSource(databaseConfig)
 
   val testDate = new DateTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")

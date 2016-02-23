@@ -59,9 +59,8 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
-      dataSource,
+      null, //dataSource,
       gcsDAO,
-      containerDAO,
       directoryDAO
     )_
 

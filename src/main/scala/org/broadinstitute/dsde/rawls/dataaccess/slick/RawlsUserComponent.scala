@@ -71,7 +71,7 @@ trait RawlsUserComponent {
     RawlsUserRecord(user.userSubjectId.value, user.userEmail.value)
   }
 
-  private def unmarshalRawlsUser(record: RawlsUserRecord): RawlsUser = {
+  protected def unmarshalRawlsUser(record: RawlsUserRecord): RawlsUser = {
     RawlsUser(RawlsUserSubjectId(record.userSubjectId), RawlsUserEmail(record.userEmail))
   }
 }

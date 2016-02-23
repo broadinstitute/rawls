@@ -88,7 +88,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     val record = ProjectUsersRecord(subjId1.value, projectName2.value)
     assertResult(record) {
-      runAndWait(rawlsBillingProjectQuery.addUserToProject(userRef1, project2))
+      runAndWait(rawlsBillingProjectQuery.addUserToProject(userRef1, project2.projectName))
     }
 
     val project2PlusUser1 = project2.copy(users = project2.users + userRef1)
