@@ -66,6 +66,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) {
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String
+  def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def toErrorReport(throwable: Throwable) = {
     val SOURCE = "google"
