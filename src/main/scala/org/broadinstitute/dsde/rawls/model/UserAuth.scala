@@ -44,7 +44,7 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[
 }
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
-case class SyncReport(items: Set[SyncReportItem])
+case class SyncReport(items: Seq[SyncReportItem])
 
 object UserAuthJsonSupport extends JsonSupport {
   trait UserAuthJsonFormatter[T <: UserAuthType] extends RootJsonFormat[T] {

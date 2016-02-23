@@ -18,13 +18,14 @@ import scala.concurrent.Await
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends FlatSpec with DriverComponent with Matchers with AllComponents {
+trait NakedTestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
   val databaseConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig[JdbcProfile]("h2mem1")
   override val driver: JdbcProfile = databaseConfig.driver
   val database = databaseConfig.db
+  val slickDataSource = new SlickDataSource(databaseConfig)
 
   val testDate = new DateTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -325,3 +326,4 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
+trait TestDriverComponent extends FlatSpec with Matchers with NakedTestDriverComponent
