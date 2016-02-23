@@ -86,11 +86,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
-        WorkspaceAccessLevels.Read -> workspaceReaderGroup))
+        WorkspaceAccessLevels.Read -> workspaceReaderGroup),
+      Map.empty)
     val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
-        WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
+        WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
+      Map.empty)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -840,4 +842,85 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "use access groups as realmACLs when creating a workspace if there is no realm" in withTestDataApiServices { services =>
+    val request = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      None,
+      Map.empty
+    )
+
+    def expectedAccessGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
+      WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
+      WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
+    )
+
+    Post(s"/workspaces", httpJson(request)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        val ws = responseAs[Workspace]
+        val expected = expectedAccessGroups(ws.workspaceId)
+
+        assertResult(expected) {
+          ws.accessLevels
+        }
+
+        assertResult(expected) {
+          ws.realmACLs
+        }
+      }
+  }
+
+  it should "create realmACLs when creating a workspace if there is a realm" in withTestDataApiServices { services =>
+    val realmName = "testRealm"
+    val realm = makeRawlsGroup(realmName, Set.empty, Set.empty)
+
+    val request = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      Option(realm),
+      Map.empty
+    )
+
+    def expectedAccessGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
+      WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
+      WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
+    )
+
+    def expectedIntersectionGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-OWNER")),
+      WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-WRITER")),
+      WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-READER"))
+    )
+
+    services.dataSource.inTransaction() { txn =>
+      authDAO.saveGroup(realm, txn)
+    }
+
+    Post(s"/workspaces", httpJson(request)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        val ws = responseAs[Workspace]
+
+        assertResult(expectedAccessGroups(ws.workspaceId)) {
+          ws.accessLevels
+        }
+
+        assertResult(expectedIntersectionGroups(ws.workspaceId)) {
+          ws.realmACLs
+        }
+      }
+  }
+
 }

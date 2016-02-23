@@ -1215,8 +1215,14 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           val STATUS_NA = "NOT_AVAILABLE"
 
           val bucketName = workspaceContext.workspace.bucketName
-          val rawlsGroupRefs = workspaceContext.workspace.accessLevels
-          val googleGroupRefs = rawlsGroupRefs map { case (accessLevel, groupRef) =>
+
+          val rawlsAccessGroupRefs = workspaceContext.workspace.accessLevels
+          val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
+            accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
+          }
+
+          val rawlsIntersectionGroupRefs = workspaceContext.workspace.realmACLs
+          val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
             accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
           }
 
@@ -1231,18 +1237,33 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             }
           }
 
-          val rawlsGroupStatuses = rawlsGroupRefs map { case (_, groupRef) =>
+          val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
             containerDAO.authDAO.loadGroup(groupRef, txn) match {
-              case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+              case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
+              case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
             }
           }
 
-          val googleGroupStatuses = googleGroupRefs map { case (_, groupRef) =>
+          val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
             val groupEmail = groupRef.get.groupEmail.value
             toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+              case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
+              case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+            }))
+          }
+
+          val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
+            containerDAO.authDAO.loadGroup(groupRef, txn) match {
+              case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
+              case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+            }
+          }
+
+          val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
+            val groupEmail = groupRef.get.groupEmail.value
+            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+              case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
+              case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
             }))
           }
 
@@ -1292,9 +1313,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
           }
 
-          Future.sequence(googleGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
+          Future.sequence(googleAccessGroupStatuses++googleIntersectionGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
             val statuses = tries.collect { case Success(s) => s }.toSeq
-            RequestComplete(WorkspaceStatus(workspaceName, (rawlsGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
+            RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses++rawlsIntersectionGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
           }
         }
       }
@@ -1311,9 +1332,15 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName) map { googleWorkspaceInfo =>
+          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName, workspaceRequest.realm) map { googleWorkspaceInfo =>
             val currentDate = DateTime.now
-            googleWorkspaceInfo.groupsByAccessLevel.values.foreach(containerDAO.authDAO.saveGroup(_, txn))
+
+            def saveAndMap(level: WorkspaceAccessLevel, group: RawlsGroup): (WorkspaceAccessLevel, RawlsGroupRef) = {
+              containerDAO.authDAO.saveGroup(group, txn)
+              level -> group
+            }
+            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => saveAndMap(a, g) }
+            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => saveAndMap(a, g) } }
 
             val workspace = Workspace(
               namespace = workspaceRequest.namespace,
@@ -1325,7 +1352,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               lastModified = currentDate,
               createdBy = userInfo.userEmail,
               attributes = workspaceRequest.attributes,
-              accessLevels = googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
+              accessLevels = accessGroups,
+              realmACLs = intersectionGroups getOrElse accessGroups
+            )
 
             op(containerDAO.workspaceDAO.save(workspace, txn))
           }

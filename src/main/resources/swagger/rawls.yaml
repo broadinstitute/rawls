@@ -3438,6 +3438,9 @@ definitions:
       accessLevels:
          $ref: ''
          description: Map[String, RawlsGroupRef]
+      realmACLs:
+         $ref: ''
+         description: Map[String, RawlsGroupRef]
       isLocked:
         type: boolean
         description: Can the Workspace currently be modified?

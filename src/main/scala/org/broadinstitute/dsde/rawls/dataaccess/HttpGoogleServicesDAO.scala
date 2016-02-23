@@ -97,12 +97,18 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
     val bucketName = getBucketName(workspaceId)
 
-    val groupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
+    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
       (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
     }.toMap
+
+    val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = realm map { realmGroupRef =>
+      groupAccessLevelsAscending.map { accessLevel =>
+        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef, accessLevel))))
+      }.toMap
+    }
 
     def rollbackGroups(groupInsertTries: Iterable[Try[RawlsGroup]]) = {
       Future.traverse(groupInsertTries) {
@@ -111,8 +117,8 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def insertGroups(workspaceGroupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef]): Future[Map[WorkspaceAccessLevel, Try[RawlsGroup]]] = {
-      Future.traverse(workspaceGroupRefsByAccess) { case (access, groupRef) => toFutureTry(createGoogleGroup(groupRef)).map(access -> _) }.map(_.toMap)
+    def insertGroups(groupRefsByAccess: Map[WorkspaceAccessLevel, RawlsGroupRef]): Future[Map[WorkspaceAccessLevel, Try[RawlsGroup]]] = {
+      Future.traverse(groupRefsByAccess) { case (access, groupRef) => toFutureTry(createGoogleGroup(groupRef)).map(access -> _) }.map(_.toMap)
     }
 
     def insertOwnerMember: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
@@ -120,9 +126,14 @@ class HttpGoogleServicesDAO(
       addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
     }
 
-    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[GoogleWorkspaceInfo] = { groupsByAccess =>
+    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
       retryExponentially(when500orGoogleError) {
         () => Future {
+
+          // When Intersection Groups exist, these are the groups used to determine ACLs.  Otherwise, Access Groups are used directly.
+
+          val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
+
           // bucket ACLs should be:
           //   workspace owner - bucket writer
           //   workspace writer - bucket writer
@@ -147,22 +158,53 @@ class HttpGoogleServicesDAO(
           blocking {
             executeGoogleRequest(inserter)
           }
-          GoogleWorkspaceInfo(bucketName, groupsByAccess)
+
+          GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }
       }
     }
 
-    insertGroups(groupRefsByAccess) flatMap { insertGroupTries =>
-      assertSuccessfulTries(insertGroupTries) flatMap
-        insertOwnerMember flatMap
-        insertBucket recoverWith {
-          case regrets =>
-            rollbackGroups(insertGroupTries.values) flatMap(_ => Future.failed(regrets))
+    // setupWorkspace main logic
+
+    val accessGroupInserts = insertGroups(accessGroupRefsByLevel)
+
+    val intersectionGroupInserts = intersectionGroupRefsByLevel match {
+      case Some(g) => insertGroups(g) map { Option(_) }
+      case None => Future.successful(None)
+    }
+
+    val bucketInsertion = for {
+      accessGroupTries <- accessGroupInserts
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember
+      intersectionGroupTries <- intersectionGroupInserts
+      intersectionGroups <- intersectionGroupTries match {
+        case Some(t) => assertSuccessfulTries(t) map { Option(_) }
+        case None => Future.successful(None)
+      }
+      inserted <- insertBucket(accessGroups, intersectionGroups)
+    } yield inserted
+
+    bucketInsertion recoverWith {
+      case regrets =>
+        val groupsToRollback = for {
+          accessGroupTries <- accessGroupInserts
+          intersectionGroupTries <- intersectionGroupInserts
+        } yield {
+          intersectionGroupTries match {
+            case Some(tries) => accessGroupTries.values ++ tries.values
+            case None => accessGroupTries.values
+          }
         }
+        groupsToRollback flatMap rollbackGroups flatMap (_ => Future.failed(regrets))
     }
   }
 
   def workspaceAccessGroupName(workspaceId: String, accessLevel: WorkspaceAccessLevel) = s"${workspaceId}-${accessLevel.toString}"
+
+  def intersectionGroupName(workspaceId: String, realmGroupRef: RawlsGroupRef, accessLevel: WorkspaceAccessLevel) = {
+    val realm = realmGroupRef.groupName.value
+    s"${realm}-${workspaceId}-${accessLevel.toString}"
+  }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = {
     val bucketName = getCromwellAuthBucketName(billingProject)
