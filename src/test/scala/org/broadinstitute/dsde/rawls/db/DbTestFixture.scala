@@ -74,7 +74,7 @@ trait DbTestFixture extends BeforeAndAfterAll {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup))
@@ -99,7 +99,7 @@ trait DbTestFixture extends BeforeAndAfterAll {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
@@ -134,9 +134,9 @@ trait DbTestFixture extends BeforeAndAfterAll {
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup))

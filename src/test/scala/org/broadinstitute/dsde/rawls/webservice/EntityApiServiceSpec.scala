@@ -415,6 +415,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
+    None,
     Map.empty
   )
 
@@ -428,7 +429,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         services.dataSource.inTransaction(readLocks=Set(workspace2Request.toWorkspaceName)) { txn =>
           assertResult(workspace2Request) {
             val ws = workspaceDAO.loadContext(workspace2Request.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
+            WorkspaceRequest(ws.namespace, ws.name, None, ws.attributes)
           }
         }
 
