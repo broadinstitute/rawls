@@ -38,7 +38,7 @@ trait RawlsBillingProjectComponent {
     def save(billingProject: RawlsBillingProject): WriteAction[RawlsBillingProject] = {
       val projectInsert = rawlsBillingProjectQuery insertOrUpdate marshalBillingProject(billingProject)
       val userInserts = billingProject.users.toSeq.map {
-        projectUsersQuery insertOrUpdate marshalProjectUsers(_, billingProject)
+        projectUsersQuery insertOrUpdate marshalProjectUsers(_, billingProject.projectName)
       }
 
       projectInsert andThen findUsersByProjectName(billingProject.projectName.value).delete andThen DBIO.seq(userInserts: _*) map { _ => billingProject }
@@ -66,8 +66,8 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def addUserToProject(userRef: RawlsUserRef, billingProject: RawlsBillingProject): WriteAction[ProjectUsersRecord] = {
-      val record = marshalProjectUsers(userRef, billingProject)
+    def addUserToProject(userRef: RawlsUserRef, billingProjectName: RawlsBillingProjectName): WriteAction[ProjectUsersRecord] = {
+      val record = marshalProjectUsers(userRef, billingProjectName)
       projectUsersQuery insertOrUpdate record map { _ => record }
     }
 
@@ -91,8 +91,8 @@ trait RawlsBillingProjectComponent {
       RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), userRefs, projectRecord.cromwellAuthBucketUrl)
     }
 
-    private def marshalProjectUsers(userRef: RawlsUserRef, billingProject: RawlsBillingProject): ProjectUsersRecord = {
-      ProjectUsersRecord(userRef.userSubjectId.value, billingProject.projectName.value)
+    private def marshalProjectUsers(userRef: RawlsUserRef, projectName: RawlsBillingProjectName): ProjectUsersRecord = {
+      ProjectUsersRecord(userRef.userSubjectId.value, projectName.value)
     }
 
     private def findBillingProjectByName(name: String): RawlsBillingProjectQuery = {

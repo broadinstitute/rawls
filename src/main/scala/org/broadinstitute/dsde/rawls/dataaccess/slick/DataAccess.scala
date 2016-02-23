@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-trait AllComponents
+trait DataAccess
   extends PendingBucketDeletionComponent
   with RawlsUserComponent
   with RawlsGroupComponent

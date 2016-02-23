@@ -660,7 +660,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
-        assertResult(SyncReport(Set(
+        assertResult(SyncReport(Seq(
           SyncReportItem("added", Option(inGraphUser), None, None),
           SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
           SyncReportItem("removed", Option(inGoogleUser), None, None),

@@ -4,6 +4,8 @@ import java.io.{File, StringReader}
 import java.util.concurrent.TimeUnit
 import java.util.logging.{LogManager, Logger}
 
+import _root_.slick.backend.DatabaseConfig
+import _root_.slick.driver.JdbcProfile
 import akka.util.Timeout
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential, GoogleAuthorizationCodeTokenRequest}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -111,6 +113,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val dataSource = DataSource(dbUrl, orientRootUser, orientRootPassword, 0, 30)
     dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
 
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("database", etcConf))
+
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       containerDAO,
       new HttpExecutionServiceDAO(executionServiceServer),
@@ -118,7 +122,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
 
-    val userServiceConstructor = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)_
+    val userServiceConstructor = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       dataSource,

@@ -149,9 +149,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val directoryDAO = new MockUserDirectoryDAO
 
       val userServiceConstructor = UserService.constructor(
-        dataSource,
+        null, //dataSource,
         gcsDAO,
-        containerDAO,
         directoryDAO
       )_
 

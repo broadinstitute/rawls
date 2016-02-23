@@ -95,7 +95,7 @@ object Boot extends App {
 
     BootMonitors.restartMonitors(dataSource, containerDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val service = system.actorOf(RawlsApiServiceActor.props(
                     WorkspaceService.constructor(dataSource,
                                                   containerDAO,

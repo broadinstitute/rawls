@@ -108,6 +108,16 @@ trait RawlsGroupComponent {
       }
     }
 
+    def loadGroupUserEmails(groupRef: RawlsGroupRef): ReadAction[Seq[RawlsUserEmail]] = {
+      (findUsersByGroupName(groupRef.groupName.value) join
+        rawlsUserQuery on (_.userSubjectId === _.userSubjectId) map (_._2.userEmail)).result.map(_.map(RawlsUserEmail))
+    }
+
+    def loadGroupSubGroupEmails(groupRef: RawlsGroupRef): ReadAction[Seq[RawlsGroupEmail]] = {
+      (findSubgroupsByGroupName(groupRef.groupName.value) join
+        rawlsGroupQuery on (_.childGroupName === _.groupName) map (_._2.groupEmail)).result.map(_.map(RawlsGroupEmail))
+    }
+
     private def checkMembershipRecursively(userRef: RawlsUserRef, previouslyCheckedGroups: Set[RawlsGroupRef], groupsToCheck: Set[RawlsGroupRef]): ReadAction[Boolean] = {
       groupsToCheck.headOption match {
         case Some(checkingNow) =>
