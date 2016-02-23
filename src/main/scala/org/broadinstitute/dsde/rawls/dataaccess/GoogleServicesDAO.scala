@@ -67,6 +67,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String
+  def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
 }
