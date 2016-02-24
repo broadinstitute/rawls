@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
-import com.typesafe.scalalogging.slf4j.LazyLogging
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -202,11 +202,14 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
         }
 
-        val accessGroups = workspaceContext.workspace.accessLevels.values.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
-        gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor).map { _ =>
-          containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
-          containerDAO.workspaceDAO.delete(workspaceName, txn)
+        // use a set because the two maps may be duplicates
+        val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
+        val groups = groupRefs.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
 
+        Future.traverse(groups) { gcsDAO.deleteGoogleGroup } map { _ =>
+          groupRefs foreach {  containerDAO.authDAO.deleteGroup(_, txn) }
+          containerDAO.workspaceDAO.delete(workspaceName, txn)
+          bucketDeletionMonitor ! DeleteBucket(workspaceContext.workspace.bucketName)
           RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
         }
       }

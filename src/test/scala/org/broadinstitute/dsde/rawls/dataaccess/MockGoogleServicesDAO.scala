@@ -90,8 +90,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = Future.successful("mockBucket")
 
-  override def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef) = Future.successful(Unit)
-
   override def deleteBucket(bucketName: String, monitorRef: ActorRef) = Future.successful(Unit)
 
   override def getBucket(bucketName: String): Future[Option[Bucket]] = Future.successful(Some(new Bucket))

@@ -26,12 +26,6 @@ trait AuthDAO {
     (loadUserByEmail(email, txn).map(Left(_)) ++ loadGroupByEmail(email, txn).map(Right(_))).headOption
   }
 
-  def deleteWorkspaceAccessGroups(workspace: Workspace, txn: RawlsTransaction) = {
-    workspace.accessLevels foreach { case (_, group) =>
-      deleteGroup(group, txn)
-    }
-  }
-
   def getMaximumAccessLevel(user: RawlsUserRef, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel
 
   def listWorkspaces(user: RawlsUserRef, txn: RawlsTransaction): Seq[WorkspacePermissionsPair]

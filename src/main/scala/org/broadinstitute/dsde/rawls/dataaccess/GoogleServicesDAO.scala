@@ -19,8 +19,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
-  def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef): Future[Any]
-
   def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any]
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"

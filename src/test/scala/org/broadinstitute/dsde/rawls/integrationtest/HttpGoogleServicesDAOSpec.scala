@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.io.StringReader
 import java.util.UUID
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
@@ -53,6 +53,15 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
 
     Future.traverse(accessGroups) { gcsDAO.deleteGoogleGroup } map { _ => bucketDeletionMonitor ! DeleteBucket(bucketName) }
+  }
+
+  private def deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo: GoogleWorkspaceInfo, bucketDeletionMonitor: ActorRef) = {
+    val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.values
+    val googleGroups = googleWorkspaceInfo.intersectionGroupsByLevel match {
+      case Some(groups) => groups.values ++ accessGroups
+      case None => accessGroups
+    }
+    Future.traverse(googleGroups) { gcsDAO.deleteGoogleGroup } map { _ => bucketDeletionMonitor ! DeleteBucket(googleWorkspaceInfo.bucketName) }
   }
 
   override def afterAll() = {
@@ -108,7 +117,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       VertexSchema.createVertexClasses(txn.graph)
       containerDAO.workspaceDAO.savePendingBucketDeletions(PendingBucketDeletions(Set.empty), txn)
     }
-    Await.result(gcsDAO.deleteWorkspace(googleWorkspaceInfo.bucketName, googleWorkspaceInfo.accessGroupsByLevel.values.toSeq, bucketDeletionMonitor), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
 
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup.groupEmail.value).execute() }
@@ -173,8 +182,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       VertexSchema.createVertexClasses(txn.graph)
       containerDAO.workspaceDAO.savePendingBucketDeletions(PendingBucketDeletions(Set.empty), txn)
     }
-    val groupsToDelete = googleWorkspaceInfo.accessGroupsByLevel.values.toSeq ++ googleWorkspaceInfo.intersectionGroupsByLevel.get.values
-    Await.result(gcsDAO.deleteWorkspace(googleWorkspaceInfo.bucketName, groupsToDelete, bucketDeletionMonitor), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
 
     intercept[GoogleJsonResponseException] { directory.groups.get(readerAG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerAG.groupEmail.value).execute() }

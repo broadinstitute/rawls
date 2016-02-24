@@ -280,6 +280,34 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
+    val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
+    services.dataSource.inTransaction() { txn =>
+      workspaceGroupRefs foreach { case groupRef =>
+        assertResult(Option(groupRef)) {
+          authDAO.loadGroup(groupRef, txn) map RawlsGroup.toRef
+        }
+      }
+    }
+
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted) {
+          status
+        }
+      }
+
+    services.dataSource.inTransaction() { txn =>
+      workspaceGroupRefs foreach { case groupRef =>
+        assertResult(None) {
+          authDAO.loadGroup(groupRef, txn)
+        }
+      }
+    }
+
+  }
+
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
