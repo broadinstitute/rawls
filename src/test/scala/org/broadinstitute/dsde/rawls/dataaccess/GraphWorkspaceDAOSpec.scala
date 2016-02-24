@@ -40,7 +40,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     }
   }
 
-  it should "save a new workspace with a realm" in withDefaultTestDatabase { dataSource =>
+  it should "save a new workspace with a realm" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
       authDAO.saveUser(user, txn)
@@ -68,7 +68,7 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     }
   }
 
-  it should "fail to save a new workspace with a missing realm" in withDefaultTestDatabase { dataSource =>
+  it should "fail to save a new workspace with a missing realm" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
       val secretGroup = makeRawlsGroup("SecretRealm", Set(user), Set.empty)
