@@ -77,7 +77,8 @@ trait DbTestFixture extends BeforeAndAfterAll {
     val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup))
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map.empty)
 
     override def save(txn:RawlsTransaction): Unit = {
       authDAO.saveUser(userOwner, txn)
@@ -102,7 +103,8 @@ trait DbTestFixture extends BeforeAndAfterAll {
     val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map.empty, isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
       authDAO.saveUser(userOwner, txn)
@@ -134,12 +136,13 @@ trait DbTestFixture extends BeforeAndAfterAll {
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty, Map.empty)
 
     val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup))
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map.empty)
 
     val sample1 = Entity("sample1", "Sample",
       Map(

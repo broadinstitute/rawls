@@ -35,6 +35,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     DateTime.now().withMillis(0),
     "test",
     Map.empty,
+    Map.empty,
     Map.empty
   )
 
