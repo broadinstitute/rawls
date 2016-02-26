@@ -13,3 +13,4 @@ test-output/
 /.settings/
 /bin/
 *.log
+config/
