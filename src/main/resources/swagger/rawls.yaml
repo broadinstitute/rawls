@@ -2400,6 +2400,10 @@ paths:
           description: Destination workspace already exists
           schema:
             $ref: '#/definitions/ErrorReport'
+        '422':
+          description: Destination workspace realm must match source's realm if it exists
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
@@ -2421,11 +2425,11 @@ paths:
           required: true
           type: string
         - in: body
-          description: Name of new workspace
-          name: workspaceNameJson
+          description: Request for new workspace
+          name: workspaceRequest
           required: true
           schema:
-            $ref: '#/definitions/WorkspaceName'
+            $ref: '#/definitions/WorkspaceRequest'
       security:
         - authorization:
             - openid
