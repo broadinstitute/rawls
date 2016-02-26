@@ -230,10 +230,6 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteWorkspace(bucketName: String, accessGroups: Seq[RawlsGroup], monitorRef: ActorRef): Future[Any] = {
-    Future.traverse(accessGroups) { deleteGoogleGroup } map { _ => monitorRef ! DeleteBucket(bucketName) }
-  }
-
   override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
