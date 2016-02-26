@@ -14,3 +14,4 @@ test-output/
 /bin/
 *.log
 config/
+rawlsdb/
