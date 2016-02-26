@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
 /**
  * Created by dvoet on 2/9/16.
  */
-class AttributeComponentSpec extends TestDriverComponent with AttributeComponent {
+class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent {
   import driver.api._
 
   "AttributeComponent" should "insert string attribute" in withEmptyTestDatabase {

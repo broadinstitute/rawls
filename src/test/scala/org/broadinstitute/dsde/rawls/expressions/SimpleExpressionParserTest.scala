@@ -4,10 +4,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, WorkspaceCont
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.FunSuite
-import org.scalatest.TryValues
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 /**
  * Created by abaumann on 5/21/15.

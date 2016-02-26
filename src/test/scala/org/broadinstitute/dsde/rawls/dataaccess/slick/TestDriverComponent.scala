@@ -18,7 +18,7 @@ import scala.concurrent.Await
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends FlatSpec with DriverComponent with Matchers with AllComponents {
+trait TestDriverComponent extends DriverComponent with AllComponents {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
@@ -325,3 +325,4 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
+trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers

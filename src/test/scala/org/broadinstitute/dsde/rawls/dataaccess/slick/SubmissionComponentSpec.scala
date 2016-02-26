@@ -9,7 +9,7 @@ import org.joda.time.DateTime
 /**
  * Created by mbemis on 2/22/16.
  */
-class SubmissionComponentSpec extends TestDriverComponent {
+class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
   private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))

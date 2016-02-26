@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
+
 trait AllComponents
   extends PendingBucketDeletionComponent
   with RawlsUserComponent
@@ -10,7 +12,8 @@ trait AllComponents
   with AttributeComponent
   with MethodConfigurationComponent
   with SubmissionComponent
-  with WorkflowComponent {
+  with WorkflowComponent
+  with SlickExpressionParser {
 
   this: DriverComponent =>
 

@@ -153,7 +153,7 @@ trait WorkspaceComponent {
       filter(rec => rec.namespace === workspaceName.namespace && rec.name === workspaceName.name)
     }
 
-    private def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
+    def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
     }
 
