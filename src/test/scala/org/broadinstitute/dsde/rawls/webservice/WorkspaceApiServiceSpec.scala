@@ -186,14 +186,49 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.dataSource.inTransaction() { txn =>
           assertResult(newWorkspace) {
             val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, None, ws.attributes)
+            WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
           }
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
-          WorkspaceRequest(ws.namespace, ws.name, None, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "create a workspace with a Realm" in withTestDataApiServices { services =>
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set.empty, Set.empty)
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup),
+      Map.empty
+    )
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(realmGroup, txn)
+    }
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        services.dataSource.inTransaction() { txn =>
+          assertResult(workspaceWithRealm) {
+            val ws = workspaceDAO.loadContext(workspaceWithRealm.toWorkspaceName, txn).get.workspace
+            WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+          }
+        }
+        assertResult(workspaceWithRealm) {
+          val ws = responseAs[Workspace]
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+        }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}"))))) {
           header("Location")
         }
       }
@@ -322,8 +357,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "copy a workspace if the source exists" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceName(namespace = testData.workspace.namespace, name = "test_copy")
+  it should "clone a workspace if the source exists" in withTestDataApiServices { services =>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -331,9 +366,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName), writeLocks=Set(workspaceCopy)) { txn =>
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName), writeLocks=Set(workspaceCopy.toWorkspaceName)) { txn =>
           withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
-            val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy, txn).get.workspace
+            val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy.toWorkspaceName, txn).get.workspace
             assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
             withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
@@ -350,6 +385,145 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
           header("Location")
+        }
+      }
+  }
+
+  it should "clone a workspace's Realm if it exists" in withTestDataApiServices { services =>
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set.empty, Set.empty)
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(realmGroup, txn)
+    }
+
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.realm, Map.empty)
+    Post(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(workspaceWithRealm.realm) {
+          responseAs[Workspace].realm
+        }
+      }
+  }
+
+  it should "not allow changing a workspace's Realm if it exists" in withTestDataApiServices { services =>
+    val name1 = "Guilder"
+    val name2 = "Florin"
+    val realmGroup1 = RawlsGroup(RawlsGroupName(name1), RawlsGroupEmail("king@guilder.eu"), Set.empty, Set.empty)
+    val realmGroup2 = RawlsGroup(RawlsGroupName(name2), RawlsGroupEmail("king@florin.eu"), Set.empty, Set.empty)
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(realmGroup1, txn)
+    }
+
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup1),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Option(realmGroup2), Map.empty)
+    Post(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(workspaceWithRealm.namespace))
+        assert(errorText.contains(workspaceWithRealm.name))
+        assert(errorText.contains(name1))
+        assert(errorText.contains(name2))
+      }
+  }
+
+  it should "set the Realm when cloning a workspace with no Realm" in withTestDataApiServices { services =>
+    val workspaceCopyNoRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyNoRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(None) {
+          responseAs[Workspace].realm
+        }
+      }
+
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set.empty, Set.empty)
+    val realmGroupRef: RawlsGroupRef = realmGroup
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(realmGroup, txn)
+    }
+
+    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroup), Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(Some(realmGroupRef)) {
+          responseAs[Workspace].realm
+        }
+      }
+  }
+
+  it should "add attributes when cloning a workspace" in withTestDataApiServices { services =>
+    val workspaceNoAttrs = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceNoAttrs)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(testData.workspace.attributes) {
+          responseAs[Workspace].attributes
+        }
+      }
+
+    val newAtts = Map(
+      "number" -> AttributeNumber(11),    // replaces an existing attribute
+      "another" -> AttributeNumber(12)    // adds a new attribute
+    )
+
+    val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", None, newAtts)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(testData.workspace.attributes ++ newAtts) {
+          responseAs[Workspace].attributes
         }
       }
   }
