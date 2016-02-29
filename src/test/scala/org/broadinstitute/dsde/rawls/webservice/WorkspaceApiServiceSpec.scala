@@ -83,6 +83,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner), Set.empty)
     val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty, Set.empty)
 
+    val workspace3Name = WorkspaceName("ns", "testworkspace3")
+    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty, Set.empty)
+    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner), Set.empty)
+    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty, Set.empty)
+
+    val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty, Set.empty)
+
     val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
@@ -92,6 +99,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
+      Map.empty)
+    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")),
+      Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
+        WorkspaceAccessLevels.Write -> workspace3WriterGroup,
+        WorkspaceAccessLevels.Read -> workspace3ReaderGroup),
       Map.empty)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
@@ -137,9 +149,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       authDAO.saveGroup(workspace2OwnerGroup, txn)
       authDAO.saveGroup(workspace2WriterGroup, txn)
       authDAO.saveGroup(workspace2ReaderGroup, txn)
+      authDAO.saveGroup(workspace3OwnerGroup, txn)
+      authDAO.saveGroup(workspace3WriterGroup, txn)
+      authDAO.saveGroup(workspace3ReaderGroup, txn)
+      authDAO.saveGroup(defaultRealmGroup, txn)
 
       workspaceDAO.save(workspace, txn)
       workspaceDAO.save(workspace2, txn)
+      workspaceDAO.save(workspace3, txn)
 
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { ctx =>
         entityDAO.save(ctx, sample1, txn)
@@ -319,7 +336,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.dataSource.inTransaction() { txn =>
           assertResult(Set(
             WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
-            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
+            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty),
+            WorkspaceListResponse(WorkspaceAccessLevels.NoAccess, testWorkspaces.workspace3.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
           )) {
             responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
           }
