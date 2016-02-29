@@ -56,7 +56,7 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
     } ~
     path("workspaces" / Segment / Segment / "clone" ) { (sourceNamespace, sourceWorkspace) =>
       post {
-        entity(as[WorkspaceName]) { destWorkspace =>
+        entity(as[WorkspaceRequest]) { destWorkspace =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace))
         }
