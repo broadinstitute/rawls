@@ -682,7 +682,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             "GOOGLE_USER_ACCESS_LEVEL: dummy@example.com" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
-            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND"))) {
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: dummy@example.com" -> "FOUND"
+          ))) {
           responseAs[WorkspaceStatus]
         }
       }

@@ -322,7 +322,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels.updated(WorkspaceAccessLevels.Owner, group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
@@ -342,10 +342,30 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
+        authDAO.getMaximumAccessLevel(obama, workspace.workspaceId, txn)
+      }
+    }
+  }
+
+  it should "ignore the accessLevels map determining access" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = userFromId("obama@whitehouse.gov")
+      val group = makeRawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = makeRawlsGroup("NotSoSecret", Set(obama), Set.empty)
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult( WorkspaceAccessLevels.NoAccess ) {
         authDAO.getMaximumAccessLevel(obama, workspace.workspaceId, txn)
       }
     }
@@ -414,7 +434,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {

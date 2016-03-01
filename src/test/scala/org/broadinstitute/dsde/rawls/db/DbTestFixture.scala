@@ -78,7 +78,10 @@ trait DbTestFixture extends BeforeAndAfterAll {
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup),
-      Map.empty)
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup))
 
     override def save(txn:RawlsTransaction): Unit = {
       authDAO.saveUser(userOwner, txn)
@@ -104,7 +107,10 @@ trait DbTestFixture extends BeforeAndAfterAll {
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup),
-      Map.empty, isLocked = true )
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
 
     override def save(txn:RawlsTransaction): Unit = {
       authDAO.saveUser(userOwner, txn)
@@ -142,7 +148,10 @@ trait DbTestFixture extends BeforeAndAfterAll {
       WorkspaceAccessLevels.Owner -> ownerGroup,
       WorkspaceAccessLevels.Write -> writerGroup,
       WorkspaceAccessLevels.Read -> readerGroup),
-      Map.empty)
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup))
 
     val realm = makeRawlsGroup(s"Test-Realm", Set.empty, Set.empty)
     val realmWsName = wsName.name + "withRealm"
