@@ -721,7 +721,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)).toJson.toString)) ~>
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)))) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(StatusCodes.BadRequest) { status }
