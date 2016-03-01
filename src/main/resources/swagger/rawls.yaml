@@ -1410,6 +1410,10 @@ paths:
           description: One or more entities of that name/type already exist
           schema:
             $ref: '#/definitions/ErrorReport'
+        '422':
+          description: Destination workspace must match source's realm, if the source has a realm
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
@@ -2401,7 +2405,7 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '422':
-          description: Destination workspace realm must match source's realm if it exists
+          description: Destination workspace must match source's realm, if the dest has a realm
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
