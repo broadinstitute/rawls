@@ -106,7 +106,7 @@ trait MethodConfigurationComponent {
         }.toSeq: _*)
       }
 
-      uniqueResult[MethodConfigurationRecord](findConfigByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
+      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
         case None =>
           val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, methodConfig))
           configInsert flatMap { configId =>
@@ -117,26 +117,26 @@ trait MethodConfigurationComponent {
             findOutputsByConfigId(methodConfigRec.id).delete andThen
             findPrereqsByConfigId(methodConfigRec.id).delete andThen
             saveMaps(methodConfigRec.id) andThen
-            findConfigByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name).map(_.rootEntityType).update(methodConfig.rootEntityType)
+            findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name).map(_.rootEntityType).update(methodConfig.rootEntityType)
       }
     } map { _ => methodConfig }
 
     def get(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadAction[Option[MethodConfiguration]] = {
-      loadMethodConfiguration(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)
+      loadMethodConfigurationByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): ReadWriteAction[Int] = {
-      findConfigByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
+      findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
     }
 
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
-      uniqueResult[MethodConfigurationRecord](findConfigByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
+      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) => {
           findInputsByConfigId(methodConfigRec.id).delete andThen
             findOutputsByConfigId(methodConfigRec.id).delete andThen
             findPrereqsByConfigId(methodConfigRec.id).delete andThen
-            findConfigByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).delete
+            findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).delete
         } map { count =>
           count > 0
         }
@@ -150,6 +150,10 @@ trait MethodConfigurationComponent {
     /*
       find helper methods
      */
+
+    def findById(id: Long): MethodConfigurationQueryType = {
+      filter(rec => rec.id === id)
+    }
 
     private def findByWorkspace(workspaceId: UUID): MethodConfigurationQueryType = {
       filter(rec => rec.workspaceId === workspaceId)
@@ -167,7 +171,7 @@ trait MethodConfigurationComponent {
       methodConfigurationPrereqQuery.filter(rec => rec.methodConfigId === configId)
     }
 
-    private def findConfigByName(workspaceId: UUID, methodNamespace: String, methodName: String): MethodConfigurationQueryType = {
+    def findByName(workspaceId: UUID, methodNamespace: String, methodName: String): MethodConfigurationQueryType = {
       filter(rec => rec.namespace === methodNamespace && rec.name === methodName && rec.workspaceId === workspaceId)
     }
 
@@ -175,17 +179,30 @@ trait MethodConfigurationComponent {
       load helper methods
      */
 
-    private def loadMethodConfiguration(workspaceId: UUID, methodConfigNamespace: String, methodConfigName: String): ReadAction[Option[MethodConfiguration]] = {
-      uniqueResult[MethodConfigurationRecord](findConfigByName(workspaceId, methodConfigNamespace, methodConfigName)) flatMap {
+    def loadMethodConfiguration(methodConfigRec: MethodConfigurationRecord): ReadAction[MethodConfiguration] = {
+      for {
+        inputs <- loadInputs(methodConfigRec.id)
+        outputs <- loadOutputs(methodConfigRec.id)
+        prereqs <- loadPrereqs(methodConfigRec.id)
+      } yield unmarshalMethodConfig(methodConfigRec, inputs, outputs, prereqs)
+    }
+
+    def loadMethodConfigurationByName(workspaceId: UUID, methodConfigNamespace: String, methodConfigName: String): ReadAction[Option[MethodConfiguration]] = {
+      uniqueResult[MethodConfigurationRecord](findByName(workspaceId, methodConfigNamespace, methodConfigName)) flatMap {
         case None => DBIO.successful(None)
         case Some(methodConfigRec) =>
-          for (
-            inputs <- loadInputs(methodConfigRec.id);
-            outputs <- loadOutputs(methodConfigRec.id);
-            prereqs <- loadPrereqs(methodConfigRec.id)
-          ) yield Option(unmarshalMethodConfig(methodConfigRec, inputs, outputs, prereqs))
+          loadMethodConfiguration(methodConfigRec) map (Some(_))
       }
     }
+
+    def loadMethodConfigurationById(id: Long): ReadAction[Option[MethodConfiguration]] = {
+      uniqueResult[MethodConfigurationRecord](findById(id)) flatMap {
+        case None => DBIO.successful(None)
+        case Some(methodConfigRec) =>
+          loadMethodConfiguration(methodConfigRec) map (Some(_))
+      }
+    }
+
 
     private def loadInputs(methodConfigId: Long) = {
       (methodConfigurationInputQuery filter (_.methodConfigId === methodConfigId)).result.map(unmarshalConfigInputs)
@@ -207,7 +224,7 @@ trait MethodConfigurationComponent {
       MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion)
     }
 
-    private def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
+    def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
       MethodConfiguration(methodConfigRec.namespace, methodConfigRec.name, methodConfigRec.rootEntityType, prereqs, inputs, outputs, MethodRepoMethod(methodConfigRec.methodNamespace, methodConfigRec.methodName, methodConfigRec.methodVersion))
     }
 
