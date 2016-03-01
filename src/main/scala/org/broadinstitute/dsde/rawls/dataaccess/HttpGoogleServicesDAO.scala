@@ -43,7 +43,7 @@ import spray.http.StatusCodes
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
-  clientSecretsJson: String,
+  val clientSecrets: GoogleClientSecrets,
   pemFile: String,
   appsDomain: String,
   groupsPrefix: String,
@@ -61,7 +61,6 @@ class HttpGoogleServicesDAO(
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
-  val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(clientSecretsJson))
   val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
   val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
   val tokenSecretKey = SecretKey(tokenEncryptionKey)

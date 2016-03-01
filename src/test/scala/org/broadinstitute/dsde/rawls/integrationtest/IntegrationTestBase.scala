@@ -48,7 +48,8 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
 
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
-    gcsConfig.getString("secrets"),
+    GoogleClientSecrets.load(
+      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))),
     gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appsDomain"),
     gcsConfig.getString("groupsPrefix"),
