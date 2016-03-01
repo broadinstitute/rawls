@@ -8,7 +8,9 @@ trait AllComponents
   with WorkspaceComponent
   with EntityComponent
   with AttributeComponent
-  with MethodConfigurationComponent {
+  with MethodConfigurationComponent
+  with SubmissionComponent
+  with WorkflowComponent {
 
   this: DriverComponent =>
 
@@ -31,5 +33,11 @@ trait AllComponents
     methodConfigurationQuery.schema ++
     methodConfigurationInputQuery.schema ++
     methodConfigurationOutputQuery.schema ++
-    methodConfigurationPrereqQuery.schema
+    methodConfigurationPrereqQuery.schema ++
+    submissionQuery.schema ++
+    submissionValidationQuery.schema ++
+    workflowQuery.schema ++
+    workflowErrorQuery.schema ++
+    workflowFailureQuery.schema ++
+    workflowMessageQuery.schema
 }
