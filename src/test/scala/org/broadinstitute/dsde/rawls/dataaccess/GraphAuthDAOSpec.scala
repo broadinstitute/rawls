@@ -373,6 +373,36 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
+  it should "return the intersection of a realm and an access group" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = userFromId("obama@whitehouse.gov")
+      val trump = userFromId("thedonald@donaldjtrump.com")
+      val arod = userFromId("alexrodriguez@mlb.com")
+      val clinton = userFromId("hillary@maybewhitehouse.gov")
+      val bernie = userFromId("bernie@vermont.gov")
+      val group = makeRawlsGroup("Good", Set(obama, bernie), Set.empty)
+      val group2 = makeRawlsGroup("Evil", Set(trump, arod), Set.empty)
+      val group3 = makeRawlsGroup("Other", Set(clinton), Set.empty)
+      val group4 = makeRawlsGroup("Good & Evil", Set.empty, Set(group, group2, group3))
+      val realm = makeRawlsGroup("Politicos", Set(obama, trump, bernie), Set(group3))
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveUser(trump, txn)
+      authDAO.saveUser(arod, txn)
+      authDAO.saveUser(clinton, txn)
+      authDAO.saveUser(bernie, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+      authDAO.saveGroup(group3, txn)
+      authDAO.saveGroup(group4, txn)
+      authDAO.saveGroup(realm, txn)
+
+      assertResult(Set(RawlsUserRef(obama.userSubjectId), RawlsUserRef(trump.userSubjectId), RawlsUserRef(clinton.userSubjectId), RawlsUserRef(bernie.userSubjectId))) {
+        authDAO.intersectGroupMembership(realm, group4, txn)
+      }
+    }
+  }
+
   it should "find ACLs for users in subgroups" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = userFromId("obama@whitehouse.gov")

@@ -12,6 +12,15 @@ import scala.collection.JavaConversions._
 import CachedTypes._
 
 class GraphAuthDAO extends AuthDAO with GraphDAO {
+
+  def loadUser(user: Vertex) = {
+    loadObject[RawlsUserRef](user)
+  }
+
+  def loadGroup(group: Vertex) = {
+    loadObject[RawlsGroupRef](group)
+  }
+
   override def loadUser(ref: RawlsUserRef, txn: RawlsTransaction): Option[RawlsUser] = txn withGraph { db =>
     getUserVertex(db, ref).map(loadObject[RawlsUser])
   }
@@ -71,6 +80,29 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     override def compute(v: Vertex) = {
       isVertexOfClass(VertexSchema.Group).compute(v) && hasPropertyValue("groupName", groupRef.groupName.value).compute(v)
     }
+  }
+
+  def flattenGroupMembers(groupRef: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef] = {
+    txn withGraph { db =>
+
+      val group = loadGroup(groupRef, txn).getOrElse(throw new RawlsException(s"Unable to load group ${groupRef}"))
+      val topLevelUsers = group.users
+
+      val subUsers = groupPipeline(db, group).as("vtx").out()
+        .loop(
+          "vtx",
+          or(or(isVertexOfClass(VertexSchema.User), isVertexOfClass(VertexSchema.Group)), isVertexOfClass(VertexSchema.Map)),
+          isVertexOfClass(VertexSchema.User)).iterator.map(loadUser).toSet
+
+      topLevelUsers ++ subUsers
+    }
+  }
+
+  def intersectGroupMembership(group1: RawlsGroupRef, group2: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef] = {
+    val group1Members = flattenGroupMembers(group1, txn)
+    val group2Members = flattenGroupMembers(group2, txn)
+
+    group1Members.intersect(group2Members)
   }
 
   override def getMaximumAccessLevel(user: RawlsUserRef, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel = {
