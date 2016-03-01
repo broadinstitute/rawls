@@ -43,7 +43,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     super.afterAll()
   }
 
-  def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
+  def httpJsonStr(str: String) = HttpEntity(ContentTypes.`application/json`, str)
+  def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = httpJsonStr(obj.toJson.toString())
+  val httpJsonEmpty = httpJsonStr("[]")
 
   def revokeCuratorRole(services: ApiServices, user: RawlsUser = testData.userOwner): Unit = {
     Get("/user/role/curator") ~>

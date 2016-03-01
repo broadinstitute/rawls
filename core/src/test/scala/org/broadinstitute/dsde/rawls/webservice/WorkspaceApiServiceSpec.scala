@@ -703,7 +703,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         |}]
       """.stripMargin
 
-    Patch(testData.workspace.path, HttpEntity(ContentTypes.`application/json`, testPayload)) ~>
+    Patch(testData.workspace.path, httpJson(testPayload)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -1447,7 +1447,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
-    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1455,7 +1455,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
-    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1469,7 +1469,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     val nonExistent = WorkspaceName("xyzzy", "plugh")
-    Patch(s"${nonExistent.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${nonExistent.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1700,7 +1700,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1717,7 +1717,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1927,7 +1927,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
-    Patch(testData.workspace.path, HttpEntity(ContentTypes.`application/json`, Seq.empty[AttributeUpdateOperation].toJson.toString)) ~>
+    Patch(testData.workspace.path, httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1950,7 +1950,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJsonEmpty) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }

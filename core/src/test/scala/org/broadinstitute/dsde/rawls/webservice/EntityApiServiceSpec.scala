@@ -1488,7 +1488,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on successfully parsing an expression" in withTestDataApiServices { services =>
-    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "this.samples.type")) ~>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("this.samples.type")) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1501,7 +1501,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 400 on failing to parse an expression" in withTestDataApiServices { services =>
-    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", HttpEntity(ContentTypes.`application/json`, "nonexistent.anything")) ~>
+    Post(s"${testData.workspace.path}/entities/SampleSet/sset1/evaluate", httpJsonStr("nonexistent.anything")) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
