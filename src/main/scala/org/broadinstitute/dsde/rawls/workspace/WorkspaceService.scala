@@ -5,6 +5,7 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
+import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -101,7 +102,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
   implicit val timeout = Timeout(5 minutes)
 
   override def receive = {
@@ -958,16 +959,39 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
         val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
-          val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-          val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
-          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions))
+          Try {
+            val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
+            val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
+            execStatusFuture map {
+              execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
+            } recover {
+              case t: Exception => {
+                val error = "Unable to submit workflow when creating submission"
+                logger.error(error, t)
+                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
+              }
+            }
+          } match {
+            case Success(result) => result
+            case Failure(t) => {
+              val error = "Unable to process workflow when creating submission"
+              logger.error(error, t)
+              Future.successful(WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage))))
+            }
+          }
         }))
 
         submittedWorkflowsFuture map { submittedWorkflows =>
+          val succeededWorkflowSubmissions = submittedWorkflows.collect {
+            case w:Workflow => w
+          }
+          val failedWorkflowSubmissions = submittedWorkflows.collect {
+            case w:WorkflowFailure => w
+          }
           val failedWorkflows = failures.map { entityInputs =>
             val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
             WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-          }
+          } ++ failedWorkflowSubmissions
 
           val submission = Submission(submissionId = submissionId,
             submissionDate = DateTime.now(),
@@ -975,13 +999,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
             methodConfigurationName = submissionRequest.methodConfigurationName,
             submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
-            workflows = submittedWorkflows,
+            workflows = succeededWorkflowSubmissions,
             notstarted = failedWorkflows,
             status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
           )
 
           containerDAO.submissionDAO.save(workspaceContext, submission, txn)
-          val workflowReports = submittedWorkflows.map { workflow =>
+          val workflowReports = succeededWorkflowSubmissions.map { workflow =>
             WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
           }
 
