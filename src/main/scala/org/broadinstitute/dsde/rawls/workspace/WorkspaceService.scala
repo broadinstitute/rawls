@@ -291,7 +291,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
 
   private def withClonedRealm(sourceWorkspaceContext: WorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    // if the source has a realm, the dest must also have that realm.  Otherwise, the caller chooses
+    // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
+    // otherwise, the caller may choose to apply a realm
     (sourceWorkspaceContext.workspace.realm, destWorkspaceRequest.realm) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
@@ -465,26 +466,44 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
       //we can't upgrade a read lock to a write.
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, txn) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, txn) { sourceWorkspaceContext =>
-          Future {
-            val entityNames = entityCopyDef.entityNames
-            val entityType = entityCopyDef.entityType
-            val conflicts = containerDAO.entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
-            conflicts.size match {
-              case 0 => {
-                // get the entities that were copied into the destination workspace
-                val entityCopies = containerDAO.entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
-                RequestComplete(StatusCodes.Created, entityCopies)
-              }
-              case _ => {
-                val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-                val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(),Seq.empty))
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq))
+          realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
+            Future {
+              val entityNames = entityCopyDef.entityNames
+              val entityType = entityCopyDef.entityType
+              val conflicts = containerDAO.entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
+              conflicts.size match {
+                case 0 => {
+                  // get the entities that were copied into the destination workspace
+                  val entityCopies = containerDAO.entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
+                  RequestComplete(StatusCodes.Created, entityCopies)
+                }
+                case _ => {
+                  val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
+                  val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
+                  throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq))
+                }
               }
             }
           }
         }
       }
     }
+
+  // can't use withClonedRealm because the Realm -> no Realm logic is different
+  private def realmCheck(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext): Future[Boolean] = {
+    // if the source has a realm, the dest must also have that realm
+    (sourceWorkspaceContext.workspace.realm, destWorkspaceContext.workspace.realm) match {
+      case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
+        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case (Some(sourceRealm), None) =>
+        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities outside of a realm"
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case _ => Future.successful(true)
+    }
+  }
+
+
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>

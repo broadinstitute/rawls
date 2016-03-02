@@ -345,7 +345,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 Not Found on copy if the source workspace cannot be found" in withTestDataApiServices { services =>
+  it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(testData.workspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -576,7 +576,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 409 Conflict on copy if the destination already exists" in withTestDataApiServices { services =>
+  it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(testData.workspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -721,7 +721,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
     import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)).toJson.toString)) ~>
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)))) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(StatusCodes.BadRequest) { status }
