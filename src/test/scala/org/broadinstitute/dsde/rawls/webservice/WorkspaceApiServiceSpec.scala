@@ -94,17 +94,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup),
-      Map.empty)
+      Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
+        WorkspaceAccessLevels.Write -> workspaceWriterGroup,
+        WorkspaceAccessLevels.Read -> workspaceReaderGroup))
     val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
-      Map.empty)
+      Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
+        WorkspaceAccessLevels.Write -> workspace2WriterGroup,
+        WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
     val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")),
       Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace3WriterGroup,
         WorkspaceAccessLevels.Read -> workspace3ReaderGroup),
-      Map.empty)
+      Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
+        WorkspaceAccessLevels.Write -> workspace3WriterGroup,
+        WorkspaceAccessLevels.Read -> workspace3ReaderGroup))
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
