@@ -37,6 +37,7 @@ object UserService {
   case object GetRefreshTokenDate extends UserServiceMessage
 
   case object CreateUser extends UserServiceMessage
+  case object DeleteUserFromDbOnly extends UserServiceMessage
   case class AdminGetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
   case object UserGetUserStatus extends UserServiceMessage
   case class EnableUser(userRef: RawlsUserRef) extends UserServiceMessage
@@ -70,6 +71,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
+    case DeleteUserFromDbOnly => deleteUserFromDbOnly() pipeTo sender
     case AdminGetUserStatus(userRef) => adminGetUserStatus(userRef) pipeTo sender
     case UserGetUserStatus => userGetUserStatus() pipeTo sender
     case EnableUser(userRef) => enableUser(userRef) pipeTo sender
@@ -127,6 +129,17 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     )
   }
 
+  def deleteUserFromDbOnly(): Future[PerRequestMessage] = {
+    val user = RawlsUser(userInfo)
+    handleFutures(
+      Future.sequence(Seq(toFutureTry(dataSource.inFutureTransaction() { txn =>
+          Future(containerDAO.authDAO.deleteUser(user, txn))
+    }))))(_ =>
+      RequestCompleteWithLocation(StatusCodes.NoContent, s"/user/${user.userSubjectId.value}"),
+        handleException("Errors deleting user")
+    )
+  }
+
   import spray.json.DefaultJsonProtocol._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
 
@@ -141,7 +154,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
   //imports the response from the above listUsers
   def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = asAdmin {
     dataSource.inFutureTransaction() { txn =>
-      Future { 
+      Future {
         val userInfos = rawlsUserInfoList.userInfoList
         userInfos.map { u =>
           val user = containerDAO.authDAO.saveUser(u.user, txn)
@@ -597,4 +610,3 @@ class UserService(protected val userInfo: UserInfo, dataSource: DataSource, prot
     override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users -- users), subGroups = (group.subGroups -- subGroups))
   }
 }
-

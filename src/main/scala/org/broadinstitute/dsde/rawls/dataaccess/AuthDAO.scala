@@ -12,6 +12,8 @@ trait AuthDAO {
 
   def saveUser(rawlsUser: RawlsUser, txn: RawlsTransaction): RawlsUser
 
+  def deleteUser(rawlsUser: RawlsUser, txn: RawlsTransaction)
+
   def loadGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Option[RawlsGroup]
 
   def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef, txn: RawlsTransaction): Option[RawlsGroup]

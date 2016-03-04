@@ -515,7 +515,6 @@ paths:
       description: List all users in rawls
       tags:
         - admin
-        - users
       summary: list users
       operationId: listUsers
       security:
@@ -523,7 +522,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/users':
     post:
       responses:
         '201':
@@ -550,7 +548,6 @@ paths:
             $ref: '#/definitions/RawlsUserInfoList'
       tags:
         - admin
-        - users
       summary: import users
       operationId: importUsers
       security:
@@ -2456,6 +2453,22 @@ paths:
             - openid
             - email
             - profile
+     delete:
+       responses:
+         '204':
+           description: Successful Request
+       description: Deletes a user from the Rawls user database. This does not affect Google groups
+                    or LDAP membership.
+       tags:
+         - users
+       summary: Delete user
+       operationId: delete
+       parameters:
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
      get:
        responses:
          '200':
@@ -2479,7 +2492,7 @@ paths:
             - openid
             - email
             - profile
-            
+
   '/api/user/{userSubjectId}/disable':
      post:
        responses:

@@ -30,6 +30,13 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
     rawlsUser
   }
 
+  override def deleteUser(rawlsUser: RawlsUser, txn: RawlsTransaction) = txn withGraph { db =>
+    val vertex = getUserVertex(db, rawlsUser) match {
+      case None => throw new RawlsException("Cannot delete user %s from database because it does not exist".format(rawlsUser))
+      case Some(vertex) => removeObject(vertex, db)
+    }
+  }
+
   override def saveGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup = txn withGraph { db =>
     val vertex = getGroupVertex(db, rawlsGroup).getOrElse(addVertex(db, VertexSchema.Group))
     saveObject[RawlsGroup](rawlsGroup, vertex, None, db)
