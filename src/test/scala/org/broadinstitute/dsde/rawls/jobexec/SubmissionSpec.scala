@@ -184,6 +184,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val execSvc = new MockExecutionServiceDAO()
     withDataAndService(testCode(execSvc), withDefaultTestDatabase, execSvc)
   }
+  def withWorkspaceServiceMockTimeoutExecution(testCode: (MockExecutionServiceDAO) => (WorkspaceService) => Any): Unit = {
+    val execSvc = new MockExecutionServiceDAO(true)
+    withDataAndService(testCode(execSvc), withDefaultTestDatabase, execSvc)
+  }
 
   def withSubmissionTestWorkspaceService(testCode: WorkspaceService => Any): Unit = {
     withDataAndService(testCode, withCustomTestDatabase(new SubmissionTestData))
@@ -317,6 +321,30 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
     }
+  }
+
+  it should "persist WorkflowFailures for each workflow that timeout when submitting to Cromwell" in withWorkspaceServiceMockTimeoutExecution { mockExecSvc => workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"))
+    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmission) = rqComplete.response
+    assertResult(StatusCodes.Created) {
+      status
+    }
+
+    val submissionStatusRq = Await.result(workspaceService.getSubmissionStatus(testData.wsName, newSubmission.submissionId), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionStatusResponse)]]
+    val (submissionStatus, submissionStatusResponse) = submissionStatusRq.response
+    assertResult(StatusCodes.OK) {
+      submissionStatus
+    }
+
+    // all three workflows should fail to start
+    assert(submissionStatusResponse.notstarted.size == 3)
+    assert(submissionStatusResponse.workflows.size == 0)
+
+    // the first fails to start for bad expression issues, whereas the other two timed out when trying to submit
+    assert(submissionStatusResponse.notstarted(0).errors(0).value == "Expected single value for workflow input, but evaluated result set was empty")
+    assert(submissionStatusResponse.notstarted(1).errors(0).value == "Unable to submit workflow when creating submission")
+    assert(submissionStatusResponse.notstarted(2).errors(0).value == "Unable to submit workflow when creating submission")
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
@@ -525,7 +553,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 }
 
-class MockExecutionServiceDAO() extends ExecutionServiceDAO {
+class MockExecutionServiceDAO(timeout:Boolean = false) extends ExecutionServiceDAO {
   var submitWdl: String = null
   var submitInput: String = null
   var submitOptions: Option[String] = None
@@ -534,7 +562,12 @@ class MockExecutionServiceDAO() extends ExecutionServiceDAO {
     this.submitInput = inputs
     this.submitWdl = wdl
     this.submitOptions = options
-    Future.successful(ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted"))
+    if (timeout) {
+      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.GatewayTimeout, s"Failed to submit")))
+    }
+    else {
+      Future.successful(ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted"))
+    }
   }
 
   override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id,
