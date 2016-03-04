@@ -2690,8 +2690,6 @@ tags:
   - name: groups
     description: Group manipulation API
 
-schemes:
-  - http
 securityDefinitions:
   authorization:
     type: oauth2
