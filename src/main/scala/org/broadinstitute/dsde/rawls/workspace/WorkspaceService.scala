@@ -1001,7 +1001,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
             workflows = succeededWorkflowSubmissions,
             notstarted = failedWorkflows,
-            status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
+            status = if (succeededWorkflowSubmissions.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
           )
 
           containerDAO.submissionDAO.save(workspaceContext, submission, txn)

@@ -345,6 +345,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert(submissionStatusResponse.notstarted(0).errors(0).value == "Expected single value for workflow input, but evaluated result set was empty")
     assert(submissionStatusResponse.notstarted(1).errors(0).value == "Unable to submit workflow when creating submission")
     assert(submissionStatusResponse.notstarted(2).errors(0).value == "Unable to submit workflow when creating submission")
+
+    // all of these workflows fail, ensure the submission status is done
+    assertResult(SubmissionStatuses.Done) {
+      submissionStatusResponse.status
+    }
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
