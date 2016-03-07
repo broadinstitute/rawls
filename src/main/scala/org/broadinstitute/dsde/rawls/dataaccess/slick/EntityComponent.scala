@@ -40,12 +40,7 @@ trait EntityComponent {
   
   object entityQuery extends TableQuery(new EntityTable(_)) {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
-    type EntityQueryWithAttributesAndRefs = Query[(EntityTable, Rep[Option[((EntityAttributeTable, AttributeTable), Rep[Option[EntityTable]])]]), (EntityRecord, Option[((EntityAttributeRecord, AttributeRecord), Option[EntityRecord])]), Seq]
-
-    private def entityAttributesWithRefsJoin = {
-      entityAttributeQuery join attributeQuery on (_.attributeId === _.id) joinLeft
-        entityQuery on (_._2.valueEntityRef === _.id)
-    }
+    type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
 
     private def entityAttributes(entityId: Long) = for {
       entityAttrRec <- entityAttributeQuery if entityAttrRec.entityId === entityId
@@ -70,22 +65,18 @@ trait EntityComponent {
 
     /** gets the given entity */
     def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
-      // query gets an entity record, all of its attributes (if there are any), and referred entities (if there are any)
-      val entityAndAttributesQuery =
-        findEntityByName(workspaceContext.workspaceId, entityType, entityName) joinLeft entityAttributesWithRefsJoin on (_.id === _._1._1.entityId)
-
-      unmarshalEntities(entityAndAttributesQuery).map(_.headOption)
+      unmarshalEntities(joinOnAttributesAndRefs(findEntityByName(workspaceContext.workspaceId, entityType, entityName))).map(_.headOption)
     }
 
     /**
      * converts a query resulting in a number of records representing many entities with many attributes, some of them references
      */
-    private def unmarshalEntities(entityAndAttributesQuery: EntityQueryWithAttributesAndRefs): ReadAction[Iterable[Entity]] = {
+    def unmarshalEntities(entityAndAttributesQuery: EntityQueryWithAttributesAndRefs): ReadAction[Iterable[Entity]] = {
       entityAndAttributesQuery.result map { entityAttributeRecords =>
         val attributeRecsByEntityRec = entityAttributeRecords.groupBy(_._1)
         attributeRecsByEntityRec map { case (entityRec, attributeRecs) =>
           val attributes = attributeQuery.unmarshalAttributes(attributeRecs.collect {
-            case (_, Some(((_, attributeRec), entityRef: Option[EntityRecord]))) => (attributeRec, entityRef)
+            case (_, Some(((attributeRec), entityRef: Option[EntityRecord]))) => (attributeRec, entityRef)
           })
           unmarshalEntity(entityRec, attributes)
         }
@@ -132,11 +123,22 @@ trait EntityComponent {
 
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      // query gets entity records, all of its attributes (if there are any), and referred entities (if there are any)
-      val entityAndAttributesQuery =
-        findEntityByType(workspaceContext.workspaceId, entityType) joinLeft entityAttributesWithRefsJoin on (_.id === _._1._1.entityId)
+      unmarshalEntities(joinOnAttributesAndRefs(findEntityByType(workspaceContext.workspaceId, entityType)))
+    }
 
-      unmarshalEntities(entityAndAttributesQuery)
+    /**
+     * Extends given query to query for attributes (if they exist) and entity references (if they exist).
+     * query joinLeft entityAttributeQuery join attributeQuery joinLeft entityQuery
+     * @param query
+     * @return
+     */
+    def joinOnAttributesAndRefs(query: EntityQuery): EntityQueryWithAttributesAndRefs = {
+      query joinLeft {
+        entityAttributeQuery join attributeQuery on (_.attributeId === _.id) joinLeft
+          entityQuery on (_._2.valueEntityRef === _.id)
+      } on (_.id === _._1._1.entityId) map { result =>
+        (result._1, result._2.map { case (a, b) => (a._2, b) })
+      }
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
@@ -148,11 +150,7 @@ trait EntityComponent {
     }
 
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
-      // query gets entity records, all of its attributes (if there are any), and referred entities (if there are any)
-      val entityAndAttributesQuery =
-        findEntityByWorkspace(workspaceContext.workspaceId) joinLeft entityAttributesWithRefsJoin on (_.id === _._1._1.entityId)
-
-      unmarshalEntities(entityAndAttributesQuery)
+      unmarshalEntities(joinOnAttributesAndRefs(findEntityByWorkspace(workspaceContext.workspaceId)))
     }
 
     def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Unit] = {
@@ -213,8 +211,7 @@ trait EntityComponent {
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
         DBIO.sequence(ids.map { id =>
-          val entityAndAttributesQuery = findEntityById(id) joinLeft entityAttributesWithRefsJoin on (_.id === _._1._1.entityId)
-          unmarshalEntities(entityAndAttributesQuery)
+          unmarshalEntities(joinOnAttributesAndRefs(findEntityById(id)))
         }.toSeq)
       }
       entitiesQuery.map(_.flatten)
@@ -242,7 +239,7 @@ trait EntityComponent {
       DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
     }
 
-    private def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[String, Attribute]) = {
+    def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[String, Attribute]) = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 

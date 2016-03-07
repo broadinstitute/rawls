@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.model._
 import org.h2.jdbc.JdbcSQLException
 
-class RawlsGroupComponentSpec extends TestDriverComponent {
+class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   "RawlsGroupComponent" should "save, load and delete" in withEmptyTestDatabase {
     val groupName = RawlsGroupName("The Avengers")

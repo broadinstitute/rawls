@@ -11,7 +11,7 @@ import org.joda.time.DateTime
 /**
  * Created by dvoet on 2/12/16.
  */
-class EntityComponentSpec extends TestDriverComponent {
+class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {

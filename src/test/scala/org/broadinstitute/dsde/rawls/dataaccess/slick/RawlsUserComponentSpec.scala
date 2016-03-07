@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
 
-class RawlsUserComponentSpec extends TestDriverComponent {
+class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
   "RawlsUserComponent" should "save and load users" in withEmptyTestDatabase {

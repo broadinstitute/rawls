@@ -101,7 +101,8 @@ trait AttributeComponent {
     }
 
     def unmarshalAttributes(allAttributeRecsWithRef: Seq[(AttributeRecord, Option[EntityRecord])]): Map[String, Attribute] = {
-      allAttributeRecsWithRef.groupBy(_._1.name).map { case (name, attributeRecsWithRefForName) =>
+      allAttributeRecsWithRef.groupBy(_._1.name).map { case (name, attributeRecsWithRefForNameWithDupes) =>
+        val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.toSet
         if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
           name -> unmarshalList(attributeRecsWithRefForName)
         } else if (attributeRecsWithRefForName.size > 1) {
@@ -114,8 +115,8 @@ trait AttributeComponent {
       }
     }
 
-    private def unmarshalList(attributeRecsWithRef: Seq[(AttributeRecord, Option[EntityRecord])]) = {
-      val sortedRecs = attributeRecsWithRef.sortBy(_._1.listIndex.get)
+    private def unmarshalList(attributeRecsWithRef: Set[(AttributeRecord, Option[EntityRecord])]) = {
+      val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
       if (sortedRecs.head._1.listIndex.get == -1) {
         AttributeEmptyList
       } else if (sortedRecs.head._2.isDefined) {

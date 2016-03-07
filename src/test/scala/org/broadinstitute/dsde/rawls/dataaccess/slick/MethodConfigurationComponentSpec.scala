@@ -11,7 +11,7 @@ import org.joda.time.DateTime
 /**
  * Created by mbemis on 2/17/16.
  */
-class MethodConfigurationComponentSpec extends TestDriverComponent {
+class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
   "MethodConfigurationComponenent" should "save and get a method config" in withDefaultTestDatabase {

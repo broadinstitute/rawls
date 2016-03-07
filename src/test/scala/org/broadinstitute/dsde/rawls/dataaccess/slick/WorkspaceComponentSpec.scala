@@ -8,7 +8,7 @@ import org.joda.time.DateTime
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponent with WorkspaceComponent {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent {
   import driver.api._
 
   private def saveRawlsGroup(name: String, email: String) = {
