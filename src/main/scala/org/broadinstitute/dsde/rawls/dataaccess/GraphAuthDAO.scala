@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.{Edge, Direction, Vertex}
+import com.tinkerpop.gremlin.java.GremlinPipeline
 import com.tinkerpop.pipes.PipeFunction
 import com.tinkerpop.pipes.branch.LoopPipe
 
@@ -79,6 +80,26 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
   private def isTargetGroup(groupRef: RawlsGroupRef) = new PipeFunction[Vertex, java.lang.Boolean] {
     override def compute(v: Vertex) = {
       isVertexOfClass(VertexSchema.Group).compute(v) && hasPropertyValue("groupName", groupRef.groupName.value).compute(v)
+    }
+  }
+
+  //returns a list of workspaces that have groupRef present in any part of its ACL tree
+  def findWorkspacesForGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Seq[Workspace] = {
+    txn withGraph { db =>
+
+      val workspacePaths = groupPipeline(db, groupRef).as("vtx").inE().outV()
+        .loop(
+          "vtx", //start point of loop
+          or(isVertexOfClass(VertexSchema.Group), isVertexOfClass(VertexSchema.Map)), //loop condition: walk while vertex is on an acl path (group or a list which looks like map)
+          isVertexOfClass(VertexSchema.Workspace)).enablePath.path().toList.map(path => path.reverse.toList)
+
+      val workspaceVertices = workspacePaths collect {
+        case (workspace: Vertex) :: (mapTypeEdge: Edge) :: (accessMap: Vertex) :: tail
+          if Seq("accessLevels", "realm").contains(EdgeSchema.stripEdgeRelation(mapTypeEdge.getLabel)) =>
+            workspace
+      }
+
+      workspaceVertices.map(loadObject[Workspace]).toSeq
     }
   }
 

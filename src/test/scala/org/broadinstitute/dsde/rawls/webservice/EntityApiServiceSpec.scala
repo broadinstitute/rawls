@@ -500,7 +500,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
     // attempt to copy an entity to a workspace with the wrong Realm
 
-    val newRealm = RawlsGroup(RawlsGroupName("a-new-realm-for-testing"), RawlsGroupEmail("president@realm.example.com"), Set.empty, Set.empty)
+    val newRealm = RawlsGroup(RawlsGroupName("a-new-realm-for-testing"), RawlsGroupEmail("president@realm.example.com"), Set(testData.userOwner), Set.empty)
     val newRealmRef: RawlsGroupRef = newRealm
 
     services.dataSource.inTransaction() { txn =>

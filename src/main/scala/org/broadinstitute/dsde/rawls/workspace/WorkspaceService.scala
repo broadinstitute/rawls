@@ -1326,7 +1326,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)
                                      (op: (WorkspaceContext) => PerRequestMessage): Future[PerRequestMessage] = {
     val workspaceName = workspaceRequest.toWorkspaceName
-    requireCreateWorkspaceAccess(workspaceName, txn) {
+    requireCreateWorkspaceAccess(workspaceRequest, txn) {
       containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
         case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
@@ -1338,6 +1338,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               containerDAO.authDAO.saveGroup(group, txn)
               level -> group
             }
+
             val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => saveAndMap(a, g) }
             val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => saveAndMap(a, g) } }
 
@@ -1364,15 +1365,21 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
-  private def requireCreateWorkspaceAccess(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    containerDAO.billingDAO.loadProject(RawlsBillingProjectName(workspaceName.namespace), txn) match {
+  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    containerDAO.billingDAO.loadProject(RawlsBillingProjectName(workspaceRequest.toWorkspaceName.namespace), txn) match {
       case Some(billingProject) =>
         if (billingProject.users.contains(RawlsUser(userInfo))) {
-          op
+          workspaceRequest.realm match {
+            case Some(realm) => containerDAO.authDAO.loadGroupIfMember(realm, RawlsUser(userInfo), txn) match {
+              case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
+              case Some(_) => op
+            }
+            case None => op
+          }
         } else {
-          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceName.namespace}")))
+          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
         }
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceName.namespace} not found")))
+      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceRequest.toWorkspaceName.namespace} not found")))
     }
   }
 

@@ -175,6 +175,10 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { directory.groups.get(writerIG.groupEmail.value).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.groups.get(ownerIG.groupEmail.value).execute() }), Duration.Inf)
 
+    //check that the owner is a part of both the access group and the intersection group
+    Await.result(retry(when500)(() => Future { directory.members.get(ownerAG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
+    Await.result(retry(when500)(() => Future { directory.members.get(ownerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
+
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     mockDataSource.inTransaction() { txn =>
       VertexSchema.createVertexClasses(txn.graph)

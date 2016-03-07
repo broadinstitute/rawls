@@ -129,6 +129,7 @@ trait DbTestFixture extends BeforeAndAfterAll {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
@@ -155,19 +156,40 @@ trait DbTestFixture extends BeforeAndAfterAll {
 
     val realm = makeRawlsGroup(s"Test-Realm", Set.empty, Set.empty)
     val realmWsName = wsName.name + "withRealm"
+    val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner), Set.empty)
+    val realmWriterIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG WRITER", Set(userWriter), Set.empty)
+    val realmReaderIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG READER", Set(userReader), Set.empty)
     val realmOwnerGroup = makeRawlsGroup(s"${realmWsName} OWNER", Set(userOwner), Set.empty)
     val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter), Set.empty)
     val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader), Set.empty)
 
+    val realmWs2Name = wsName2.name + "withRealm"
+    val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner), Set.empty)
+    val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter), Set.empty)
+    val realmReaderIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG READER", Set(userReader), Set.empty)
+    val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner), Set.empty)
+    val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter), Set.empty)
+    val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader), Set.empty)
+
     val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> ownerGroup,
-        WorkspaceAccessLevels.Write -> writerGroup,
-        WorkspaceAccessLevels.Read -> readerGroup),
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup,
         WorkspaceAccessLevels.Write -> realmWriterGroup,
-        WorkspaceAccessLevels.Read -> realmReaderGroup))
+        WorkspaceAccessLevels.Read -> realmReaderGroup),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup))
+
+    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), "aWorkspaceId2", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup2,
+        WorkspaceAccessLevels.Write -> realmWriterGroup2,
+        WorkspaceAccessLevels.Read -> realmReaderGroup2),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup2,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup2,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup2))
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -288,12 +310,22 @@ trait DbTestFixture extends BeforeAndAfterAll {
       authDAO.saveGroup(writerGroup, txn)
       authDAO.saveGroup(readerGroup, txn)
       authDAO.saveGroup(realm, txn)
+      authDAO.saveGroup(realmOwnerIntersectionGroup, txn)
+      authDAO.saveGroup(realmWriterIntersectionGroup, txn)
+      authDAO.saveGroup(realmReaderIntersectionGroup, txn)
       authDAO.saveGroup(realmOwnerGroup, txn)
       authDAO.saveGroup(realmWriterGroup, txn)
       authDAO.saveGroup(realmReaderGroup, txn)
+      authDAO.saveGroup(realmOwnerIntersectionGroup2, txn)
+      authDAO.saveGroup(realmWriterIntersectionGroup2, txn)
+      authDAO.saveGroup(realmReaderIntersectionGroup2, txn)
+      authDAO.saveGroup(realmOwnerGroup2, txn)
+      authDAO.saveGroup(realmWriterGroup2, txn)
+      authDAO.saveGroup(realmReaderGroup2, txn)
       workspaceDAO.save(workspace, txn)
       workspaceDAO.save(workspaceNoGroups, txn)
       workspaceDAO.save(workspaceWithRealm, txn)
+      workspaceDAO.save(otherWorkspaceWithRealm, txn)
       withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
         entityDAO.save(context, aliquot1, txn)
         entityDAO.save(context, aliquot2, txn)

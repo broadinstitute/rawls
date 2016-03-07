@@ -179,7 +179,7 @@ class HttpGoogleServicesDAO(
       accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) map { Option(_) }
+        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember map { Option(_) }
         case None => Future.successful(None)
       }
       inserted <- insertBucket(accessGroups, intersectionGroups)
