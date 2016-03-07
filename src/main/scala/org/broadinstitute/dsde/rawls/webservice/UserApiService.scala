@@ -31,6 +31,16 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
     }
   }
 
+  val deleteUserFromDbRoute = requireUserInfo() { userInfo =>
+    path("user") {
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.DeleteUserFromDbOnly)
+      }
+    }
+  }
+
   val getUserStatusRoute = requireUserInfo() { userInfo =>
     path("user") {
       get {
