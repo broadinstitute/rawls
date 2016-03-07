@@ -18,6 +18,8 @@ trait AuthDAO {
 
   def loadGroupByEmail(groupEmail: String, txn: RawlsTransaction): Option[RawlsGroup]
 
+  def findWorkspacesForGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Seq[Workspace]
+
   def flattenGroupMembers(groupRef: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef]
 
   def intersectGroupMembership(group1: RawlsGroupRef, group2: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef]
