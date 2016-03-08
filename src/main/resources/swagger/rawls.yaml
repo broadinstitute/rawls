@@ -699,6 +699,33 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/workspaces':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Workspace'
+        '403':
+          description: You must be an admin to list workspaces
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List all workspaces
+      tags:
+        - admin
+      summary: list all workspaces
+      operationId: listAllWorkspaces
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
