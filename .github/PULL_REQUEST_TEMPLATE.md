@@ -1,6 +1,5 @@
-Add the following to your main PR comment
-=========================
-```
+
+
 - [ ] **Submitter**: Rebase to develop. DO NOT SQUASH
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
 - [ ] **Submitter**: Make sure documentation for code is complete
@@ -28,4 +27,3 @@ Add the following to your main PR comment
 - [ ] **Submitter**: Verify swagger UI on dev environment still works after deployment
 - [ ] **Submitter**: Inform other teams of any API changes via hipchat and/or email
 - [ ] **Submitter**: Mark JIRA issue as resolved once this checklist is completed
-```
