@@ -5,6 +5,7 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
+import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._

@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -23,7 +24,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
-    gcsConfig.getString("secrets"),
+    GoogleClientSecrets.load(
+      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))),
     gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appsDomain"),
     gcsConfig.getString("groupsPrefix"),
