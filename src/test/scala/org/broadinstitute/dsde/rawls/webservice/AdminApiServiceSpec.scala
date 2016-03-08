@@ -692,4 +692,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
+      }
+  }
 }

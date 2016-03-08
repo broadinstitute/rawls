@@ -165,6 +165,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             WorkspaceService.GetWorkspaceStatus(WorkspaceName(workspaceNamespace, workspaceName), userSubjectId))
         }
       }
+    } ~
+    path("admin" / "workspaces") {
+      get {
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListAllWorkspaces)
+      }
     }
   }
 }
