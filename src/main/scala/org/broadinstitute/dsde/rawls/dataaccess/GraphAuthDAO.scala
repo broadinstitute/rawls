@@ -180,7 +180,7 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
       // user -> group -> ...some other groups... -> group -> workspace access map
       //Multiple paths implies that the user belongs to multiple groups associated with the workspace.
       val accessMapPaths =
-        userPipeline(db, user).as("vtx").in()
+        userPipeline(db, user).as("vtx").inE().outV()
           .loop(
             "vtx", //start point of loop
             or(isVertexOfClass(VertexSchema.Group), isVertexOfClass(VertexSchema.Map)), //loop condition: walk while vertex is on an acl path (group or a list which looks like map)
@@ -191,26 +191,27 @@ class GraphAuthDAO extends AuthDAO with GraphDAO {
       //The edge label between the group and the workspace access map corresponds to the access level for the group.
       //It is possible for there to be more than 1 access level for a user for a workspace
       //Group the paths by workspace then take the max access level for each workspace
-      val accessByWorkspace = accessMapPaths.toList.groupBy(path => loadObject[Workspace](path.last.asInstanceOf[Vertex]))
+
+      val workspaceWithAccessLevel = accessMapPaths.toList.map(p => p.reverse.toList).collect {
+        case (workspace: Vertex) :: (mapTypeEdge: Edge) :: (accessMap: Vertex) :: (accessLevelEdge: Edge) :: (group: Vertex) :: tail
+          if EdgeSchema.stripEdgeRelation(mapTypeEdge.getLabel) == "realmACLs" || EdgeSchema.stripEdgeRelation(mapTypeEdge.getLabel) == "accessLevels" =>
+          val accessLevel = WorkspaceAccessLevels.withName(EdgeSchema.stripEdgeRelation(accessLevelEdge.getLabel))
+          (workspace, accessLevel)
+      }
+
+      val accessByWorkspace = workspaceWithAccessLevel.groupBy(t => loadObject[Workspace](t._1))
       val accessLevels = accessByWorkspace map { case (workspace, paths) =>
         paths.foldLeft(WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.NoAccess))({ (maxAccessLevel, path) =>
-          val reversePath = path.reverseIterator
-          reversePath.next() // remove workspace vertex
-          val accessMap = reversePath.next().asInstanceOf[Vertex]
-          val group = reversePath.next().asInstanceOf[Vertex]
-
-          val accessLabel = accessMap.getEdges(Direction.OUT).filter(_.getVertex(Direction.IN) == group).head.getLabel
-          val accessLevel = WorkspaceAccessLevels.withName(EdgeSchema.stripEdgeRelation(accessLabel))
 
           //the logic works as follows: if the workspace has no realm, then we proceed as usual
           //if the workspace has a realm, we check to see if the user is in that realm group. if they aren't return NoAccess
           //if they are in the realm group, return their normal access level
           workspace.realm match {
-            case None => WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.max(accessLevel, maxAccessLevel.accessLevel))
+            case None => WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.max(path._2, maxAccessLevel.accessLevel))
             case Some(realmGroup) => {
               loadGroupIfMember(realmGroup, user, txn) match {
                 case None => WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
-                case Some(_) => WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.max(accessLevel, maxAccessLevel.accessLevel))
+                case Some(_) => WorkspacePermissionsPair(workspace.workspaceId, WorkspaceAccessLevels.max(path._2, maxAccessLevel.accessLevel))
               }
             }
           }
