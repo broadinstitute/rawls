@@ -403,8 +403,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader)), response) {
-          responseAs[RawlsUserInfoList]
+        assertResult(Set(userOwner, userWriter, userReader), response) {
+          responseAs[RawlsUserInfoList].userInfoList.toSet
         }
       }
   }
@@ -430,8 +430,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader, user1, user2, user3)), response) {
-          responseAs[RawlsUserInfoList]
+        assertResult(Set(userOwner, userWriter, userReader, user1, user2, user3), response) {
+          responseAs[RawlsUserInfoList].userInfoList.toSet
         }
       }
   }
@@ -674,15 +674,20 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(WorkspaceStatus(WorkspaceName(testData.workspace.namespace, testData.workspace.name),
           Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
-            "GOOGLE_GROUP: dummy@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: dummy@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
             "GOOGLE_USER_ACCESS_LEVEL: dummy@example.com" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND"))) {
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: dummy@example.com" -> "FOUND"
+          ))) {
           responseAs[WorkspaceStatus]
         }
       }

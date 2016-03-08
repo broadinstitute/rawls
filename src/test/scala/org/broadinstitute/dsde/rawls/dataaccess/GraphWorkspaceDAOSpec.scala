@@ -23,7 +23,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         lastModified = testDate,
         createdBy = "Barack Obama",
         attributes = Map("workspace_attrib" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
 
       workspaceDAO.save(workspace2, txn)
@@ -39,13 +40,14 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
     }
   }
 
-  it should "save a new workspace with a realm" in withDefaultTestDatabase { dataSource =>
+  it should "save a new workspace with a realm" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
       authDAO.saveUser(user, txn)
       val secretGroup = makeRawlsGroup("SecretRealm", Set(user), Set.empty)
       authDAO.saveGroup(secretGroup, txn)
       val secretGroupRef = RawlsGroupRef(groupName = secretGroup.groupName)
+
       val secretWorkspace = Workspace(
         namespace = testData.wsName.namespace,
         name = testData.wsName.name,
@@ -56,24 +58,17 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         lastModified = testDate,
         createdBy = "Secret User",
         attributes = Map("workspace_attrib" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
       workspaceDAO.save(secretWorkspace, txn)
-      val savedWorkspace = workspaceDAO.findById(secretWorkspace.workspaceId, txn).get.workspace
-      assert {
-        savedWorkspace.name == secretWorkspace.name &&
-            savedWorkspace.namespace == secretWorkspace.namespace &&
-            savedWorkspace.bucketName == secretWorkspace.bucketName &&
-            savedWorkspace.createdBy == secretWorkspace.createdBy &&
-            savedWorkspace.createdDate == testDate &&
-            savedWorkspace.accessLevels == secretWorkspace.accessLevels &&
-            savedWorkspace.attributes == secretWorkspace.attributes &&
-            savedWorkspace.realm == secretWorkspace.realm
+      assertResult(secretWorkspace) {
+        workspaceDAO.findById(secretWorkspace.workspaceId, txn).get.workspace.copy(lastModified = testDate)
       }
     }
   }
 
-  it should "fail to save a new workspace with a missing realm" in withDefaultTestDatabase { dataSource =>
+  it should "fail to save a new workspace with a missing realm" in withEmptyTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
       val secretGroup = makeRawlsGroup("SecretRealm", Set(user), Set.empty)
@@ -87,7 +82,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         lastModified = testDate,
         createdBy = "Secret User",
         attributes = Map("workspace_attrib" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
 
       intercept[RawlsException] {
@@ -153,7 +149,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map("dots.dots.more.dots" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
 
       intercept[RawlsException] {
@@ -187,7 +184,8 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
         lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map(reserved -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
       dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
         withWorkspaceContext(testData.workspace, txn) { context =>

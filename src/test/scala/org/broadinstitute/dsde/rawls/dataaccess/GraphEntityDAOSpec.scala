@@ -35,7 +35,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
 
   class BugTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
+    val workspace = new Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map("aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")))
@@ -123,6 +123,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
       Map.empty,
+      Map.empty,
       Map.empty
     )
 
@@ -135,6 +136,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
       createdDate = DateTime.now,
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
+      Map.empty,
       Map.empty,
       Map.empty
     )
@@ -339,6 +341,7 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     createdDate = DateTime.now,
     lastModified = DateTime.now,
     createdBy = "Joe Biden",
+    Map.empty,
     Map.empty,
     Map.empty
   )
