@@ -52,7 +52,8 @@ object DataMigration extends LazyLogging {
   }
 
   val dataMigrations: Seq[DataMigration] = Seq(
-    AddWorkspaceGroupEmailMigration
+    AddWorkspaceGroupEmailMigration,
+    AddWorkspaceRealmACLs
   )
 }
 
