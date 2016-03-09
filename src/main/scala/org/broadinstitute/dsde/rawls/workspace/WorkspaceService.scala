@@ -578,7 +578,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        Future.successful(RequestComplete(StatusCodes.OK, containerDAO.entityDAO.getEntityTypes(workspaceContext, txn).toSeq))
+        val typesWithCounts = containerDAO.entityDAO.getEntityTypes(workspaceContext, txn).toSeq.map { entityType =>
+          entityType -> containerDAO.entityDAO.getEntityTypeCount(workspaceContext, entityType, txn)
+        }.toMap
+        Future.successful(RequestComplete(StatusCodes.OK, typesWithCounts))
       }
     }
 
