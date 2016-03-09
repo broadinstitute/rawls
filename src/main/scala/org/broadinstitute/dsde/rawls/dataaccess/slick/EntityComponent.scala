@@ -149,6 +149,10 @@ trait EntityComponent {
       filter(_.workspaceId === workspaceContext.workspaceId).map(_.entityType).distinct.result
     }
 
+    def getEntityTypeCount(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[Int] = {
+      filter(_.entityType === entityType).countDistinct.result
+    }
+
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
       unmarshalEntities(joinOnAttributesAndRefs(findEntityByWorkspace(workspaceContext.workspaceId)))
     }

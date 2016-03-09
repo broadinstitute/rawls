@@ -65,6 +65,27 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
+  it should "correctly count entities of a certain type" in withDefaultTestDatabase {
+
+    withWorkspaceContext(testData.workspace) { context =>
+
+      val bernie = Entity("Bernie", "Politician", Map.empty)
+      val obama = Entity("Obama", "Politician", Map.empty)
+      val biden = Entity("Biden", "Politician", Map.empty)
+      val trump = Entity("Trump", "Politician", Map.empty)
+
+      runAndWait(entityQuery.save(context, bernie))
+      runAndWait(entityQuery.save(context, obama))
+      runAndWait(entityQuery.save(context, biden))
+      runAndWait(entityQuery.save(context, trump))
+
+      assertResult(4) {
+        runAndWait(entityQuery.getEntityTypeCount(context, "Politician"))
+      }
+    }
+
+  }
+
   it should "list all entities of all entity types" in withDefaultTestDatabase { 
     
       withWorkspaceContext(testData.workspace) { context =>
