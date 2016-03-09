@@ -33,6 +33,27 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
+  it should "correctly count entities of a certain type" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        val bernie = Entity("Bernie", "Politician", Map.empty)
+        val obama = Entity("Obama", "Politician", Map.empty)
+        val biden = Entity("Biden", "Politician", Map.empty)
+        val trump = Entity("Trump", "Politician", Map.empty)
+
+        entityDAO.save(context, bernie, txn)
+        entityDAO.save(context, obama, txn)
+        entityDAO.save(context, biden, txn)
+        entityDAO.save(context, trump, txn)
+
+        assertResult(4) {
+          dao.getEntityTypeCount(context, "Politician", txn)
+        }
+
+      }
+    }
+  }
+
   class BugTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
     val workspace = new Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
