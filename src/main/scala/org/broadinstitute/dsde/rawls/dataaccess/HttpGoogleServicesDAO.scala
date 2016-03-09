@@ -203,7 +203,7 @@ class HttpGoogleServicesDAO(
 
   def intersectionGroupName(workspaceId: String, realmGroupRef: RawlsGroupRef, accessLevel: WorkspaceAccessLevel) = {
     val realm = realmGroupRef.groupName.value
-    s"${realm}-${workspaceId}-${accessLevel.toString}"
+    s"I_${workspaceId}-${accessLevel.toString}"
   }
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String] = {
