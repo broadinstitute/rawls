@@ -150,7 +150,7 @@ trait EntityComponent {
     }
 
     def getEntityTypeCount(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[Int] = {
-      filter(_.entityType === entityType).countDistinct
+      filter(_.entityType === entityType).countDistinct.result
     }
 
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {

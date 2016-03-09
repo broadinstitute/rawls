@@ -74,13 +74,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       val biden = Entity("Biden", "Politician", Map.empty)
       val trump = Entity("Trump", "Politician", Map.empty)
 
-      runAndWait(entityQuery.save(workspaceContext, bernie))
-      runAndWait(entityQuery.save(workspaceContext, obama))
-      runAndWait(entityQuery.save(workspaceContext, biden))
-      runAndWait(entityQuery.save(workspaceContext, trump))
+      runAndWait(entityQuery.save(context, bernie))
+      runAndWait(entityQuery.save(context, obama))
+      runAndWait(entityQuery.save(context, biden))
+      runAndWait(entityQuery.save(context, trump))
 
       assertResult(4) {
-        runAndWait(entityQuery.getEntityTypes(context)).toSet
+        runAndWait(entityQuery.getEntityTypeCount(context, "Politician"))
       }
     }
 
