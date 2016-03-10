@@ -12,11 +12,13 @@ import spray.http.HttpCookie
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Try, Success}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.scalatest.BeforeAndAfterAll
 
 /**
  * Created by dvoet on 7/1/15.
  */
-class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with OrientDbTestFixture {
+class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll {
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
   val testDbName = "SubmissionMonitorSpec"
@@ -44,11 +46,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     wfActors
   }
 
-  "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource =>
+  "SubmissionMonitor" should "mark unknown workflows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(
       testData.wsName,
       testData.submission1.submissionId,
-      containerDAO,
       dataSource,
       10 milliseconds,
       1 second,
@@ -58,16 +59,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     system.actorSelection(monitorRef.path / "*").tell(PoisonPill, testActor)
     expectMsgClass(15 seconds, classOf[Terminated])
     assertResult(true) {
-      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
-          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Unknown)
-        }
-      }
+      val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+      submission.get.workflows.forall(_.status == WorkflowStatuses.Unknown)
     }
   }
 
-  it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource =>
-	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+  it should "transition to running then completed then terminate" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+	  val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
 	  watch(monitorRef)
 
 	  val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
@@ -78,11 +76,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 	  }
 
 	  awaitCond({
-      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
-          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Running)
-        }
-      }
+	    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+	    submission.get.workflows.forall(_.status == WorkflowStatuses.Running)
 	  }, 15 seconds)
 
 	  testData.submission1.workflows.foreach { workflow =>
@@ -91,23 +86,21 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
 	  expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        assertResult(true) {
-          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
-        }
-        testData.submission1.workflows.foreach { workflow =>
-          assertResult(Some(AttributeString(workflow.workflowId))) {
-            entityDAO.get(context, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName, txn).get.attributes.get("test")
-          }
+      assertResult(true) {
+  	    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+  	    submission.get.workflows.forall(_.status == WorkflowStatuses.Succeeded)
+      }
+      testData.submission1.workflows.foreach { workflow =>
+        assertResult(Some(AttributeString(workflow.workflowId))) {
+          val entity = runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName))
+          entity.get.attributes.get("test")
         }
       }
-    }
     unwatch(monitorRef)
   }
 
-  it should "transition to running then aborting then aborted" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+  it should "transition to running then aborting then aborted" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
@@ -118,7 +111,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
 
     awaitCond({
-      dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      dataSource.inTransaction { txn =>
         withWorkspaceContext(testData.workspace, txn) { context =>
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborting)
         }
@@ -126,7 +119,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }, 15 seconds)
 
     //Set the current status of the submission to Aborting
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+    dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>
         submissionDAO.update(context, testData.submission1.copy(status = SubmissionStatuses.Aborting), txn)
       }
@@ -139,7 +132,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+    dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>
         assertResult(true) {
           submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborted)
@@ -160,8 +153,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
 
-  it should "save workflows with error messages" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+  it should "save workflows with error messages" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submission1.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submission1, monitorRef)
@@ -172,7 +165,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+    dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { context =>
         submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
           assertResult(WorkflowStatuses.Failed) {
@@ -187,8 +180,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource =>
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+  it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionTerminateTest.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionTerminateTest, monitorRef)
@@ -204,9 +197,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     unwatch(monitorRef)
   }
 
-  it should "update attributes on entities" in withDefaultTestDatabase { dataSource =>
+  it should "update attributes on entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateEntity.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionUpdateEntity, monitorRef)
@@ -220,7 +213,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+    dataSource.inTransaction { txn =>
       withWorkspaceContext(testData.workspace, txn) { wsCtx =>
         val entity = entityDAO.get(
           wsCtx,
@@ -235,9 +228,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     unwatch(monitorRef)
   }
 
-  it should "update attributes on workspaces" in withDefaultTestDatabase { dataSource =>
+  it should "update attributes on workspaces" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     //don't use methodConfigEntityUpdate. use a different method config where the output name is called o1 and maps to an attribute value of this.foo
-    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace.submissionId, containerDAO, dataSource, 10 milliseconds, 1 second, TestActor.props()))
+    val monitorRef = TestActorRef[SubmissionMonitor](SubmissionMonitor.props(testData.wsName, testData.submissionUpdateWorkspace.submissionId, dataSource, 10 milliseconds, 1 second, TestActor.props()))
     watch(monitorRef)
 
     val wfActors = waitForWorkflowActors(testData.submissionUpdateWorkspace, monitorRef)
@@ -251,7 +244,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+    dataSource.inTransaction { txn =>
       val workspace = workspaceDAO.loadContext(testData.wsName, txn).get.workspace
       assertResult(AttributeString("foo"), workspace.attributes) {
         workspace.attributes.getOrElse("myAttribute", None)

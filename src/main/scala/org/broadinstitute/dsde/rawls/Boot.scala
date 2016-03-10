@@ -86,9 +86,8 @@ object Boot extends App {
     DataMigration.migrateData(conf, containerDAO, dataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      dataSource
+      slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
