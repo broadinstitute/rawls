@@ -18,7 +18,7 @@ import scala.concurrent.Await
 /**
  * Created by dvoet on 2/3/16.
  */
-trait TestDriverComponent extends DriverComponent with AllComponents {
+trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 

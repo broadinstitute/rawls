@@ -117,6 +117,30 @@ trait RawlsGroupComponent {
       (findSubgroupsByGroupName(groupRef.groupName.value) join
         rawlsGroupQuery on (_.childGroupName === _.groupName) map (_._2.groupEmail)).result.map(_.map(RawlsGroupEmail))
     }
+    
+    def listGroupsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsGroupRef]] = {
+      val firstLevel = for {
+        groupUser <- groupUsersQuery if (groupUser.userSubjectId === userRef.userSubjectId.value)
+        group <- rawlsGroupQuery if (groupUser.groupName === group.groupName)
+      } yield group
+      
+      firstLevel.result.map(_.toSet).flatMap(groups => listParentGroupsRecursive(groups, groups).map(_.map(groupRec => RawlsGroupRef(RawlsGroupName(groupRec.groupName)))))
+    }
+    
+    private def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
+      if (groups.isEmpty) DBIO.successful(cumulativeGroups)
+      else {
+        val nextLevelUp = for {
+          groupSubGroup <- groupSubgroupsQuery if (groupSubGroup.childGroupName.inSetBind(groups.map(_.groupName)))
+          parentGroup <- rawlsGroupQuery if (groupSubGroup.parentGroupName === parentGroup.groupName)
+        } yield parentGroup
+        
+        nextLevelUp.result.flatMap { nextGroups =>
+          val nextCumulativeGroups = cumulativeGroups ++ nextGroups
+          listParentGroupsRecursive(nextGroups.toSet -- nextCumulativeGroups, nextCumulativeGroups)
+        }
+      }
+    }
 
     private def checkMembershipRecursively(userRef: RawlsUserRef, previouslyCheckedGroups: Set[RawlsGroupRef], groupsToCheck: Set[RawlsGroupRef]): ReadAction[Boolean] = {
       groupsToCheck.headOption match {

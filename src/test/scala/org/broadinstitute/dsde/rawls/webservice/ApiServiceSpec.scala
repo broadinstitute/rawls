@@ -65,8 +65,7 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     )_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
+      null, //dataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,

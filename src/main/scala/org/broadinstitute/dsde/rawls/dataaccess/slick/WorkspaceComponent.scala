@@ -2,12 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 import slick.profile.FixedSqlAction
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 
 /**
  * Created by dvoet on 2/4/16.
@@ -26,7 +26,7 @@ case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: Long)
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String)
 
 trait WorkspaceComponent {
-  this: DriverComponent with AttributeComponent with RawlsGroupComponent with EntityComponent =>
+  this: DriverComponent with AttributeComponent with RawlsGroupComponent with RawlsUserComponent with EntityComponent =>
 
   import driver.api._
 
@@ -127,6 +127,26 @@ trait WorkspaceComponent {
           }
       }
     }
+    
+    def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
+      val accessAndUserEmail = (for {
+        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId)
+        group <- rawlsGroupQuery if (access.groupName === group.groupName)
+        userGroup <- groupUsersQuery if (group.groupName === userGroup.groupName)
+        user <- rawlsUserQuery if (user.userSubjectId === userGroup.userSubjectId)
+      } yield (access, user)).map { case (access, user) => (access.accessLevel, user.userEmail) }
+
+      val accessAndSubGroupEmail = (for {
+        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId)
+        group <- rawlsGroupQuery if (access.groupName === group.groupName)
+        subGroupGroup <- groupSubgroupsQuery if (group.groupName === subGroupGroup.parentGroupName)
+        subGroup <- rawlsGroupQuery if (subGroup.groupName === subGroupGroup.childGroupName)
+      } yield (access, subGroup)).map { case (access, subGroup) => (access.accessLevel, subGroup.groupEmail) }
+
+      (accessAndUserEmail union accessAndSubGroupEmail).result.map(_.map { case (access, email) => 
+        (email, WorkspaceAccessLevels.withName(access))
+      })
+    }
 
     private def workspaceAttributes(workspaceId: UUID) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId === workspaceId
@@ -155,6 +175,14 @@ trait WorkspaceComponent {
 
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
+    }
+    
+    def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
+      val query = for {
+        accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)))
+        workspace <- workspaceQuery if (workspace.id === accessLevel.workspaceId)
+      } yield (workspace, accessLevel)
+      query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString(), WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {

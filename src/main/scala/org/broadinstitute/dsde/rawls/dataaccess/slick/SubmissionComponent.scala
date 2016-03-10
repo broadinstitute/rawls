@@ -96,6 +96,17 @@ trait SubmissionComponent {
       }))
     }
 
+    def listWithUser(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(Submission, RawlsUser)]] = {
+      val query = for {
+        submissionRec <- findByWorkspaceId(workspaceContext.workspaceId)
+        userRec <- rawlsUserQuery if (submissionRec.submitterId === userRec.userSubjectId)
+      } yield (submissionRec, userRec)
+      
+      query.result.flatMap(recs => DBIO.sequence(recs.map { case (submissionRec, userRec) =>
+        loadSubmission(submissionRec.id).map(sub => (sub.get, rawlsUserQuery.unmarshalRawlsUser(userRec)))
+      }))
+    }
+
     /* creates a submission and associated workflows in a workspace */
     def create(workspaceContext: SlickWorkspaceContext, submission: Submission): ReadWriteAction[Submission] = {
 

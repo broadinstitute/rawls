@@ -59,8 +59,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     )_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
+      null, //dataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,

@@ -1,12 +1,16 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import org.broadinstitute.dsde.rawls.dataaccess.{DataSource, RawlsTransaction}
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{WordSpecLike, Matchers}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import java.util.UUID
 
-class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbTestFixture {
+class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
+  import driver.api._
+
   val littleWdl =
     """
       |task t1 {
@@ -44,7 +48,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
 
-  val workspace = new Workspace("workspaces", "test_workspace", "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
+  val workspace = new Workspace("workspaces", "test_workspace", UUID.randomUUID().toString(), "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
 
   val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
@@ -73,40 +77,38 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with OrientDbT
     MethodRepoMethod( "method_namespace", "test_method", 1))
 
   class ConfigData extends TestData {
-    override def save(txn: RawlsTransaction): Unit = {
-      workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
-        entityDAO.save(context, sampleGood, txn)
-        entityDAO.save(context, sampleMissingValue, txn)
-        entityDAO.save(context, sampleSet, txn)
-        methodConfigDAO.save(context, configGood, txn)
-        methodConfigDAO.save(context, configMissingExpr, txn)
-        methodConfigDAO.save(context, configSampleSet, txn)
-      }
+    override def save() = {
+      DBIO.seq(
+        workspaceQuery.save(workspace),
+        withWorkspaceContext(workspace) { context =>
+          DBIO.seq(
+            entityQuery.save(context, sampleGood),
+            entityQuery.save(context, sampleMissingValue),
+            entityQuery.save(context, sampleSet),
+            methodConfigurationQuery.save(context, configGood),
+            methodConfigurationQuery.save(context, configMissingExpr),
+            methodConfigurationQuery.save(context, configSampleSet)
+          )
+        }
+      )
     }
   }
   val configData = new ConfigData()
 
-  def withConfigData(testCode:DataSource => Any): Unit = {
-    withCustomTestDatabase(configData) { dataSource =>
-      testCode(dataSource)
-    }
+  def withConfigData(testCode: => Any): Unit = {
+    withCustomTestDatabase(configData)(testCode)
   }
 
   "MethodConfigResolver" should {
-    "resolve method config inputs" in withConfigData { dataSource =>
-      dataSource.inTransaction(readLocks=Set(workspace.toWorkspaceName)) { txn =>
-        withWorkspaceContext(workspace, txn) { context =>
-          // success cases
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configSampleSet, sampleSet, arrayWdl) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
+    "resolve method config inputs" in withConfigData {
+      val context = new SlickWorkspaceContext(workspace)
+      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl, this)) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
+      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
+      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
 
-          // failure cases
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleMissingValue, littleWdl) should matchPattern { case Left(Seq(_)) => }
-          MethodConfigResolver.resolveInputsOrGatherErrors(context, configMissingExpr, sampleGood, littleWdl) should matchPattern { case Left(Seq(_)) => }
-        }
-      }
+      // failure cases
+      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleMissingValue, littleWdl, this)) should matchPattern { case Left(Seq(_)) => }
+      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configMissingExpr, sampleGood, littleWdl, this)) should matchPattern { case Left(Seq(_)) => }
     }
   }
 }

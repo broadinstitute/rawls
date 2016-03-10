@@ -125,8 +125,7 @@ trait IntegrationTestBase extends FlatSpec with ScalatestRouteTest with Matchers
     val userServiceConstructor = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
+      slickDataSource,
       new HttpMethodRepoDAO(methodRepoServer),
       new HttpExecutionServiceDAO(executionServiceServer),
       gcsDAO,

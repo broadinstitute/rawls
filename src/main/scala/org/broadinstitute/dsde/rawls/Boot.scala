@@ -97,8 +97,7 @@ object Boot extends App {
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val service = system.actorOf(RawlsApiServiceActor.props(
-                    WorkspaceService.constructor(dataSource,
-                                                  containerDAO,
+                    WorkspaceService.constructor(slickDataSource,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),

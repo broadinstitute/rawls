@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.user
 
-import _root_.slick.dbio._
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
@@ -67,6 +66,8 @@ object UserService {
 }
 
 class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+  import dataSource.dataAccess.driver.api._
+
   override def receive = {
     case SetRefreshToken(token) => setRefreshToken(token) pipeTo sender
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender

@@ -50,28 +50,28 @@ trait RawlsUserComponent {
         }
       }
     }
-  }
-
-  private def loadCommon(query: RawlsUserQuery): ReadAction[Option[RawlsUser]] = {
-    uniqueResult[RawlsUserRecord](query).map {
-      case None => None
-      case Some(rec) => Option(unmarshalRawlsUser(rec))
+    
+    private def loadCommon(query: RawlsUserQuery): ReadAction[Option[RawlsUser]] = {
+      uniqueResult[RawlsUserRecord](query).map {
+        case None => None
+        case Some(rec) => Option(unmarshalRawlsUser(rec))
+      }
     }
-  }
-
-  private def findUserBySubjectId(subjId: String): RawlsUserQuery = {
-    rawlsUserQuery.filter(_.userSubjectId === subjId)
-  }
-
-  private def findUserByEmail(email: String): RawlsUserQuery = {
-    rawlsUserQuery.filter(_.userEmail === email)
-  }
-
-  private def marshalRawlsUser(user: RawlsUser): RawlsUserRecord = {
-    RawlsUserRecord(user.userSubjectId.value, user.userEmail.value)
-  }
-
-  protected def unmarshalRawlsUser(record: RawlsUserRecord): RawlsUser = {
-    RawlsUser(RawlsUserSubjectId(record.userSubjectId), RawlsUserEmail(record.userEmail))
+  
+    def findUserBySubjectId(subjId: String): RawlsUserQuery = {
+      rawlsUserQuery.filter(_.userSubjectId === subjId)
+    }
+  
+    private def findUserByEmail(email: String): RawlsUserQuery = {
+      rawlsUserQuery.filter(_.userEmail === email)
+    }
+  
+    private def marshalRawlsUser(user: RawlsUser): RawlsUserRecord = {
+      RawlsUserRecord(user.userSubjectId.value, user.userEmail.value)
+    }
+  
+    def unmarshalRawlsUser(record: RawlsUserRecord): RawlsUser = {
+      RawlsUser(RawlsUserSubjectId(record.userSubjectId), RawlsUserEmail(record.userEmail))
+    }
   }
 }

@@ -155,8 +155,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       )_
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
-        dataSource,
-        containerDAO,
+        null, //dataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
         execService,
         gcsDAO,

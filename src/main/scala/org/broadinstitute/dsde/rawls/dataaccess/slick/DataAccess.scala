@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionParser
+import slick.driver.JdbcProfile
 
 trait DataAccess
   extends PendingBucketDeletionComponent
@@ -16,7 +17,9 @@ trait DataAccess
   with SlickExpressionParser {
 
   this: DriverComponent =>
-
+    
+  val driver: JdbcProfile
+  
   import driver.api._
 
   lazy val allSchemas =
