@@ -110,20 +110,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       wfActors(workflow.workflowId).tell(SubmissionMonitor.WorkflowStatusChange(workflow.copy(status = WorkflowStatuses.Aborting), None), testActor)
     }
 
-    awaitCond({
-      dataSource.inTransaction { txn =>
-        withWorkspaceContext(testData.workspace, txn) { context =>
-          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborting)
-        }
-      }
-    }, 15 seconds)
+	  awaitCond({
+	    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+	    submission.get.workflows.forall(_.status == WorkflowStatuses.Aborting)
+	  }, 15 seconds)
 
     //Set the current status of the submission to Aborting
-    dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        submissionDAO.update(context, testData.submission1.copy(status = SubmissionStatuses.Aborting), txn)
-      }
-    }
+	  runAndWait(submissionQuery.updateStatus(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId, SubmissionStatuses.Aborting))
 
     //Tell all of the workflows to move to Aborted
     testData.submission1.workflows.foreach { workflow =>
@@ -132,21 +125,17 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        assertResult(true) {
-          submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Aborted)
-        }
-        assertResult(SubmissionStatuses.Aborted) {
-          withWorkspaceContext(testData.workspace, txn) { context =>
-            submissionDAO.get(context, testData.submission1.submissionId, txn).get.status
-          }
-        }
-        testData.submission1.workflows.foreach { workflow =>
-          assertResult(Some(AttributeString(workflow.workflowId))) {
-            entityDAO.get(context, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName, txn).get.attributes.get("test")
-          }
-        }
+    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+    assertResult(true) {
+	    submission.get.workflows.forall(_.status == WorkflowStatuses.Aborted)
+    }
+    assertResult(SubmissionStatuses.Aborted) {
+	    submission.get.status
+    }
+    testData.submission1.workflows.foreach { workflow =>
+      assertResult(Some(AttributeString(workflow.workflowId))) {
+  	    val entity = runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName))
+  	    entity.get.attributes.get("test")
       }
     }
     unwatch(monitorRef)
@@ -165,19 +154,16 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { context =>
-        submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.foreach { workflow =>
-          assertResult(WorkflowStatuses.Failed) {
-            workflow.status
-          }
-          assertResult(Seq(AttributeString("message"))) {
-            workflow.messages
-          }
-        }
-        submissionDAO.get(context, testData.submission1.submissionId, txn).get.workflows.forall(_.status == WorkflowStatuses.Failed)
+    val submission = runAndWait(submissionQuery.get(SlickWorkspaceContext(testData.workspace), testData.submission1.submissionId))
+    submission.get.workflows.foreach { workflow =>
+      assertResult(WorkflowStatuses.Failed) {
+        workflow.status
+      }
+      assertResult(Seq(AttributeString("message"))) {
+        workflow.messages
       }
     }
+    submission.get.workflows.forall(_.status == WorkflowStatuses.Failed)
   }
 
   it should "terminate when all workflows are done" in withDefaultTestDatabase { dataSource: SlickDataSource =>
@@ -213,17 +199,13 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction { txn =>
-      withWorkspaceContext(testData.workspace, txn) { wsCtx =>
-        val entity = entityDAO.get(
-          wsCtx,
-          testData.submissionUpdateEntity.submissionEntity.get.entityType,
-          testData.submissionUpdateEntity.submissionEntity.get.entityName,
-          txn).get
-        assertResult(AttributeString("foo"), entity.attributes) {
-          entity.attributes.getOrElse("myAttribute", None)
-        }
-      }
+    val entity = runAndWait(entityQuery.get(
+      SlickWorkspaceContext(testData.workspace),
+      testData.submissionUpdateEntity.submissionEntity.get.entityType,
+      testData.submissionUpdateEntity.submissionEntity.get.entityName)).get
+      
+    assertResult(AttributeString("foo"), entity.attributes) {
+      entity.attributes.getOrElse("myAttribute", None)
     }
     unwatch(monitorRef)
   }
@@ -244,11 +226,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     expectMsgClass(15 seconds, classOf[Terminated])
 
-    dataSource.inTransaction { txn =>
-      val workspace = workspaceDAO.loadContext(testData.wsName, txn).get.workspace
-      assertResult(AttributeString("foo"), workspace.attributes) {
-        workspace.attributes.getOrElse("myAttribute", None)
-      }
+    val workspace = runAndWait(workspaceQuery.findById(testData.workspace.workspaceId)).get
+    assertResult(AttributeString("foo"), workspace.attributes) {
+      workspace.attributes.getOrElse("myAttribute", None)
     }
     unwatch(monitorRef)
   }

@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -13,6 +12,7 @@ import spray.http._
 import spray.json._
 import spray.routing._
 import scala.concurrent.ExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 
 /**
  * Created by dvoet on 4/24/15.
@@ -32,9 +32,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -44,25 +44,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
   def withTestDataApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
   def withEmptyWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(new EmptyWorkspace) { dataSource =>
+    withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
   def withLockedWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(new LockedWorkspace) { dataSource =>
+    withCustomTestDatabase(new LockedWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
@@ -157,13 +157,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   val testWorkspaces = new TestWorkspaces
 
   def withTestWorkspacesApiServices(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(testWorkspaces) { dataSource =>
+    withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
   def withTestWorkspacesApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(testWorkspaces) { dataSource =>
+    withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
@@ -181,7 +181,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction() { txn =>
+        services.dataSource.inTransaction { dataAccess =>
           assertResult(newWorkspace) {
             val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
             WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
@@ -205,7 +205,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction() { txn =>
+        services.dataSource.inTransaction { dataAccess =>
           assertResult(
             WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
           ){
@@ -234,7 +234,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-      services.dataSource.inTransaction() { txn =>
+      services.dataSource.inTransaction { dataAccess =>
         assertResult(None) {
           workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn)
         }
@@ -249,7 +249,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction() { txn =>
+        services.dataSource.inTransaction { dataAccess =>
           assertResult(Set(
             WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
             WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
@@ -299,7 +299,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          services.dataSource.inTransaction() { txn =>
+          services.dataSource.inTransaction { dataAccess =>
             workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
@@ -313,7 +313,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(None) {
-          services.dataSource.inTransaction() { txn =>
+          services.dataSource.inTransaction { dataAccess =>
             workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
           }
         }
@@ -492,7 +492,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser("owner-access") { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
     }
     import WorkspaceACLJsonSupport._
@@ -645,7 +645,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl"), txn)
     }
     val newWorkspace = WorkspaceRequest(

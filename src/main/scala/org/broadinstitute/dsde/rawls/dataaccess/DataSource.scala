@@ -56,7 +56,7 @@ object DataSource {
   }
 }
 
-class SlickDataSource(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
   val dataAccess = new DataAccessComponent(databaseConfig.driver)
   import dataAccess.driver.api._
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {

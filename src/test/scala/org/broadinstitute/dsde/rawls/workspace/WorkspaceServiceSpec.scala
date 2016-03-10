@@ -186,7 +186,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "retrieve ACLs" in withTestDataServices { services =>
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
       //ACLs into the workspace manually.
       val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
@@ -222,7 +222,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "patch ACLs" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveUser(user, txn)
       containerDAO.authDAO.saveGroup(group, txn)
     }
@@ -299,7 +299,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "fail to patch ACLs if a user doesn't exist" in withTestDataServices { services =>
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveGroup(group, txn)
     }
     testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }

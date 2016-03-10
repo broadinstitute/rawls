@@ -19,9 +19,9 @@ import scala.collection.JavaConversions._
  * Created by dvoet on 4/24/15.
  */
 class UserApiServiceSpec extends ApiServiceSpec {
-  case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices(dataSource: DataSource, user: String = "test_token")(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: SlickDataSource, user: String = "test_token")(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -31,7 +31,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
@@ -62,13 +62,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource =>
+  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
-      dataSource.inTransaction() { txn =>
+      dataSource.inTransaction { dataAccess =>
         txn.withGraph { graph =>
           assert {
             getMatchingUserVertices(graph, user).isEmpty
@@ -94,7 +94,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      dataSource.inTransaction() { txn =>
+      dataSource.inTransaction { dataAccess =>
         txn.withGraph { graph =>
           assert {
             getMatchingUserVertices(graph, user).nonEmpty
@@ -115,7 +115,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "enable/disable user" in withEmptyTestDatabase { dataSource =>
+  it should "enable/disable user" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -179,7 +179,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveUser(user, txn)
     }
 
@@ -202,7 +202,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")
 
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveUser(billingUser, txn)
     }
 
@@ -238,7 +238,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
     val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
     val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveGroup(group3, txn)
       containerDAO.authDAO.saveGroup(group2, txn)
       containerDAO.authDAO.saveGroup(group1, txn)
@@ -269,7 +269,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
     val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-    services.dataSource.inTransaction() { txn =>
+    services.dataSource.inTransaction { dataAccess =>
       containerDAO.authDAO.saveGroup(group3, txn)
       containerDAO.authDAO.saveGroup(group2, txn)
       containerDAO.authDAO.saveGroup(group1, txn)

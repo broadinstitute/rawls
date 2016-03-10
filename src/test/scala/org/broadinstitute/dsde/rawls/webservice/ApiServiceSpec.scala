@@ -15,9 +15,10 @@ import spray.json._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture with SprayJsonSupport {
+trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with TestDriverComponent with SprayJsonSupport {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -45,14 +46,12 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
-      dataSource,
-      containerDAO,
+      slickDataSource,
       gcsDAO
     ))
 
@@ -65,7 +64,7 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     )_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      null, //dataSource,
+      slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,
