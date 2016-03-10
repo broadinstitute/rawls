@@ -18,8 +18,8 @@ trait EntityComponent {
 
   class EntityTable(tag: Tag) extends Table[EntityRecord](tag, "ENTITY") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def name = column[String]("name")
-    def entityType = column[String]("entity_type")
+    def name = column[String]("name", O.Length(254))
+    def entityType = column[String]("entity_type", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
     def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)

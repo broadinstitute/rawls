@@ -14,8 +14,8 @@ trait RawlsGroupComponent {
   import driver.api._
 
   class RawlsGroupTable(tag: Tag) extends Table[RawlsGroupRecord](tag, "GROUP") {
-    def groupName = column[String]("NAME", O.PrimaryKey)
-    def groupEmail = column[String]("EMAIL")
+    def groupName = column[String]("NAME", O.PrimaryKey, O.Length(254))
+    def groupEmail = column[String]("EMAIL", O.Length(254))
 
     def * = (groupName, groupEmail) <> (RawlsGroupRecord.tupled, RawlsGroupRecord.unapply)
 
@@ -23,8 +23,8 @@ trait RawlsGroupComponent {
   }
 
   class GroupUsersTable(tag: Tag) extends Table[GroupUsersRecord](tag, "GROUP_USERS") {
-    def userSubjectId = column[String]("USER_SUBJECT_ID")
-    def groupName = column[String]("GROUP_NAME")
+    def userSubjectId = column[String]("USER_SUBJECT_ID", O.Length(254))
+    def groupName = column[String]("GROUP_NAME", O.Length(254))
 
     def * = (userSubjectId, groupName) <>(GroupUsersRecord.tupled, GroupUsersRecord.unapply)
 
@@ -34,8 +34,8 @@ trait RawlsGroupComponent {
   }
 
   class GroupSubgroupsTable(tag: Tag) extends Table[GroupSubgroupsRecord](tag, "GROUP_SUBGROUPS") {
-    def parentGroupName = column[String]("PARENT_NAME")
-    def childGroupName = column[String]("CHILD_NAME")
+    def parentGroupName = column[String]("PARENT_NAME", O.Length(254))
+    def childGroupName = column[String]("CHILD_NAME", O.Length(254))
 
     def * = (parentGroupName, childGroupName) <> (GroupSubgroupsRecord.tupled, GroupSubgroupsRecord.unapply)
 

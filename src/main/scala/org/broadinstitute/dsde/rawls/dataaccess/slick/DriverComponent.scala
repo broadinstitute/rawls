@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import java.sql.Timestamp
+
 import org.broadinstitute.dsde.rawls.model.{Attributable, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import slick.driver.JdbcProfile
@@ -10,6 +12,9 @@ import scala.concurrent.ExecutionContext
 trait DriverComponent {
   val driver: JdbcProfile
   implicit val executionContext: ExecutionContext
+
+  // needed by MySQL but not actually used; we will always overwrite
+  val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
 
   import driver.api._
 
