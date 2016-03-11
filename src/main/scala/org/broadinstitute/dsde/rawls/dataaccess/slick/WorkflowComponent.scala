@@ -49,7 +49,9 @@ trait WorkflowComponent {
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
-  }
+
+    def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
+}
 
   class WorkflowMessageTable(tag: Tag) extends Table[WorkflowMessageRecord](tag, "WORKFLOW_MESSAGE") {
     def workflowId = column[Long]("WORKFLOW_ID")
