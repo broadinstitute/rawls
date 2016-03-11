@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.testkit.{TestKit, TestActorRef}
 import akka.util.Timeout
@@ -20,11 +19,11 @@ import spray.http.{StatusCode, StatusCodes}
 import spray.json._
 import scala.collection.immutable.HashMap
 import scala.concurrent.duration._
-
 import scala.concurrent.{Future, Await}
 import scala.util.{Try, Success}
-
-import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.scalatest.BeforeAndAfterAll
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 
 /**
  * Created with IntelliJ IDEA.
@@ -32,7 +31,9 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
  * Date: 07/02/2015
  * Time: 11:06
  */
-class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with OrientDbTestFixture {
+class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll {
+  import driver.api._
+  
   def this() = this(ActorSystem("SubmissionSpec"))
 
   val testDbName = "SubmissionSpec"
@@ -54,7 +55,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   class SubmissionTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val user = RawlsUser(userInfo)
-    val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
+    val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
     val workspace = Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
     val sample1 = Entity("sample1", "Sample",
@@ -119,43 +120,49 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
             "wf.x.four" -> AttributeNumber(4),
             "wf.x.five" -> AttributeNumber(4))))))
 
-    override def save(txn:RawlsTransaction): Unit = {
-      authDAO.saveUser(user, txn)
-      authDAO.saveGroup(ownerGroup, txn)
-      workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
-        entityDAO.save(context, sample1, txn)
-        submissionDAO.save(context, submissionTestAbortMissingWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortMalformedWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortGoodWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortTerminalWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortOneMissingWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortTwoGoodWorkflows, txn)
-      }
+    override def save() = {
+      DBIO.seq(
+        rawlsUserQuery.save(user),
+        rawlsGroupQuery.save(ownerGroup),
+        workspaceQuery.save(workspace),
+        withWorkspaceContext(workspace) { context =>
+          DBIO.seq(
+            entityQuery.save(context, sample1),
+            submissionQuery.create(context, submissionTestAbortMissingWorkflow),
+            submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
+            submissionQuery.create(context, submissionTestAbortGoodWorkflow),
+            submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
+            submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
+            submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows)
+          )
+        }
+      )
     }
   }
 
-  def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit, execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
+  def withDataAndService(
+      testCode: WorkspaceService => Any, 
+      withDataOp: (SlickDataSource => Any) => Unit, 
+      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-        containerDAO,
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-        dataSource
+        slickDataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
 
       val userServiceConstructor = UserService.constructor(
-        null, //dataSource,
+        slickDataSource,
         gcsDAO,
         directoryDAO
       )_
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
-        null, //dataSource,
+        dataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
         execService,
         gcsDAO,

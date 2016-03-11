@@ -298,18 +298,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       }
     }
 
-    withCustomTestDatabase(emptyData)(testCode)
+    withCustomTestDatabaseInternal(emptyData)(testCode)
   }
 
   def withDefaultTestDatabase(testCode: => Any):Unit = {
-    withCustomTestDatabase(testData)(testCode)
+    withCustomTestDatabaseInternal(testData)(testCode)
   }
 
   def withDefaultTestDatabase(testCode:SlickDataSource => Any):Unit = {
-    withCustomTestDatabase(testData)(testCode(slickDataSource))
+    withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
   }
 
-  def withCustomTestDatabase(data:TestData)(testCode: => Any):Unit = {
+  def withCustomTestDatabase(data:TestData)(testCode:SlickDataSource => Any):Unit = {
+    withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
+  }
+
+  def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
     try {
       runAndWait(allSchemas.create)
       runAndWait(data.save())

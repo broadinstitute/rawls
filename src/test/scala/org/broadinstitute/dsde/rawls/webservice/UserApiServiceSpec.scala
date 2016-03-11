@@ -39,11 +39,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   def userFromId(subjectId: String) =
     RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
 
-  def getMatchingUserVertices(graph: Graph, user: RawlsUser): Iterable[Vertex] =
-    graph.getVertices.filter(v => {
-      v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.User) &&
-        v.getProperty[String]("userSubjectId") == user.userSubjectId.value
-    })
+  def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
 
   "UserApi" should "put token and get date" in withTestDataApiServices { services =>
@@ -68,15 +64,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
-      dataSource.inTransaction { dataAccess =>
-        txn.withGraph { graph =>
-          assert {
-            getMatchingUserVertices(graph, user).isEmpty
-          }
-          assert {
-            containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn).isEmpty
-          }
-        }
+      assert {
+        loadUser(user).isEmpty
+      }
+      assert {
+        runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef)).isEmpty
       }
 
       assert {
@@ -94,16 +86,12 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      dataSource.inTransaction { dataAccess =>
-        txn.withGraph { graph =>
-          assert {
-            getMatchingUserVertices(graph, user).nonEmpty
-          }
-          assert {
-            val group = containerDAO.authDAO.loadGroup(UserService.allUsersGroupRef, txn)
-            group.isDefined && group.get.users.contains(user)
-          }
-        }
+      assert {
+        loadUser(user).nonEmpty
+      }
+      assert {
+        val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
+        group.isDefined && group.get.users.contains(user)
       }
 
       assert {
@@ -179,9 +167,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveUser(user, txn)
-    }
+    runAndWait(rawlsUserQuery.save(user))
 
     Get("/user") ~>
       sealRoute(services.getUserStatusRoute) ~>
@@ -202,9 +188,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")
 
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveUser(billingUser, txn)
-    }
+    runAndWait(rawlsUserQuery.save(billingUser))
 
     Put(s"/admin/billing/${project1.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -238,11 +222,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
     val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
     val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveGroup(group3, txn)
-      containerDAO.authDAO.saveGroup(group2, txn)
-      containerDAO.authDAO.saveGroup(group1, txn)
-    }
+
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group1))
 
     import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
     Get(s"/user/group/${group3.groupName.value}") ~>
@@ -269,11 +252,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
     val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
     val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group2))
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveGroup(group3, txn)
-      containerDAO.authDAO.saveGroup(group2, txn)
-      containerDAO.authDAO.saveGroup(group1, txn)
-    }
+
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group1))
 
     import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
     Get(s"/user/group/${group3.groupName.value}") ~>

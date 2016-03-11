@@ -40,15 +40,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   import scala.collection.JavaConversions._
 
-  def getMatchingBillingProjectVertices(dataSource: DataSource, project: RawlsBillingProject): Iterable[Vertex] =
-    dataSource.inTransaction() { txn =>
-      txn.withGraph { graph =>
-        graph.getVertices.filter(v => {
-          v.asInstanceOf[OrientVertex].getRecord.getClassName.equalsIgnoreCase(VertexSchema.BillingProject) &&
-            v.getProperty[String]("projectName") == project.projectName.value
-        })
-      }
-    }
+  def getMatchingBillingProjectVertices(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
 
@@ -178,10 +170,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        services.dataSource.inTransaction { dataAccess =>
-          assert {
-            ! containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-          }
+        assert {
+          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
         }
 
         Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
@@ -190,10 +180,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.OK) {
               status
             }
-            services.dataSource.inTransaction { dataAccess =>
-              assert {
-                containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-              }
+            assert {
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
             }
           }
       }
@@ -234,10 +222,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
           sealRoute(services.adminRoutes) ~>
           check {
-            services.dataSource.inTransaction { dataAccess =>
-              assert {
-                containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-              }
+            assert {
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
             }
 
             Delete(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
@@ -246,10 +232,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
                 assertResult(StatusCodes.OK) {
                   status
                 }
-                services.dataSource.inTransaction { dataAccess =>
-                  assert {
-                    ! containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-                  }
+                assert {
+                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
                 }
               }
           }
@@ -286,9 +270,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
     val project1 = billingProjectFromName("project1")
 
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveUser(testUser, txn)
-    }
+    runAndWait(rawlsUserQuery.save(testUser))
 
     Get(s"/admin/billing/list/${testUser.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -520,17 +502,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     val testGroup = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set[RawlsUserRef](user1, user2), Set[RawlsGroupRef](subGroup1, subGroup2))
 
-    services.dataSource.inTransaction { dataAccess =>
-      authDAO.saveUser(user1, txn)
-      authDAO.saveUser(user2, txn)
-      authDAO.saveUser(user3, txn)
+    runAndWait(rawlsUserQuery.save(user1))
+    runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsUserQuery.save(user3))
 
-      authDAO.saveGroup(subGroup1, txn)
-      authDAO.saveGroup(subGroup2, txn)
-      authDAO.saveGroup(subGroup3, txn)
+    runAndWait(rawlsGroupQuery.save(subGroup1))
+    runAndWait(rawlsGroupQuery.save(subGroup2))
+    runAndWait(rawlsGroupQuery.save(subGroup3))
 
-      authDAO.saveGroup(testGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(testGroup))
 
     services.gcsDAO.createGoogleGroup(testGroup)
 
@@ -540,9 +520,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
 
-    services.dataSource.inTransaction { dataAccess =>
-      assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { authDAO.loadGroup(testGroup, txn) }
-    }
+    assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { runAndWait(rawlsGroupQuery.load(testGroup)) }
 
     // put it back the way it was this time using subject ids and group names
     Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userSubjectIds = Option(Seq(user2.userSubjectId.value, user1.userSubjectId.value)), subGroupNames = Option(Seq(subGroup2.groupName.value, subGroup1.groupName.value))))) ~>
@@ -551,15 +529,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent) { status }
       }
 
-    services.dataSource.inTransaction { dataAccess =>
-      assertResult(Option(testGroup)) { authDAO.loadGroup(testGroup, txn) }
-    }
+    assertResult(Option(testGroup)) { runAndWait(rawlsGroupQuery.load(testGroup)) }
   }
 
   it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-    }
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
 
     testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
 
@@ -579,13 +553,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
 
-    services.dataSource.inTransaction { dataAccess =>
-      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+    val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
 
-      assertResult(Some(true)) {
-        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
-          members.contains(Right(UserService.allUsersGroupRef))
-        }
+    assertResult(Some(true)) {
+      Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+        members.contains(Right(UserService.allUsersGroupRef))
       }
     }
 
@@ -599,15 +571,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
-    services.dataSource.inTransaction { dataAccess =>
-      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+      
+    val group2 = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
 
       assertResult(Some(false)) {
-        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+        Await.result(services.gcsDAO.listGroupMembers(group2), Duration.Inf).map { members =>
           members.contains(Right(UserService.allUsersGroupRef))
         }
       }
-    }
 
   }
 
@@ -644,17 +615,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inGoogleUser)), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
 
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveUser(inGoogleUser, txn)
-      containerDAO.authDAO.saveUser(inBothUser, txn)
-      containerDAO.authDAO.saveUser(inGraphUser, txn)
+    runAndWait(rawlsUserQuery.save(inGoogleUser))
+    runAndWait(rawlsUserQuery.save(inBothUser))
+    runAndWait(rawlsUserQuery.save(inGraphUser))
 
-      containerDAO.authDAO.saveGroup(inGoogleGroup, txn)
-      containerDAO.authDAO.saveGroup(inBothGroup, txn)
-      containerDAO.authDAO.saveGroup(inGraphGroup, txn)
+    runAndWait(rawlsGroupQuery.save(inGoogleGroup))
+    runAndWait(rawlsGroupQuery.save(inBothGroup))
+    runAndWait(rawlsGroupQuery.save(inGraphGroup))
 
-      containerDAO.authDAO.saveGroup(topGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(topGroup))
 
     Post(s"/admin/groups/${topGroup.groupName.value}/sync") ~>
       sealRoute(services.adminRoutes) ~>
@@ -674,9 +643,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "get the status of a workspace" in withTestDataApiServices { services =>
     val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveUser(testUser, txn)
-    }
+    runAndWait(rawlsUserQuery.save(testUser))
 
     Get(s"/admin/validate/${testData.workspace.namespace}/${testData.workspace.name}?userSubjectId=${testUser.userSubjectId.value}") ~>
       sealRoute(services.adminRoutes) ~>

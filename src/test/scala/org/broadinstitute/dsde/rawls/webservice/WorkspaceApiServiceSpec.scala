@@ -18,6 +18,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
  * Created by dvoet on 4/24/15.
  */
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
+  import driver.api._
+
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
@@ -73,14 +75,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
     val workspaceName = WorkspaceName("ns", "testworkspace")
-    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner), Set.empty)
-    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter), Set.empty)
-    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader), Set.empty)
+    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner))
+    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter))
+    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader))
 
     val workspace2Name = WorkspaceName("ns", "testworkspace2")
-    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty, Set.empty)
-    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner), Set.empty)
-    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty, Set.empty)
+    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty)
+    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner))
+    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty)
 
     val workspace = Workspace(workspaceName.namespace, workspaceName.name, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
@@ -124,33 +126,37 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
     )
 
-    override def save(txn: RawlsTransaction): Unit = {
-      authDAO.saveUser(userOwner, txn)
-      authDAO.saveUser(userWriter, txn)
-      authDAO.saveUser(userReader, txn)
-      authDAO.saveGroup(workspaceOwnerGroup, txn)
-      authDAO.saveGroup(workspaceWriterGroup, txn)
-      authDAO.saveGroup(workspaceReaderGroup, txn)
-      authDAO.saveGroup(workspace2OwnerGroup, txn)
-      authDAO.saveGroup(workspace2WriterGroup, txn)
-      authDAO.saveGroup(workspace2ReaderGroup, txn)
-
-      workspaceDAO.save(workspace, txn)
-      workspaceDAO.save(workspace2, txn)
-
-      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { ctx =>
-        entityDAO.save(ctx, sample1, txn)
-        entityDAO.save(ctx, sample2, txn)
-        entityDAO.save(ctx, sample3, txn)
-        entityDAO.save(ctx, sampleSet, txn)
-
-        methodConfigDAO.save(ctx, methodConfig, txn)
-
-        submissionDAO.save(ctx, submissionSuccess, txn)
-        submissionDAO.save(ctx, submissionFail, txn)
-        submissionDAO.save(ctx, submissionRunning1, txn)
-        submissionDAO.save(ctx, submissionRunning2, txn)
-      }
+    override def save() = {
+      DBIO.seq(
+        rawlsUserQuery.save(userOwner),
+        rawlsUserQuery.save(userWriter),
+        rawlsUserQuery.save(userReader),
+        rawlsGroupQuery.save(workspaceOwnerGroup),
+        rawlsGroupQuery.save(workspaceWriterGroup),
+        rawlsGroupQuery.save(workspaceReaderGroup),
+        rawlsGroupQuery.save(workspace2OwnerGroup),
+        rawlsGroupQuery.save(workspace2WriterGroup),
+        rawlsGroupQuery.save(workspace2ReaderGroup),
+  
+        workspaceQuery.save(workspace),
+        workspaceQuery.save(workspace2),
+  
+        withWorkspaceContext(workspace) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sampleSet),
+    
+            methodConfigurationQuery.save(ctx, methodConfig),
+    
+            submissionQuery.create(ctx, submissionSuccess),
+            submissionQuery.create(ctx, submissionFail),
+            submissionQuery.create(ctx, submissionRunning1),
+            submissionQuery.create(ctx, submissionRunning2)
+          )
+        }
+      )
     }
   }
 
@@ -181,11 +187,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          assertResult(newWorkspace) {
-            val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
-          }
+        assertResult(newWorkspace) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
@@ -205,13 +209,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction { dataAccess =>
-          assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
-          ){
-            val response = responseAs[WorkspaceListResponse]
-            WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
-          }
+        assertResult(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
+        ){
+          val response = responseAs[WorkspaceListResponse]
+          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
         }
       }
   }
@@ -234,10 +236,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-      services.dataSource.inTransaction { dataAccess =>
-        assertResult(None) {
-          workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn)
-        }
+      assertResult(None) {
+        runAndWait(workspaceQuery.findByName(testData.workspace.toWorkspaceName))
       }
   }
 
@@ -249,13 +249,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction { dataAccess =>
-          assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
-            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
-          )) {
-            responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
-          }
+        assertResult(Set(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
+          WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
+        )) {
+          responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
       }
   }
@@ -299,9 +297,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          services.dataSource.inTransaction { dataAccess =>
-            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
-          }
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
         }
       }
 
@@ -313,9 +309,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(None) {
-          services.dataSource.inTransaction { dataAccess =>
-            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
-          }
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
         }
       }
   }
@@ -329,19 +323,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName), writeLocks=Set(workspaceCopy)) { txn =>
-          withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
-            val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy, txn).get.workspace
-            assert(copiedWorkspace.attributes == testData.workspace.attributes)
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
-            withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
-              //Name, namespace, creation date, and owner might change, so this is all that remains.
-              assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
-                entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet
-              }
-              assertResult(methodConfigDAO.list(sourceWorkspaceContext, txn).toSet) {
-                methodConfigDAO.list(copiedWorkspaceContext, txn).toSet
-              }
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -492,9 +484,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser("owner-access") { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-    services.dataSource.inTransaction { dataAccess =>
-      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-    }
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)).toJson.toString)) ~>
@@ -645,9 +635,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
-    services.dataSource.inTransaction { dataAccess =>
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl"), txn)
-    }
+    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl")))
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",

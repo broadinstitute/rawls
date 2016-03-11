@@ -95,7 +95,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   val bugData = new BugTestData
 
-  it should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabase(bugData) {
+  it should "get an entity with attribute ref name same as an entity, but different case" in withCustomTestDatabaseInternal(bugData) {
 
       withWorkspaceContext(bugData.workspace) { context =>
         assertResult(Some(bugData.sample1)) {

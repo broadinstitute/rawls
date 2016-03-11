@@ -43,12 +43,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(newMethodConfig) {
-              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get
-            }
-          }
+        assertResult(newMethodConfig) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
         }
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
           header("Location")
@@ -76,16 +72,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
           responseAs[ValidatedMethodConfiguration]
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            // all inputs and outputs are saved, regardless of parsing errors
-            for ((key, value) <- inputs) assertResult(Option(value)) {
-              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get.inputs.get(key)
-            }
-            for ((key, value) <- outputs) assertResult(Option(value)) {
-              methodConfigDAO.get(workspaceContext, newMethodConfig.namespace, newMethodConfig.name, txn).get.outputs.get(key)
-            }
-          }
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- inputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+        }
+        for ((key, value) <- outputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -141,15 +133,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(true) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "testConfig2_changed", txn).isDefined
-            }
-            assertResult(None) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn)
-            }
-          }
+        assertResult(true) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "testConfig2_changed")).isDefined
+        }
+        assertResult(None) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
   }
@@ -161,15 +149,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(true) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
-            }
-            assertResult(None) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "foox", txn)
-            }
-          }
+        assertResult(true) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
+        }
+        assertResult(None) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "foox"))
         }
       }
   }
@@ -181,12 +165,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(None) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn)
-            }
-          }
+        assertResult(None) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
   }
@@ -199,15 +179,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(true) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).isDefined
-            }
-            assertResult(None) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, "foox", txn)
-            }
-          }
+        assertResult(true) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
+        }
+        assertResult(None) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, "foox"))
         }
       }
   }
@@ -223,12 +199,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(modifiedMethodConfig) {
           responseAs[ValidatedMethodConfiguration].methodConfiguration
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult(Option(AttributeString("foo2"))) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get("param2")
-            }
-          }
+        assertResult(Option(AttributeString("foo2"))) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get("param2")
         }
       }
   }
@@ -252,16 +224,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(ValidatedMethodConfiguration(modifiedMethodConfig, expectedSuccessInputs, expectedFailureInputs, expectedSuccessOutputs, expectedFailureOutputs)) {
           responseAs[ValidatedMethodConfiguration]
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            // all inputs and outputs are saved, regardless of parsing errors
-            for ((key, value) <- newInputs) assertResult(Option(value)) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.inputs.get(key)
-            }
-            for ((key, value) <- newOutputs) assertResult(Option(value)) {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.outputs.get(key)
-            }
-          }
+        // all inputs and outputs are saved, regardless of parsing errors
+        for ((key, value) <- newInputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get(key)
+        }
+        for ((key, value) <- newOutputs) assertResult(Option(value)) {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.outputs.get(key)
         }
       }
   }
@@ -277,11 +245,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
-    services.dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-        methodConfigDAO.save(workspaceContext, foo, txn)
-      }
-    }
+    runAndWait(methodConfigurationQuery.save(SlickWorkspaceContext(testData.workspace), foo))
 
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/blah/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -312,12 +276,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult("testConfig1") {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
-            }
-          }
+        assertResult("testConfig1") {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
         }
       }
   }
@@ -373,12 +333,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            assertResult("testConfig1") {
-              methodConfigDAO.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, txn).get.name
-            }
-          }
+        assertResult("testConfig1") {
+          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
         }
       }
   }
@@ -482,13 +438,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        services.dataSource.inTransaction { dataAccess =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            val configs = methodConfigDAO.list(workspaceContext, txn).toSet
-            assertResult(configs) {
-              responseAs[Array[MethodConfigurationShort]].toSet
-            }
-          }
+        val configs = runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspace))).toSet
+        assertResult(configs) {
+          responseAs[Array[MethodConfigurationShort]].toSet
         }
       }
   }

@@ -40,7 +40,7 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
 
   trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
-    val dataSource: DataSource
+    val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
 
     def actorRefFactory = system
@@ -58,7 +58,7 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
-      null, //dataSource,
+      slickDataSource,
       gcsDAO,
       directoryDAO
     )_
