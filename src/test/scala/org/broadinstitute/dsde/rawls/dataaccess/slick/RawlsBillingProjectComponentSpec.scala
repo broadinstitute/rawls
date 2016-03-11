@@ -48,18 +48,32 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val subjId1 = RawlsUserSubjectId("subject ID #1")
     val subjId2 = RawlsUserSubjectId("This is subject two")
     val subjId3 = RawlsUserSubjectId("3")
+    val subjId4 = RawlsUserSubjectId("A user with no billing projects")
 
-    val userRef1 = RawlsUserRef(subjId1)
-    val userRef2 = RawlsUserRef(subjId2)
-    val userRef3 = RawlsUserRef(subjId3)
+    val email1 = RawlsUserEmail("my1@email.address")
+    val email2 = RawlsUserEmail("my2@email.address")
+    val email3 = RawlsUserEmail("my3@email.address")
+    val email4 = RawlsUserEmail("my4@email.address")
 
-    val userRecord1 = RawlsUserRecord(subjId1.value, "my1@email.address")
-    val userRecord2 = RawlsUserRecord(subjId2.value, "my2@email.address")
-    val userRecord3 = RawlsUserRecord(subjId3.value, "my3@email.address")
+    val user1 = RawlsUser(subjId1, email1)
+    val user2 = RawlsUser(subjId2, email2)
+    val user3 = RawlsUser(subjId3, email3)
+    val user4 = RawlsUser(subjId4, email4)
+
+    val userRef1: RawlsUserRef = user1
+    val userRef2: RawlsUserRef = user2
+    val userRef3: RawlsUserRef = user3
+    val userRef4: RawlsUserRef = user4
+
+    val userRecord1 = RawlsUserRecord(subjId1.value, email1.value)
+    val userRecord2 = RawlsUserRecord(subjId2.value, email2.value)
+    val userRecord3 = RawlsUserRecord(subjId3.value, email3.value)
+    val userRecord4 = RawlsUserRecord(subjId4.value, email4.value)
 
     runAndWait(rawlsUserQuery += userRecord1)
     runAndWait(rawlsUserQuery += userRecord2)
     runAndWait(rawlsUserQuery += userRecord3)
+    runAndWait(rawlsUserQuery += userRecord4)
 
     val projectName1 = RawlsBillingProjectName("project1")
     val projectName2 = RawlsBillingProjectName("project2")
@@ -80,6 +94,19 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     assertResult(Seq(projectName2)) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef3))
+    }
+
+    assertResult(Seq.empty) {
+      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef4))
+    }
+
+    val expectedUsersProjects = Map(
+      user1 -> Seq(projectName1),
+      user2 -> Seq(projectName2),
+      user3 -> Seq(projectName2),
+      user4 -> Seq.empty)
+    expectedUsersProjects should contain theSameElementsAs {
+      runAndWait(rawlsBillingProjectQuery.loadAllUsersWithProjects)
     }
 
     assertResult(Some(project2)) {

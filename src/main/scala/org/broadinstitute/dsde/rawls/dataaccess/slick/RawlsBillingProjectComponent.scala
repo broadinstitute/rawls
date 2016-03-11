@@ -84,13 +84,14 @@ trait RawlsBillingProjectComponent {
 
     def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
       val usersAndProjects = for {
-        user <- rawlsUserQuery
-        userProject <- projectUsersQuery if user.userSubjectId === userProject.userSubjectId
-      } yield (user, userProject.projectName)
+        (user, userProject) <- rawlsUserQuery joinLeft projectUsersQuery on (_.userSubjectId === _.userSubjectId)
+      } yield (user, userProject.map(_.projectName))
 
       usersAndProjects.result.map { results =>
         results.groupBy(_._1) map {
-          case (userRec, userAndProjects) => rawlsUserQuery.unmarshalRawlsUser(userRec) -> userAndProjects.map(userAndProject => RawlsBillingProjectName(userAndProject._2))
+          case (userRec, userAndProjectOps) =>
+            val projects = userAndProjectOps.flatMap(_._2.map(RawlsBillingProjectName))
+            rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
         }
       }
     }
