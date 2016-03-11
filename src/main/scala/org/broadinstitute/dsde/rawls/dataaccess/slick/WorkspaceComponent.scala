@@ -148,6 +148,10 @@ trait WorkspaceComponent {
       })
     }
 
+    def deleteWorkspaceAccessReferences(workspaceId: UUID) = {
+      workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
+    }
+
     private def workspaceAttributes(workspaceId: UUID) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId === workspaceId
       attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id
