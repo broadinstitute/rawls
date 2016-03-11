@@ -71,7 +71,7 @@ class WorkflowMonitor(parent: ActorRef,
     val status = WorkflowStatuses.withName(statusResponse.status)
 
     withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-      dataAccess.workflowQuery.get(workspaceContext, submissionId, workflow.workflowId) map {
+      dataAccess.workflowQuery.get(workspaceContext, submissionId, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName) map {
         case None => throw new RawlsException(s"workflow ${workflow} could not be found")
         case Some(refreshedWorkflow) =>
           if (refreshedWorkflow.status != status) {

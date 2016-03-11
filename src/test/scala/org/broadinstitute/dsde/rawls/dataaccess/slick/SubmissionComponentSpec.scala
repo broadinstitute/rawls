@@ -101,28 +101,30 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     val workflow0 = testData.submission1.workflows(0)
     assertResult(Some(workflow0)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowId))
+      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowEntity.get.entityType, workflow0.workflowEntity.get.entityName))
     }
 
     val workflow1 = testData.submission1.workflows(1)
     assertResult(Some(workflow1)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow1.workflowId))
+      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow1.workflowEntity.get.entityType, workflow1.workflowEntity.get.entityName))
     }
 
     val workflow2 = testData.submission1.workflows(2)
     assertResult(Some(workflow2)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow2.workflowId))
+      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow2.workflowEntity.get.entityType, workflow2.workflowEntity.get.entityName))
     }
 
     val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity, testData.inputResolutions)
 
-    runAndWait(workflowQuery.update(workspaceContext, testData.submission1.submissionId, workflow3))
+    runAndWait(workflowQuery.update(workspaceContext, UUID.fromString(testData.submission1.submissionId), workflow3))
 
     assertResult(Some(workflow3)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow3.workflowId))
+      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow3.workflowEntity.get.entityType, workflow3.workflowEntity.get.entityName))
     }
 
-    assert(runAndWait(workflowQuery.delete(workspaceContext, testData.submission1.submissionId, workflow3.workflowId)))
+    val workflowsWithIds = runAndWait(workflowQuery.getWithWorkflowIds(workspaceContext, testData.submission1.submissionId))
+    val workflow3Id = workflowsWithIds.collect { case (id, workflow) if workflow == workflow3 => id }.head
+    assert(runAndWait(workflowQuery.delete(workflow3Id)))
 
     val submission = testData.submission1.copy(workflows=Seq(workflow0, workflow2))
     assertResult(Some(submission)) {

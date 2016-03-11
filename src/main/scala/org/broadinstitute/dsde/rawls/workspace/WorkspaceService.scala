@@ -1338,9 +1338,16 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   }
 
   private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")))
-      case Some(submission) => op(submission)
+    Try {
+      UUID.fromString(submissionId)
+    } match {
+      case Failure(t: IllegalArgumentException) =>
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
+      case _ =>
+        dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
+          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")))
+          case Some(submission) => op(submission)
+        }
     }
   }
 

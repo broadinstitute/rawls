@@ -232,7 +232,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
     val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
 
-    val submissionTerminateTest = Submission("submissionTerminate",testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
       Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
         Workflow("workflowB",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
         Workflow("workflowC",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
@@ -276,13 +276,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 methodConfigurationQuery.save(context, methodConfigValid),
                 methodConfigurationQuery.save(context, methodConfigUnparseable),
                 methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup)
-  //
-  //              submissionDAO.save(context, submissionTerminateTest, txn)
-  //              submissionDAO.save(context, submission1, txn)
-  //              submissionDAO.save(context, submission2, txn)
-  //              submissionDAO.save(context, submissionUpdateEntity, txn)
-  //              submissionDAO.save(context, submissionUpdateWorkspace, txn)
+                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+  
+                submissionQuery.create(context, submissionTerminateTest),
+                submissionQuery.create(context, submission1),
+                submissionQuery.create(context, submission2),
+                submissionQuery.create(context, submissionUpdateEntity),
+                submissionQuery.create(context, submissionUpdateWorkspace)
           )
         })
       )

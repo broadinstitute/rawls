@@ -6,8 +6,8 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-
 import scala.concurrent.ExecutionContext
+import java.util.UUID
 
 /**
  * Created by dvoet on 4/24/15.
@@ -127,6 +127,11 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {status}
+      }
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${UUID.randomUUID}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}

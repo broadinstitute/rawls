@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import scala.concurrent.Future
 import akka.pattern._
+import java.util.UUID
 
 /**
  * Created by dvoet on 6/26/15.
@@ -70,16 +71,16 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
       checkSubmissionStatus() pipeTo self
     case Terminated(monitor) =>
       system.log.debug("workflow monitor terminated, submission {}, actor {}", submissionId, monitor)
-      handleTerminatedMonitor(submissionId, monitor.path.name) pipeTo self
+      handleTerminatedMonitor(submissionId, monitor.path.name.toLong) pipeTo self
 
     case Unit => // some future completed successfully, ignore
     case akka.actor.Status.Failure(t) => throw t // an error happened in some future, let the supervisor handle it
   }
 
-  private def handleTerminatedMonitor(submissionId: String, workflowId: String): Future[Unit] = {
+  private def handleTerminatedMonitor(submissionId: String, workflowId: Long): Future[Unit] = {
     val workflowFuture = datasource.inTransaction { dataAccess =>
       withWorkspaceContext[Workflow](workspaceName, dataAccess) { workspaceContext =>
-        dataAccess.workflowQuery.get(workspaceContext, submissionId, workflowId).map(_.getOrElse(
+        dataAccess.workflowQuery.get(workflowId).map(_.getOrElse(
           throw new RawlsException(s"Could not find workflow in workspace ${workspaceName} with id ${workflowId}")
         ))
       }
@@ -94,16 +95,15 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
   private def startWorkflowMonitorActors(): Future[Unit] = {
     datasource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        dataAccess.submissionQuery.get(workspaceContext, submissionId).map {
-          case None => throw new RawlsException(s"submission ${submissionId} does not exist")
-          case Some(submission) => submission.workflows.filterNot(workflow => workflow.status.isDone).foreach(startWorkflowMonitorActor(_))
+        dataAccess.workflowQuery.getWithWorkflowIds(workspaceContext, submissionId).map { workflowsWithIds =>
+          workflowsWithIds.foreach { case (id, workflow) => startWorkflowMonitorActor(workflow, id) }
         }
       }
     }
   }
 
-  private def startWorkflowMonitorActor(workflow: Workflow): Unit = {
-    watch(actorOf(workflowMonitorProps(self, workspaceName, submissionId, workflow), workflow.workflowId))
+  private def startWorkflowMonitorActor(workflow: Workflow, id: Long): Unit = {
+    watch(actorOf(workflowMonitorProps(self, workspaceName, submissionId, workflow), id.toString()))
   }
 
   private def handleStatusChange(workflow: Workflow, workflowOutputsOption: Option[Map[String, Attribute]]): Future[Unit] = {
@@ -135,7 +135,7 @@ class SubmissionMonitor(workspaceName: WorkspaceName,
 
         workflowToSave match {
           case None => DBIO.successful(workflow)
-          case Some(action) => action.flatMap(wf => dataAccess.workflowQuery.update(workspaceContext, submissionId, wf.copy(statusLastChangedDate = DateTime.now))) 
+          case Some(action) => action.flatMap(wf => dataAccess.workflowQuery.update(workspaceContext, UUID.fromString(submissionId), wf.copy(statusLastChangedDate = DateTime.now))) 
         }
       }
     }
