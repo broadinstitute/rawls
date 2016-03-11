@@ -234,6 +234,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             DBIO.from(gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor))
           }
         } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
+        } andThen {
           DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
             dataAccess.rawlsGroupQuery.delete(group)
           }.toSeq:_*)
@@ -1246,7 +1248,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           val workspaceId = UUID.randomUUID.toString
           DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName)) flatMap { googleWorkspaceInfo =>
             val currentDate = DateTime.now
-            googleWorkspaceInfo.groupsByAccessLevel.values.foreach(dataAccess.rawlsGroupQuery.save)
 
             val workspace = Workspace(workspaceRequest.namespace,
               workspaceRequest.name,
@@ -1258,7 +1259,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
               workspaceRequest.attributes,
               googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
 
-            dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
+            val groupInserts = googleWorkspaceInfo.groupsByAccessLevel.values.map(dataAccess.rawlsGroupQuery.save).toSeq
+
+            DBIO.seq(groupInserts:_*) andThen
+              dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
           }
       }
     }

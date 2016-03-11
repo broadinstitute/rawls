@@ -39,7 +39,7 @@ trait MethodConfigurationComponent {
     def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def namespaceNameIdx = index("IDX_CONFIG", (namespace, name), unique = true)
+    def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name), unique = true)
   }
 
   class MethodConfigurationInputTable(tag: Tag) extends Table[MethodConfigurationInputRecord](tag, "METHOD_CONFIG_INPUT") {
