@@ -397,9 +397,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader)), response) {
-          responseAs[RawlsUserInfoList]
-        }
+        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader))
       }
   }
 
@@ -424,9 +422,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(RawlsUserInfoList(Seq(userOwner, userWriter, userReader, user1, user2, user3)), response) {
-          responseAs[RawlsUserInfoList]
-        }
+        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader, user1, user2, user3))
       }
   }
 
