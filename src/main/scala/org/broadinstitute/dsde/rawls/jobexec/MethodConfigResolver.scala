@@ -1,9 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import cromwell.binding.types.{WdlType, WdlArrayType}
-import cromwell.binding.{WorkflowInput, NamespaceWithWorkflow, WdlNamespace}
-import cromwell.engine.backend.Backend
-import cromwell.parser.BackendType
+import wdl4s.{FullyQualifiedName, WorkflowInput, NamespaceWithWorkflow}
+import wdl4s.types.{WdlArrayType}
 import org.broadinstitute.dsde.rawls.{model, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.{WorkspaceContext, RawlsTransaction}
 import org.broadinstitute.dsde.rawls.expressions.{ExpressionParser, ExpressionEvaluator}
@@ -54,7 +52,7 @@ object MethodConfigResolver {
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Seq[MethodInput] = {
-    val agoraInputs = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs.map( input => input.fqn -> input ).toMap
+    val agoraInputs = NamespaceWithWorkflow.load(wdl).workflow.inputs
     val missingInputs = agoraInputs.filter{ case (fqn,workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
     val extraInputs = methodConfig.inputs.filter{ case (name,expression) => !agoraInputs.contains(name) }.keys
     if ( missingInputs.size > 0 || extraInputs.size > 0 ) {
@@ -90,18 +88,18 @@ object MethodConfigResolver {
   def resolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[Map[String, SubmissionValidationValue]] = {
     import dataAccess.driver.api._
     
-    val resolutions = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow.inputs map { wfInput: WorkflowInput =>
-      val result = methodConfig.inputs.get(wfInput.fqn) match {
+    val resolutions = NamespaceWithWorkflow.load(wdl).workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: WorkflowInput) =>
+      val result = methodConfig.inputs.get(fqn) match {
         case Some(AttributeString(expression)) =>
           evaluateResult(workspaceContext, entity, expression, dataAccess) match {
             case Success(mcSequence) => mcSequence.map(unpackResult(_, wfInput))
-            case Failure(regret) => DBIO.successful(SubmissionValidationValue(None, Some(regret.getMessage), wfInput.fqn))
+            case Failure(regret) => DBIO.successful(SubmissionValidationValue(None, Some(regret.getMessage), fqn))
           }
         case _ =>
           val errorOption = if (wfInput.optional) None else Some(missingMandatoryValueError) // if an optional value is unspecified in the MC, we don't care
-          DBIO.successful(SubmissionValidationValue(None, errorOption, wfInput.fqn))
+          DBIO.successful(SubmissionValidationValue(None, errorOption, fqn))
       }
-      result.map((wfInput.fqn, _))
+      result.map((fqn, _))
     }
     
     DBIO.sequence(resolutions).map(_.toMap)
@@ -131,17 +129,17 @@ object MethodConfigResolver {
   ) toString
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {
-    val workflow = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow
+    val workflow = NamespaceWithWorkflow.load(wdl).workflow
     val nothing = AttributeString("expression")
-    val inputs = for ( input <- workflow.inputs ) yield input.fqn.toString -> nothing
-    val outputs = for ( output <- workflow.outputs ) yield output._1.toString -> nothing
-    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs,methodRepoMethod)
+    val inputs = for ( (fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs ) yield fqn.toString -> nothing
+    val outputs = workflow.outputs map (o =>  o.fullyQualifiedName.toString -> nothing)
+    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs.toMap,methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String) = {
-    val workflow = NamespaceWithWorkflow.load(wdl, BackendType.LOCAL).workflow
+    val workflow = NamespaceWithWorkflow.load(wdl).workflow
     MethodInputsOutputs(
-      workflow.inputs.map(i => model.MethodInput(i.fqn, i.wdlType.toWdlString, i.optional)),
-      workflow.outputs.map(o => MethodOutput(o._1, o._2.toWdlString)).toSeq)
+      (workflow.inputs map {case (fqn: FullyQualifiedName, wfInput:WorkflowInput) => model.MethodInput(fqn, wfInput.wdlType.toWdlString, wfInput.optional)}).toSeq,
+      workflow.outputs.map(o => MethodOutput(o.fullyQualifiedName, o.wdlType.toWdlString)).toSeq)
   }
 }
