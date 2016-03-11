@@ -629,14 +629,13 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
-        assertResult(SyncReport(Seq(
-          SyncReportItem("added", Option(inGraphUser), None, None),
-          SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
-          SyncReportItem("removed", Option(inGoogleUser), None, None),
-          SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
-        ))) {
-          responseAs[SyncReport]
-        }
+        responseAs[SyncReport].items should contain theSameElementsAs
+          Seq(
+            SyncReportItem("added", Option(inGraphUser), None, None),
+            SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
+            SyncReportItem("removed", Option(inGoogleUser), None, None),
+            SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
+          )
       }
   }
 
@@ -651,19 +650,25 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(WorkspaceStatus(WorkspaceName(testData.workspace.namespace, testData.workspace.name),
-          Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
-            "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
-            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
-            "GOOGLE_GROUP: dummy@example.com" -> "FOUND",
-            "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: dummy@example.com" -> "FOUND",
-            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND"))) {
-          responseAs[WorkspaceStatus]
+        val responseStatus = responseAs[WorkspaceStatus]
+        assertResult(WorkspaceName(testData.workspace.namespace, testData.workspace.name)) {
+          responseStatus.workspaceName
         }
+        responseStatus.statuses should contain theSameElementsAs
+          Map(
+            "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
+            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
+            "GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "GOOGLE_BUCKET: aBucket" -> "FOUND",
+            "GOOGLE_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
+            "GOOGLE_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER"
+          )
       }
   }
 }
