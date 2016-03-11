@@ -133,7 +133,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
 
   def listUsers(): Future[PerRequestMessage] = asAdmin {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.loadAllUsersWithProjects map { projectsByUser =>
+      dataAccess.rawlsBillingProjectQuery.loadAllUsersWithProjects map { projectsByUser =>
         val userInfoList = projectsByUser map {
           case (user, projectNames) => RawlsUserInfo(user, projectNames.toSeq)
         }

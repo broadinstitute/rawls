@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUserSubjectId, RawlsUserRef, RawlsBillingProjectName, RawlsBillingProject}
+import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String)
 case class ProjectUsersRecord(userSubjectId: String, projectName: String)
@@ -79,6 +79,19 @@ trait RawlsBillingProjectComponent {
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectName]] = {
       findProjectsByUserSubjectId(rawlsUser.userSubjectId.value).result.map { projects =>
         projects.map { rec => RawlsBillingProjectName(rec.projectName) }
+      }
+    }
+
+    def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
+      val usersAndProjects = for {
+        user <- rawlsUserQuery
+        userProject <- projectUsersQuery if user.userSubjectId === userProject.userSubjectId
+      } yield (user, userProject.projectName)
+
+      usersAndProjects.result.map { results =>
+        results.groupBy(_._1) map {
+          case (userRec, userAndProjects) => rawlsUserQuery.unmarshalRawlsUser(userRec) -> userAndProjects.map(userAndProject => RawlsBillingProjectName(userAndProject._2))
+        }
       }
     }
 

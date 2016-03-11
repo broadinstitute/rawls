@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.rawls.model._
 case class RawlsUserRecord(userSubjectId: String, userEmail: String)
 
 trait RawlsUserComponent {
-  this: DriverComponent with RawlsBillingProjectComponent =>
+  this: DriverComponent =>
 
   import driver.api._
 
@@ -38,19 +38,6 @@ trait RawlsUserComponent {
       loadCommon(findUserByEmail(userEmail.value))
     }
 
-    def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
-      val usersAndProjects = for {
-        user <- rawlsUserQuery
-        userProject <- projectUsersQuery if user.userSubjectId === userProject.userSubjectId
-      } yield (user, userProject.projectName)
-
-      usersAndProjects.result.map { results =>
-        results.groupBy(_._1) map {
-          case (userRec, userAndProjects) => unmarshalRawlsUser(userRec) -> userAndProjects.map(userAndProject => RawlsBillingProjectName(userAndProject._2))
-        }
-      }
-    }
-    
     private def loadCommon(query: RawlsUserQuery): ReadAction[Option[RawlsUser]] = {
       uniqueResult[RawlsUserRecord](query).map {
         case None => None
