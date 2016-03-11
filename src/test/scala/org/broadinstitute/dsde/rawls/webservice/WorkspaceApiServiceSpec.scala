@@ -84,11 +84,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner))
     val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty)
 
-    val workspace = Workspace(workspaceName.namespace, workspaceName.name, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
+    val workspace1Id = UUID.randomUUID().toString
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, workspace1Id, "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup))
-    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
+
+    val workspace2Id = UUID.randomUUID().toString
+    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, workspace2Id, "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
@@ -232,7 +235,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted) {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
           status
         }
       }
@@ -319,7 +322,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
 
