@@ -73,8 +73,6 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "update a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    runAndWait(submissionQuery.create(workspaceContext, testData.submission1))
-
     runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission1.submissionId, SubmissionStatuses.Done))
 
     assertResult(Some(testData.submission1.copy(status = SubmissionStatuses.Done))) {
@@ -85,7 +83,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "save a submission with workflow failures" in withDefaultTestDatabase {
     val workspaceContext= SlickWorkspaceContext(testData.workspace)
 
-    val submissionWithFailedWorkflows = testData.submission1.copy(notstarted = Seq(WorkflowFailure(testData.indiv1.name, testData.indiv1.entityType, Seq.empty, Seq.empty)))
+    val submissionWithFailedWorkflows = testData.submission1.copy(submissionId = UUID.randomUUID().toString, notstarted = Seq(WorkflowFailure(testData.indiv1.name, testData.indiv1.entityType, Seq.empty, Seq.empty)))
 
     runAndWait(submissionQuery.create(workspaceContext, submissionWithFailedWorkflows))
 
@@ -96,8 +94,6 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   "WorkflowComponent" should "let you modify Workflows within a submission" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    runAndWait(submissionQuery.create(workspaceContext, testData.submission1))
 
     val workflow0 = testData.submission1.workflows(0)
     assertResult(Some(workflow0)) {

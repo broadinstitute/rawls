@@ -68,9 +68,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   it should "list all entities of all entity types" in withDefaultTestDatabase { 
     
       withWorkspaceContext(testData.workspace) { context =>
-        assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2)) {
-          runAndWait(entityQuery.listEntitiesAllTypes(context)).toSet
-        }
+        Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2) should contain
+        theSameElementsAs(runAndWait(entityQuery.listEntitiesAllTypes(context)).toSet)
       }
 
   }
@@ -219,9 +218,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   it should "list entities" in withDefaultTestDatabase {
     
       withWorkspaceContext(testData.workspace) { context =>
-        assertResult(Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7)) {
-          runAndWait(entityQuery.list(context, "Sample")).toSet
-        }
+        Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7) should contain
+        theSameElementsAs(runAndWait(entityQuery.list(context, "Sample")).toSet)
       }
 
   }
