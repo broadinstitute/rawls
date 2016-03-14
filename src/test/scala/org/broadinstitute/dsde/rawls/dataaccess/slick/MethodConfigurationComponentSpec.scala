@@ -54,9 +54,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "list method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    assertResult(List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort)) {
-      runAndWait(methodConfigurationQuery.list(workspaceContext)).toList
-    }
+    List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort) should contain
+    theSameElementsAs(runAndWait(methodConfigurationQuery.list(workspaceContext)).toList)
   }
 
   it should "rename method configs" in withDefaultTestDatabase {

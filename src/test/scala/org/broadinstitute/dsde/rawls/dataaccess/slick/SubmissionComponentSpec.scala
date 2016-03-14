@@ -15,7 +15,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
   private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
 
-  "GraphComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
+  "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     runAndWait(submissionQuery.create(workspaceContext, submission3))

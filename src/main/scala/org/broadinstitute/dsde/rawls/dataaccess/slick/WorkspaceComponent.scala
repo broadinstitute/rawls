@@ -119,6 +119,7 @@ trait WorkspaceComponent {
         case None => DBIO.successful(false)
         case Some(workspaceRecord) =>
           workspaceAttributes(workspaceRecord.id).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs):_*)) flatMap { _ =>
+            //should we be deleting ALL workspace-related things inside of this method?
             workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
           } flatMap { _ =>
             findByIdQuery(workspaceRecord.id).delete
@@ -150,6 +151,10 @@ trait WorkspaceComponent {
 
     def deleteWorkspaceAccessReferences(workspaceId: UUID) = {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
+    }
+
+    def deleteWorkspaceEntities(workspaceId: UUID) = {
+      entityQuery.filter(_.workspaceId === workspaceId).delete
     }
 
     private def workspaceAttributes(workspaceId: UUID) = for {
