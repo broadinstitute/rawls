@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import org.broadinstitute.dsde.rawls.dataaccess.slick.PendingBucketDeletionRecord
-import com.typesafe.scalalogging.slf4j.LazyLogging
+import com.typesafe.scalalogging.LazyLogging
 
 object BucketDeletionMonitor {
   def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO)(implicit executionContext: ExecutionContext): Props = {

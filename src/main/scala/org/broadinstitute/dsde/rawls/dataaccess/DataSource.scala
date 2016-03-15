@@ -13,7 +13,7 @@ import com.orientechnologies.orient.core.exception.OConcurrentModificationExcept
 import com.tinkerpop.blueprints.Graph
 import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
-import com.typesafe.scalalogging.slf4j.LazyLogging
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
