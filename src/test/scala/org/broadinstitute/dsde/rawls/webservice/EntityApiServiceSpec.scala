@@ -184,14 +184,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
-          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
-            val entityTypes = entityDAO.getEntityTypes(workspaceContext, txn)
-            val entityTypesWithCounts = entityTypes.map(entityType => entityType -> entityDAO.list(workspaceContext, entityType, txn).size).toMap
-            assertResult(entityTypesWithCounts) {
-              responseAs[Map[String, Int]]
-            }
-          }
+        val entityTypes = runAndWait(entityQuery.getEntityTypesWithCounts(SlickWorkspaceContext(testData.workspace)))
+        assertResult(entityTypes) {
+          responseAs[Map[String, Int]]
         }
       }
   }

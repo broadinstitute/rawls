@@ -74,6 +74,16 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
+  it should "list all entity types with their counts" in withDefaultTestDatabase {
+
+    withWorkspaceContext(testData.workspace) { context =>
+      assertResult(Map("PairSet" -> 1, "Individual" -> 1, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
+        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+      }
+    }
+
+  }
+
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
     val workspace = new Workspace(wsName.namespace, wsName.name, UUID.randomUUID.toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)

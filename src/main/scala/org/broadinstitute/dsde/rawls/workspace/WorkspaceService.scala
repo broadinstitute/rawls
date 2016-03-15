@@ -637,9 +637,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.getEntityTypes(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
-        
-        need to return counts: Map[entity type, count]
+        dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
       }
     }
 
