@@ -24,7 +24,6 @@ class WorkflowMonitorSpec(_system: ActorSystem) extends TestKit(_system) with Fl
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
 
   val testDbName = "WorkflowMonitorSpec"
-  val workflowDAO: GraphWorkflowDAO = new GraphWorkflowDAO(new GraphSubmissionDAO())
   val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
 
   val mockCredential = new MockGoogleCredential.Builder().build()

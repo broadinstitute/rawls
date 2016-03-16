@@ -28,11 +28,13 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   val workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
+    None,
     "aWorkspaceId",
     "aBucket",
     DateTime.now().withMillis(0),
     DateTime.now().withMillis(0),
     "test",
+    Map.empty,
     Map.empty,
     Map.empty
   )

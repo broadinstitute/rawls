@@ -52,6 +52,10 @@ class GraphEntityDAO extends EntityDAO with GraphDAO {
     getEntityVertex(workspaceContext, entityType, entityName).foreach(_.setProperty("name", newName))
   }
 
+  override def getEntityTypeCount(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): Long = txn withGraph { db =>
+    entityTypePipeline(workspaceContext, entityType).count()
+  }
+
   override def getEntityTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): Seq[String] = txn withGraph { graph =>
     workspacePipeline(workspaceContext).out().filter(isVertexOfClass(VertexSchema.Entity)).filter(hasProperty("entityType")).property("entityType").dedup().toList.toSeq.map(_.toString)
   }

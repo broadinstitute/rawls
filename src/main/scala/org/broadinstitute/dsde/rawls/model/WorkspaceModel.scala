@@ -44,6 +44,7 @@ case class WorkspaceName(
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
+                      realm: Option[RawlsGroupRef],
                       attributes: Map[String, Attribute]
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -53,6 +54,7 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
+                      realm: Option[RawlsGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
@@ -60,6 +62,7 @@ case class Workspace(
                       createdBy: String,
                       attributes: Map[String, Attribute],
                       accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
+                      realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
                       ) extends Attributable with DomainObject {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -242,13 +245,13 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val WorkspaceRequestFormat = jsonFormat3(WorkspaceRequest)
-
   implicit val RawlsGroupRefFormat = UserAuthJsonSupport.RawlsGroupRefFormat
+
+  implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
   implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
-  implicit val WorkspaceFormat = jsonFormat10(Workspace)
+  implicit val WorkspaceFormat = jsonFormat12(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 

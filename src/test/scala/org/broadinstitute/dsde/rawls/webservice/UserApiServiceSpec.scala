@@ -9,12 +9,6 @@ import spray.http._
 
 import scala.concurrent.ExecutionContext
 
-import com.tinkerpop.blueprints.{Vertex, Graph}
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-
-import scala.collection.JavaConversions._
-
-
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -183,7 +177,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "list a user's billing projects" in withTestDataApiServices { services =>
 
-    // first add the project and user to the graph
+    // first add the project and user to the DB
 
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
     val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")

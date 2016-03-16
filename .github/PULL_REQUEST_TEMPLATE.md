@@ -1,6 +1,5 @@
-Add the following to your main PR comment
-=========================
-```
+
+
 - [ ] **Submitter**: Rebase to develop. DO NOT SQUASH
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
 - [ ] **Submitter**: Make sure documentation for code is complete
@@ -24,7 +23,7 @@ Add the following to your main PR comment
 - [ ] **Submitter**: Merge to develop 
 - [ ] **Submitter**: Delete branch after merge
 - [ ] **Submitter**: Check configuration files in Jenkins in case they need changes
-- [ ] **Submitter**: Verify swagger UI on dev server still works after deployment
+- [ ] **Submitter**: **Test this change works on dev environment after deployment**. YOU own getting it fixed if dev isn't working for ANY reason!
+- [ ] **Submitter**: Verify swagger UI on dev environment still works after deployment
 - [ ] **Submitter**: Inform other teams of any API changes via hipchat and/or email
 - [ ] **Submitter**: Mark JIRA issue as resolved once this checklist is completed
-```

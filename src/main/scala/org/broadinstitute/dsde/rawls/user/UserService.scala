@@ -184,9 +184,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
       case None => createGroupInternal(allUsersGroupRef, dataAccess).asTry flatMap {
         case Success(group) => DBIO.successful(group)
         case Failure(t: HttpResponseException) if t.getStatusCode == StatusCodes.Conflict.intValue =>
-          // this case is where the group was not in our db but already in google, the recovery code makes the assumption
-          // that createGroupInternal saves the group in our db before creating the group in google so loadGroup should work
-          dataAccess.rawlsGroupQuery.load(allUsersGroupRef).map(_.get)
+          // this case is where the group was not in our db but already in google
+          dataAccess.rawlsGroupQuery.save(allUsersGroupRef)
         case Failure(regrets) => DBIO.failed(regrets)
       }
     }
@@ -348,29 +347,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     dataSource.inTransaction { dataAccess =>
       withGroup(groupRef, dataAccess) { group =>
         withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
-          val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
-          val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
-
-          // first remove members that should be removed
-          val removeMembersAction = for {
-            users <- DBIO.sequence(usersToRemove.map(dataAccess.rawlsUserQuery.load(_).map(_.get)).toSeq)
-            subGroups <- DBIO.sequence(subGroupsToRemove.map(dataAccess.rawlsGroupQuery.load(_).map(_.get)).toSeq)
-            result <- updateGroupMembersInternal(group, users.toSet, subGroups.toSet, RemoveGroupMembersOp, dataAccess)
-          } yield result
-
-          // then if there were no errors, add users that should be added
-          val addMembersAction = removeMembersAction.flatMap {
-            case Some(errorReport) => DBIO.successful(Option(errorReport))
-            case None =>
-              val usersToAdd = users.filter(user => !group.users.contains(user))
-              val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
-
-              // need to reload group cause it changed if members were removed
-              dataAccess.rawlsGroupQuery.load(groupRef).map(_.get) flatMap {
-                updateGroupMembersInternal(_, usersToAdd, subGroupsToAdd, AddGroupMembersOp, dataAccess)
-              }
-
-          }
+          val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, txn)
 
           // finally report the results
           addMembersAction.map {
@@ -380,6 +357,33 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         }
       }
     }
+  }
+
+  def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], txn: RawlsTransaction): ReadWriteAction[Option[ErrorReport]] = {
+    val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
+    val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
+
+    // first remove members that should be removed
+    val removeMembersAction = for {
+      users <- DBIO.sequence(usersToRemove.map(dataAccess.rawlsUserQuery.load(_).map(_.get)).toSeq)
+      subGroups <- DBIO.sequence(subGroupsToRemove.map(dataAccess.rawlsGroupQuery.load(_).map(_.get)).toSeq)
+      result <- updateGroupMembersInternal(group, users.toSet, subGroups.toSet, RemoveGroupMembersOp, dataAccess)
+    } yield result
+
+    // then if there were no errors, add users that should be added
+    val addMembersAction = removeMembersAction.flatMap {
+      case Some(errorReport) => DBIO.successful(Option(errorReport))
+      case None =>
+        val usersToAdd = users.filter(user => !group.users.contains(user))
+        val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
+
+        // need to reload group cause it changed if members were removed
+        dataAccess.rawlsGroupQuery.load(groupRef).map(_.get) flatMap {
+          updateGroupMembersInternal(_, usersToAdd, subGroupsToAdd, AddGroupMembersOp, dataAccess)
+        }
+
+    }
+
   }
 
   private def withMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess)(op: (Set[RawlsUser], Set[RawlsGroup]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
@@ -541,6 +545,34 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
           Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
         }
       }
+    } flatMap { errorReport =>
+      Future.sequence(containerDAO.authDAO.findWorkspacesForGroup(group, txn).flatMap(ws =>
+        updateIntersectionGroupMembers(ws, txn)
+      ) :+ Future.successful(errorReport))
+    } map { errorReports =>
+      val reports = errorReports.collect {
+        case Some(report) => report
+      }
+      reports match {
+        case Seq() => None
+        case Seq(report) => Option(report)
+        case _ => Option(ErrorReport(StatusCodes.BadRequest, "Errors updating group", reports))
+      }
+    }
+  }
+
+  def updateIntersectionGroupMembers(workspace: Workspace, txn: RawlsTransaction): Seq[Future[Option[ErrorReport]]] = {
+    workspace.realm match {
+      case None => Seq(Future.successful(None))
+      case Some(realm) =>
+        workspace.accessLevels.map {
+          case (accessLevel, group) =>
+            val intersectionGroup = containerDAO.authDAO.loadGroup(workspace.realmACLs(accessLevel), txn).getOrElse(throw new RawlsException("Unable to load intersection group"))
+
+            overwriteGroupMembersInternal(intersectionGroup,
+              containerDAO.authDAO.intersectGroupMembership(group, realm, txn).map(ref => containerDAO.authDAO.loadUser(ref, txn).get),
+              Set.empty, txn)
+        }.toSeq
     }
   }
 

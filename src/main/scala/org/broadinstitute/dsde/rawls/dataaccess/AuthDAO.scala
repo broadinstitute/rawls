@@ -18,18 +18,18 @@ trait AuthDAO {
 
   def loadGroupByEmail(groupEmail: String, txn: RawlsTransaction): Option[RawlsGroup]
 
+  def findWorkspacesForGroup(groupRef: RawlsGroupRef, txn: RawlsTransaction): Seq[Workspace]
+
+  def flattenGroupMembers(groupRef: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef]
+
+  def intersectGroupMembership(group1: RawlsGroupRef, group2: RawlsGroupRef, txn: RawlsTransaction): Set[RawlsUserRef]
+
   def saveGroup(rawlsGroup: RawlsGroup, txn: RawlsTransaction): RawlsGroup
 
   def deleteGroup(rawlsGroup: RawlsGroupRef, txn: RawlsTransaction)
 
   def loadFromEmail(email: String, txn: RawlsTransaction): Option[Either[RawlsUser, RawlsGroup]] = {
     (loadUserByEmail(email, txn).map(Left(_)) ++ loadGroupByEmail(email, txn).map(Right(_))).headOption
-  }
-
-  def deleteWorkspaceAccessGroups(workspace: Workspace, txn: RawlsTransaction) = {
-    workspace.accessLevels foreach { case (_, group) =>
-      deleteGroup(group, txn)
-    }
   }
 
   def getMaximumAccessLevel(user: RawlsUserRef, workspaceId: String, txn: RawlsTransaction): WorkspaceAccessLevel

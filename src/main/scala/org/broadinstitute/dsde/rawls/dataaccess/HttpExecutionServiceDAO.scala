@@ -23,8 +23,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String )( implicit val syste
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
     val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs) ++ options.map("workflowOptions" -> _).toSeq)
-    retry(when500) { () => pipeline(Post(url,formData)) }
-//    retry(Await.result(pipeline(Post(url,formData)),Duration.Inf),when500)
+    pipeline(Post(url,formData))
   }
 
   override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo): Future[ExecutionServiceValidation] = {

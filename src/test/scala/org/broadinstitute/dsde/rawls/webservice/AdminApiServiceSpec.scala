@@ -2,8 +2,6 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -591,21 +589,21 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("both"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
-    val inGraphGroup = RawlsGroup(
-      RawlsGroupName("graph"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("graph"))),
+    val inDbGroup = RawlsGroup(
+      RawlsGroupName("db"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("db"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
 
     val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
     val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
-    val inGraphUser = RawlsUser(RawlsUserSubjectId("graph"), RawlsUserEmail("graph@fc.org"))
+    val inDbUser = RawlsUser(RawlsUserSubjectId("db"), RawlsUserEmail("db@fc.org"))
 
     val topGroup = RawlsGroup(
       RawlsGroupName("synctest"),
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("synctest"))),
-      Set[RawlsUserRef](inBothUser, inGraphUser),
-      Set[RawlsGroupRef](inBothGroup, inGraphGroup))
+      Set[RawlsUserRef](inBothUser, inDbUser),
+      Set[RawlsGroupRef](inBothGroup, inDbGroup))
 
     Await.result(services.gcsDAO.createGoogleGroup(topGroup), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inGoogleGroup)), Duration.Inf)
@@ -667,6 +665,16 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER"
           )
+      }
+  }
+
+  it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
       }
   }
 }

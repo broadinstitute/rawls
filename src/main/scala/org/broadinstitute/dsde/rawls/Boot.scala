@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.File
+import java.io.{File, StringReader}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcProfile
@@ -8,6 +8,8 @@ import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
 import akka.util.Timeout
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
+import com.google.api.client.json.jackson2.JacksonFactory
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -39,9 +41,12 @@ object Boot extends App {
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("database", conf))
 
     val gcsConfig = conf.getConfig("gcs")
+    val jsonFactory = JacksonFactory.getDefaultInstance
+    val clientSecrets = GoogleClientSecrets.load(
+      jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
-      gcsConfig.getString("secrets"),
+      clientSecrets,
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appsDomain"),
       gcsConfig.getString("groupsPrefix"),
@@ -84,7 +89,9 @@ object Boot extends App {
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),
                     userServiceConstructor,
-                    ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version"))),
+                    ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
+                    clientSecrets.getDetails.getClientId
+    ),
                     "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)

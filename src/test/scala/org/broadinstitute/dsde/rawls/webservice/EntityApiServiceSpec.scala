@@ -184,9 +184,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val entityTypes = runAndWait(entityQuery.getEntityTypes(SlickWorkspaceContext(testData.workspace)))
-        assertResult(entityTypes) {
-          responseAs[Array[String]]
+        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+          withWorkspaceContext(testData.workspace, txn) { workspaceContext =>
+            val entityTypes = entityDAO.getEntityTypes(workspaceContext, txn)
+            val entityTypesWithCounts = entityTypes.map(entityType => entityType -> entityDAO.list(workspaceContext, entityType, txn).size).toMap
+            assertResult(entityTypesWithCounts) {
+              responseAs[Map[String, Int]]
+            }
+          }
         }
       }
   }
@@ -383,6 +388,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
     workspace2Name.name,
+    None,
     Map.empty
   )
 
@@ -395,7 +401,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(workspace2Request) {
           val ws = runAndWait(workspaceQuery.findByName(workspace2Request.toWorkspaceName)).get
-          WorkspaceRequest(ws.namespace, ws.name, ws.attributes)
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
 
         Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", httpJson(z1)) ~>
@@ -432,6 +438,72 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
+          status
+        }
+      }
+  }
+
+  it should "return 422 when copying entities from a Realm-protected workspace into one not in that Realm" in withTestDataApiServices { services =>
+    val srcWorkspace = testData.workspaceWithRealm
+    val srcWorkspaceName = srcWorkspace.toWorkspaceName
+
+    // add an entity to a workspace with a Realm
+
+    Post(s"/workspaces/${srcWorkspace.namespace}/${srcWorkspace.name}/entities", httpJson(z1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        services.dataSource.inTransaction(readLocks = Set(srcWorkspaceName)) { txn =>
+          val workspaceContext = workspaceDAO.loadContext(srcWorkspaceName, txn).get
+          assertResult(z1) {
+            entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
+          }
+        }
+      }
+
+    // attempt to copy an entity to a workspace with the wrong Realm
+
+    val newRealm = RawlsGroup(RawlsGroupName("a-new-realm-for-testing"), RawlsGroupEmail("president@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val newRealmRef: RawlsGroupRef = newRealm
+
+    services.dataSource.inTransaction() { txn =>
+      containerDAO.authDAO.saveGroup(newRealm, txn)
+    }
+
+    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealm), Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(wrongRealmCloneRequest)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(Some(newRealmRef)) {
+          responseAs[Workspace].realm
+        }
+      }
+
+    val destWorkspaceWrongRealmName = wrongRealmCloneRequest.toWorkspaceName
+
+    val wrongRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceWrongRealmName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(wrongRealmCopyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
+          status
+        }
+      }
+
+    // attempt to copy an entity to a workspace with no Realm
+
+    val destWorkspaceNoRealmName = testData.workspace.toWorkspaceName
+
+    val noRealmCopyDef = EntityCopyDefinition(srcWorkspaceName, destWorkspaceNoRealmName, "Sample", Seq("z1"))
+    Post("/workspaces/entities/copy", httpJson(noRealmCopyDef)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.UnprocessableEntity) {
           status
         }
       }

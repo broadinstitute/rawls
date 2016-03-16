@@ -313,72 +313,6 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
-  it should "delete Workspace Access Groups" in withEmptyTestDatabase { dataSource =>
-    val context = dataSource.inTransaction() { txn =>
-      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels)
-      workspaceDAO.save(workspace, txn)
-    }
-
-    // first confirm the groups exist, and save them
-
-    val groups = dataSource.inTransaction() { txn =>
-      withWorkspaceContext(testData.workspaceNoGroups, txn, bSkipLockCheck = true) { wc =>
-        txn.withGraph { graph =>
-          val mapVertex = authDAO.getVertices(wc.workspaceVertex, Direction.OUT, EdgeSchema.Own, "accessLevels").head
-
-          WorkspaceAccessLevels.groupAccessLevelsAscending map { level =>
-            val levelFromWs = authDAO.getVertices(mapVertex, Direction.OUT, EdgeSchema.Ref, level.toString).head
-
-            val levelGroup = newRawlsGroup(testData.workspaceNoGroups.toWorkspaceName, level, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-            val levelVertices = getMatchingGroupVertices(graph, levelGroup)
-
-            assertResult(1) {
-              levelVertices.size
-            }
-            assert {
-              levelVertices.head == levelFromWs
-            }
-
-            levelGroup
-          }
-        }
-      }
-    }
-
-    dataSource.inTransaction() { txn =>
-      authDAO.deleteWorkspaceAccessGroups(context.workspace, txn)
-    }
-
-    // then confirm they do not
-
-    dataSource.inTransaction() { txn =>
-      txn.withGraph { graph =>
-        assertResult(0) {
-          groups map { group =>
-            getMatchingGroupVertices(graph, group).size
-          } sum
-        }
-      }
-    }
-
-    // and also confirm that we have not left any stray vertices besides Workspace and User
-
-    dataSource.inTransaction() { txn =>
-      workspaceDAO.delete(context.workspace.toWorkspaceName, txn)
-
-      txn.withGraph { graph =>
-        val wsOwnerVertex = getMatchingUserVertices(graph, testUser).head
-        authDAO.removeObject(wsOwnerVertex, graph)
-
-        assertResult(0) {
-          graph.getVertices.toList.size
-        }
-      }
-    }
-
-  }
-
   it should "return the ACL for a user in a workspace" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = userFromId("obama@whitehouse.gov")
@@ -388,7 +322,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels.updated(WorkspaceAccessLevels.Owner, group))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels.updated(WorkspaceAccessLevels.Owner, group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
@@ -408,10 +342,30 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group2, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
+        authDAO.getMaximumAccessLevel(obama, workspace.workspaceId, txn)
+      }
+    }
+  }
+
+  it should "ignore the accessLevels map determining access" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = userFromId("obama@whitehouse.gov")
+      val group = makeRawlsGroup("TopSecret", Set(obama), Set.empty)
+      val group2 = makeRawlsGroup("NotSoSecret", Set(obama), Set.empty)
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+
+      val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
+      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group, WorkspaceAccessLevels.Read -> group2))
+      workspaceDAO.save(workspace, txn)
+
+      assertResult( WorkspaceAccessLevels.NoAccess ) {
         authDAO.getMaximumAccessLevel(obama, workspace.workspaceId, txn)
       }
     }
@@ -439,6 +393,36 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
     }
   }
 
+  it should "return the intersection of a realm and an access group" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val obama = userFromId("obama@whitehouse.gov")
+      val trump = userFromId("thedonald@donaldjtrump.com")
+      val arod = userFromId("alexrodriguez@mlb.com")
+      val clinton = userFromId("hillary@maybewhitehouse.gov")
+      val bernie = userFromId("bernie@vermont.gov")
+      val group = makeRawlsGroup("Good", Set(obama, bernie), Set.empty)
+      val group2 = makeRawlsGroup("Evil", Set(trump, arod), Set.empty)
+      val group3 = makeRawlsGroup("Other", Set(clinton), Set.empty)
+      val group4 = makeRawlsGroup("Good & Evil", Set.empty, Set(group, group2, group3))
+      val realm = makeRawlsGroup("Politicos", Set(obama, trump, bernie), Set(group3))
+
+      authDAO.saveUser(obama, txn)
+      authDAO.saveUser(trump, txn)
+      authDAO.saveUser(arod, txn)
+      authDAO.saveUser(clinton, txn)
+      authDAO.saveUser(bernie, txn)
+      authDAO.saveGroup(group, txn)
+      authDAO.saveGroup(group2, txn)
+      authDAO.saveGroup(group3, txn)
+      authDAO.saveGroup(group4, txn)
+      authDAO.saveGroup(realm, txn)
+
+      assertResult(Set(RawlsUserRef(obama.userSubjectId), RawlsUserRef(trump.userSubjectId), RawlsUserRef(clinton.userSubjectId), RawlsUserRef(bernie.userSubjectId))) {
+        authDAO.intersectGroupMembership(realm, group4, txn)
+      }
+    }
+  }
+
   it should "find ACLs for users in subgroups" in withDefaultTestDatabase { dataSource =>
     dataSource.inTransaction() { txn =>
       val user = userFromId("obama@whitehouse.gov")
@@ -450,7 +434,7 @@ class GraphAuthDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture {
       authDAO.saveGroup(group, txn)
 
       val levels = createWorkspaceAccessGroups(authDAO, testData.workspaceNoGroups.toWorkspaceName, testUserInfo, txn)
-      val workspace = testData.workspaceNoGroups.copy(accessLevels = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
+      val workspace = testData.workspaceNoGroups.copy(realmACLs = levels ++ Map[WorkspaceAccessLevel, RawlsGroupRef](WorkspaceAccessLevels.Owner -> group))
       workspaceDAO.save(workspace, txn)
 
       assertResult( WorkspaceAccessLevels.Owner ) {
