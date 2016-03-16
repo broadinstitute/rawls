@@ -18,11 +18,11 @@ import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{StatusCodes, StatusCode, OAuth2BearerToken}
 import spray.testkit.ScalatestRouteTest
-
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.Duration
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with OrientDbTestFixture {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
   val workspace = Workspace(
@@ -37,31 +37,28 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Map.empty
   )
 
-  case class TestApiService(dataSource: DataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
+  case class TestApiService(dataSource: SlickDataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
-      dataSource,
+      slickDataSource,
       gcsDAO,
-      containerDAO,
       directoryDAO
     )_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
+      slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,
@@ -76,7 +73,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   def withTestDataServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource)
       try {
         testCode(apiService)
@@ -174,13 +171,13 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "validate method config expressions" in withTestDataServices { services =>
-    val shouldBeValid = services.workspaceService.validateMCExpressions(testData.methodConfigValidExprs)
+    val shouldBeValid = services.workspaceService.validateMCExpressions(testData.methodConfigValidExprs, this)
     assertResult(2) { shouldBeValid.validInputs.size }
     assertResult(2) { shouldBeValid.validOutputs.size }
     assertResult(0) { shouldBeValid.invalidInputs.size }
     assertResult(0) { shouldBeValid.invalidOutputs.size }
 
-    val shouldBeInvalid = services.workspaceService.validateMCExpressions(testData.methodConfigInvalidExprs)
+    val shouldBeInvalid = services.workspaceService.validateMCExpressions(testData.methodConfigInvalidExprs, this)
     assertResult(1) { shouldBeInvalid.validInputs.size }
     assertResult(0) { shouldBeInvalid.validOutputs.size }
     assertResult(1) { shouldBeInvalid.invalidInputs.size }
@@ -188,20 +185,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "retrieve ACLs" in withTestDataServices { services =>
-    services.dataSource.inTransaction() { txn =>
-      //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
-      //ACLs into the workspace manually.
-      val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-      val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
+    //ACLs into the workspace manually.
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
 
-      containerDAO.authDAO.saveUser(user, txn)
-      containerDAO.authDAO.saveGroup(group, txn)
+    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsGroupQuery.save(group))
 
-      val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
-      val theOwnerGroup = containerDAO.authDAO.loadGroup(ownerGroupRef, txn).get
-      val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
-      containerDAO.authDAO.saveGroup(replacementOwnerGroup, txn)
-    }
+    val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
+    val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
+    val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
+    runAndWait(rawlsGroupQuery.save(replacementOwnerGroup))
 
     val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]]
@@ -224,10 +219,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "patch ACLs" in withTestDataServices { services =>
     val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveUser(user, txn)
-      containerDAO.authDAO.saveGroup(group, txn)
-    }
+    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsGroupQuery.save(group))
 
     services.gcsDAO.createGoogleGroup(group)
     testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
@@ -301,9 +294,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "fail to patch ACLs if a user doesn't exist" in withTestDataServices { services =>
     val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(group, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(group))
     testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
 
     val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner), WorkspaceACLUpdate("group@whitehouse.gov", WorkspaceAccessLevels.Read))

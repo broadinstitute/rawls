@@ -11,7 +11,6 @@ import akka.util.Timeout
 import com.tinkerpop.blueprints.impls.orient.OrientGraph
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.datamigration.DataMigration
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor.{BootMonitors, BucketDeletionMonitor}
@@ -37,10 +36,6 @@ object Boot extends App {
 
     val orientConfig = conf.getConfig("orientdb")
     val dbConnectionUrl = orientConfig.getString("connectionUrl")
-    val dataSource = DataSource(dbConnectionUrl, orientConfig.getString("rootUser"), orientConfig.getString("rootPassword"), 0, 30)
-
-    dataSource.inTransaction() { txn => txn.withGraph { graph => VertexSchema.createVertexClasses(graph.asInstanceOf[OrientGraph]) } }
-
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("database", conf))
 
     val gcsConfig = conf.getConfig("gcs")
@@ -70,35 +65,21 @@ object Boot extends App {
     )
 
     system.registerOnTermination {
-      dataSource.shutdown()
+      slickDataSource.databaseConfig.db.shutdown
     }
 
-    val containerDAO = GraphContainerDAO(
-      new GraphWorkflowDAO(new GraphSubmissionDAO()),
-      new GraphWorkspaceDAO(),
-      new GraphEntityDAO(),
-      new GraphMethodConfigurationDAO(),
-      new GraphAuthDAO(),
-      new GraphBillingDAO(),
-      new GraphSubmissionDAO()
-    )
-
-    DataMigration.migrateData(conf, containerDAO, dataSource)
-
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
       new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-      dataSource
+      slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
-    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+    val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
-    BootMonitors.restartMonitors(dataSource, containerDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
+    BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(dataSource, gcsDAO, containerDAO, userDirDAO)
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val service = system.actorOf(RawlsApiServiceActor.props(
-                    WorkspaceService.constructor(dataSource,
-                                                  containerDAO,
+                    WorkspaceService.constructor(slickDataSource,
                                                   new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
                                                   new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
                                                   gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),

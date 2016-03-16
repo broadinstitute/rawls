@@ -21,7 +21,7 @@ case class SubmissionRecord(id: UUID,
                             status: String
                            )
 
-case class SubmissionValidationRecord(workflowId: Option[UUID],
+case class SubmissionValidationRecord(workflowId: Option[Long],
                                       workflowFailureId: Option[Long],
                                       valueId: Option[Long],
                                       errorText: Option[String],
@@ -61,7 +61,7 @@ trait SubmissionComponent {
       TODO: add a constraint to ensure that one of workflowId / workflowFailureId are present
       See GAWB-288
      */
-    def workflowId = column[Option[UUID]]("WORKFLOW_ID")
+    def workflowId = column[Option[Long]]("WORKFLOW_ID")
     def workflowFailureId = column[Option[Long]]("WORKFLOW_FAILURE_ID")
     def valueId = column[Option[Long]]("VALUE_ID")
     def errorText = column[Option[String]]("ERROR_TEXT")
@@ -96,12 +96,23 @@ trait SubmissionComponent {
       }))
     }
 
+    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(Submission, RawlsUser)]] = {
+      val query = for {
+        submissionRec <- findByWorkspaceId(workspaceContext.workspaceId)
+        userRec <- rawlsUserQuery if (submissionRec.submitterId === userRec.userSubjectId)
+      } yield (submissionRec, userRec)
+      
+      query.result.flatMap(recs => DBIO.sequence(recs.map { case (submissionRec, userRec) =>
+        loadSubmission(submissionRec.id).map(sub => (sub.get, rawlsUserQuery.unmarshalRawlsUser(userRec)))
+      }))
+    }
+
     /* creates a submission and associated workflows in a workspace */
     def create(workspaceContext: SlickWorkspaceContext, submission: Submission): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
         DBIO.seq(workflows.map { case (wf) =>
-          workflowQuery.save(workspaceContext, submission.submissionId, wf)
+          workflowQuery.save(workspaceContext, UUID.fromString(submission.submissionId), wf)
         }.toSeq: _*)
       }
 
@@ -140,7 +151,7 @@ trait SubmissionComponent {
 
       def deleteSubmissionWorkflows(submissionId: UUID) = {
         workflowQuery.findWorkflowsBySubmissionId(submissionId).result.flatMap { recs => DBIO.sequence(recs.map { rec =>
-          workflowQuery.delete(workspaceContext, submissionId.toString, rec.id.toString)
+          workflowQuery.delete(rec.id)
         })}
       }
 
@@ -162,6 +173,13 @@ trait SubmissionComponent {
       findActiveSubmissions.result.flatMap(recs => DBIO.sequence(recs.map{ rec =>
         loadActiveSubmission(rec.id)
       }))
+    }
+
+    def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {
+      val workflowDeletes = workflowQuery.filter(_.submissionId === submissionId).result flatMap { result =>
+        DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
+      }
+      workflowDeletes andThen submissionQuery.filter(_.id === submissionId).delete
     }
 
     /*
@@ -211,7 +229,7 @@ trait SubmissionComponent {
 
     def loadSubmissionWorkflows(submissionId: UUID): ReadAction[Seq[Workflow]] = {
       workflowQuery.findWorkflowsBySubmissionId(submissionId).result.flatMap(recs => DBIO.sequence(recs.map { rec =>
-        workflowQuery.loadWorkflow(submissionId, rec.id) map(wf => wf.get)
+        workflowQuery.get(rec.id) map(wf => wf.get)
       }))
     }
 

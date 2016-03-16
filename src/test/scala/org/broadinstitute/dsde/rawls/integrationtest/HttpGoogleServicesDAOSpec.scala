@@ -5,7 +5,6 @@ import akka.actor.ActorSystem
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
-
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
 import scala.util.Try
@@ -14,10 +13,9 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
 import spray.http.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
-import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
-
-class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with OrientDbTestFixture {
+class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with TestDriverComponent {
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
@@ -31,8 +29,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getString("tokenEncryptionKey"),
     gcsConfig.getString("tokenSecretsJson")
   )
-  val mockDataSource = DataSource("memory:12345", "admin", "admin")
-  val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(mockDataSource, containerDAO, gcsDAO))
+
+  val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
   val testProject = "broad-dsde-dev"
   val testWorkspaceId = UUID.randomUUID.toString
@@ -94,10 +92,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val ownerResource = Await.result(retry(when500)(() => Future { directory.groups.get(ownerGroup.groupEmail.value).execute() }), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
-    mockDataSource.inTransaction() { txn =>
-      VertexSchema.createVertexClasses(txn.graph)
-      containerDAO.workspaceDAO.savePendingBucketDeletions(PendingBucketDeletions(Set.empty), txn)
-    }
     Await.result(gcsDAO.deleteWorkspace(googleWorkspaceInfo.bucketName, googleWorkspaceInfo.groupsByAccessLevel.values.toSeq, bucketDeletionMonitor), Duration.Inf)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup.groupEmail.value).execute() }

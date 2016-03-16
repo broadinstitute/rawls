@@ -284,16 +284,15 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
   test("output expressions") {
     withTestWorkspace { workspaceContext =>
-      val parser = new ExpressionParser
-      assert(parser.parseOutputExpr("this.attribute").isSuccess, "this.attribute should parse correctly" )
-      assert(parser.parseOutputExpr("this..attribute").isFailure, "this..attribute should not parse correctly" )
-      assert(parser.parseOutputExpr("this.chained.expression").isFailure, "this.chained.expression should not parse correctly" )
+      assert(parseOutputExpr("this.attribute").isSuccess, "this.attribute should parse correctly" )
+      assert(parseOutputExpr("this..attribute").isFailure, "this..attribute should not parse correctly" )
+      assert(parseOutputExpr("this.chained.expression").isFailure, "this.chained.expression should not parse correctly" )
 
-      assert(parser.parseOutputExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
-      assert(parser.parseOutputExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
-      assert(parser.parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
+      assert(parseOutputExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
+      assert(parseOutputExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
+      assert(parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
       
-      assert(parser.parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
+      assert(parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
     }
   }
 }

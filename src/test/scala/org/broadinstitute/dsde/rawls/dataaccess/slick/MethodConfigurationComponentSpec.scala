@@ -54,9 +54,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "list method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    assertResult(List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort)) {
-      runAndWait(methodConfigurationQuery.list(workspaceContext)).toList
-    }
+    List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort) should contain
+    theSameElementsAs(runAndWait(methodConfigurationQuery.list(workspaceContext)).toList)
   }
 
   it should "rename method configs" in withDefaultTestDatabase {
@@ -75,7 +74,10 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "delete method configs" in withDefaultTestDatabase {
+  /*
+   * test disabled until we decide what to do with submissions that reference deleted configs
+   */
+  ignore should "*DISABLED* delete method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     assertResult(Option("testConfig1")) {
@@ -86,6 +88,20 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     assertResult(None) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
+    }
+  }
+
+  it should "delete method configs" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    assertResult(Option(testData.methodConfig3.name)) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name)).map(_.name)
+    }
+
+    runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+
+    assertResult(None) {
+      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
     }
   }
 }
