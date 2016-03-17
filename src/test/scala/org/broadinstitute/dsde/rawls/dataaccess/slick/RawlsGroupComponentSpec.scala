@@ -254,8 +254,8 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   }
 
   val userSubjId = "dummy-ID"
-  val userEmail = "dummy-email@example.com"
-  val testUser = RawlsUser(RawlsUserSubjectId(userSubjId), RawlsUserEmail(userEmail))
+  val userEmailDummy = "dummy-email@example.com"
+  val testUser = RawlsUser(RawlsUserSubjectId(userSubjId), RawlsUserEmail(userEmailDummy))
 
   def userFromId(subjectId: String) =
     RawlsUser(RawlsUserSubjectId(subjectId), RawlsUserEmail("dummy@example.com"))
@@ -310,5 +310,56 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(rawlsGroupQuery.load(group2))
     }
   }
+
+  it should "flatten group membership" in withEmptyTestDatabase {
+    val testUser2 = testUser.copy(userSubjectId = RawlsUserSubjectId("dummy-ID2"), userEmail = RawlsUserEmail("dummy-email2@example.com"))
+    val group1 = makeRawlsGroup("Group One", Set(testUser))
+    val group2 = makeRawlsGroup("Group Two", Set(testUser2)).copy(subGroups = Set(group1))
+    val group3 = makeRawlsGroup("Group Three", Set.empty).copy(subGroups = Set(group2))
+    val group4 = makeRawlsGroup("Group Four", Set.empty).copy(subGroups = Set(group3))
+    val group5 = makeRawlsGroup("Group Five", Set.empty).copy(subGroups = Set(group3))
+
+    runAndWait(rawlsUserQuery.save(testUser))
+    runAndWait(rawlsUserQuery.save(testUser2))
+    runAndWait(rawlsGroupQuery.save(group1))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group4))
+    runAndWait(rawlsGroupQuery.save(group5))
+
+    assertResult(Set(testUser, testUser2).map(u => RawlsUserRef(u.userSubjectId))) {
+      runAndWait(rawlsGroupQuery.flattenGroupMembership(group5))
+    }
+
+  }
+
+  it should "return the intersection of a realm and a group" in withEmptyTestDatabase {
+    val obama = RawlsUser(RawlsUserSubjectId("obama"), RawlsUserEmail("obama@whitehouse.gov"))
+    val trump = RawlsUser(RawlsUserSubjectId("donald"), RawlsUserEmail("thedonald@donaldjtrump.com"))
+    val arod = RawlsUser(RawlsUserSubjectId("arod"), RawlsUserEmail("alexrodriguez@mlb.com"))
+    val clinton = RawlsUser(RawlsUserSubjectId("hillary"), RawlsUserEmail("hillary@maybewhitehouse.gov"))
+    val bernie = RawlsUser(RawlsUserSubjectId("bernie"), RawlsUserEmail("bernie@vermont.gov"))
+    val group = makeRawlsGroup("Good", Set(obama, bernie))
+    val group2 = makeRawlsGroup("Evil", Set(trump, arod))
+    val group3 = makeRawlsGroup("Other", Set(clinton))
+    val group4 = makeRawlsGroup("Good & Evil", Set.empty).copy(subGroups =  Set(group, group2, group3))
+    val realm = makeRawlsGroup("Politicos", Set(obama, trump, bernie)).copy(subGroups = Set(group3))
+
+    runAndWait(rawlsUserQuery.save(obama))
+    runAndWait(rawlsUserQuery.save(trump))
+    runAndWait(rawlsUserQuery.save(arod))
+    runAndWait(rawlsUserQuery.save(clinton))
+    runAndWait(rawlsUserQuery.save(bernie))
+    runAndWait(rawlsGroupQuery.save(group))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group4))
+    runAndWait(rawlsGroupQuery.save(realm))
+
+    assertResult(Set(RawlsUserRef(obama.userSubjectId), RawlsUserRef(trump.userSubjectId), RawlsUserRef(clinton.userSubjectId), RawlsUserRef(bernie.userSubjectId))) {
+      runAndWait(rawlsGroupQuery.intersectGroupMembership(realm, group4))
+    }
+  }
+
 
 }
