@@ -185,7 +185,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         case Success(group) => DBIO.successful(group)
         case Failure(t: HttpResponseException) if t.getStatusCode == StatusCodes.Conflict.intValue =>
           // this case is where the group was not in our db but already in google
-          dataAccess.rawlsGroupQuery.save(allUsersGroupRef)
+          dataAccess.rawlsGroupQuery.save(RawlsGroup(allUsersGroupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(allUsersGroupRef.groupName)), Set.empty, Set.empty))
         case Failure(regrets) => DBIO.failed(regrets)
       }
     }
@@ -347,7 +347,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     dataSource.inTransaction { dataAccess =>
       withGroup(groupRef, dataAccess) { group =>
         withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
-          val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, txn)
+          val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, dataAccess)
 
           // finally report the results
           addMembersAction.map {
@@ -359,7 +359,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], txn: RawlsTransaction): ReadWriteAction[Option[ErrorReport]] = {
+  def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
     val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
     val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
 
@@ -371,19 +371,17 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     } yield result
 
     // then if there were no errors, add users that should be added
-    val addMembersAction = removeMembersAction.flatMap {
+    removeMembersAction.flatMap {
       case Some(errorReport) => DBIO.successful(Option(errorReport))
       case None =>
         val usersToAdd = users.filter(user => !group.users.contains(user))
         val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
 
         // need to reload group cause it changed if members were removed
-        dataAccess.rawlsGroupQuery.load(groupRef).map(_.get) flatMap {
+        dataAccess.rawlsGroupQuery.load(group).map(_.get) flatMap {
           updateGroupMembersInternal(_, usersToAdd, subGroupsToAdd, AddGroupMembersOp, dataAccess)
         }
-
     }
-
   }
 
   private def withMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess)(op: (Set[RawlsUser], Set[RawlsGroup]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
@@ -546,9 +544,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         }
       }
     } flatMap { errorReport =>
-      Future.sequence(containerDAO.authDAO.findWorkspacesForGroup(group, txn).flatMap(ws =>
-        updateIntersectionGroupMembers(ws, txn)
-      ) :+ Future.successful(errorReport))
+      DBIO.sequence(
+        dataAccess.workspaceQuery.findWorkspacesForGroup(group).flatMap(ws => updateIntersectionGroupMembers(ws)) :+ DBIO.successful(errorReport)
     } map { errorReports =>
       val reports = errorReports.collect {
         case Some(report) => report
@@ -561,17 +558,22 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def updateIntersectionGroupMembers(workspace: Workspace, txn: RawlsTransaction): Seq[Future[Option[ErrorReport]]] = {
+  def updateIntersectionGroupMembers(workspace: Workspace, dataAccess:DataAccess): Seq[ReadWriteAction[Option[ErrorReport]]] = {
     workspace.realm match {
-      case None => Seq(Future.successful(None))
+      case None => Seq(DBIO.successful(None))
       case Some(realm) =>
         workspace.accessLevels.map {
           case (accessLevel, group) =>
-            val intersectionGroup = containerDAO.authDAO.loadGroup(workspace.realmACLs(accessLevel), txn).getOrElse(throw new RawlsException("Unable to load intersection group"))
+            dataAccess.rawlsGroupQuery.load(workspace.realmACLs(accessLevel)) flatMap {
+              case None => DBIO.failed(new RawlsException("Unable to load intersection group"))
+              case Some(intersectionGroup) =>
+                dataAccess.rawlsGroupQuery.intersectGroupMembership(group, realm) flatMap { newMemberRefs =>
+                  DBIO.sequence(newMemberRefs.map(dataAccess.rawlsUserQuery.load(_).map(_.get)))
+                } flatMap { newMembers =>
+                  overwriteGroupMembersInternal(intersectionGroup, newMembers, Set.empty, dataAccess)
+                }
+            }
 
-            overwriteGroupMembersInternal(intersectionGroup,
-              containerDAO.authDAO.intersectGroupMembership(group, realm, txn).map(ref => containerDAO.authDAO.loadUser(ref, txn).get),
-              Set.empty, txn)
         }.toSeq
     }
   }

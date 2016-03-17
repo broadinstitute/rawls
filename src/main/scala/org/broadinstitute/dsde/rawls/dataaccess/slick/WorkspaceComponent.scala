@@ -20,10 +20,11 @@ case class WorkspaceRecord(
   createdDate: Timestamp,
   lastModified: Timestamp,
   createdBy: String,
-  isLocked: Boolean
+  isLocked: Boolean,
+  realmGroupName: Option[String]
 )
 case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: Long)
-case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String)
+case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
 
 trait WorkspaceComponent {
   this: DriverComponent
@@ -46,10 +47,12 @@ trait WorkspaceComponent {
     def lastModified = column[Timestamp]("last_modified")
     def createdBy = column[String]("created_by")
     def isLocked = column[Boolean]("is_locked")
+    def realmGroupName = column[Option[String]]("realm_group_name")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName)
 
-    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends Table[WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
@@ -66,13 +69,14 @@ trait WorkspaceComponent {
     def groupName = column[String]("group_name")
     def workspaceId = column[UUID]("workspace_id")
     def accessLevel = column[String]("access_level")
+    def isRealmAcl = column[Boolean]("is_realm_acl")
 
     def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def group = foreignKey("FK_WS_ACCESS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel))
 
-    def * = (workspaceId, groupName, accessLevel) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
+    def * = (workspaceId, groupName, accessLevel, isRealmAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
   }
 
   protected val workspaceAttributeQuery = TableQuery[WorkspaceAttributeTable]
@@ -80,6 +84,10 @@ trait WorkspaceComponent {
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
+
+    def listAll(): ReadAction[Seq[Workspace]] = {
+      workspaceQuery.result.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
+    }
 
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
@@ -92,9 +100,9 @@ trait WorkspaceComponent {
       val workspaceRecord = marshalWorkspace(workspace)
 
       workspaceQuery insertOrUpdate workspaceRecord andThen {
-        DBIO.seq(workspace.accessLevels.map { case (accessLevel, group) =>
-          workspaceAccessQuery insertOrUpdate WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString)
-        }.toSeq: _*)
+        val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString, false) }
+        val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString, true) }
+        DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
 
       } andThen {
         workspaceAttributes(workspaceRecord.id).result.flatMap { attributeRecords =>
@@ -233,20 +241,24 @@ trait WorkspaceComponent {
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
       uniqueResult[WorkspaceRecord](lookup).flatMap {
         case None => DBIO.successful(None)
-        case Some(workspaceRec) =>
-          for (
-            attributes <- loadAttributes(workspaceRec.id);
-            accessGroups <- loadAccessGroupRefs(workspaceRec.id)
-          ) yield Option(unmarshalWorkspace(workspaceRec, attributes, accessGroups))
+        case Some(workspaceRec) => loadWorkspace(workspaceRec).map(Option(_))
       }
     }
 
-    private def marshalWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked)
+    private def loadWorkspace(workspaceRec: WorkspaceRecord): ReadAction[Workspace] = {
+      for (
+        attributes <- loadAttributes(workspaceRec.id);
+        (realmACLs, accessGroups) <- loadAccessGroupRefs(workspaceRec.id)
+      ) yield unmarshalWorkspace(workspaceRec, attributes, accessGroups, realmACLs)
     }
 
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[String, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, workspaceRec.isLocked)
+    private def marshalWorkspace(workspace: Workspace) = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value))
+    }
+
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[String, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
+      val realm = workspaceRec.realmGroupName.map(name => RawlsGroupRef(RawlsGroupName(name)))
+      Workspace(workspaceRec.namespace, workspaceRec.name, realm, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, realmACLs, workspaceRec.isLocked)
     }
 
     private def loadAttributes(workspaceId: UUID) = {
@@ -257,8 +269,12 @@ trait WorkspaceComponent {
       (workspaceAccessQuery filter (_.workspaceId === workspaceId)).result.map(unmarshalRawlsGroupRefs)
     }
 
-    private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]): Map[WorkspaceAccessLevel, RawlsGroupRef] = {
-      workspaceAccessRecords.map(rec => WorkspaceAccessLevels.withName(rec.accessLevel) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
+    private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]) = {
+      def toGroupMap(recs: Seq[WorkspaceAccessRecord]) =
+        recs.map(rec => WorkspaceAccessLevels.withName(rec.accessLevel) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
+
+      val (realmAclRecs, accessGroupRecs) = workspaceAccessRecords.partition(_.isRealmAcl)
+      (toGroupMap(realmAclRecs), toGroupMap(accessGroupRecs))
     }
   }
 }

@@ -229,10 +229,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             case success => success
           }
         }) andThen {
-          DBIO.sequence(workspaceContext.workspace.accessLevels.values.map(dataAccess.rawlsGroupQuery.load)) flatMap { accessGroupOptions =>
-            val accessGroups = accessGroupOptions.collect { case Some(g) => g }
-            DBIO.from(gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor))
-          }
+          DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
+        } andThen {
+          val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
+          DBIO.seq(groupRefs.map { groupRef => dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+            case Some(group) => DBIO.from(gcsDAO.deleteGoogleGroup(group))
+            case None => DBIO.successful(Unit)
+          } }.toSeq:_* )
         } andThen {
           DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
         } andThen {
@@ -251,25 +254,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           dataAccess.workspaceQuery.delete(workspaceName)
         } andThen {
           DBIO.successful(RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h."))
-        }
-
-        // use a set because the two maps may be duplicates
-        val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-        val groups = groupRefs.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
-
-        Future.traverse(groups) { gcsDAO.deleteGoogleGroup } map { _ =>
-          groupRefs foreach {  containerDAO.authDAO.deleteGroup(_, txn) }
-          containerDAO.workspaceDAO.delete(workspaceName, txn)
-          bucketDeletionMonitor ! DeleteBucket(workspaceContext.workspace.bucketName)
-          RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
-        }
-
-        val accessGroups = workspaceContext.workspace.accessLevels.values.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
-        gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor).map { _ =>
-          containerDAO.authDAO.deleteWorkspaceAccessGroups(workspaceContext.workspace, txn)
-          containerDAO.workspaceDAO.delete(workspaceName, txn)
-
-          RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
         }
       }
     }
@@ -338,48 +322,37 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(sourceWorkspaceName), writeLocks=Set(destWorkspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read,txn) { sourceWorkspaceContext =>
-        withNewWorkspaceContext(WorkspaceRequest(destWorkspaceName.namespace,destWorkspaceName.name,sourceWorkspaceContext.workspace.attributes),txn) { destWorkspaceContext =>
-          containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
-          // TODO add a method for cloning all method configs, instead of doing this
-          containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-            containerDAO.methodConfigurationDAO.save(destWorkspaceContext,
-              containerDAO.methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
-          }
-        }
-      }
-    }
-
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(sourceWorkspaceName), writeLocks=Set(destWorkspaceRequest.toWorkspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read,txn) { sourceWorkspaceContext =>
-        withClonedRealm(sourceWorkspaceContext: WorkspaceContext, destWorkspaceRequest: WorkspaceRequest) { newRealm =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
+        withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
 
           // add to or replace current attributes, on an individual basis
           val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), txn) { destWorkspaceContext =>
-            containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
-            // TODO add a method for cloning all method configs, instead of doing this
-            containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-              containerDAO.methodConfigurationDAO.save(destWorkspaceContext,
-                containerDAO.methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
+          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+            dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+              dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                val inserts = methodConfigShorts.map { methodConfigShort => dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                  dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
+                }
+                }
+                DBIO.seq(inserts: _*)
+              } andThen {
+              DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
             }
-            RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path)
           }
         }
       }
     }
 
-  private def withClonedRealm(sourceWorkspaceContext: WorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
     // otherwise, the caller may choose to apply a realm
     (sourceWorkspaceContext.workspace.realm, destWorkspaceRequest.realm) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
       case (Some(sourceRealm), _) => op(Option(sourceRealm))
       case (None, destOpt) => op(destOpt)
     }
@@ -522,72 +495,45 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(entityCopyDef.sourceWorkspace), writeLocks=Set(entityCopyDef.destinationWorkspace)) { txn =>
-      //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
-      //we can't upgrade a read lock to a write.
-      withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, txn) { destWorkspaceContext =>
-        withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, txn) { sourceWorkspaceContext =>
-          realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
-            Future {
-              val entityNames = entityCopyDef.entityNames
-              val entityType = entityCopyDef.entityType
-              val conflicts = containerDAO.entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
-              conflicts.size match {
-                case 0 => {
-                  // get the entities that were copied into the destination workspace
-                  val entityCopies = containerDAO.entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
-                  RequestComplete(StatusCodes.Created, entityCopies)
-                }
-                case _ => {
-                  val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-                  val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
-                  throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq))
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
       //we can't upgrade a read lock to a write.
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-          val entityNames = entityCopyDef.entityNames
-          val entityType = entityCopyDef.entityType
-          val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
-          copyResults.flatMap(conflicts => conflicts.size match {
-            case 0 => {
-              // get the entities that were copied into the destination workspace
-              dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities => 
-                val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
-                RequestComplete(StatusCodes.Created, entityCopies)
+          realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
+            val entityNames = entityCopyDef.entityNames
+            val entityType = entityCopyDef.entityType
+            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
+            copyResults.flatMap(conflicts => conflicts.size match {
+              case 0 => {
+                // get the entities that were copied into the destination workspace
+                dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
+                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
+                  RequestComplete(StatusCodes.Created, entityCopies)
+                }
               }
-            }
-            case _ => {
-              val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-              val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(),Seq.empty))
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
-            }
-          })
+              case _ => {
+                val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
+                val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
+              }
+            })
+          }
         }
       }
     }
 
   // can't use withClonedRealm because the Realm -> no Realm logic is different
-  private def realmCheck(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext): Future[Boolean] = {
+  private def realmCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
     // if the source has a realm, the dest must also have that realm
     (sourceWorkspaceContext.workspace.realm, destWorkspaceContext.workspace.realm) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
       case (Some(sourceRealm), None) =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities outside of a realm"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
-      case _ => Future.successful(true)
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case _ => DBIO.successful(true)
     }
   }
 
@@ -1261,10 +1207,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   def listAllWorkspaces() = {
     asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          RequestComplete(StatusCodes.OK, containerDAO.workspaceDAO.list(txn).toList)
-        }
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
       }
     }
   }
@@ -1278,109 +1222,129 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
     
     asAdmin {
-      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get 
-          val STATUS_FOUND = "FOUND"
-          val STATUS_NOT_FOUND = "NOT_FOUND"
-          val STATUS_CAN_WRITE = "USER_CAN_WRITE"
-          val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
-          val STATUS_NA = "NOT_AVAILABLE"
+      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
+      val STATUS_FOUND = "FOUND"
+      val STATUS_NOT_FOUND = "NOT_FOUND"
+      val STATUS_CAN_WRITE = "USER_CAN_WRITE"
+      val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
+      val STATUS_NA = "NOT_AVAILABLE"
 
-          val bucketName = workspace.bucketName
-          val rawlsGroupRefs = workspace.accessLevels
-          val googleGroupRefs = rawlsGroupRefs map { case (accessLevel, groupRef) =>
-            accessLevel -> run { _.rawlsGroupQuery.load(groupRef) }
-          }
+      val bucketName = workspace.bucketName
+      val rawlsAccessGroupRefs = workspace.accessLevels
+      val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
+        }
+      }
+      val rawlsIntersectionGroupRefs = workspace.realmACLs
+      val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
+        }
+      }
 
-          val userRef = userSubjectId.flatMap(id => run { _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id))) })
+      val userRef = userSubjectId.flatMap(id => run {
+        _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id)))
+      })
 
-          val userStatus = userRef match {
-            case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
-            case None => userSubjectId match {
-              case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
-              case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
-            }
-          }
+      val userStatus = userRef match {
+        case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
+        case None => userSubjectId match {
+          case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
+          case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
+        }
+      }
 
-          val rawlsGroupStatuses = rawlsGroupRefs map { case (_, groupRef) =>
-            run { _.rawlsGroupQuery.load(groupRef) } match {
-              case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-            }
-          }
+      val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
 
-          val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
-            val groupEmail = groupRef.get.groupEmail.value
-            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-            }))
-          }
+      val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
 
-          val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
-            containerDAO.authDAO.loadGroup(groupRef, txn) match {
-              case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-            }
-          }
+      val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
 
-          val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
-            val groupEmail = groupRef.get.groupEmail.value
-            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-            }))
-          }
+      val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
 
-          val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
-            case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
-            case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+      val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
+        case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
+        case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+      }))
+
+      val bucketWriteStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
+            case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
+            case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
           }))
+        }
+        case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
+      }
 
-          val bucketWriteStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
-                case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
-                case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
-              }))
-            }
-            case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
-          }
+      val userProxyStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
+            if (status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
+            else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
+          })
+        }
+        case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
+      }
 
-          val userProxyStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
-                if(status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
-                else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
-              })
-            }
-            case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
-          }
+      val userAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) =>
+          "WORKSPACE_USER_ACCESS_LEVEL" -> run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
+          }.toString()
+        case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+      }
 
-          val userAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) =>
-              "WORKSPACE_USER_ACCESS_LEVEL" -> run { getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _) }.toString()
-            case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+      val googleAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) => {
+          val accessLevel = run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
           }
+          if (accessLevel >= WorkspaceAccessLevels.Read) {
+            val groupEmail = run {
+              _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get)
+            }.get.groupEmail.value
+            toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
+              if (status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
+              else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
+            })
+          }
+          else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
+        }
+        case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
+      }
 
-          val googleAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) => {
-              val accessLevel = run { getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _) }
-              if(accessLevel >= WorkspaceAccessLevels.Read) {
-                val groupEmail = run { _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get) }.get.groupEmail.value
-                toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
-                  if(status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
-                  else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
-                })
-              }
-              else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
-            }
-            case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
-          }
-
-          Future.sequence(googleAccessGroupStatuses++googleIntersectionGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
-            val statuses = tries.collect { case Success(s) => s }.toSeq
-            RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses++rawlsIntersectionGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
-          }
+      Future.sequence(googleAccessGroupStatuses ++ googleIntersectionGroupStatuses ++ Seq(bucketStatus, bucketWriteStatus, userProxyStatus, googleAccessLevel)).map { tries =>
+        val statuses = tries.collect { case Success(s) => s }.toSeq
+        RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses ++ rawlsIntersectionGroupStatuses ++ statuses ++ Seq(userStatus, userAccessLevel)).toMap))
+      }
     }
   }
 
@@ -1397,13 +1361,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
             val currentDate = DateTime.now
 
-            def saveAndMap(level: WorkspaceAccessLevel, group: RawlsGroup): (WorkspaceAccessLevel, RawlsGroupRef) = {
-              containerDAO.authDAO.saveGroup(group, txn)
-              level -> group
-            }
-
-            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => saveAndMap(a, g) }
-            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => saveAndMap(a, g) } }
+            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))}
+            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => (a -> RawlsGroup.toRef(g))} }
 
             val workspace = Workspace(
               namespace = workspaceRequest.namespace,
@@ -1419,7 +1378,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
               realmACLs = intersectionGroups getOrElse accessGroups
             )
 
-            op(containerDAO.workspaceDAO.save(workspace, txn))
+            val groupInserts =
+              googleWorkspaceInfo.accessGroupsByLevel.values.map(dataAccess.rawlsGroupQuery.save) ++
+              googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
+
+            DBIO.seq(groupInserts.toSeq:_*) andThen
+              dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
           }
       }
     }
@@ -1428,21 +1392,21 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
-  private def requireCreateWorkspaceAccess(workspaceName: WorkspaceName, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace)) flatMap {
+  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.toWorkspaceName.namespace)) flatMap {
       case Some(billingProject) =>
         if (billingProject.users.contains(RawlsUser(userInfo))) {
           workspaceRequest.realm match {
-            case Some(realm) => containerDAO.authDAO.loadGroupIfMember(realm, RawlsUser(userInfo), txn) match {
-              case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
+            case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
+              case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
               case Some(_) => op
             }
             case None => op
           }
         } else {
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceName.namespace}")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
         }
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceName.namespace} not found")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceRequest.toWorkspaceName.namespace} not found")))
     }
   }
 
