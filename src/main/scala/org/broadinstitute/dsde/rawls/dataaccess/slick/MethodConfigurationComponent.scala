@@ -28,8 +28,8 @@ trait MethodConfigurationComponent {
 
   class MethodConfigurationTable(tag: Tag) extends Table[MethodConfigurationRecord](tag, "METHOD_CONFIG") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def namespace = column[String]("NAMESPACE")
-    def name = column[String]("NAME")
+    def namespace = column[String]("NAMESPACE", O.Length(254))
+    def name = column[String]("NAME", O.Length(254))
     def workspaceId = column[UUID]("WORKSPACE_ID")
     def rootEntityType = column[String]("ROOT_ENTITY_TYPE")
     def methodNamespace = column[String]("METHOD_NAMESPACE")
@@ -45,7 +45,7 @@ trait MethodConfigurationComponent {
   class MethodConfigurationInputTable(tag: Tag) extends Table[MethodConfigurationInputRecord](tag, "METHOD_CONFIG_INPUT") {
     def methodConfigId = column[Long]("METHOD_CONFIG_ID")
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def key = column[String]("KEY")
+    def key = column[String]("KEY", O.Length(254))
     def value = column[String]("VALUE")
 
     def * = (methodConfigId, id, key, value) <> (MethodConfigurationInputRecord.tupled, MethodConfigurationInputRecord.unapply)
@@ -57,7 +57,7 @@ trait MethodConfigurationComponent {
   class MethodConfigurationOutputTable(tag: Tag) extends Table[MethodConfigurationOutputRecord](tag, "METHOD_CONFIG_OUTPUT") {
     def methodConfigId = column[Long]("METHOD_CONFIG_ID")
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def key = column[String]("KEY")
+    def key = column[String]("KEY", O.Length(254))
     def value = column[String]("VALUE")
 
     def * = (methodConfigId, id, key, value) <> (MethodConfigurationOutputRecord.tupled, MethodConfigurationOutputRecord.unapply)
@@ -69,7 +69,7 @@ trait MethodConfigurationComponent {
   class MethodConfigurationPrereqTable(tag: Tag) extends Table[MethodConfigurationPrereqRecord](tag, "METHOD_CONFIG_PREREQ") {
     def methodConfigId = column[Long]("METHOD_CONFIG_ID")
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def key = column[String]("KEY")
+    def key = column[String]("KEY", O.Length(254))
     def value = column[String]("VALUE")
 
     def * = (methodConfigId, id, key, value) <> (MethodConfigurationPrereqRecord.tupled, MethodConfigurationPrereqRecord.unapply)

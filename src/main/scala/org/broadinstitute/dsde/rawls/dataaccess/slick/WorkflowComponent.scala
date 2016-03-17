@@ -43,7 +43,7 @@ trait WorkflowComponent {
     def externalid = column[String]("EXTERNAL_ID")
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
-    def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED")
+    def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
 
     def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)

@@ -39,11 +39,11 @@ trait WorkspaceComponent {
 
   class WorkspaceTable(tag: Tag) extends Table[WorkspaceRecord](tag, "WORKSPACE") {
     def id = column[UUID]("id", O.PrimaryKey)
-    def namespace = column[String]("namespace")
-    def name = column[String]("name")
+    def namespace = column[String]("namespace", O.Length(254))
+    def name = column[String]("name", O.Length(254))
     def bucketName = column[String]("bucket_name")
-    def createdDate = column[Timestamp]("created_date")
-    def lastModified = column[Timestamp]("last_modified")
+    def createdDate = column[Timestamp]("created_date", O.Default(defaultTimeStamp))
+    def lastModified = column[Timestamp]("last_modified", O.Default(defaultTimeStamp))
     def createdBy = column[String]("created_by")
     def isLocked = column[Boolean]("is_locked")
 
@@ -63,9 +63,9 @@ trait WorkspaceComponent {
   }
 
   class WorkspaceAccessTable(tag: Tag) extends Table[WorkspaceAccessRecord](tag, "WORKSPACE_ACCESS") {
-    def groupName = column[String]("group_name")
+    def groupName = column[String]("group_name", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
-    def accessLevel = column[String]("access_level")
+    def accessLevel = column[String]("access_level", O.Length(254))
 
     def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def group = foreignKey("FK_WS_ACCESS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
