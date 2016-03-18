@@ -118,10 +118,12 @@ trait SubmissionComponent {
 
       def saveSubmissionWorkflowFailures(workflowFailures: Seq[WorkflowFailure]) = {
         DBIO.seq(workflowFailures.map { case (wff) =>
-          loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity) flatMap { entityId =>
-            workflowFailureQuery += marshalWorkflowFailure(entityId, UUID.fromString(submission.submissionId))
-          }
-        }.toSeq: _*)
+          for {
+            entityId <- loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity)
+            failureId <- (workflowFailureQuery returning workflowFailureQuery.map(_.id)) += marshalWorkflowFailure(entityId, UUID.fromString(submission.submissionId))
+            messageInserts <- DBIO.sequence(wff.errors.map(message => workflowErrorQuery += WorkflowErrorRecord(failureId, message.value)))
+          } yield messageInserts
+        }: _*)
       }
 
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {

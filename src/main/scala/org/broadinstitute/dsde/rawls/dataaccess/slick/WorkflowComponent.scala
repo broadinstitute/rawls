@@ -198,7 +198,7 @@ trait WorkflowComponent {
     }
 
     def loadWorkflowFailureMessages(workflowFailureId: Long): ReadAction[Seq[AttributeString]] = {
-      findWorkflowErrorsByWorkflowId(workflowFailureId).result.map(unmarshalWorkflowErrors)
+      findWorkflowErrorsByWorkflowFailureId(workflowFailureId).result.map(unmarshalWorkflowErrors)
     }
 
     def loadWorkflowFailures(submissionId: UUID): ReadAction[Seq[WorkflowFailure]] = {
@@ -250,8 +250,8 @@ trait WorkflowComponent {
       filter(rec => rec.submissionId === submissionId)
     }
 
-    def findWorkflowErrorsByWorkflowId(workflowId: Long) = {
-      (workflowErrorQuery filter(_.workflowFailureId === workflowId))
+    def findWorkflowErrorsByWorkflowFailureId(workflowFailureId: Long) = {
+      (workflowErrorQuery filter(_.workflowFailureId === workflowFailureId))
     }
 
     def findInactiveWorkflows(submissionId: UUID) = {

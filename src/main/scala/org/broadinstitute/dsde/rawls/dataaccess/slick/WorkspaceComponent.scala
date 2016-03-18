@@ -154,14 +154,14 @@ trait WorkspaceComponent {
     
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
       val accessAndUserEmail = (for {
-        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId)
+        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId && access.isRealmAcl === false)
         group <- rawlsGroupQuery if (access.groupName === group.groupName)
         userGroup <- groupUsersQuery if (group.groupName === userGroup.groupName)
         user <- rawlsUserQuery if (user.userSubjectId === userGroup.userSubjectId)
       } yield (access, user)).map { case (access, user) => (access.accessLevel, user.userEmail) }
 
       val accessAndSubGroupEmail = (for {
-        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId)
+        access <- workspaceAccessQuery if (access.workspaceId === workspaceContext.workspaceId && access.isRealmAcl === false)
         group <- rawlsGroupQuery if (access.groupName === group.groupName)
         subGroupGroup <- groupSubgroupsQuery if (group.groupName === subGroupGroup.parentGroupName)
         subGroup <- rawlsGroupQuery if (subGroup.groupName === subGroupGroup.childGroupName)
@@ -232,7 +232,7 @@ trait WorkspaceComponent {
     
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
       val query = for {
-        accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)))
+        accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
         workspace <- workspaceQuery if (workspace.id === accessLevel.workspaceId)
       } yield (workspace, accessLevel)
       query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString(), WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
@@ -250,7 +250,7 @@ trait WorkspaceComponent {
 
     private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
       for {
-        workspaceAccess <- workspaceAccessQuery.filter(_.groupName inSetBind(groups.map(_.groupName)))
+        workspaceAccess <- workspaceAccessQuery if (workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false)
         workspace <- workspaceQuery if (workspaceAccess.workspaceId === workspace.id)
       } yield workspace
     }
