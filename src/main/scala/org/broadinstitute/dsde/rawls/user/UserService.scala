@@ -40,10 +40,10 @@ object UserService {
   case object CreateUser extends UserServiceMessage
   case class AdminGetUserStatus(userRef: RawlsUserRef) extends UserServiceMessage
   case object UserGetUserStatus extends UserServiceMessage
-  case class EnableUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case class DisableUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case object ListUsers extends UserServiceMessage
-  case class ImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
+  case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case object AdminListUsers extends UserServiceMessage
+  case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
@@ -53,16 +53,16 @@ object UserService {
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
 
-  case class CreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class ListGroupMembers(groupName: String) extends UserServiceMessage
-  case class DeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminListGroupMembers(groupName: String) extends UserServiceMessage
+  case class AdminDeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminAddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AddGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
-  case class SynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
@@ -73,12 +73,12 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => adminGetUserStatus(userRef) pipeTo sender
-    case UserGetUserStatus => userGetUserStatus() pipeTo sender
-    case EnableUser(userRef) => enableUser(userRef) pipeTo sender
-    case DisableUser(userRef) => disableUser(userRef) pipeTo sender
-    case ListUsers => listUsers pipeTo sender
-    case ImportUsers(rawlsUserInfoList) => importUsers(rawlsUserInfoList) pipeTo sender
+    case AdminGetUserStatus(userRef) => asAdmin { getUserStatus(userRef) } pipeTo sender
+    case UserGetUserStatus => getUserStatus() pipeTo sender
+    case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
+    case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
+    case AdminListUsers => asAdmin { listUsers } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asAdmin{ importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     // ListBillingProjects is for the current user, not as admin
@@ -91,16 +91,16 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
 
-    case CreateGroup(groupRef) => pipe(createGroup(groupRef)) to sender
-    case ListGroupMembers(groupName) => pipe(listGroupMembers(groupName)) to sender
-    case DeleteGroup(groupName) => pipe(deleteGroup(groupName)) to sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => adminOverwriteGroupMembers(groupName, memberList) to sender
+    case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
+    case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
+    case AdminDeleteGroup(groupName) => asAdmin { deleteGroup(groupName) } pipeTo sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin { overwriteGroupMembers(groupName, memberList) } to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
     case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
     case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case SynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) to sender
+    case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -131,7 +131,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   import spray.json.DefaultJsonProtocol._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsUserInfoListFormat
 
-  def listUsers(): Future[PerRequestMessage] = asAdmin {
+  def listUsers(): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.loadAllUsersWithProjects map { projectsByUser =>
         val userInfoList = projectsByUser map {
@@ -143,7 +143,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   //imports the response from the above listUsers
-  def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = asAdmin {
+  def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       val userInfos = rawlsUserInfoList.userInfoList
       DBIO.sequence(
@@ -191,12 +191,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def userGetUserStatus(): Future[PerRequestMessage] = {
+  def getUserStatus(): Future[PerRequestMessage] = {
     getUserStatus(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
-  }
-
-  def adminGetUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
-    getUserStatus(userRef)
   }
 
   def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = withUser(userRef) { user =>
@@ -213,7 +209,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
   }
 
-  def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
+  def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already added entries are ok
     withUser(userRef) { user =>
@@ -225,7 +221,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def disableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = asAdmin {
+  def disableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already removed entries are ok
     withUser(userRef) { user =>
@@ -293,7 +289,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def listGroupMembers(groupName: String) = {
+  def listGroupMembers(groupName: String): Future[PerRequestMessage] = {
     asAdmin {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(groupName))) flatMap {
@@ -309,14 +305,12 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def createGroup(groupRef: RawlsGroupRef) = {
-    asAdmin {
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
-          case None =>
-            createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
-        }
-      }
+    dataSource.inTransaction { dataAccess =>
+	  dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+	    case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
+	    case None =>
+	      createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
+	  }
     }
   }
 
@@ -327,19 +321,11 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def deleteGroup(groupRef: RawlsGroupRef) = {
-    asAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withGroup(groupRef, dataAccess) { group =>
-          dataAccess.rawlsGroupQuery.delete(groupRef) andThen
-          DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
-        }
+    dataSource.inTransaction { dataAccess =>
+      withGroup(groupRef, dataAccess) { group =>
+        dataAccess.rawlsGroupQuery.delete(groupRef) andThen
+        DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
       }
-    }
-  }
-
-  def adminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    asAdmin {
-      overwriteGroupMembers(groupRef, memberList)
     }
   }
 
@@ -439,17 +425,15 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def synchronizeGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
-    asAdmin {
-      dataSource.inTransaction { dataAccess =>
-        withGroup(groupRef, dataAccess) { group =>
-          synchronizeGroupMembersInternal(group, dataAccess) map { syncReport =>
-            val statusCode = if (syncReport.items.exists(_.errorReport.isDefined)) {
-              StatusCodes.BadGateway // status 500 is used for all other errors, 502 seems like the best otherwise
-            } else {
-              StatusCodes.OK
-            }
-            RequestComplete(statusCode, syncReport)
+    dataSource.inTransaction { dataAccess =>
+      withGroup(groupRef, dataAccess) { group =>
+        synchronizeGroupMembersInternal(group, dataAccess) map { syncReport =>
+          val statusCode = if (syncReport.items.exists(_.errorReport.isDefined)) {
+            StatusCodes.BadGateway // status 500 is used for all other errors, 502 seems like the best otherwise
+          } else {
+            StatusCodes.OK
           }
+          RequestComplete(statusCode, syncReport)
         }
       }
     }

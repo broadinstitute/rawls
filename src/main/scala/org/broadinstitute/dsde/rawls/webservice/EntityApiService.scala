@@ -23,6 +23,12 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
 
   val entityRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
+    } ~
+    path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[Entity]) { entity =>
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
@@ -44,6 +50,13 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
         }
       }
     } ~
+/*  This endpoint has been disabled as part of GAWB-423 and will return when GAWB-422 is complete
+    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
+      delete {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+      }
+    } ~ */
     path("workspaces" / Segment / Segment / "entities" / "batchUpsert") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[Array[EntityUpdateDefinition]]) { operations =>
@@ -52,21 +65,14 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
         }
       }
     } ~
-      path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
-        post {
-          entity(as[Array[EntityUpdateDefinition]]) { operations =>
-            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
-          }
+    path("workspaces" / Segment / Segment / "entities" / "batchUpdate") { (workspaceNamespace, workspaceName) =>
+      post {
+        entity(as[Array[EntityUpdateDefinition]]) { operations =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.BatchUpdateEntities(WorkspaceName(workspaceNamespace, workspaceName), operations))
         }
-      } ~
-    //This endpoint has been disabled as part of GAWB-423 and will return when GAWB-422 is complete
-//    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
-//      delete {
-//        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-//          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
-//      }
-//    } ~
+      }
+    } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[EntityName]) { newEntityName =>
@@ -81,12 +87,6 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.EvaluateExpression(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName, expression))
         }
-      }
-    } ~
-    path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
-      get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "entities" / Segment) { (workspaceNamespace, workspaceName, entityType) =>

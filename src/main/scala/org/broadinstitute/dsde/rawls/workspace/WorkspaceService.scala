@@ -88,7 +88,7 @@ object WorkspaceService {
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
 
-  case object ListAllActiveSubmissions extends WorkspaceServiceMessage
+  case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
 
   case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -155,7 +155,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to sender
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
 
-    case ListAllActiveSubmissions => pipe(listAllActiveSubmissions()) to sender
+    case AdminListAllActiveSubmissions => asAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to sender
 
     case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
@@ -1148,10 +1148,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   }
 
   def listAllActiveSubmissions() = {
-    asAdmin {
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
-      }
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
     }
   }
 

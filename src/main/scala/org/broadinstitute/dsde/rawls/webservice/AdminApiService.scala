@@ -59,7 +59,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       get {
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListAllActiveSubmissions)
+          WorkspaceService.AdminListAllActiveSubmissions)
       }
     } ~
     path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
@@ -74,14 +74,14 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         entity(as[RawlsGroupRef]) { groupRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.CreateGroup(groupRef))
+            UserService.AdminCreateGroup(groupRef))
         }
       } ~
       delete {
         entity(as[RawlsGroupRef]) { groupRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.DeleteGroup(groupRef))
+            UserService.AdminDeleteGroup(groupRef))
         }
       }
     } ~
@@ -115,7 +115,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.ListGroupMembers(groupName))
+          UserService.AdminListGroupMembers(groupName))
       }
     } ~
     path("admin" / "groups" / Segment / "sync") { (groupNameRaw) =>
@@ -123,20 +123,20 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       post {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.SynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))))
+          UserService.AdminSynchronizeGroupMembers(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
     path("admin" / "users") {
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.ListUsers)
+          UserService.AdminListUsers)
       } ~
       post {
         entity(as[RawlsUserInfoList]) { userInfoList =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.ImportUsers(userInfoList))
+            UserService.AdminImportUsers(userInfoList))
         }
       }
     } ~
