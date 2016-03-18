@@ -256,19 +256,36 @@ trait WorkspaceComponent {
     }
 
     def findWorkspacesForGroup(group: RawlsGroupRef): ReadAction[Seq[Workspace]] = {
-      val x = for {
+      val byAccessGroupAction: ReadAction[Seq[WorkspaceRecord]] = for {
         groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
         allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
         workspaceRecs <- findWorkspacesForGroups(allGroups).result
       } yield workspaceRecs
 
-      x.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
+      val byRealmAction: ReadAction[Seq[WorkspaceRecord]] = for {
+        groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
+        allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
+        workspaceRecs <- findWorkspacesForRealms(allGroups).result
+      } yield workspaceRecs
+
+      val workspaceRecs = for {
+        byAccessGroup <- byAccessGroupAction
+        byRealm <- byRealmAction
+      } yield (byAccessGroup.toSet ++ byRealm).toSeq
+
+      workspaceRecs.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
     }
 
     private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
       for {
         workspaceAccess <- workspaceAccessQuery if (workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false)
         workspace <- workspaceQuery if (workspaceAccess.workspaceId === workspace.id)
+      } yield workspace
+    }
+
+    private def findWorkspacesForRealms(groups: Set[RawlsGroupRecord]) = {
+      for {
+        workspace <- workspaceQuery if (workspace.realmGroupName.inSetBind(groups.map(_.groupName)))
       } yield workspace
     }
 

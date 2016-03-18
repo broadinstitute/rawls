@@ -430,10 +430,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
       withGroup(groupRef, dataAccess) { group =>
         withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
           updateGroupMembersInternal(group, users, subGroups, operation, dataAccess) map {
-            _ match {
-              case None => RequestComplete(StatusCodes.OK)
-              case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
-            }
+            case None => RequestComplete(StatusCodes.OK)
+            case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
           }
         }
       }
