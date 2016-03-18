@@ -87,9 +87,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty)
 
     val workspace3Name = WorkspaceName("ns", "testworkspace3")
-    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty, Set.empty)
-    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner), Set.empty)
-    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty, Set.empty)
+    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty)
+    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner))
+    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty)
 
     val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
 
@@ -243,9 +243,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Map.empty
     )
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -253,11 +251,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction() { txn =>
-          assertResult(workspaceWithRealm) {
-            val ws = workspaceDAO.loadContext(workspaceWithRealm.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
-          }
+        assertResult(workspaceWithRealm) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
         assertResult(workspaceWithRealm) {
           val ws = responseAs[Workspace]
@@ -311,11 +307,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
     val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
-    services.dataSource.inTransaction() { txn =>
-      workspaceGroupRefs foreach { case groupRef =>
-        assertResult(Option(groupRef)) {
-          authDAO.loadGroup(groupRef, txn) map RawlsGroup.toRef
-        }
+    workspaceGroupRefs foreach { case groupRef =>
+      assertResult(Option(groupRef)) {
+        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
       }
     }
 
@@ -327,13 +321,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    services.dataSource.inTransaction() { txn =>
       workspaceGroupRefs foreach { case groupRef =>
         assertResult(None) {
-          authDAO.loadGroup(groupRef, txn)
+          runAndWait(rawlsGroupQuery.load(groupRef))
         }
       }
-    }
 
   }
 
@@ -421,7 +413,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
-          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy)).get
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
@@ -444,9 +436,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "clone a workspace's Realm if it exists" in withTestDataApiServices { services =>
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -482,9 +472,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup1 = RawlsGroup(RawlsGroupName(name1), RawlsGroupEmail("king@guilder.eu"), Set(testData.userOwner), Set.empty)
     val realmGroup2 = RawlsGroup(RawlsGroupName(name2), RawlsGroupEmail("king@florin.eu"), Set(testData.userOwner), Set.empty)
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup1, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup1))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -532,9 +520,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
     val realmGroupRef: RawlsGroupRef = realmGroup
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroup), Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
@@ -626,12 +612,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false){
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //add userWriter to realm
@@ -645,15 +629,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs and userOwner is a part of realm owner ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Owner), txn).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
-      }
+    assertResult(true){
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+    }
+    assertResult(true){
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
     }
 
     //remove userWriter from realm
@@ -667,12 +649,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false){
+      runAndWait(rawlsGroupQuery.load(ws3.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -778,12 +758,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true) {
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(true) {
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group A
@@ -797,12 +775,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false) {
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false) {
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -906,12 +882,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(true) {
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group C
@@ -925,12 +899,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false) {
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1310,7 +1282,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "create realmACLs when creating a workspace if there is a realm" in withTestDataApiServices { services =>
     val realmName = "testRealm"
-    val realm = makeRawlsGroup(realmName, Set(testData.userOwner), Set.empty)
+    val realm = makeRawlsGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1331,9 +1303,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-READER"))
     )
 
-    services.dataSource.inTransaction() { txn =>
-      authDAO.saveGroup(realm, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realm))
 
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>

@@ -549,21 +549,12 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         val w = workspaces.map(updateIntersectionGroupMembers(_, dataAccess))
         DBIO.sequence(w :+ x)
       }
-    } map { errorReports =>
-      val reports = errorReports.collect {
-        case Some(report) => report
-      }
-      reports match {
-        case Seq() => None
-        case Seq(report) => Option(report)
-        case _ => Option(ErrorReport(StatusCodes.BadRequest, "Errors updating group", reports))
-      }
-    }
+    } map(reduceErrorReports)
   }
 
   def updateIntersectionGroupMembers(workspace: Workspace, dataAccess:DataAccess): ReadWriteAction[Option[ErrorReport]] = {
-    workspace.realm match {
-      case None => DBIO.successful(None)
+    val actions = workspace.realm match {
+      case None => Seq(DBIO.successful(None))
       case Some(realm) =>
         workspace.accessLevels.map {
           case (accessLevel, group) =>
@@ -571,13 +562,26 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
               case None => DBIO.failed(new RawlsException("Unable to load intersection group"))
               case Some(intersectionGroup) =>
                 dataAccess.rawlsGroupQuery.intersectGroupMembership(group, realm) flatMap { newMemberRefs =>
-                  DBIO.sequence(newMemberRefs.map(dataAccess.rawlsUserQuery.load(_).map(_.get)))
+                  DBIO.sequence(newMemberRefs.map(dataAccess.rawlsUserQuery.load(_).map(_.get)).toSeq)
                 } flatMap { newMembers =>
-                  overwriteGroupMembersInternal(intersectionGroup, newMembers, Set.empty, dataAccess)
+                  overwriteGroupMembersInternal(intersectionGroup, newMembers.toSet, Set.empty, dataAccess)
                 }
             }
+        }
+    }
 
-        }.toSeq
+    DBIO.sequence(actions).map(reduceErrorReports)
+  }
+
+  private def reduceErrorReports(errorReportOptions: Iterable[Option[ErrorReport]]): Option[ErrorReport] = {
+    val errorReports = errorReportOptions.collect {
+      case Some(errorReport) => errorReport
+    }.toSeq
+
+    errorReports match {
+      case Seq() => None
+      case Seq(single) => Option(single)
+      case many => Option(ErrorReport("multiple errors", errorReports.toSeq))
     }
   }
 

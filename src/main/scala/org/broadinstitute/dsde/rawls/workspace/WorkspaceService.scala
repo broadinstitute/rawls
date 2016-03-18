@@ -197,7 +197,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       }
     })
     
-    accessLevels.map { _.reduce(WorkspaceAccessLevels.max) }
+    accessLevels.map { als =>
+      if (als.isEmpty) WorkspaceAccessLevels.NoAccess
+      else als.reduce(WorkspaceAccessLevels.max)
+    }
   }
   
   def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadAction[Seq[String]] = {

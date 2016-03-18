@@ -450,11 +450,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction(readLocks = Set(srcWorkspaceName)) { txn =>
-          val workspaceContext = workspaceDAO.loadContext(srcWorkspaceName, txn).get
-          assertResult(z1) {
-            entityDAO.get(workspaceContext, z1.entityType, z1.name, txn).get
-          }
+        assertResult(z1) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(srcWorkspace), z1.entityType, z1.name)).get
         }
       }
 
@@ -463,9 +460,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val newRealm = RawlsGroup(RawlsGroupName("a-new-realm-for-testing"), RawlsGroupEmail("president@realm.example.com"), Set(testData.userOwner), Set.empty)
     val newRealmRef: RawlsGroupRef = newRealm
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(newRealm, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(newRealm))
 
     val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealm), Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(wrongRealmCloneRequest)) ~>

@@ -32,6 +32,7 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val workspace: Workspace = Workspace(
       "test_namespace",
       "test_name",
+      None,
       workspaceId.toString,
       "bucketname",
       DateTime.now(),
@@ -40,6 +41,9 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Map("attributeString" -> AttributeString("value"),
         "attributeBool" -> AttributeBoolean(true),
         "attributeNum" -> AttributeNumber(3.14159)),
+      Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
+        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
+        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
       Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
         WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
         WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),

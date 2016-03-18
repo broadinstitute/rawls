@@ -58,10 +58,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
-      WorkspaceAccessLevels.Owner -> ownerGroup,
-      WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
     override def save() = {
       DBIO.seq(
@@ -85,10 +84,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
-      WorkspaceAccessLevels.Owner -> ownerGroup,
-      WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
 
     override def save() = {
       DBIO.seq (
@@ -109,6 +107,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
@@ -122,12 +121,48 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty, Map.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
-      WorkspaceAccessLevels.Owner -> ownerGroup,
-      WorkspaceAccessLevels.Write -> writerGroup,
-      WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+
+    val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
+    val realmWsName = wsName.name + "withRealm"
+    val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG READER", Set(userReader))
+    val realmOwnerGroup = makeRawlsGroup(s"${realmWsName} OWNER", Set(userOwner))
+    val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter))
+    val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader))
+
+    val realmWs2Name = wsName2.name + "withRealm"
+    val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG READER", Set(userReader))
+    val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner))
+    val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter))
+    val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
+
+    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup,
+        WorkspaceAccessLevels.Write -> realmWriterGroup,
+        WorkspaceAccessLevels.Read -> realmReaderGroup),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup))
+
+    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup2,
+        WorkspaceAccessLevels.Write -> realmWriterGroup2,
+        WorkspaceAccessLevels.Read -> realmReaderGroup2),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup2,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup2,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup2))
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -249,8 +284,23 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
+        rawlsGroupQuery.save(realm),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup),
+        rawlsGroupQuery.save(realmOwnerGroup),
+        rawlsGroupQuery.save(realmWriterGroup),
+        rawlsGroupQuery.save(realmReaderGroup),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup2),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup2),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup2),
+        rawlsGroupQuery.save(realmOwnerGroup2),
+        rawlsGroupQuery.save(realmWriterGroup2),
+        rawlsGroupQuery.save(realmReaderGroup2),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspaceNoGroups),
+        workspaceQuery.save(workspaceWithRealm),
+        workspaceQuery.save(otherWorkspaceWithRealm),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, aliquot1),

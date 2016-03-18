@@ -613,11 +613,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsUserQuery.save(inGoogleUser))
     runAndWait(rawlsUserQuery.save(inBothUser))
-    runAndWait(rawlsUserQuery.save(inGraphUser))
+    runAndWait(rawlsUserQuery.save(inDbUser))
 
     runAndWait(rawlsGroupQuery.save(inGoogleGroup))
     runAndWait(rawlsGroupQuery.save(inBothGroup))
-    runAndWait(rawlsGroupQuery.save(inGraphGroup))
+    runAndWait(rawlsUserQuery.save(inDbUser))
 
     runAndWait(rawlsGroupQuery.save(topGroup))
 
@@ -627,8 +627,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         responseAs[SyncReport].items should contain theSameElementsAs
           Seq(
-            SyncReportItem("added", Option(inGraphUser), None, None),
-            SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
+            SyncReportItem("added", Option(inDbUser), None, None),
             SyncReportItem("removed", Option(inGoogleUser), None, None),
             SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
           )

@@ -178,10 +178,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { directory.members.get(ownerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
-    mockDataSource.inTransaction() { txn =>
-      VertexSchema.createVertexClasses(txn.graph)
-      containerDAO.workspaceDAO.savePendingBucketDeletions(PendingBucketDeletions(Set.empty), txn)
-    }
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
 
     intercept[GoogleJsonResponseException] { directory.groups.get(readerAG.groupEmail.value).execute() }

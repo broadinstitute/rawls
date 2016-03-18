@@ -121,7 +121,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.submissionId}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {status}
+        assertResult(StatusCodes.OK, response.entity.asString) {status}
         assertResult(new SubmissionStatusResponse(testData.submission1, testData.userOwner)) {responseAs[SubmissionStatusResponse]}
       }
   }

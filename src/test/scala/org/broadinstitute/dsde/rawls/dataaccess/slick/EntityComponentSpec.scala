@@ -16,7 +16,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
-    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, workspaceId.toString, "bucketname", DateTime.now(), DateTime.now(), "me", Map.empty, Map.empty, false)
+    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, None, workspaceId.toString, "bucketname", DateTime.now(), DateTime.now(), "me", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
     val workspaceContext = SlickWorkspaceContext(workspace)
 
@@ -86,7 +86,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, UUID.randomUUID.toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
+    val workspace = new Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID.toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map("aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")))
@@ -162,11 +162,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val workspaceOriginal = Workspace(
       namespace = testData.wsName.namespace + "Original",
       name = testData.wsName.name + "Original",
+      None,
       workspaceId = UUID.randomUUID.toString,
       bucketName = "aBucket",
       createdDate = DateTime.now,
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
+      Map.empty,
       Map.empty,
       Map.empty
     )
@@ -174,11 +176,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val workspaceClone = Workspace(
       namespace = testData.wsName.namespace + "Clone",
       name = testData.wsName.name + "Clone",
+      realm = None,
       workspaceId = UUID.randomUUID.toString,
       bucketName = "anotherBucket",
       createdDate = DateTime.now,
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
+      Map.empty,
       Map.empty,
       Map.empty
     )
@@ -304,11 +308,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   val workspace2 = Workspace(
     namespace = testData.wsName.namespace + "2",
     name = testData.wsName.name + "2",
+    None,
     workspaceId = UUID.randomUUID.toString,
     bucketName = "aBucket",
     createdDate = DateTime.now,
     lastModified = DateTime.now,
     createdBy = "Joe Biden",
+    Map.empty,
     Map.empty,
     Map.empty
   )

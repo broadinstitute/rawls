@@ -47,10 +47,10 @@ trait WorkspaceComponent {
     def lastModified = column[Timestamp]("last_modified", O.Default(defaultTimeStamp))
     def createdBy = column[String]("created_by")
     def isLocked = column[Boolean]("is_locked")
-    def realmGroupName = column[Option[String]]("realm_group_name")
+    def realmGroupName = column[Option[String]]("realm_group_name", O.Length(254))
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
-    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName.?)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
@@ -74,7 +74,7 @@ trait WorkspaceComponent {
     def workspace = foreignKey("FK_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def group = foreignKey("FK_WS_ACCESS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
-    def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel))
+    def accessPrimaryKey = primaryKey("PK_WORKSPACE_ACCESS", (workspaceId, accessLevel, isRealmAcl))
 
     def * = (workspaceId, groupName, accessLevel, isRealmAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
   }
