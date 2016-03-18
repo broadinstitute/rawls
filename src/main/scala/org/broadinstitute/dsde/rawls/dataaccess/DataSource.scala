@@ -19,7 +19,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAcce
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
+
+import liquibase.{Contexts, Liquibase}
+import liquibase.database.jvm.JdbcConnection
+import liquibase.resource.{FileSystemResourceAccessor, ResourceAccessor}
 
 object DataSource {
   /**
@@ -62,6 +66,27 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
   import dataAccess.driver.api._
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {
     databaseConfig.db.run(f(dataAccess).transactionally)
+  }
+
+  def initWithLiquibase(liquibaseChangeLog: String) = {
+    val dbConnection = databaseConfig.db.source.createConnection()
+    val liquibaseConnection = new JdbcConnection(dbConnection)
+
+    try {
+      val resourceAccessor: ResourceAccessor = new FileSystemResourceAccessor()
+      val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
+      liquibase.update(new Contexts())
+    } finally {
+      liquibaseConnection.close()
+      dbConnection.close()
+    }
+  }
+
+  // For testing/migration.  Not for production code!
+  def initWithSlick(): Unit = {
+    import dataAccess.driver.api._
+    import scala.concurrent.duration._
+    Await.result(databaseConfig.db.run(DBIO.seq(dataAccess.allSchemas.create)), 1.minute)
   }
 }
 

@@ -12,15 +12,15 @@ trait RawlsBillingProjectComponent {
   import driver.api._
 
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
-    def projectName = column[String]("NAME", O.PrimaryKey)
+    def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL")
 
     def * = (projectName, cromwellAuthBucketUrl) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   class ProjectUsersTable(tag: Tag) extends Table[ProjectUsersRecord](tag, "PROJECT_USERS") {
-    def userSubjectId = column[String]("USER_SUBJECT_ID")
-    def projectName = column[String]("PROJECT_NAME")
+    def userSubjectId = column[String]("USER_SUBJECT_ID", O.Length(254))
+    def projectName = column[String]("PROJECT_NAME", O.Length(254))
 
     def * = (userSubjectId, projectName) <> (ProjectUsersRecord.tupled, ProjectUsersRecord.unapply)
 

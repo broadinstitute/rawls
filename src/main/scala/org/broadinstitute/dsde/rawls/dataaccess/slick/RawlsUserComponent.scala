@@ -10,8 +10,8 @@ trait RawlsUserComponent {
   import driver.api._
 
   class RawlsUserTable(tag: Tag) extends Table[RawlsUserRecord](tag, "USER") {
-    def userSubjectId = column[String]("SUBJECT_ID", O.PrimaryKey)
-    def userEmail = column[String]("EMAIL")
+    def userSubjectId = column[String]("SUBJECT_ID", O.PrimaryKey, O.Length(254))
+    def userEmail = column[String]("EMAIL", O.Length(254))
 
     def * = (userSubjectId, userEmail) <> (RawlsUserRecord.tupled, RawlsUserRecord.unapply)
 

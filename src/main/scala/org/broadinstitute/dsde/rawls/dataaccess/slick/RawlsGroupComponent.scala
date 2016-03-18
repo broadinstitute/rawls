@@ -14,8 +14,8 @@ trait RawlsGroupComponent {
   import driver.api._
 
   class RawlsGroupTable(tag: Tag) extends Table[RawlsGroupRecord](tag, "GROUP") {
-    def groupName = column[String]("NAME", O.PrimaryKey)
-    def groupEmail = column[String]("EMAIL")
+    def groupName = column[String]("NAME", O.PrimaryKey, O.Length(254))
+    def groupEmail = column[String]("EMAIL", O.Length(254))
 
     def * = (groupName, groupEmail) <> (RawlsGroupRecord.tupled, RawlsGroupRecord.unapply)
 
@@ -23,8 +23,8 @@ trait RawlsGroupComponent {
   }
 
   class GroupUsersTable(tag: Tag) extends Table[GroupUsersRecord](tag, "GROUP_USERS") {
-    def userSubjectId = column[String]("USER_SUBJECT_ID")
-    def groupName = column[String]("GROUP_NAME")
+    def userSubjectId = column[String]("USER_SUBJECT_ID", O.Length(254))
+    def groupName = column[String]("GROUP_NAME", O.Length(254))
 
     def * = (userSubjectId, groupName) <>(GroupUsersRecord.tupled, GroupUsersRecord.unapply)
 
@@ -34,8 +34,8 @@ trait RawlsGroupComponent {
   }
 
   class GroupSubgroupsTable(tag: Tag) extends Table[GroupSubgroupsRecord](tag, "GROUP_SUBGROUPS") {
-    def parentGroupName = column[String]("PARENT_NAME")
-    def childGroupName = column[String]("CHILD_NAME")
+    def parentGroupName = column[String]("PARENT_NAME", O.Length(254))
+    def childGroupName = column[String]("CHILD_NAME", O.Length(254))
 
     def * = (parentGroupName, childGroupName) <> (GroupSubgroupsRecord.tupled, GroupSubgroupsRecord.unapply)
 
@@ -137,7 +137,51 @@ trait RawlsGroupComponent {
         
         nextLevelUp.result.flatMap { nextGroups =>
           val nextCumulativeGroups = cumulativeGroups ++ nextGroups
-          listParentGroupsRecursive(nextGroups.toSet -- nextCumulativeGroups, nextCumulativeGroups)
+          listParentGroupsRecursive(nextGroups.toSet -- cumulativeGroups, nextCumulativeGroups)
+        }
+      }
+    }
+
+    private def listDescendantGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
+      if (groups.isEmpty) DBIO.successful(cumulativeGroups)
+      else {
+        val nextLevelDown = for {
+          groupSubGroup <- groupSubgroupsQuery if (groupSubGroup.parentGroupName.inSetBind(groups.map(_.groupName)))
+          childGroup <- rawlsGroupQuery if (groupSubGroup.childGroupName === childGroup.groupName)
+        } yield childGroup
+
+        nextLevelDown.result.flatMap { nextGroups =>
+          val nextCumulativeGroups = cumulativeGroups ++ nextGroups
+          listDescendantGroupsRecursive(nextGroups.toSet -- cumulativeGroups, nextCumulativeGroups)
+        }
+      }
+    }
+
+    private def listGroupUsers(groupRec: RawlsGroupRecord): ReadAction[Set[RawlsUserRef]] = {
+      findUsersByGroupName(groupRec.groupName).result flatMap { userRecs =>
+        DBIO.successful(userRecs.map(u => RawlsUserRef(RawlsUserSubjectId(u.userSubjectId))).toSet)
+      }
+    }
+
+    def flattenGroupMembership(groupRef: RawlsGroupRef): ReadAction[Set[RawlsUserRef]] = {
+      load(groupRef) flatMap {
+        case None => throw new RawlsException(s"Unable to load group ${groupRef}")
+        case Some(group) =>
+          listDescendantGroupsRecursive(Set(marshalRawlsGroup(group)), Set(marshalRawlsGroup(group))) flatMap { groups =>
+            DBIO.sequence(groups.toSeq.map { group =>
+              listGroupUsers(group)
+            }).map(_.reduce(_ ++ _))
+          }
+      }
+    }
+
+    def intersectGroupMembership(group1: RawlsGroupRef, group2: RawlsGroupRef): ReadAction[Set[RawlsUserRef]] = {
+      val group1Members = flattenGroupMembership(group1)
+      val group2Members = flattenGroupMembership(group2)
+
+      group1Members flatMap { members1 =>
+        group2Members flatMap { members2 =>
+          DBIO.successful(members1.intersect(members2))
         }
       }
     }
