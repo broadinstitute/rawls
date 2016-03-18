@@ -1270,8 +1270,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         run {
           _.rawlsGroupQuery.load(groupRef)
         } match {
-          case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
-          case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+          case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
         }
       }
 

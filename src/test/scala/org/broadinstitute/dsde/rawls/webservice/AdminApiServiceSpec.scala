@@ -617,7 +617,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsGroupQuery.save(inGoogleGroup))
     runAndWait(rawlsGroupQuery.save(inBothGroup))
-    runAndWait(rawlsUserQuery.save(inDbUser))
+    runAndWait(rawlsGroupQuery.save(inDbGroup))
 
     runAndWait(rawlsGroupQuery.save(topGroup))
 
@@ -628,6 +628,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         responseAs[SyncReport].items should contain theSameElementsAs
           Seq(
             SyncReportItem("added", Option(inDbUser), None, None),
+            SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
             SyncReportItem("removed", Option(inGoogleUser), None, None),
             SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
           )
@@ -649,20 +650,26 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(WorkspaceName(testData.workspace.namespace, testData.workspace.name)) {
           responseStatus.workspaceName
         }
+
         responseStatus.statuses should contain theSameElementsAs
-          Map(
+          Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
-            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
-            "GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_USER_ACCESS_LEVEL: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
-            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER"
+            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"
           )
       }
   }
