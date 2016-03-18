@@ -127,7 +127,7 @@ trait RawlsGroupComponent {
       firstLevel.result.map(_.toSet).flatMap(groups => listParentGroupsRecursive(groups, groups).map(_.map(groupRec => RawlsGroupRef(RawlsGroupName(groupRec.groupName)))))
     }
     
-    private def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
+    def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
       if (groups.isEmpty) DBIO.successful(cumulativeGroups)
       else {
         val nextLevelUp = for {
@@ -162,51 +162,50 @@ trait RawlsGroupComponent {
       }
     }
 
-  }
 
-  private def loadGroup(query: GroupQuery): ReadAction[Option[RawlsGroup]] = {
-    uniqueResult[RawlsGroupRecord](query).flatMap {
-      case None => DBIO.successful(None)
-      case Some(groupRec) =>
-        for {
-          users <- findUsersByGroupName(groupRec.groupName).result
-          subgroups <- findSubgroupsByGroupName(groupRec.groupName).result
-        } yield Option(unmarshalRawlsGroup(groupRec, users, subgroups))
+    private def loadGroup(query: GroupQuery): ReadAction[Option[RawlsGroup]] = {
+      uniqueResult[RawlsGroupRecord](query).flatMap {
+        case None => DBIO.successful(None)
+        case Some(groupRec) =>
+          for {
+            users <- findUsersByGroupName(groupRec.groupName).result
+            subgroups <- findSubgroupsByGroupName(groupRec.groupName).result
+          } yield Option(unmarshalRawlsGroup(groupRec, users, subgroups))
+      }
+    }
+
+    private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
+      RawlsGroupRecord(group.groupName.value, group.groupEmail.value)
+    }
+
+    private def marshalGroupUsers(ref: RawlsUserRef, rawlsGroup: RawlsGroup): GroupUsersRecord = {
+      GroupUsersRecord(ref.userSubjectId.value, rawlsGroup.groupName.value)
+    }
+
+    private def marshalGroupSubgroups(child: RawlsGroupRef, parent: RawlsGroup): GroupSubgroupsRecord = {
+      GroupSubgroupsRecord(parent.groupName.value, child.groupName.value)
+    }
+
+    private def unmarshalRawlsGroup(groupRecord: RawlsGroupRecord, userRecords: Seq[GroupUsersRecord], subGroupRecords: Seq[GroupSubgroupsRecord]): RawlsGroup = {
+      val userRefs = userRecords map { r => RawlsUserRef(RawlsUserSubjectId(r.userSubjectId)) }
+      val subGroupRefs = subGroupRecords map { r => RawlsGroupRef(RawlsGroupName(r.childGroupName)) }
+      RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
+    }
+
+    def findGroupByName(name: String): GroupQuery = {
+      rawlsGroupQuery.filter(_.groupName === name)
+    }
+
+    private def findGroupByEmail(email: String): GroupQuery = {
+      rawlsGroupQuery.filter(_.groupEmail === email)
+    }
+
+    private def findUsersByGroupName(groupName: String): GroupUsersQuery = {
+      groupUsersQuery.filter(_.groupName === groupName)
+    }
+
+    private def findSubgroupsByGroupName(groupName: String): GroupSubgroupsQuery = {
+      groupSubgroupsQuery.filter(_.parentGroupName === groupName)
     }
   }
-
-  private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
-    RawlsGroupRecord(group.groupName.value, group.groupEmail.value)
-  }
-
-  private def marshalGroupUsers(ref: RawlsUserRef, rawlsGroup: RawlsGroup): GroupUsersRecord = {
-    GroupUsersRecord(ref.userSubjectId.value, rawlsGroup.groupName.value)
-  }
-
-  private def marshalGroupSubgroups(child: RawlsGroupRef, parent: RawlsGroup): GroupSubgroupsRecord = {
-    GroupSubgroupsRecord(parent.groupName.value, child.groupName.value)
-  }
-
-  private def unmarshalRawlsGroup(groupRecord: RawlsGroupRecord, userRecords: Seq[GroupUsersRecord], subGroupRecords: Seq[GroupSubgroupsRecord]): RawlsGroup = {
-    val userRefs = userRecords map { r => RawlsUserRef(RawlsUserSubjectId(r.userSubjectId)) }
-    val subGroupRefs = subGroupRecords map { r => RawlsGroupRef(RawlsGroupName(r.childGroupName)) }
-    RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
-  }
-
-  private def findGroupByName(name: String): GroupQuery = {
-    rawlsGroupQuery.filter(_.groupName === name)
-  }
-
-  private def findGroupByEmail(email: String): GroupQuery = {
-    rawlsGroupQuery.filter(_.groupEmail === email)
-  }
-
-  private def findUsersByGroupName(groupName: String): GroupUsersQuery = {
-    groupUsersQuery.filter(_.groupName === groupName)
-  }
-
-  private def findSubgroupsByGroupName(groupName: String): GroupSubgroupsQuery = {
-    groupSubgroupsQuery.filter(_.parentGroupName === groupName)
-  }
-
 }

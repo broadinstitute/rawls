@@ -1352,13 +1352,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    val workspaceName = workspaceRequest.toWorkspaceName
-    requireCreateWorkspaceAccess(workspaceName, dataAccess) {
-      dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+    requireCreateWorkspaceAccess(workspaceRequest, dataAccess) {
+      dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
+          DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
             val currentDate = DateTime.now
 
             val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))}

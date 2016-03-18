@@ -238,6 +238,23 @@ trait WorkspaceComponent {
       query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString(), WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
     }
 
+    def findWorkspacesForGroup(group: RawlsGroupRef): ReadAction[Seq[Workspace]] = {
+      val x = for {
+        groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
+        allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
+        workspaceRecs <- findWorkspacesForGroups(allGroups).result
+      } yield workspaceRecs
+
+      x.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
+    }
+
+    private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
+      for {
+        workspaceAccess <- workspaceAccessQuery.filter(_.groupName inSetBind(groups.map(_.groupName)))
+        workspace <- workspaceQuery if (workspaceAccess.workspaceId === workspace.id)
+      } yield workspace
+    }
+
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
       uniqueResult[WorkspaceRecord](lookup).flatMap {
         case None => DBIO.successful(None)

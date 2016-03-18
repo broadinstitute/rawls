@@ -544,8 +544,11 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         }
       }
     } flatMap { errorReport =>
-      DBIO.sequence(
-        dataAccess.workspaceQuery.findWorkspacesForGroup(group).flatMap(ws => updateIntersectionGroupMembers(ws)) :+ DBIO.successful(errorReport)
+      dataAccess.workspaceQuery.findWorkspacesForGroup(group).flatMap { workspaces =>
+        val x: ReadWriteAction[Option[ErrorReport]] = DBIO.successful(errorReport)
+        val w = workspaces.map(updateIntersectionGroupMembers(_, dataAccess))
+        DBIO.sequence(w :+ x)
+      }
     } map { errorReports =>
       val reports = errorReports.collect {
         case Some(report) => report
@@ -558,9 +561,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     }
   }
 
-  def updateIntersectionGroupMembers(workspace: Workspace, dataAccess:DataAccess): Seq[ReadWriteAction[Option[ErrorReport]]] = {
+  def updateIntersectionGroupMembers(workspace: Workspace, dataAccess:DataAccess): ReadWriteAction[Option[ErrorReport]] = {
     workspace.realm match {
-      case None => Seq(DBIO.successful(None))
+      case None => DBIO.successful(None)
       case Some(realm) =>
         workspace.accessLevels.map {
           case (accessLevel, group) =>
