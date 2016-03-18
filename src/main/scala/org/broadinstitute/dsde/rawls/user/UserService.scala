@@ -181,12 +181,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   private def getOrCreateAllUsersGroup(dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
     dataAccess.rawlsGroupQuery.load(allUsersGroupRef) flatMap {
       case Some(g) => DBIO.successful(g)
-      case None => createGroupInternal(allUsersGroupRef, dataAccess).asTry flatMap {
+      case None => createGroupInternal(allUsersGroupRef, dataAccess, recoverGoogleConflict = true).asTry flatMap {
         case Success(group) => DBIO.successful(group)
-        case Failure(t: HttpResponseException) if t.getStatusCode == StatusCodes.Conflict.intValue =>
-          // this case is where the group was not in our db but already in google, the recovery code makes the assumption
-          // that createGroupInternal saves the group in our db before creating the group in google so loadGroup should work
-          dataAccess.rawlsGroupQuery.load(allUsersGroupRef).map(_.get)
         case Failure(regrets) => DBIO.failed(regrets)
       }
     }
@@ -315,14 +311,19 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
         dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
           case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
           case None =>
-            createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
+            createGroupInternal(groupRef, dataAccess, recoverGoogleConflict = false) map { _ => RequestComplete(StatusCodes.Created) }
         }
       }
     }
   }
 
-  private def createGroupInternal(groupRef: RawlsGroupRef, dataAccess: DataAccess): ReadWriteAction[RawlsGroup] = {
-    DBIO.from(gcsDAO.createGoogleGroup(groupRef)).flatMap { rawlsGroup =>
+  private def createGroupInternal(groupRef: RawlsGroupRef, dataAccess: DataAccess, recoverGoogleConflict: Boolean): ReadWriteAction[RawlsGroup] = {
+    val googleCreated = gcsDAO.createGoogleGroup(groupRef) recover {
+      case t: HttpResponseException if recoverGoogleConflict && t.getStatusCode == StatusCodes.Conflict.intValue =>
+        RawlsGroup(groupRef.groupName, RawlsGroupEmail(gcsDAO.toGoogleGroupName(groupRef.groupName)), Set.empty, Set.empty)
+    }
+
+    DBIO.from(googleCreated).flatMap { rawlsGroup =>
       dataAccess.rawlsGroupQuery.save(rawlsGroup)
     }
   }
