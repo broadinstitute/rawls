@@ -543,9 +543,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
       }
     } flatMap { errorReport =>
       dataAccess.workspaceQuery.findWorkspacesForGroup(group).flatMap { workspaces =>
-        val x: ReadWriteAction[Option[ErrorReport]] = DBIO.successful(errorReport)
-        val w = workspaces.map(updateIntersectionGroupMembers(_, dataAccess))
-        DBIO.sequence(w :+ x)
+        val priorResult: ReadWriteAction[Option[ErrorReport]] = DBIO.successful(errorReport)
+        val instersectionUpdatesResults = workspaces.map(updateIntersectionGroupMembers(_, dataAccess))
+        DBIO.sequence(instersectionUpdatesResults :+ priorResult)
       }
     } map(reduceErrorReports)
   }
