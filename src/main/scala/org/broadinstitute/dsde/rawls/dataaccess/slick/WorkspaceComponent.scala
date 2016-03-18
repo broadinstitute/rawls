@@ -201,6 +201,23 @@ trait WorkspaceComponent {
       }
     }
 
+    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {
+      DBIO.sequence(workspaceIds.map { id =>
+        findById(id) flatMap {
+          case None => DBIO.successful(None)
+          case Some(workspace) => DBIO.successful(workspace.realm)
+        }
+      }) flatMap { allRealms =>
+        val flatRealms = allRealms.flatten.toSet
+        DBIO.sequence(flatRealms.toSeq.map { realm =>
+          rawlsGroupQuery.loadGroupIfMember(realm, user) flatMap {
+            case None => DBIO.successful(None)
+            case Some(_) => DBIO.successful(Some(realm))
+          }
+        })
+      }
+    }
+
     private def workspaceAttributes(workspaceId: UUID) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId === workspaceId
       attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id

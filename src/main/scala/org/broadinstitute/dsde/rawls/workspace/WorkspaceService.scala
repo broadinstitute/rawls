@@ -284,15 +284,23 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       listWorkspaces(RawlsUser(userInfo), dataAccess) flatMap { permissionsPairs =>
         DBIO.sequence(permissionsPairs map { permissionsPair =>
           // database query to get details
-          dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
-            case Some(workspace) =>
-              for {
-                stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
-                owners <- getWorkspaceOwners(workspace, dataAccess)
-              } yield Option(WorkspaceListResponse(permissionsPair.accessLevel, workspace, stats, owners))
-            case None =>
-              // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
-              DBIO.successful(None)
+          dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo)) flatMap { realms =>
+            dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
+              case Some(workspace) =>
+                def trueAccessLevel = workspace.realm match {
+                  case None => permissionsPair.accessLevel
+                  case Some(realm) =>
+                    if(realms.flatten.contains(realm)) permissionsPair.accessLevel
+                    else WorkspaceAccessLevels.NoAccess
+                }
+                for {
+                  stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
+                  owners <- getWorkspaceOwners(workspace, dataAccess)
+                } yield Option(WorkspaceListResponse(trueAccessLevel, workspace, stats, owners))
+              case None =>
+                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
+                DBIO.successful(None)
+            }
           }
         }).map { responses => RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x }) }
       }
