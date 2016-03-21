@@ -1,10 +1,10 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
@@ -14,12 +14,11 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestCompleteWithLocation, PerRequestMessage, RequestComplete}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
@@ -29,14 +28,15 @@ import spray.httpx.UnsuccessfulResponseException
 import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
-
 import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
-
 import scala.concurrent.duration._
+import com.typesafe.scalalogging.slf4j.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import scala.concurrent.Await
 /**
  * Created by dvoet on 4/27/15.
  */
@@ -100,11 +100,13 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, containerDAO, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource, containerDAO: DbContainerDAO, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
+  import dataSource.dataAccess.driver.api._
+
   implicit val timeout = Timeout(5 minutes)
 
   override def receive = {
@@ -130,8 +132,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
     case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
-    case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpsertEntities(workspaceName, entityUpdates)) to sender
-    case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates)) to sender
+    case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
+    case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
 
     case CreateMethodConfiguration(workspaceName, methodConfiguration) => pipe(createMethodConfiguration(workspaceName, methodConfiguration)) to sender
     case RenameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName) => pipe(renameMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName, newName)) to sender
@@ -163,192 +165,231 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceRequest.toWorkspaceName)) { txn =>
-      withNewWorkspaceContext(workspaceRequest, txn) { workspaceContext =>
-        RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path)
+    dataSource.inTransaction { dataAccess =>
+      withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
+        DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
       }
     }
 
   def getWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext.workspace.workspaceId, txn)
-        if (accessLevel < WorkspaceAccessLevels.Read)
-          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-        else {
-          val response = WorkspaceListResponse(accessLevel,
-            workspaceContext.workspace,
-            getWorkspaceSubmissionStats(workspaceContext, txn),
-            getWorkspaceOwners(workspaceContext.workspace, txn))
-          Future.successful(RequestComplete(StatusCodes.OK, response))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
+          if (accessLevel < WorkspaceAccessLevels.Read)
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+          else {
+            for {
+              stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
+              owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
+            } yield {
+              RequestComplete(StatusCodes.OK, WorkspaceListResponse(accessLevel, workspaceContext.workspace, stats, owners))
+            }
+          }
         }
       }
     }
 
-  def getWorkspaceOwners(workspace: Workspace, txn: RawlsTransaction): Seq[String] = {
-    val ownerGroup = containerDAO.authDAO.loadGroup(workspace.accessLevels(WorkspaceAccessLevels.Owner), txn).getOrElse(
-      throw new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
-    val users = ownerGroup.users.map(u => containerDAO.authDAO.loadUser(u, txn).get.userEmail.value)
-    val subGroups = ownerGroup.subGroups.map(g => containerDAO.authDAO.loadGroup(g, txn).get.groupEmail.value)
-
-    (users++subGroups).toSeq
+  def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceAccessLevel] = {
+    val accessLevels = DBIO.sequence(workspaceContext.workspace.accessLevels.map { case (accessLevel, groupRef) =>
+      dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
+        case Some(_) => accessLevel
+        case None => WorkspaceAccessLevels.NoAccess
+      }
+    })
+    
+    accessLevels.map { als =>
+      if (als.isEmpty) WorkspaceAccessLevels.NoAccess
+      else als.reduce(WorkspaceAccessLevels.max)
+    }
+  }
+  
+  def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadAction[Seq[String]] = {
+    dataAccess.rawlsGroupQuery.load(workspace.accessLevels(WorkspaceAccessLevels.Owner)).flatMap {
+      case None => DBIO.failed(new RawlsException(s"Unable to load owners for workspace ${workspace.toWorkspaceName}"))
+      case Some(ownerGroup) =>
+        val usersAction = DBIO.sequence(ownerGroup.users.map(dataAccess.rawlsUserQuery.load(_).map(_.get.userEmail.value)).toSeq)
+        val subGroupsAction = DBIO.sequence(ownerGroup.subGroups.map(dataAccess.rawlsGroupQuery.load(_).map(_.get.groupEmail.value)).toSeq)
+        
+        for {
+          users <- usersAction
+          subGroups <- subGroupsAction
+        } yield users ++ subGroups
+    }
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, txn) { workspaceContext =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
         //Attempt to abort any running workflows so they don't write any more to the bucket.
         //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
         //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
         //ExecutionContext run the futures whenever
-        containerDAO.submissionDAO.list(workspaceContext, txn).flatMap(_.workflows).toList collect {
-          case wf if !wf.status.isDone => Future { executionServiceDAO.abort(wf.workflowId, userInfo) }
-        }
-
-        // use a set because the two maps may be duplicates
-        val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-        val groups = groupRefs.map(containerDAO.authDAO.loadGroup(_, txn)).collect { case Some(g) => g }
-
-        Future.traverse(groups) { gcsDAO.deleteGoogleGroup } map { _ =>
-          groupRefs foreach {  containerDAO.authDAO.deleteGroup(_, txn) }
-          containerDAO.workspaceDAO.delete(workspaceName, txn)
-          bucketDeletionMonitor ! DeleteBucket(workspaceContext.workspace.bucketName)
-          RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h.")
+        dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
+          case wf if !wf.status.isDone => executionServiceDAO.abort(wf.workflowId, userInfo).map {
+            case Failure(regrets) =>
+              logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
+              Failure(regrets)
+            case success => success
+          }
+        }) andThen {
+          DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
+        } andThen {
+          val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
+          DBIO.seq(groupRefs.map { groupRef => dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+            case Some(group) => DBIO.from(gcsDAO.deleteGoogleGroup(group))
+            case None => DBIO.successful(Unit)
+          } }.toSeq:_* )
+        } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
+        } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
+        } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
+        } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceEntityAttributes(workspaceContext.workspaceId))
+        } andThen {
+          DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceEntities(workspaceContext.workspaceId))
+        } andThen {
+          DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
+            dataAccess.rawlsGroupQuery.delete(group)
+          }.toSeq:_*)
+        } andThen {
+          dataAccess.workspaceQuery.delete(workspaceName)
+        } andThen {
+          DBIO.successful(RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h."))
         }
       }
     }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          try {
-            val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
-            RequestComplete(StatusCodes.OK, containerDAO.workspaceDAO.save(updatedWorkspace, txn).workspace)
-          } catch {
-            case e: AttributeUpdateOperationException => {
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e)))
-            }
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        val updateAction = Try {
+          val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
+          dataAccess.workspaceQuery.save(updatedWorkspace)
+        } match {
+          case Success(result) => result
+          case Failure(e: AttributeUpdateOperationException) =>
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
+          case Failure(regrets) => DBIO.failed(regrets)
+        }
+        updateAction.map { savedWorkspace =>
+          RequestComplete(StatusCodes.OK, savedWorkspace)
         }
       }
     }
 
   def listWorkspaces(): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction() { txn =>
-      Future {
-        val permissionsPairs = containerDAO.authDAO.listWorkspaces(RawlsUser(userInfo), txn)
-
-        val responses = permissionsPairs map { permissionsPair =>
+    dataSource.inTransaction { dataAccess =>
+      listWorkspaces(RawlsUser(userInfo), dataAccess) flatMap { permissionsPairs =>
+        DBIO.sequence(permissionsPairs map { permissionsPair =>
           // database query to get details
-          containerDAO.workspaceDAO.findById(permissionsPair.workspaceId, txn) match {
-            case Some(workspaceContext) =>
-              Option(WorkspaceListResponse(permissionsPair.accessLevel,
-                workspaceContext.workspace,
-                getWorkspaceSubmissionStats(workspaceContext, txn),
-                getWorkspaceOwners(workspaceContext.workspace, txn))
-              )
-            case None =>
-              // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
-              None
+          dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo)) flatMap { realms =>
+            dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
+              case Some(workspace) =>
+                def trueAccessLevel = workspace.realm match {
+                  case None => permissionsPair.accessLevel
+                  case Some(realm) =>
+                    if(realms.flatten.contains(realm)) permissionsPair.accessLevel
+                    else WorkspaceAccessLevels.NoAccess
+                }
+                for {
+                  stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
+                  owners <- getWorkspaceOwners(workspace, dataAccess)
+                } yield Option(WorkspaceListResponse(trueAccessLevel, workspace, stats, owners))
+              case None =>
+                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
+                DBIO.successful(None)
+            }
           }
-        }
-
-        RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x })
+        }).map { responses => RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x }) }
       }
     }
 
-  private def getWorkspaceSubmissionStats(workspaceContext: WorkspaceContext, txn: RawlsTransaction): WorkspaceSubmissionStats = {
-    val submissions = containerDAO.submissionDAO.list(workspaceContext, txn)
+  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {
+    val rawPairs = for {
+      groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+      pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups)
+    } yield pairs
 
-    val workflowsOrderedByDateDesc = submissions.flatMap(_.workflows).toVector.sortWith { (first, second) =>
-      first.statusLastChangedDate.isAfter(second.statusLastChangedDate)
+    rawPairs.map { pairs =>
+      pairs.groupBy(_.workspaceId).map { case (workspaceId, pairs) =>
+        pairs.reduce((a, b) => WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(a.accessLevel, b.accessLevel)))
+      }.toSeq
     }
-
-    WorkspaceSubmissionStats(
-      lastSuccessDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Succeeded).map(_.statusLastChangedDate),
-      lastFailureDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Failed).map(_.statusLastChangedDate),
-      runningSubmissionsCount = submissions.count(_.status == SubmissionStatuses.Submitted)
-    )
+  }
+  
+  private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
+    dataAccess.submissionQuery.list(workspaceContext) map { submissions => 
+      val workflowsOrderedByDateDesc = submissions.flatMap(_.workflows).toVector.sortWith { (first, second) =>
+        first.statusLastChangedDate.isAfter(second.statusLastChangedDate)
+      }
+  
+      WorkspaceSubmissionStats(
+        lastSuccessDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Succeeded).map(_.statusLastChangedDate),
+        lastFailureDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Failed).map(_.statusLastChangedDate),
+        runningSubmissionsCount = submissions.count(_.status == SubmissionStatuses.Submitted)
+      )
+    }
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(sourceWorkspaceName), writeLocks=Set(destWorkspaceRequest.toWorkspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read,txn) { sourceWorkspaceContext =>
-        withClonedRealm(sourceWorkspaceContext: WorkspaceContext, destWorkspaceRequest: WorkspaceRequest) { newRealm =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
+        withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
 
           // add to or replace current attributes, on an individual basis
           val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), txn) { destWorkspaceContext =>
-            containerDAO.entityDAO.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext, txn)
-            // TODO add a method for cloning all method configs, instead of doing this
-            containerDAO.methodConfigurationDAO.list(sourceWorkspaceContext, txn).foreach { methodConfig =>
-              containerDAO.methodConfigurationDAO.save(destWorkspaceContext,
-                containerDAO.methodConfigurationDAO.get(sourceWorkspaceContext, methodConfig.namespace, methodConfig.name, txn).get, txn)
+          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+            dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+              dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                val inserts = methodConfigShorts.map { methodConfigShort => dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                  dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
+                }
+                }
+                DBIO.seq(inserts: _*)
+              } andThen {
+              DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
             }
-            RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path)
           }
         }
       }
     }
 
-  private def withClonedRealm(sourceWorkspaceContext: WorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
     // otherwise, the caller may choose to apply a realm
     (sourceWorkspaceContext.workspace.realm, destWorkspaceRequest.realm) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
       case (Some(sourceRealm), _) => op(Option(sourceRealm))
       case (None, destOpt) => op(destOpt)
     }
   }
 
-  def withRawlsUser[T](userRef: RawlsUserRef, txn: RawlsTransaction)(op: (RawlsUser) => T): T = {
-    containerDAO.authDAO.loadUser(userRef, txn) match {
+  def withRawlsUser[T](userRef: RawlsUserRef, dataAccess: DataAccess)(op: (RawlsUser) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    dataAccess.rawlsUserQuery.load(userRef) flatMap {
       case Some(user) => op(user)
-      case None => throw new RawlsException(s"Couldn't find user for userRef $userRef")
+      case None => DBIO.failed(new RawlsException(s"Couldn't find user for userRef $userRef"))
     }
   }
 
-  def withRawlsGroup[T](groupRef: RawlsGroupRef, txn: RawlsTransaction)(op: (RawlsGroup) => T): T = {
-    containerDAO.authDAO.loadGroup(groupRef, txn) match {
+  def withRawlsGroup[T](groupRef: RawlsGroupRef, dataAccess: DataAccess)(op: (RawlsGroup) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
       case Some(group) => op(group)
-      case None => throw new RawlsException(s"Couldn't find group for groupRef $groupRef")
+      case None => DBIO.failed(new RawlsException(s"Couldn't find group for groupRef $groupRef"))
     }
   }
 
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
-          //Pull the ACLs from the workspace. Sort the keys by level, so that higher access levels overwrite lower ones.
-          //Build a map from user/group ID to associated access level.
-          val aclList: Map[String, WorkspaceAccessLevel] = workspaceContext.workspace.accessLevels.toSeq.sortBy(_._1)
-            .foldLeft(Map.empty[String, WorkspaceAccessLevel])({ case (currentMap, (level, groupRef)) =>
-            //groupRef = group representing this access level for the workspace
-            withRawlsGroup(groupRef, txn) { accessGroup =>
-
-              //pairs of user emails -> this access level
-              val userLevels = accessGroup.users.map {
-                withRawlsUser(_, txn) { user =>
-                  (user.userEmail.value, level)
-                }
-              }
-
-              //pairs of group emails -> this access level
-              val subgroupLevels = accessGroup.subGroups.map {
-                withRawlsGroup(_, txn) { subGroup =>
-                  (subGroup.groupEmail.value, level)
-                }
-              }
-
-              //fold 'em into the map
-              currentMap ++ userLevels ++ subgroupLevels
-            }
-          })
-          Future.successful( RequestComplete(StatusCodes.OK, aclList) )
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+          dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).map { emailsAndAccess =>
+            RequestComplete(StatusCodes.OK, emailsAndAccess.sortBy(_._2).reverse.toMap)
+          }
         }
       }
     }
@@ -361,88 +402,94 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
    * @return
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
 
           //collapse the acl updates list so there are no dupe emails, and convert to RawlsGroup/RawlsUser instances
-          val updateMap: Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel] = aclUpdates
-            .map { case upd => (containerDAO.authDAO.loadFromEmail(upd.email, txn), upd.accessLevel) }
-            .collect { case (Some(userauth), level) => userauth -> level }.toMap
-
-          //make a list of all the refs we're going to update
-          val allTheRefs: Set[UserAuthRef] = updateMap.map {
-            case (Left(rawlsUser:RawlsUser), level) => RawlsUser.toRef(rawlsUser)
-            case (Right(rawlsGroup:RawlsGroup), level) => RawlsGroup.toRef(rawlsGroup)
-          }.toSet
-
-          if (allTheRefs.contains(UserService.allUsersGroupRef)) {
-            // UserService.allUsersGroupRef cannot be updated in this code path, there is an admin end point for that
-            Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}")))
-
-          } else if (!updateMap.get(Left(RawlsUser(userInfo))).forall(_ == containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext.workspace.workspaceId, txn))) {
-            // don't allow the user to change their own permissions but let it pass if they are in the list and their current access level
-            // is the same as the new value
-            Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, "You may not change your own permissions")))
-
-          } else {
-            val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-            val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
-
-            // go through the access level groups on the workspace and update them
-            // foldLeft to go through the futures in order instead of parallel to avoid concurrent modification exceptions
-            workspaceContext.workspace.accessLevels.foldLeft(Future.successful(RequestComplete(StatusCodes.NoContent)).asInstanceOf[Future[PerRequestMessage]]) {
-              case (priorFuture, (level, groupRef)) => priorFuture.flatMap {
-                case RequestComplete(StatusCodes.NoContent) => withRawlsGroup(groupRef, txn) { group =>
-                  //remove existing records for users and groups in the acl update list
-                  val usersNotChanging = group.users.filter(userRef => !allTheRefs.contains(userRef))
-                  val groupsNotChanging = group.subGroups.filter(groupRef => !allTheRefs.contains(groupRef))
-
-                  //generate the list of new references
-                  val newUsers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
-                  val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
-
-                  userServiceRef ? UserService.OverwriteGroupMembers(group, RawlsGroupMemberList(
-                    userSubjectIds = Option((usersNotChanging ++ newUsers).map(_.userSubjectId.value).toSeq),
-                    subGroupNames = Option((groupsNotChanging ++ newgroups).map(_.groupName.value).toSeq)
-                  ))
-                }.asInstanceOf[Future[PerRequestMessage]]
-                case _ => priorFuture
-              }
-            } map {
-              case RequestComplete(StatusCodes.NoContent) =>
-                val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
-                  case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
-                  case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
-                }).toSeq)
-                  .map( email => ErrorReport( StatusCodes.NotFound, email ) )
-
-                if (emailNotFoundReports.isEmpty) {
-                  RequestComplete(StatusCodes.OK)
-                } else {
-                  //this is a case where we don't want to rollback the transaction in the event of getting an error.
-                  //we will process the emails that are valid, and report any others as invalid
-                  RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
+          DBIO.sequence(aclUpdates.map { aclUpdate =>
+            dataAccess.rawlsGroupQuery.loadFromEmail(aclUpdate.email).map((_, aclUpdate.accessLevel))
+          }).map(_.collect { case (Some(x), a) => (x, a) }.toMap).flatMap { updateMap =>
+            //make a list of all the refs we're going to update
+            val allTheRefs: Set[UserAuthRef] = updateMap.map {
+              case (Left(rawlsUser:RawlsUser), level) => RawlsUser.toRef(rawlsUser)
+              case (Right(rawlsGroup:RawlsGroup), level) => RawlsGroup.toRef(rawlsGroup)
+            }.toSet
+  
+            getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { currentUserAccess =>
+              if (allTheRefs.contains(UserService.allUsersGroupRef)) {
+                // UserService.allUsersGroupRef cannot be updated in this code path, there is an admin end point for that
+                DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}")))
+    
+              } else if (!updateMap.get(Left(RawlsUser(userInfo))).forall(_ == currentUserAccess)) {
+                // don't allow the user to change their own permissions but let it pass if they are in the list and their current access level
+                // is the same as the new value
+                DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not change your own permissions")))
+    
+              } else {
+                val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
+                val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
+    
+                // go through the access level groups on the workspace and update them
+                val groupUpdateResults = DBIO.sequence(workspaceContext.workspace.accessLevels.map { case (level, groupRef) =>
+                  withRawlsGroup(groupRef, dataAccess) { group =>
+                    //remove existing records for users and groups in the acl update list
+                    val usersNotChanging = group.users.filter(userRef => !allTheRefs.contains(userRef))
+                    val groupsNotChanging = group.subGroups.filter(groupRef => !allTheRefs.contains(groupRef))
+  
+                    //generate the list of new references
+                    val newUsers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
+                    val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
+  
+                    val groupUpdateFuture = (userServiceRef ? UserService.OverwriteGroupMembers(group, RawlsGroupMemberList(
+                      userSubjectIds = Option((usersNotChanging ++ newUsers).map(_.userSubjectId.value).toSeq),
+                      subGroupNames = Option((groupsNotChanging ++ newgroups).map(_.groupName.value).toSeq)
+                    ))).asInstanceOf[Future[PerRequestMessage]]
+                    
+                    DBIO.from(groupUpdateFuture)
+                  }
+                }).map(_.reduce { (prior, next) =>
+                  // this reduce will propagate the first non-NoContent (i.e. error) response
+                  prior match {
+                    case RequestComplete(StatusCodes.NoContent) => next
+                    case otherwise => prior
+                  }
+                })
+                
+                groupUpdateResults.map {
+                  case RequestComplete(StatusCodes.NoContent) =>
+                    val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
+                      case Left(rawlsUser:RawlsUser) => rawlsUser.userEmail.value
+                      case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
+                    }).toSeq)
+                      .map( email => ErrorReport( StatusCodes.NotFound, email ) )
+    
+                    if (emailNotFoundReports.isEmpty) {
+                      RequestComplete(StatusCodes.OK)
+                    } else {
+                      //this is a case where we don't want to rollback the transaction in the event of getting an error.
+                      //we will process the emails that are valid, and report any others as invalid
+                      RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
+                    }
+    
+                  case otherwise => otherwise
                 }
-
-              case otherwise => otherwise
+              }
             }
-          }
+          }  
         }
       }
     }
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
-          Future {
-            if ( !containerDAO.submissionDAO.list(workspaceContext,txn).forall(_.status.isDone) )
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked."))
-            else {
-              if (!workspaceContext.workspace.isLocked)
-                containerDAO.workspaceDAO.save(workspaceContext.workspace.copy(isLocked = true), txn)
-              RequestComplete(StatusCodes.NoContent)
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+          dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
+            if (!submissions.forall(_.status.isDone)) {
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
+            } else {
+              dataAccess.workspaceQuery.lock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
             }
           }
         }
@@ -450,215 +497,169 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, txn) {
-          Future {
-            if ( workspaceContext.workspace.isLocked ) {
-              containerDAO.workspaceDAO.save(workspaceContext.workspace.copy(isLocked = false), txn)
-            }
-            RequestComplete(StatusCodes.NoContent)
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+          dataAccess.workspaceQuery.unlock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(entityCopyDef.sourceWorkspace), writeLocks=Set(entityCopyDef.destinationWorkspace)) { txn =>
+    dataSource.inTransaction { dataAccess =>
       //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
       //we can't upgrade a read lock to a write.
-      withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, txn) { destWorkspaceContext =>
-        withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, txn) { sourceWorkspaceContext =>
+      withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
+        withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
           realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
-            Future {
-              val entityNames = entityCopyDef.entityNames
-              val entityType = entityCopyDef.entityType
-              val conflicts = containerDAO.entityDAO.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, txn)
-              conflicts.size match {
-                case 0 => {
-                  // get the entities that were copied into the destination workspace
-                  val entityCopies = containerDAO.entityDAO.list(destWorkspaceContext, entityType, txn).filter((e: Entity) => entityNames.contains(e.name)).toList
+            val entityNames = entityCopyDef.entityNames
+            val entityType = entityCopyDef.entityType
+            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
+            copyResults.flatMap(conflicts => conflicts.size match {
+              case 0 => {
+                // get the entities that were copied into the destination workspace
+                dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
+                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
                   RequestComplete(StatusCodes.Created, entityCopies)
                 }
-                case _ => {
-                  val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-                  val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
-                  throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq))
-                }
               }
-            }
+              case _ => {
+                val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
+                val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
+              }
+            })
           }
         }
       }
     }
 
   // can't use withClonedRealm because the Realm -> no Realm logic is different
-  private def realmCheck(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext): Future[Boolean] = {
+  private def realmCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
     // if the source has a realm, the dest must also have that realm
     (sourceWorkspaceContext.workspace.realm, destWorkspaceContext.workspace.realm) match {
       case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
       case (Some(sourceRealm), None) =>
         val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities outside of a realm"
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
-      case _ => Future.successful(true)
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case _ => DBIO.successful(true)
     }
   }
 
 
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          containerDAO.entityDAO.get(workspaceContext, entity.entityType, entity.name, txn) match {
-            case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}"))
-            case None => RequestCompleteWithLocation((StatusCodes.Created, containerDAO.entityDAO.save(workspaceContext, entity, txn)), entity.path(workspaceName))
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
+          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
+          case None => dataAccess.entityQuery.save(workspaceContext, entity).map(e => RequestCompleteWithLocation((StatusCodes.Created, e), entity.path(workspaceName)))
         }
       }
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          val results = entityUpdates.map { entityUpdate =>
-            val entity = containerDAO.entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn)
-            entity match {
-              case Some(e) =>
-                val trial = Try {
-                  val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
-                  containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn)
-                }
-                (entityUpdate, trial)
-              case None => (entityUpdate, Failure(new RuntimeException("Entity does not exist")))
-            }
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] =
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        val results = entityUpdates.map { entityUpdate =>
+          val updateAction = dataAccess.entityQuery.get(workspaceContext, entityUpdate.entityType, entityUpdate.name) flatMap {
+            case Some(e) =>
+              val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
+              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
+            case None =>
+              if (upsert) {
+                val updatedEntity = applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations)
+                dataAccess.entityQuery.save(workspaceContext, updatedEntity)
+              } else {
+                DBIO.failed(new RuntimeException("Entity does not exist"))
+              }
           }
-          val errorReports = results.collect{
-            case (entityUpdate, Failure(regrets)) => ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}",ErrorReport(regrets))
-          }
-          if(errorReports.isEmpty) {
-            RequestComplete(StatusCodes.NoContent)
-          } else {
-            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.",errorReports))
-          }
+          
+          updateAction.asTry.map { trial => (entityUpdate, trial) }
         }
-      }
-    }
-
-  def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          val results = entityUpdates.map { entityUpdate =>
-            val entity = containerDAO.entityDAO.get(workspaceContext, entityUpdate.entityType, entityUpdate.name, txn) match {
-              case Some(e) => e
-              case None => containerDAO.entityDAO.save(workspaceContext, Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), txn)
-            }
-            val trial = Try {
-              val updatedEntity = applyOperationsToEntity(entity, entityUpdate.operations)
-              containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn)
-            }
-            (entityUpdate, trial)
-          }
-          val errorReports = results.collect {
-            case (entityUpdate, Failure(regrets)) => ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}",ErrorReport(regrets))
-          }
-          if (errorReports.isEmpty) {
-            RequestComplete(StatusCodes.NoContent)
-          } else {
-            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Some entities could not be upserted.", errorReports))
-          }
+        
+        val errorReports = DBIO.sequence(results).map(_.collect {
+          case (entityUpdate, Failure(regrets)) => ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}",ErrorReport(regrets))
+        })
+        
+        errorReports.map {
+          case Seq() => RequestComplete(StatusCodes.NoContent)
+          case reports => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.",reports))
         }
       }
     }
 
   def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        val typesWithCounts = containerDAO.entityDAO.getEntityTypes(workspaceContext, txn).toSeq.map { entityType =>
-          entityType -> containerDAO.entityDAO.getEntityTypeCount(workspaceContext, entityType, txn)
-        }.toMap
-        Future.successful(RequestComplete(StatusCodes.OK, typesWithCounts))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
       }
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        Future.successful(RequestComplete(StatusCodes.OK, containerDAO.entityDAO.list(workspaceContext, entityType, txn).toList))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.list(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
       }
     }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          Future.successful(PerRequest.RequestComplete(StatusCodes.OK, entity))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, entity))
         }
       }
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          Future {
-            try {
-              val updatedEntity = applyOperationsToEntity(entity, operations)
-              RequestComplete(StatusCodes.OK, containerDAO.entityDAO.save(workspaceContext, updatedEntity, txn))
-            } catch {
-              case e: AttributeUpdateOperationException => {
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}", ErrorReport(e)))
-              }
-            }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+          val updateAction = Try {
+            val updatedEntity = applyOperationsToEntity(entity, operations)
+            dataAccess.entityQuery.save(workspaceContext, updatedEntity)
+          } match {
+            case Success(result) => result
+            case Failure(e: AttributeUpdateOperationException) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}", ErrorReport(e))))
+            case Failure(regrets) => DBIO.failed(regrets)
           }
+          updateAction.map(RequestComplete(StatusCodes.OK, _))
         }
       }
     }
 
   def deleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          Future {
-            containerDAO.entityDAO.delete(workspaceContext, entity.entityType, entity.name, txn)
-            RequestComplete(StatusCodes.NoContent)
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+          dataAccess.entityQuery.delete(workspaceContext, entity.entityType, entity.name).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, txn) { entity =>
-          Future {
-            containerDAO.entityDAO.get(workspaceContext, entity.entityType, newName, txn) match {
-              case None =>
-                containerDAO.entityDAO.rename(workspaceContext, entity.entityType, entity.name, newName, txn)
-                RequestComplete(StatusCodes.NoContent)
-              case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists"))
-            }
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+          dataAccess.entityQuery.get(workspaceContext, entity.entityType, newName) flatMap {
+            case None => dataAccess.entityQuery.rename(workspaceContext, entity.entityType, entity.name, newName)
+            case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${entity.entityType} ${newName} already exists"))
+          } map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        Future {
-          txn withGraph { graph =>
-            new ExpressionEvaluator(new ExpressionParser())
-              .evalFinalAttribute(workspaceContext, entityType, entityName, expression) match {
-              case Success(result) => RequestComplete(StatusCodes.OK, result)
-              case Failure(regret) => {
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
-              }
-            }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        new SlickExpressionEvaluator(dataAccess).evalFinalAttribute(workspaceContext, entityType, entityName, expression) match {
+          case Success(result) => result.map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+          case Failure(regret) => {
+            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
           }
         }
       }
@@ -755,16 +756,15 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 
-  def saveAndValidateMCExpressions(workspaceContext: WorkspaceContext, methodConfiguration: MethodConfiguration, txn: RawlsTransaction): ValidatedMethodConfiguration = {
-    containerDAO.methodConfigurationDAO.save(workspaceContext, methodConfiguration, txn)
-
-    validateMCExpressions(methodConfiguration)
+  def saveAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+    dataAccess.methodConfigurationQuery.save(workspaceContext, methodConfiguration) map { _ =>
+      validateMCExpressions(methodConfiguration, dataAccess)
+    }
   }
 
-  def validateMCExpressions(methodConfiguration: MethodConfiguration): ValidatedMethodConfiguration = {
-    val parser = new ExpressionParser
-
-    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[ExpressionTypes.PipelineQuery] ) = {
+  def validateMCExpressions(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ValidatedMethodConfiguration = {
+    val parser = dataAccess  // this makes it compile for some reason (as opposed to inlining parser)
+    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[parser.PipelineQuery] ) = {
       val parsed = m mapValues { attr => parseFunc(attr.value) }
       ( parsed collect { case (key, Success(_)) => key } toSeq,
         parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
@@ -776,85 +776,75 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   def getAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] = {
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
-          Future { PerRequest.RequestComplete(StatusCodes.OK, validateMCExpressions(methodConfig)) }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
+          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, validateMCExpressions(methodConfig, dataAccess)))
         }
       }
     }
   }
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-            case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}"))
-            case None =>
-              val validatedMethodConfiguration = saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn)
-              RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
+          case None => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+        } map { validatedMethodConfiguration =>
+          RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
         }
       }
     }
 
   def deleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
-          Future {
-            containerDAO.methodConfigurationDAO.delete(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn)
-            RequestComplete(StatusCodes.NoContent)
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
+          dataAccess.methodConfigurationQuery.delete(workspaceContext, methodConfigurationNamespace, methodConfigurationName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
   def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfiguration =>
-          Future {
-            containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfigurationNamespace, newName, txn) match {
-              case None =>
-                containerDAO.methodConfigurationDAO.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName, newName, txn)
-                RequestComplete(StatusCodes.NoContent)
-              case Some(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${newName} already exists"))
-            }
-          }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfiguration =>
+          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, newName) flatMap {
+            case None =>
+              dataAccess.methodConfigurationQuery.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName, newName)
+            case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${newName} already exists")))
+          } map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
     }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        Future {
-          containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name, txn) match {
-            case Some(_) => RequestComplete(StatusCodes.OK, saveAndValidateMCExpressions(workspaceContext, methodConfiguration, txn))
-            case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}."))
-          }
-        }
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+          case Some(_) => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+        } map(RequestComplete(StatusCodes.OK, _))
       }
     }
 
   def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
-          Future.successful(PerRequest.RequestComplete(StatusCodes.OK, methodConfig))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
+          DBIO.successful(PerRequest.RequestComplete(StatusCodes.OK, methodConfig))
         }
       }
     }
 
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] = {
-    dataSource.inFutureTransaction(readLocks=Set(mcnp.source.workspaceName), writeLocks=Set(mcnp.destination.workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(mcnp.destination.workspaceName, WorkspaceAccessLevels.Write, txn) { destContext =>
-        withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevels.Read, txn) { sourceContext =>
-          containerDAO.methodConfigurationDAO.get(sourceContext, mcnp.source.namespace, mcnp.source.name, txn) match {
-            case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${mcnp.source.namespace}/${mcnp.source.name} in ${mcnp.source.workspaceName}.")))
-            case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, txn)
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(mcnp.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
+        withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceContext =>
+          dataAccess.methodConfigurationQuery.get(sourceContext, mcnp.source.namespace, mcnp.source.name) flatMap {
+            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${mcnp.source.namespace}/${mcnp.source.name} in ${mcnp.source.workspaceName}.")))
+            case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
           }
         }
       }
@@ -862,23 +852,23 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(writeLocks=Set(methodRepoQuery.destination.workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions( methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, txn ) { destContext =>
-        methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap { agoraEntityOption =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions( methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
+        DBIO.from(methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo)) flatMap { agoraEntityOption =>
           agoraEntityOption match {
-            case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodRepoQuery.methodRepoNamespace}/${methodRepoQuery.methodRepoName}/${methodRepoQuery.methodRepoSnapshotId} in the repository.")))
+            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodRepoQuery.methodRepoNamespace}/${methodRepoQuery.methodRepoName}/${methodRepoQuery.methodRepoSnapshotId} in the repository.")))
             case Some(entity) =>
               try {
                 // if JSON parsing fails, catch below
                 val methodConfig = entity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
                 methodConfig match {
-                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, txn)
-                  case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
+                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
+                  case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
                 }
               }
               catch {
                 case e: Exception =>
-                  Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Error parsing Method Repo response message.", ErrorReport(e))))
+                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Error parsing Method Repo response message.", ErrorReport(e))))
               }
           }
         }
@@ -886,55 +876,51 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
-    dataSource.inFutureTransaction(readLocks=Set(methodRepoQuery.source.workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, txn) { methodConfig =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
           import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
-          methodRepoDAO.postMethodConfig(
+          DBIO.from(methodRepoDAO.postMethodConfig(
             methodRepoQuery.methodRepoNamespace,
             methodRepoQuery.methodRepoName,
             methodConfig.copy(namespace = methodRepoQuery.methodRepoNamespace, name = methodRepoQuery.methodRepoName),
-            userInfo) map { RequestComplete(StatusCodes.OK, _) }
+            userInfo)) map { RequestComplete(StatusCodes.OK, _) }
         }
       }
     }
   }
 
-  private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, destContext: WorkspaceContext, txn: RawlsTransaction) =
-    Future {
-      containerDAO.methodConfigurationDAO.get(destContext, dest.namespace, dest.name, txn) match {
-        case Some(existingMethodConfig) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}"))
-        case None =>
-          val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
-          val validatedTarget = saveAndValidateMCExpressions(destContext, target, txn)
-          RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName))
-      }
-    }
+  private def saveCopiedMethodConfiguration(methodConfig: MethodConfiguration, dest: MethodConfigurationName, destContext: SlickWorkspaceContext, dataAccess: DataAccess) = {
+    val target = methodConfig.copy(name = dest.name, namespace = dest.namespace)
+
+    dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
+      case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
+      case None => saveAndValidateMCExpressions(destContext, target, dataAccess)
+    }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
+  }
 
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        // use toList below to eagerly iterate through the response from methodConfigurationDAO.list
-        // to ensure it is evaluated within the transaction
-        Future.successful(RequestComplete(StatusCodes.OK, containerDAO.methodConfigurationDAO.list(workspaceContext, txn).toList))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.methodConfigurationQuery.list(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
       }
     }
 
   def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
-    withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
-      withWdl(method) { wdl =>
-        Future {
-          RequestComplete(StatusCodes.OK, MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod))
+    dataSource.inTransaction { dataAccess => 
+      withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+        withWdl(method) { wdl =>
+          DBIO.successful(RequestComplete(StatusCodes.OK, MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod)))
         }
       }
     }
   }
 
   def getMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
-    withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
-      withWdl(method) { wdl =>
-        Future {
-          RequestComplete(StatusCodes.OK, MethodConfigResolver.getMethodInputsOutputs(wdl))
+    dataSource.inTransaction { dataAccess => 
+      withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
+        withWdl(method) { wdl =>
+          DBIO.successful(RequestComplete(StatusCodes.OK, MethodConfigResolver.getMethodInputsOutputs(wdl)))
         }
       }
     }
@@ -946,43 +932,38 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   def validateMethodConfig(workspaceName: WorkspaceName,
     methodConfigurationNamespace: String, methodConfigurationName: String,
     entityType: String, entityName: String, userInfo: UserInfo): Future[PerRequestMessage] = {
-      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) { methodConfig =>
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
             withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
-              withEntity(workspaceContext, entityType, entityName, txn) { entity =>
+              withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
                 withWdl(method) { wdl =>
-                  Future {
-                    MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl) match {
-                      case Left(failures) => RequestComplete(StatusCodes.OK, failures)
-                      case Right(unpacked) =>
-                        val idation = executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), userInfo)
-                        RequestComplete(StatusCodes.OK, idation)
-                    }
+                  MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl, dataAccess) flatMap {
+                    case Left(failures) => DBIO.successful(RequestComplete(StatusCodes.OK, failures))
+                    case Right(unpacked) =>
+                      DBIO.from(executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), userInfo)) map(RequestComplete(StatusCodes.OK, _))
                   }
+                }
               }
             }
           }
         }
       }
     }
-  }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        val statuses = containerDAO.submissionDAO.list(workspaceContext, txn) map { submission =>
-          withRawlsUser(submission.submitter, txn) { user =>
-            new SubmissionStatusResponse(submission, user)
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.submissionQuery.listWithSubmitter(workspaceContext).map { _.map {
+            case (submission, user) => new SubmissionStatusResponse(submission, user) 
           }
-        }
-        Future.successful(RequestComplete(StatusCodes.OK, statuses.toList))
+        }.map(RequestComplete(StatusCodes.OK, _))
       }
     }
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] = {
     val submissionFuture: Future[PerRequestMessage] = withSubmissionParameters(workspaceName, submissionRequest) {
-      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
+      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
@@ -1009,7 +990,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
           }
         }))
 
-        submittedWorkflowsFuture map { submittedWorkflows =>
+        DBIO.from(submittedWorkflowsFuture) flatMap { submittedWorkflows =>
           val succeededWorkflowSubmissions = submittedWorkflows.collect {
             case w:Workflow => w
           }
@@ -1032,12 +1013,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
             status = if (succeededWorkflowSubmissions.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
           )
 
-          containerDAO.submissionDAO.save(workspaceContext, submission, txn)
-          val workflowReports = succeededWorkflowSubmissions.map { workflow =>
-            WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
+          dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
+            val workflowReports = succeededWorkflowSubmissions.map { workflow =>
+              WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
+            }
+  
+            RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
           }
-
-          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
         }
     }
 
@@ -1057,16 +1039,16 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[PerRequestMessage] =
     withSubmissionParameters(workspaceName,submissionRequest) {
-      (txn: RawlsTransaction, workspaceContext: WorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs]) =>
-        Future.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
+      (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, succeeded: Seq[SubmissionValidationEntityInputs], failed: Seq[SubmissionValidationEntityInputs]) =>
+        DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
     }
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withSubmission(workspaceContext, submissionId, txn) { submission =>
-          withRawlsUser(submission.submitter, txn) { user =>
-            Future.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+          withRawlsUser(submission.submitter, dataAccess) { user =>
+            DBIO.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
           }
         }
       }
@@ -1074,39 +1056,40 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        abortSubmission(workspaceContext, submissionId, txn)
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        abortSubmission(workspaceContext, submissionId, dataAccess)
       }
     }
   }
 
-  private def abortSubmission(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction): Future[PerRequestMessage] = {
-    withSubmission(workspaceContext, submissionId, txn) { submission =>
-      containerDAO.submissionDAO.update(workspaceContext, submission.copy(status = SubmissionStatuses.Aborting), txn)
-      val aborts = Future.traverse(submission.workflows)(wf =>
-        Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
-      )
-
-      aborts.map { abortResults =>
-
-        val failures = abortResults map { case (workflowId: String, result: Try[ExecutionServiceStatus]) =>
-          (workflowId, result.recover {
-            // Forbidden responses means that it is already done which is ok here
-            case ure: UnsuccessfulResponseException if ure.response.status == StatusCodes.Forbidden => Success(ExecutionServiceStatus(workflowId, WorkflowStatuses.Aborted.toString))
-          })
-        } collect {
-          case (workflowId: String, Failure(regret)) => (workflowId -> regret)
-        }
-
-        if (failures.isEmpty) {
-          RequestComplete(StatusCodes.NoContent)
-        } else {
-          val causes = failures map { case (workflowId, throwable) =>
-            ErrorReport(s"Unable to abort workflow ${workflowId}", executionServiceDAO.toErrorReport(throwable))
+  private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
+    withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+      dataAccess.submissionQuery.updateStatus(workspaceContext, submission.submissionId, SubmissionStatuses.Aborting) flatMap { _ =>
+        val aborts = DBIO.from(Future.traverse(submission.workflows)(wf =>
+          Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
+        ))
+  
+        aborts.map { abortResults =>
+  
+          val failures = abortResults map { case (workflowId: String, result: Try[ExecutionServiceStatus]) =>
+            (workflowId, result.recover {
+              // Forbidden responses means that it is already done which is ok here
+              case ure: UnsuccessfulResponseException if ure.response.status == StatusCodes.Forbidden => Success(ExecutionServiceStatus(workflowId, WorkflowStatuses.Aborted.toString))
+            })
+          } collect {
+            case (workflowId: String, Failure(regret)) => (workflowId -> regret)
           }
-          //if we fail to abort all workflows, we do not want to roll back the transaction. we've done all we can at this point
-          RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to abort all workflows for submission ${submissionId}.",causes))
+  
+          if (failures.isEmpty) {
+            RequestComplete(StatusCodes.NoContent)
+          } else {
+            val causes = failures map { case (workflowId, throwable) =>
+              ErrorReport(s"Unable to abort workflow ${workflowId}", executionServiceDAO.toErrorReport(throwable))
+            }
+            //if we fail to abort all workflows, we do not want to roll back the transaction. we've done all we can at this point
+            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to abort all workflows for submission ${submissionId}.",causes))
+          }
         }
       }
     }
@@ -1130,13 +1113,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   /**
    * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withSubmission(workspaceContext, submissionId, txn) { submission =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           withWorkflow(workspaceName, submission, workflowId) { workflow =>
-            val outputs = executionServiceDAO.outputs(workflowId, userInfo).map(Success(_)).recover{case t=>Failure(t)}
-            val logs = executionServiceDAO.logs(workflowId, userInfo).map(Success(_)).recover{case t=>Failure(t)}
-            outputs zip logs map { _ match {
+            val outputFTs = toFutureTry(executionServiceDAO.outputs(workflowId, userInfo))
+            val logFTs = toFutureTry(executionServiceDAO.logs(workflowId, userInfo))
+            DBIO.from(outputFTs zip logFTs map {
               case (Success(outputs), Success(logs)) =>
                 mergeWorkflowOutputs(outputs, logs, workflowId)
               case (Failure(outputsFailure), Success(logs)) =>
@@ -1146,8 +1129,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               case (Failure(outputsFailure), Failure(logsFailure)) =>
                 throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs and unable to get logs for ${submissionId}.",
                   Seq(executionServiceDAO.toErrorReport(outputsFailure),executionServiceDAO.toErrorReport(logsFailure))))
-              }
-            }
+            })
           }
         }
       }
@@ -1155,11 +1137,11 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   }
 
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
-    dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, txn) { workspaceContext =>
-        withSubmission(workspaceContext, submissionId, txn) { submission =>
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           withWorkflow(workspaceName, submission, workflowId) { workflow =>
-            executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em))
+            DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
           }
         }
       }
@@ -1168,19 +1150,17 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def listAllActiveSubmissions() = {
     asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          RequestComplete(StatusCodes.OK, containerDAO.submissionDAO.listAllActiveSubmissions(txn).toList)
-        }
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
       }
     }
   }
 
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
     asAdmin {
-      dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-          abortSubmission(workspaceContext, submissionId, txn)
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          abortSubmission(workspaceContext, submissionId, dataAccess)
         }
       }
     }
@@ -1188,14 +1168,19 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     asAdmin {
-      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-          val readerGroup = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
-
-          if (readerGroup.subGroups.contains(UserService.allUsersGroupRef)) {
-            Future.successful(RequestComplete(StatusCodes.NoContent))
-          } else {
-            Future.successful(RequestComplete(StatusCodes.NotFound))
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
+            readerGroup match {
+              case Some(group) =>
+                if (group.subGroups.contains(UserService.allUsersGroupRef)) {
+                  RequestComplete(StatusCodes.NoContent)
+                } else {
+                  RequestComplete(StatusCodes.NotFound)
+                }
+              case None =>
+                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, "allUsersGroup not found"))
+            }
           }
         }
       }
@@ -1204,12 +1189,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     asAdmin {
-      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-          (userServiceRef ? UserService.AddGroupMembers(
+          DBIO.from((userServiceRef ? UserService.AddGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]]
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]])
         } map {
           case RequestComplete(StatusCodes.OK) => RequestComplete(StatusCodes.Created)
           case otherwise => otherwise
@@ -1220,12 +1205,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     asAdmin {
-      dataSource.inFutureTransaction(readLocks=Set(workspaceName)) { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
-          (userServiceRef ? UserService.RemoveGroupMembers(
+          DBIO.from((userServiceRef ? UserService.RemoveGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
-            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]]
+            RawlsGroupMemberList(subGroupNames = Option(Seq(UserService.allUsersGroupRef.groupName.value))))).asInstanceOf[Future[PerRequestMessage]])
         }
       }
     }
@@ -1233,152 +1218,161 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
 
   def listAllWorkspaces() = {
     asAdmin {
-      dataSource.inFutureTransaction() { txn =>
-        Future {
-          RequestComplete(StatusCodes.OK, containerDAO.workspaceDAO.list(txn).toList)
-        }
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
       }
     }
   }
 
+  // this function is a bit naughty because it waits for database results
+  // this is acceptable because it is a seldom used admin functions, not part of the mainstream
+  // refactoring it to do the propper database action chaining is too much work at this time
   def getWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]): Future[PerRequestMessage] = {
+    def run[T](action: DataAccess => ReadWriteAction[T]): T = {
+      Await.result(dataSource.inTransaction { dataAccess => action(dataAccess) }, 10 seconds)
+    }
+    
     asAdmin {
-      dataSource.inFutureTransaction(readLocks = Set(workspaceName)) { txn =>
-        withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-          val STATUS_FOUND = "FOUND"
-          val STATUS_NOT_FOUND = "NOT_FOUND"
-          val STATUS_CAN_WRITE = "USER_CAN_WRITE"
-          val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
-          val STATUS_NA = "NOT_AVAILABLE"
+      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
+      val STATUS_FOUND = "FOUND"
+      val STATUS_NOT_FOUND = "NOT_FOUND"
+      val STATUS_CAN_WRITE = "USER_CAN_WRITE"
+      val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
+      val STATUS_NA = "NOT_AVAILABLE"
 
-          val bucketName = workspaceContext.workspace.bucketName
-
-          val rawlsAccessGroupRefs = workspaceContext.workspace.accessLevels
-          val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
-            accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
-          }
-
-          val rawlsIntersectionGroupRefs = workspaceContext.workspace.realmACLs
-          val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
-            accessLevel -> containerDAO.authDAO.loadGroup(groupRef, txn)
-          }
-
-          val userRef = userSubjectId.flatMap(id =>
-            containerDAO.authDAO.loadUser(RawlsUserRef(RawlsUserSubjectId(id)), txn))
-
-          val userStatus = userRef match {
-            case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
-            case None => userSubjectId match {
-              case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
-              case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
-            }
-          }
-
-          val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
-            containerDAO.authDAO.loadGroup(groupRef, txn) match {
-              case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-            }
-          }
-
-          val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
-            val groupEmail = groupRef.get.groupEmail.value
-            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-            }))
-          }
-
-          val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
-            containerDAO.authDAO.loadGroup(groupRef, txn) match {
-              case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-            }
-          }
-
-          val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
-            val groupEmail = groupRef.get.groupEmail.value
-            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-            }))
-          }
-
-          val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
-            case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
-            case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
-          }))
-
-          val bucketWriteStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
-                case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
-                case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
-              }))
-            }
-            case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
-          }
-
-          val userProxyStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
-                if(status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
-                else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
-              })
-            }
-            case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
-          }
-
-          val userAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) =>
-              "WORKSPACE_USER_ACCESS_LEVEL" -> containerDAO.authDAO.getMaximumAccessLevel(userRef.get, workspaceContext.workspace.workspaceId, txn).toString
-            case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
-          }
-
-          val googleAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) => {
-              val accessLevel = containerDAO.authDAO.getMaximumAccessLevel(userRef.get, workspaceContext.workspace.workspaceId, txn)
-              if(accessLevel >= WorkspaceAccessLevels.Read) {
-                val groupEmail = containerDAO.authDAO.loadGroup(workspaceContext.workspace.accessLevels.get(accessLevel).get, txn).get.groupEmail.value
-                toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
-                  if(status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
-                  else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
-                })
-              }
-              else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
-            }
-            case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
-          }
-
-          Future.sequence(googleAccessGroupStatuses++googleIntersectionGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
-            val statuses = tries.collect { case Success(s) => s }.toSeq
-            RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses++rawlsIntersectionGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
-          }
+      val bucketName = workspace.bucketName
+      val rawlsAccessGroupRefs = workspace.accessLevels
+      val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
         }
+      }
+      val rawlsIntersectionGroupRefs = workspace.realmACLs
+      val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
+        }
+      }
+
+      val userRef = userSubjectId.flatMap(id => run {
+        _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id)))
+      })
+
+      val userStatus = userRef match {
+        case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
+        case None => userSubjectId match {
+          case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
+          case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
+        }
+      }
+
+      val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
+
+      val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
+
+      val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
+
+      val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
+
+      val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
+        case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
+        case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+      }))
+
+      val bucketWriteStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
+            case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
+            case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
+          }))
+        }
+        case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
+      }
+
+      val userProxyStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
+            if (status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
+            else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
+          })
+        }
+        case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
+      }
+
+      val userAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) =>
+          "WORKSPACE_USER_ACCESS_LEVEL" -> run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
+          }.toString()
+        case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+      }
+
+      val googleAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) => {
+          val accessLevel = run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
+          }
+          if (accessLevel >= WorkspaceAccessLevels.Read) {
+            val groupEmail = run {
+              _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get)
+            }.get.groupEmail.value
+            toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
+              if (status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
+              else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
+            })
+          }
+          else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
+        }
+        case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
+      }
+
+      Future.sequence(googleAccessGroupStatuses ++ googleIntersectionGroupStatuses ++ Seq(bucketStatus, bucketWriteStatus, userProxyStatus, googleAccessLevel)).map { tries =>
+        val statuses = tries.collect { case Success(s) => s }.toSeq
+        RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses ++ rawlsIntersectionGroupStatuses ++ statuses ++ Seq(userStatus, userAccessLevel)).toMap))
       }
     }
   }
 
   // helper methods
 
-  private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)
-                                     (op: (WorkspaceContext) => PerRequestMessage): Future[PerRequestMessage] = {
-    val workspaceName = workspaceRequest.toWorkspaceName
-    requireCreateWorkspaceAccess(workspaceRequest, txn) {
-      containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
-        case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
+  private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
+                                     (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    requireCreateWorkspaceAccess(workspaceRequest, dataAccess) {
+      dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) flatMap {
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName, workspaceRequest.realm) map { googleWorkspaceInfo =>
+          DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
             val currentDate = DateTime.now
 
-            def saveAndMap(level: WorkspaceAccessLevel, group: RawlsGroup): (WorkspaceAccessLevel, RawlsGroupRef) = {
-              containerDAO.authDAO.saveGroup(group, txn)
-              level -> group
-            }
-
-            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => saveAndMap(a, g) }
-            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => saveAndMap(a, g) } }
+            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))}
+            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => (a -> RawlsGroup.toRef(g))} }
 
             val workspace = Workspace(
               namespace = workspaceRequest.namespace,
@@ -1394,7 +1388,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
               realmACLs = intersectionGroups getOrElse accessGroups
             )
 
-            op(containerDAO.workspaceDAO.save(workspace, txn))
+            val groupInserts =
+              googleWorkspaceInfo.accessGroupsByLevel.values.map(dataAccess.rawlsGroupQuery.save) ++
+              googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
+
+            DBIO.seq(groupInserts.toSeq:_*) andThen
+              dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
           }
       }
     }
@@ -1403,113 +1402,122 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
-  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    containerDAO.billingDAO.loadProject(RawlsBillingProjectName(workspaceRequest.toWorkspaceName.namespace), txn) match {
+  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.toWorkspaceName.namespace)) flatMap {
       case Some(billingProject) =>
         if (billingProject.users.contains(RawlsUser(userInfo))) {
           workspaceRequest.realm match {
-            case Some(realm) => containerDAO.authDAO.loadGroupIfMember(realm, RawlsUser(userInfo), txn) match {
-              case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
+            case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
+              case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
               case Some(_) => op
             }
             case None => op
           }
         } else {
-          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
         }
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceRequest.toWorkspaceName.namespace} not found")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceRequest.toWorkspaceName.namespace} not found")))
     }
   }
 
-  private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    withWorkspaceContext(workspaceName, txn) { workspaceContext =>
-      requireAccess(workspaceContext.workspace, accessLevel, txn) { op(workspaceContext) }
+  private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+      requireAccess(workspaceContext.workspace, accessLevel, dataAccess) { op(workspaceContext) }
     }
   }
 
-  private def withWorkspaceContext(workspaceName: WorkspaceName, txn: RawlsTransaction)(op: (WorkspaceContext) => Future[PerRequestMessage]) = {
-    assert( txn.readLocks.contains(workspaceName) || txn.writeLocks.contains(workspaceName),
-            s"Attempting to use context on workspace $workspaceName but it's not read or write locked! Add it to inTransaction or inFutureTransaction")
-    containerDAO.workspaceDAO.loadContext(workspaceName, txn) match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-      case Some(workspaceContext) => op(workspaceContext)
+  private def withWorkspaceContext(workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]) = {
+    dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+      case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
   }
 
-  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel, txn: RawlsTransaction)(codeBlock: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    val userLevel = containerDAO.authDAO.getMaximumAccessLevel(RawlsUser(userInfo), workspace.workspaceId, txn)
-    if (userLevel >= requiredLevel) {
-      if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
-        Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
-      else codeBlock
+  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+      if (userLevel >= requiredLevel) {
+        if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+        else codeBlock
+      }
+      else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+      else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
     }
-    else if (userLevel >= WorkspaceAccessLevels.Read) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
-    else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
   }
 
-  private def requireOwnerIgnoreLock(workspace: Workspace, txn: RawlsTransaction)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner, txn)(op)
+  private def requireOwnerIgnoreLock(workspace: Workspace, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner, dataAccess)(op)
   }
 
-  private def withEntity(workspaceContext: WorkspaceContext, entityType: String, entityName: String, txn: RawlsTransaction)(op: (Entity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    containerDAO.entityDAO.get(workspaceContext, entityType, entityName, txn) match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext}")))
+  private def withEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext}")))
       case Some(entity) => op(entity)
     }
   }
 
-  private def withMethodConfig(workspaceContext: WorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, txn: RawlsTransaction)(op: (MethodConfiguration) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    containerDAO.methodConfigurationDAO.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName, txn) match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
+  private def withMethodConfig(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
       case Some(methodConfiguration) => op(methodConfiguration)
     }
   }
 
-  private def withMethod(methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    toFutureTry(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)) flatMap { agoraEntityOption => agoraEntityOption match {
-      case Success(None) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
+  private def withMethod(methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
+      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
+      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
     }}
   }
 
-  private def withWdl(method: AgoraEntity)(op: (String) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withWdl(method: AgoraEntity)(op: (String) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     method.payload match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
       case Some(wdl) => op(wdl)
     }
   }
 
-  private def withSubmission(workspaceContext: WorkspaceContext, submissionId: String, txn: RawlsTransaction)(op: (Submission) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    containerDAO.submissionDAO.get(workspaceContext, submissionId, txn) match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")))
-      case Some(submission) => op(submission)
+  private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    Try {
+      UUID.fromString(submissionId)
+    } match {
+      case Failure(t: IllegalArgumentException) =>
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
+      case _ =>
+        dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
+          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")))
+          case Some(submission) => op(submission)
+        }
     }
   }
 
-  private def withWorkflow(workspaceName: WorkspaceName, submission: Submission, workflowId: String)(op: (Workflow) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withWorkflow(workspaceName: WorkspaceName, submission: Submission, workflowId: String)(op: (Workflow) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     submission.workflows.find(wf => wf.workflowId == workflowId) match {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
       case Some(workflow) => op(workflow)
     }
   }
 
-  private def buildWorkflowOptions(workspaceContext: WorkspaceContext, submissionId: String): Future[Option[String]] = {
+  private def buildWorkflowOptions(workspaceContext: SlickWorkspaceContext, submissionId: String): Future[Option[String]] = {
     val bucketName = workspaceContext.workspace.bucketName
     val billingProjectName = RawlsBillingProjectName(workspaceContext.workspace.namespace)
 
-    // note: executes in a Future
-    gcsDAO.getToken(RawlsUser(userInfo)) map { optToken =>
-      val refreshToken = optToken getOrElse {
+    val refreshTokenFuture = gcsDAO.getToken(RawlsUser(userInfo)) map { optToken =>
+      optToken getOrElse {
         throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}")
       }
-
-      val billingProject = dataSource.inTransaction() { txn =>
-        containerDAO.billingDAO.loadProject(billingProjectName, txn) getOrElse {
-          throw new RawlsException(s"Billing Project with name ${billingProjectName.value} not found")
-        }
-      }
-
+    }
+    
+    val billingProjectFuture = dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map(_.getOrElse(
+        throw new RawlsException(s"Billing Project with name ${billingProjectName.value} not found")))
+    }
+    
+    for {
+      refreshToken <- refreshTokenFuture
+      billingProject <- billingProjectFuture
+    } yield {
       import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 
       Option(ExecutionServiceWorkflowOptions(
@@ -1522,31 +1530,31 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 
-  private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: WorkspaceContext, rootEntityType: String, txn: RawlsTransaction)(op: (Seq[Entity]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityType: String, dataAccess: DataAccess)(op: (Seq[Entity]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     //If there's an expression, evaluate it to get the list of entities to run this job on.
     //Otherwise, use the entity given in the submission.
     submissionRequest.expression match {
       case None =>
         if ( submissionRequest.entityType != rootEntityType )
-          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
         else
-          containerDAO.entityDAO.get(workspaceContext,submissionRequest.entityType,submissionRequest.entityName,txn) match {
+          dataAccess.entityQuery.get(workspaceContext,submissionRequest.entityType,submissionRequest.entityName) flatMap {
             case None =>
-              Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"No entity of type ${submissionRequest.entityType} named ${submissionRequest.entityName} exists in this workspace.")))
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"No entity of type ${submissionRequest.entityType} named ${submissionRequest.entityName} exists in this workspace.")))
             case Some(entity) =>
               op(Seq(entity))
           }
       case Some(expression) =>
-        new ExpressionEvaluator(new ExpressionParser()).evalFinalEntity(workspaceContext, submissionRequest.entityType, submissionRequest.entityName, expression) match {
+        new SlickExpressionEvaluator(dataAccess).evalFinalEntity(workspaceContext, submissionRequest.entityType, submissionRequest.entityName, expression) match {
           case Failure(regret) =>
-            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
-          case Success(entities) =>
-            if ( entities.isEmpty )
-              Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
-            else {
-              val eligibleEntities = entities.filter(_.entityType == rootEntityType)
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
+          case Success(entitiesAction) => entitiesAction flatMap {
+            case Seq() =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
+            case entities =>
+              val eligibleEntities = entities.filter(_.entityType == rootEntityType).toSeq
               if (eligibleEntities.isEmpty)
-                Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
               else
                 op(eligibleEntities)
             }
@@ -1554,34 +1562,36 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: DataSource,
     }
   }
 
-  private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     // TODO add Method to model instead of exposing AgoraEntity?
     val methodRepoMethod = methodConfig.methodRepoMethod
-    toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo)) flatMap { _ match {
-      case Success(None) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
+    DBIO.from(toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo))) flatMap { _ match {
+      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => agoraEntity.payload match {
-        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
+        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
         case Some(wdl) => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-          case Failure(exception) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
+          case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
           case Success(methodInputs) => op(wdl,methodInputs)
         }
       }
-      case Failure(throwable) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
+      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
     }}
   }
 
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
-   ( op: (RawlsTransaction, WorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource.inFutureTransaction(writeLocks=Set(workspaceName)) { txn =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, txn) { workspaceContext =>
-        withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, txn) { methodConfig =>
+   ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+        withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
           withMethodInputs(methodConfig) { (wdl,methodInputs) =>
-            withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, txn) { jobEntities =>
-              val resolvedInputs = jobEntities map { entity => SubmissionValidationEntityInputs(entity.name, MethodConfigResolver.resolveInputs(workspaceContext,methodInputs,entity)) }
-              val (succeeded, failed) = resolvedInputs partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }
-              val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
-              val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-              op(txn, workspaceContext, wdl, header, succeeded, failed)
+            withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntities =>
+              val resolvedInputs = DBIO.sequence(jobEntities map { entity => MethodConfigResolver.resolveInputs(workspaceContext, methodInputs, entity, dataAccess).map(SubmissionValidationEntityInputs(entity.name, _)) })
+              val partitionedInputs = resolvedInputs.map { _.partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }}
+              partitionedInputs.flatMap { case (succeeded, failed) =>
+                val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+                val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+                op(dataAccess, workspaceContext, wdl, header, succeeded, failed)
+              }
             }
           }
         }

@@ -1,14 +1,11 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
-
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.testkit.{TestKit, TestActorRef}
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.db.TestData
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
@@ -20,11 +17,11 @@ import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.json._
 import scala.concurrent.duration._
-
 import scala.concurrent.{Future, Await}
 import scala.util.{Try, Success}
-
-import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.scalatest.BeforeAndAfterAll
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 
 /**
  * Created with IntelliJ IDEA.
@@ -32,12 +29,13 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext.testExecutionContext
  * Date: 07/02/2015
  * Time: 11:06
  */
-class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with OrientDbTestFixture {
+class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll {
+  import driver.api._
+  
   def this() = this(ActorSystem("SubmissionSpec"))
 
   val testDbName = "SubmissionSpec"
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
-  val subTestData = new SubmissionTestData()
 
   val mockServer = RemoteServicesMockServer()
   override def beforeAll() = {
@@ -51,13 +49,24 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     mockServer.stopServer
   }
 
+  var subMissingWorkflow = UUID.randomUUID().toString
+  var subMalformedWorkflow = UUID.randomUUID().toString
+  var subGoodWorkflow = UUID.randomUUID().toString
+  var subTerminalWorkflow = UUID.randomUUID().toString
+  var subOneMissingWorkflow = UUID.randomUUID().toString
+  var subTwoGoodWorkflows = UUID.randomUUID().toString
+
+  val subTestData = new SubmissionTestData()
+
   class SubmissionTestData() extends TestData {
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName = WorkspaceName("myNamespacexxx", "myWorkspace")
     val user = RawlsUser(userInfo)
-    val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user), Set.empty)
-    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
+    val ownerGroup = makeRawlsGroup("workspaceOwnerGroup", Set(user))
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
     val sample1 = Entity("sample1", "Sample",
+      Map("type" -> AttributeString("normal")))
+    val sample2 = Entity("sample2", "Sample",
       Map("type" -> AttributeString("normal")))
 
     val refreshToken = UUID.randomUUID.toString
@@ -65,32 +74,35 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val existingWorkflowId = "69d1d92f-3895-4a7b-880a-82535e9a096e"
     val nonExistingWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c9999"
     val alreadyTerminatedWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c8778"
-    val submissionTestAbortMissingWorkflow = Submission("subMissingWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    
+    
+    
+    val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortMalformedWorkflow = Submission("subMalformedWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(Workflow("malformed_workflow",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortGoodWorkflow = Submission("subGoodWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTerminalWorkflow = Submission("subTerminalWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortOneMissingWorkflow = Submission("subOneMissingWorkflow",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions),
-        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
+        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val submissionTestAbortTwoGoodWorkflows = Submission("subTwoGoodWorkflows",testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
+    val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions),
-        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
+        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
@@ -119,45 +131,51 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
             "wf.x.four" -> AttributeNumber(4),
             "wf.x.five" -> AttributeNumber(4))))))
 
-    override def save(txn:RawlsTransaction): Unit = {
-      authDAO.saveUser(user, txn)
-      authDAO.saveGroup(ownerGroup, txn)
-      workspaceDAO.save(workspace, txn)
-      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
-        entityDAO.save(context, sample1, txn)
-        submissionDAO.save(context, submissionTestAbortMissingWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortMalformedWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortGoodWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortTerminalWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortOneMissingWorkflow, txn)
-        submissionDAO.save(context, submissionTestAbortTwoGoodWorkflows, txn)
-      }
+    override def save() = {
+      DBIO.seq(
+        rawlsUserQuery.save(user),
+        rawlsGroupQuery.save(ownerGroup),
+        workspaceQuery.save(workspace),
+        withWorkspaceContext(workspace) { context =>
+          DBIO.seq(
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            methodConfigurationQuery.save(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
+            submissionQuery.create(context, submissionTestAbortMissingWorkflow),
+            submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
+            submissionQuery.create(context, submissionTestAbortGoodWorkflow),
+            submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
+            submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
+            submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows)
+          )
+        }
+      )
     }
   }
 
-  def withDataAndService(testCode: WorkspaceService => Any, withDataOp: (DataSource => Any) => Unit, execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
+  def withDataAndService(
+      testCode: WorkspaceService => Any, 
+      withDataOp: (SlickDataSource => Any) => Unit, 
+      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-        containerDAO,
         new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-        dataSource
+        slickDataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(dataSource, containerDAO, gcsDAO))
+      val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
 
       val userServiceConstructor = UserService.constructor(
-        dataSource,
+        slickDataSource,
         gcsDAO,
-        containerDAO,
         directoryDAO
       )_
 
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
-        containerDAO,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
         execService,
         gcsDAO,
@@ -459,7 +477,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "502 if Cromwell can't find the workflow" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subMissingWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subMissingWorkflow)
     val errorReport = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
     assertResult(StatusCodes.BadGateway) {
       errorReport.statusCode.get
@@ -467,7 +485,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "502 if Cromwell says the workflow is malformed" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subMalformedWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subMalformedWorkflow)
     val errorReport = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
     assertResult(StatusCodes.BadGateway) {
       errorReport.statusCode.get
@@ -475,7 +493,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with a single workflow" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subGoodWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subGoodWorkflow)
     val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status
@@ -483,12 +501,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission and change submission status to Aborting" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subGoodWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subGoodWorkflow)
     val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status
     }
-    val checkStatus = workspaceService.getSubmissionStatus(subTestData.wsName, "subGoodWorkflow")
+    val checkStatus = workspaceService.getSubmissionStatus(subTestData.wsName, subGoodWorkflow)
     Await.result(checkStatus, Duration.Inf) match {
       case RequestComplete((submissionStatus: StatusCode, submissionData: Any)) => {
         assertResult(StatusCodes.OK) { submissionStatus }
@@ -499,7 +517,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with a workflow that's already terminated" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subTerminalWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subTerminalWorkflow)
 //    val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode)]].response
     assertResult(StatusCodes.NoContent) {
       Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
@@ -507,7 +525,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "502 if Cromwell says one workflow in a multi-workflow submission is missing" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subOneMissingWorkflow")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subOneMissingWorkflow)
     val errorReport = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
     assertResult(StatusCodes.BadGateway) {
       errorReport.statusCode.get
@@ -515,7 +533,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   it should "204 No Content for a valid submission with multiple workflows" in withSubmissionTestWorkspaceService { workspaceService =>
-    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, "subTwoGoodWorkflows")
+    val rqComplete = workspaceService.abortSubmission(subTestData.wsName, subTwoGoodWorkflows)
     val status = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[StatusCode]].response
     assertResult(StatusCodes.NoContent) {
       status

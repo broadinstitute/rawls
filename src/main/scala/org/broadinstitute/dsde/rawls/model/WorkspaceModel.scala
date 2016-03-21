@@ -11,6 +11,7 @@ import scala.reflect.runtime.universe._
 import scala.reflect.runtime.{universe=>ru}
 
 object Attributable {
+  // if updating these, also update their use in SlickExpressionParsing
   val reservedAttributeNames = Set("name", "entityType")
 }
 

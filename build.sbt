@@ -20,11 +20,13 @@ libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
   val orientV = "2.0.8"
+  val slickV = "3.1.1"
   Seq(
     "com.gettyimages" %% "spray-swagger" % "0.5.0",
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
+    "com.typesafe.slick" %% "slick" % "3.1.1",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing" % sprayV,
     "io.spray" %% "spray-client" % sprayV,
@@ -34,6 +36,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
+    "com.h2database" % "h2" % "1.4.191" % "test",
     "com.orientechnologies" % "orientdb-core" % orientV,
     "com.orientechnologies" % "orientdb-graphdb" % orientV,
     "com.orientechnologies" % "orientdb-server" % orientV,
@@ -41,12 +44,16 @@ libraryDependencies ++= {
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     "rhino" % "js" % "1.7R2",
-    ("org.broadinstitute" %% "cromwell" % "0.9")
-      excludeAll (ExclusionRule(organization = "com.gettyimages"), ExclusionRule(organization = "org.webjars")) ,
+    "org.broadinstitute" %% "wdl4s" % "0.1",
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
-    ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0")
+    ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0"),
+    "com.typesafe.slick" %% "slick" % slickV,
+    "com.typesafe.slick" %% "slick-hikaricp" % slickV,
+    "org.slf4j" % "slf4j-nop" % "1.6.4",
+    "mysql" % "mysql-connector-java" % "5.1.38",
+    "org.liquibase" % "liquibase-core" % "3.3.5"
   )
 }
 
@@ -121,4 +128,3 @@ resourceGenerators in Compile <+= Def.task {
   IO.write(file, contents)
   Seq(file)
 }
-

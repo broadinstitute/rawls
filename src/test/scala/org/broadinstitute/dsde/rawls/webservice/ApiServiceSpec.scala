@@ -15,9 +15,10 @@ import spray.json._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with OrientDbTestFixture with SprayJsonSupport {
+trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with TestDriverComponent with SprayJsonSupport {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)
@@ -39,35 +40,31 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
 
   trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService {
-    val dataSource: DataSource
+    val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
 
     def actorRefFactory = system
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      containerDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
-      dataSource
+      slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
-      dataSource,
-      containerDAO,
+      slickDataSource,
       gcsDAO
     ))
 
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
-      dataSource,
+      slickDataSource,
       gcsDAO,
-      containerDAO,
       directoryDAO
     )_
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
-      dataSource,
-      containerDAO,
+      slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       gcsDAO,

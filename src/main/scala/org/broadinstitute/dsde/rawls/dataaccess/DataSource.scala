@@ -4,6 +4,9 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
 import java.util.concurrent.locks.{Lock, StampedLock, ReadWriteLock, ReentrantReadWriteLock}
 
+import _root_.slick.backend.DatabaseConfig
+import _root_.slick.dbio.Effect.Transactional
+import _root_.slick.driver.JdbcProfile
 import com.tinkerpop.blueprints.Element
 import com.tinkerpop.blueprints.impls.orient.OrientElement
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException
@@ -12,10 +15,15 @@ import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
 import com.tinkerpop.blueprints.impls.orient.{OrientGraph, OrientGraphFactory}
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
+
+import liquibase.{Contexts, Liquibase}
+import liquibase.database.jvm.JdbcConnection
+import liquibase.resource.{FileSystemResourceAccessor, ResourceAccessor}
 
 object DataSource {
   /**
@@ -39,6 +47,10 @@ object DataSource {
     new DataSource(factory)
   }
 
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {
+    new SlickDataSource(databaseConfig)
+  }
+
   def createFactory(url: String, user: String, password: String): OrientGraphFactory = {
     val factory = new OrientGraphFactory(url, user, password)
     factory.setThreadMode(THREAD_MODE.MANUAL)
@@ -46,6 +58,35 @@ object DataSource {
     factory.setUseClassForEdgeLabel(false)
     factory.setUseLightweightEdges(true)
     factory
+  }
+}
+
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
+  val dataAccess = new DataAccessComponent(databaseConfig.driver)
+  import dataAccess.driver.api._
+  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {
+    databaseConfig.db.run(f(dataAccess).transactionally)
+  }
+
+  def initWithLiquibase(liquibaseChangeLog: String) = {
+    val dbConnection = databaseConfig.db.source.createConnection()
+    val liquibaseConnection = new JdbcConnection(dbConnection)
+
+    try {
+      val resourceAccessor: ResourceAccessor = new FileSystemResourceAccessor()
+      val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
+      liquibase.update(new Contexts())
+    } finally {
+      liquibaseConnection.close()
+      dbConnection.close()
+    }
+  }
+
+  // For testing/migration.  Not for production code!
+  def initWithSlick(): Unit = {
+    import dataAccess.driver.api._
+    import scala.concurrent.duration._
+    Await.result(databaseConfig.db.run(DBIO.seq(dataAccess.allSchemas.create)), 1.minute)
   }
 }
 

@@ -19,9 +19,9 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmission
 class AdminApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  case class TestApiService(dataSource: DataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices(dataSource: DataSource)(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: SlickDataSource)(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -31,12 +31,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
   import scala.collection.JavaConversions._
+
+  def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
 
@@ -52,7 +54,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
+  // NOTE: we no longer support deleting entities that are tied to an existing submission - this will cause a
+  // Referential integrity constraint violation - if we change that behavior we need to fix this test
+  ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -99,7 +103,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val project = billingProjectFromName("new_project")
 
     assert {
-      ! billingProjectInDb(services.dataSource, project)
+      getBillingProject(services.dataSource, project).isEmpty
     }
 
     Put(s"/admin/billing/${project.projectName.value}") ~>
@@ -110,7 +114,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
         assert {
-          billingProjectInDb(services.dataSource, project)
+          getBillingProject(services.dataSource, project).nonEmpty
         }
       }
   }
@@ -136,7 +140,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
-          billingProjectInDb(services.dataSource, project)
+          getBillingProject(services.dataSource, project).nonEmpty
         }
 
         Delete(s"/admin/billing/${project.projectName.value}") ~>
@@ -146,7 +150,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
               status
             }
             assert {
-              ! billingProjectInDb(services.dataSource, project)
+              getBillingProject(services.dataSource, project).isEmpty
             }
           }
       }
@@ -166,10 +170,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        services.dataSource.inTransaction() { txn =>
-          assert {
-            ! containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-          }
+        assert {
+          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
         }
 
         Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
@@ -178,10 +180,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             assertResult(StatusCodes.OK) {
               status
             }
-            services.dataSource.inTransaction() { txn =>
-              assert {
-                containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-              }
+            assert {
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
             }
           }
       }
@@ -222,10 +222,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
           sealRoute(services.adminRoutes) ~>
           check {
-            services.dataSource.inTransaction() { txn =>
-              assert {
-                containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-              }
+            assert {
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
             }
 
             Delete(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
@@ -234,10 +232,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
                 assertResult(StatusCodes.OK) {
                   status
                 }
-                services.dataSource.inTransaction() { txn =>
-                  assert {
-                    ! containerDAO.billingDAO.loadProject(project.projectName, txn).get.users.contains(testData.userOwner)
-                  }
+                assert {
+                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
                 }
               }
           }
@@ -274,9 +270,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
     val project1 = billingProjectFromName("project1")
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveUser(testUser, txn)
-    }
+    runAndWait(rawlsUserQuery.save(testUser))
 
     Get(s"/admin/billing/list/${testUser.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -403,9 +397,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(Set(userOwner, userWriter, userReader), response) {
-          responseAs[RawlsUserInfoList].userInfoList.toSet
-        }
+        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader))
       }
   }
 
@@ -430,9 +422,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(Set(userOwner, userWriter, userReader, user1, user2, user3), response) {
-          responseAs[RawlsUserInfoList].userInfoList.toSet
-        }
+        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader, user1, user2, user3))
       }
   }
 
@@ -508,17 +498,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     val testGroup = RawlsGroup(RawlsGroupName(UUID.randomUUID().toString), RawlsGroupEmail(s"${UUID.randomUUID().toString}@foo.com"), Set[RawlsUserRef](user1, user2), Set[RawlsGroupRef](subGroup1, subGroup2))
 
-    services.dataSource.inTransaction() { txn =>
-      authDAO.saveUser(user1, txn)
-      authDAO.saveUser(user2, txn)
-      authDAO.saveUser(user3, txn)
+    runAndWait(rawlsUserQuery.save(user1))
+    runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsUserQuery.save(user3))
 
-      authDAO.saveGroup(subGroup1, txn)
-      authDAO.saveGroup(subGroup2, txn)
-      authDAO.saveGroup(subGroup3, txn)
+    runAndWait(rawlsGroupQuery.save(subGroup1))
+    runAndWait(rawlsGroupQuery.save(subGroup2))
+    runAndWait(rawlsGroupQuery.save(subGroup3))
 
-      authDAO.saveGroup(testGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(testGroup))
 
     services.gcsDAO.createGoogleGroup(testGroup)
 
@@ -528,9 +516,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
 
-    services.dataSource.inTransaction() { txn =>
-      assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { authDAO.loadGroup(testGroup, txn) }
-    }
+    assertResult(Option(testGroup.copy(users = Set[RawlsUserRef](user2, user3), subGroups = Set[RawlsGroupRef](subGroup2, subGroup3)))) { runAndWait(rawlsGroupQuery.load(testGroup)) }
 
     // put it back the way it was this time using subject ids and group names
     Put(s"/admin/groups/${testGroup.groupName.value}/members", httpJson(RawlsGroupMemberList(userSubjectIds = Option(Seq(user2.userSubjectId.value, user1.userSubjectId.value)), subGroupNames = Option(Seq(subGroup2.groupName.value, subGroup1.groupName.value))))) ~>
@@ -539,15 +525,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent) { status }
       }
 
-    services.dataSource.inTransaction() { txn =>
-      assertResult(Option(testGroup)) { authDAO.loadGroup(testGroup, txn) }
-    }
+    assertResult(Option(testGroup)) { runAndWait(rawlsGroupQuery.load(testGroup)) }
   }
 
   it should "get, grant, revoke all user read access to workspace" in withTestDataApiServices { services =>
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-    }
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
 
     testData.workspace.accessLevels.values.foreach(services.gcsDAO.createGoogleGroup)
 
@@ -567,13 +549,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NoContent, response.entity.asString) { status }
       }
 
-    services.dataSource.inTransaction() { txn =>
-      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+    val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
 
-      assertResult(Some(true)) {
-        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
-          members.contains(Right(UserService.allUsersGroupRef))
-        }
+    assertResult(Some(true)) {
+      Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+        members.contains(Right(UserService.allUsersGroupRef))
       }
     }
 
@@ -587,15 +567,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
-    services.dataSource.inTransaction() { txn =>
-      val group = containerDAO.authDAO.loadGroup(testData.workspace.accessLevels(WorkspaceAccessLevels.Read), txn).get
+      
+    val group2 = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
 
       assertResult(Some(false)) {
-        Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
+        Await.result(services.gcsDAO.listGroupMembers(group2), Duration.Inf).map { members =>
           members.contains(Right(UserService.allUsersGroupRef))
         }
       }
-    }
 
   }
 
@@ -632,39 +611,34 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inGoogleUser)), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveUser(inGoogleUser, txn)
-      containerDAO.authDAO.saveUser(inBothUser, txn)
-      containerDAO.authDAO.saveUser(inDbUser, txn)
+    runAndWait(rawlsUserQuery.save(inGoogleUser))
+    runAndWait(rawlsUserQuery.save(inBothUser))
+    runAndWait(rawlsUserQuery.save(inDbUser))
 
-      containerDAO.authDAO.saveGroup(inGoogleGroup, txn)
-      containerDAO.authDAO.saveGroup(inBothGroup, txn)
-      containerDAO.authDAO.saveGroup(inDbGroup, txn)
+    runAndWait(rawlsGroupQuery.save(inGoogleGroup))
+    runAndWait(rawlsGroupQuery.save(inBothGroup))
+    runAndWait(rawlsGroupQuery.save(inDbGroup))
 
-      containerDAO.authDAO.saveGroup(topGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(topGroup))
 
     Post(s"/admin/groups/${topGroup.groupName.value}/sync") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
-        assertResult(SyncReport(Set(
-          SyncReportItem("added", Option(inDbUser), None, None),
-          SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
-          SyncReportItem("removed", Option(inGoogleUser), None, None),
-          SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
-        ))) {
-          responseAs[SyncReport]
-        }
+        responseAs[SyncReport].items should contain theSameElementsAs
+          Seq(
+            SyncReportItem("added", Option(inDbUser), None, None),
+            SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
+            SyncReportItem("removed", Option(inGoogleUser), None, None),
+            SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
+          )
       }
   }
 
   it should "get the status of a workspace" in withTestDataApiServices { services =>
     val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveUser(testUser, txn)
-    }
+    runAndWait(rawlsUserQuery.save(testUser))
 
     Get(s"/admin/validate/${testData.workspace.namespace}/${testData.workspace.name}?userSubjectId=${testUser.userSubjectId.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -672,24 +646,31 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(WorkspaceStatus(WorkspaceName(testData.workspace.namespace, testData.workspace.name),
+        val responseStatus = responseAs[WorkspaceStatus]
+        assertResult(WorkspaceName(testData.workspace.namespace, testData.workspace.name)) {
+          responseStatus.workspaceName
+        }
+
+        responseStatus.statuses should contain theSameElementsAs
           Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
-            "GOOGLE_ACCESS_GROUP: dummy@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: dummy@example.com" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: dummy@example.com" -> "FOUND"
-          ))) {
-          responseAs[WorkspaceStatus]
-        }
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"
+          )
       }
   }
 

@@ -18,12 +18,11 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: String, credential: Credential)
 
-  def props(containerDAO: DbContainerDAO,
-            executionServiceDAO: ExecutionServiceDAO,
-            datasource: DataSource,
+  def props(executionServiceDAO: ExecutionServiceDAO,
+            datasource: SlickDataSource,
             workflowPollInterval: Duration = 1 minutes,
             submissionPollInterval: Duration = 30 minutes): Props = {
-    Props(new SubmissionSupervisor(containerDAO, executionServiceDAO, datasource, workflowPollInterval, submissionPollInterval))
+    Props(new SubmissionSupervisor(executionServiceDAO, datasource, workflowPollInterval, submissionPollInterval))
   }
 }
 
@@ -31,15 +30,13 @@ object SubmissionSupervisor {
  * Supervisor actor that should run for the life of the app. SubmissionStarted messages will start a monitor
  * for the given submission. Errors are logged if that monitor fails.
  * 
- * @param containerDAO
  * @param executionServiceDAO
  * @param datasource
  * @param workflowPollInterval
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(containerDAO: DbContainerDAO,
-                           executionServiceDAO: ExecutionServiceDAO,
-                           datasource: DataSource,
+class SubmissionSupervisor(executionServiceDAO: ExecutionServiceDAO,
+                           datasource: SlickDataSource,
                            workflowPollInterval: Duration,
                            submissionPollInterval: Duration) extends Actor {
   import context._
@@ -49,8 +46,8 @@ class SubmissionSupervisor(containerDAO: DbContainerDAO,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: String, credential: Credential): Unit = {
-    actorOf(SubmissionMonitor.props(workspaceName, submissionId, containerDAO, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, containerDAO, executionServiceDAO, datasource, credential)), submissionId)
+    actorOf(SubmissionMonitor.props(workspaceName, submissionId, datasource, workflowPollInterval, submissionPollInterval,
+      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, datasource, credential)), submissionId)
   }
 
   override val supervisorStrategy =

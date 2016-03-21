@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -13,12 +12,14 @@ import spray.http._
 import spray.json._
 import spray.routing._
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.db.TestData
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 
 /**
  * Created by dvoet on 4/24/15.
  */
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
+  import driver.api._
+
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
@@ -35,9 +36,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  case class TestApiService(dataSource: DataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
+  case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices(dataSource: DataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
+  def withApiServices(dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -47,25 +48,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
   def withTestDataApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
-    withDefaultTestDatabase { dataSource =>
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
   def withEmptyWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(new EmptyWorkspace) { dataSource =>
+    withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
   def withLockedWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(new LockedWorkspace) { dataSource =>
+    withCustomTestDatabase(new LockedWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
@@ -76,37 +77,42 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
     val workspaceName = WorkspaceName("ns", "testworkspace")
-    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner), Set.empty)
-    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter), Set.empty)
-    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader), Set.empty)
+    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner))
+    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter))
+    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader))
 
     val workspace2Name = WorkspaceName("ns", "testworkspace2")
-    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty, Set.empty)
-    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner), Set.empty)
-    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty, Set.empty)
+    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty)
+    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner))
+    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty)
 
     val workspace3Name = WorkspaceName("ns", "testworkspace3")
-    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty, Set.empty)
-    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner), Set.empty)
-    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty, Set.empty)
+    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty)
+    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner))
+    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty)
 
-    val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty, Set.empty)
+    val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
 
-    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, "workspaceId1", "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
+    val workspace1Id = UUID.randomUUID().toString
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup))
-    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, "workspaceId2", "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
+
+    val workspace2Id = UUID.randomUUID().toString
+    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
-    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), "workspaceId3", "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")),
+
+    val workspace3Id = UUID.randomUUID().toString
+    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")),
       Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace3WriterGroup,
         WorkspaceAccessLevels.Read -> workspace3ReaderGroup),
@@ -147,51 +153,55 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       workflows = submissionTemplate.workflows.map(_.copy(status = WorkflowStatuses.Running))
     )
 
-    override def save(txn: RawlsTransaction): Unit = {
-      authDAO.saveUser(userOwner, txn)
-      authDAO.saveUser(userWriter, txn)
-      authDAO.saveUser(userReader, txn)
-      authDAO.saveGroup(workspaceOwnerGroup, txn)
-      authDAO.saveGroup(workspaceWriterGroup, txn)
-      authDAO.saveGroup(workspaceReaderGroup, txn)
-      authDAO.saveGroup(workspace2OwnerGroup, txn)
-      authDAO.saveGroup(workspace2WriterGroup, txn)
-      authDAO.saveGroup(workspace2ReaderGroup, txn)
-      authDAO.saveGroup(workspace3OwnerGroup, txn)
-      authDAO.saveGroup(workspace3WriterGroup, txn)
-      authDAO.saveGroup(workspace3ReaderGroup, txn)
-      authDAO.saveGroup(defaultRealmGroup, txn)
+    override def save() = {
+      DBIO.seq(
+        rawlsUserQuery.save(userOwner),
+        rawlsUserQuery.save(userWriter),
+        rawlsUserQuery.save(userReader),
+        rawlsGroupQuery.save(workspaceOwnerGroup),
+        rawlsGroupQuery.save(workspaceWriterGroup),
+        rawlsGroupQuery.save(workspaceReaderGroup),
+        rawlsGroupQuery.save(workspace2OwnerGroup),
+        rawlsGroupQuery.save(workspace2WriterGroup),
+        rawlsGroupQuery.save(workspace2ReaderGroup),
+        rawlsGroupQuery.save(workspace3OwnerGroup),
+        rawlsGroupQuery.save(workspace3WriterGroup),
+        rawlsGroupQuery.save(workspace3ReaderGroup),
+        rawlsGroupQuery.save(defaultRealmGroup),
 
-      workspaceDAO.save(workspace, txn)
-      workspaceDAO.save(workspace2, txn)
-      workspaceDAO.save(workspace3, txn)
-
-      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { ctx =>
-        entityDAO.save(ctx, sample1, txn)
-        entityDAO.save(ctx, sample2, txn)
-        entityDAO.save(ctx, sample3, txn)
-        entityDAO.save(ctx, sampleSet, txn)
-
-        methodConfigDAO.save(ctx, methodConfig, txn)
-
-        submissionDAO.save(ctx, submissionSuccess, txn)
-        submissionDAO.save(ctx, submissionFail, txn)
-        submissionDAO.save(ctx, submissionRunning1, txn)
-        submissionDAO.save(ctx, submissionRunning2, txn)
-      }
+        workspaceQuery.save(workspace),
+        workspaceQuery.save(workspace2),
+        workspaceQuery.save(workspace3),
+  
+        withWorkspaceContext(workspace) { ctx =>
+          DBIO.seq(
+            entityQuery.save(ctx, sample1),
+            entityQuery.save(ctx, sample2),
+            entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sampleSet),
+    
+            methodConfigurationQuery.save(ctx, methodConfig),
+    
+            submissionQuery.create(ctx, submissionSuccess),
+            submissionQuery.create(ctx, submissionFail),
+            submissionQuery.create(ctx, submissionRunning1),
+            submissionQuery.create(ctx, submissionRunning2)
+          )
+        }
+      )
     }
   }
 
   val testWorkspaces = new TestWorkspaces
 
   def withTestWorkspacesApiServices(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(testWorkspaces) { dataSource =>
+    withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
   def withTestWorkspacesApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
-    withCustomTestDatabase(testWorkspaces) { dataSource =>
+    withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
@@ -210,11 +220,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction() { txn =>
-          assertResult(newWorkspace) {
-            val ws = workspaceDAO.loadContext(newWorkspace.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
-          }
+        assertResult(newWorkspace) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
         assertResult(newWorkspace) {
           val ws = responseAs[Workspace]
@@ -235,9 +243,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Map.empty
     )
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -245,11 +251,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        services.dataSource.inTransaction() { txn =>
-          assertResult(workspaceWithRealm) {
-            val ws = workspaceDAO.loadContext(workspaceWithRealm.toWorkspaceName, txn).get.workspace
-            WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
-          }
+        assertResult(workspaceWithRealm) {
+          val ws = runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
         assertResult(workspaceWithRealm) {
           val ws = responseAs[Workspace]
@@ -269,13 +273,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction() { txn =>
-          assertResult(
-            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
-          ){
-            val response = responseAs[WorkspaceListResponse]
-            WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
-          }
+        assertResult(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
+        ){
+          val response = responseAs[WorkspaceListResponse]
+          WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
         }
       }
   }
@@ -294,24 +296,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Accepted) {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
           status
         }
       }
-      services.dataSource.inTransaction() { txn =>
-        assertResult(None) {
-          workspaceDAO.loadContext(testData.workspace.toWorkspaceName, txn)
-        }
+      assertResult(None) {
+        runAndWait(workspaceQuery.findByName(testData.workspace.toWorkspaceName))
       }
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
     val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
-    services.dataSource.inTransaction() { txn =>
-      workspaceGroupRefs foreach { case groupRef =>
-        assertResult(Option(groupRef)) {
-          authDAO.loadGroup(groupRef, txn) map RawlsGroup.toRef
-        }
+    workspaceGroupRefs foreach { case groupRef =>
+      assertResult(Option(groupRef)) {
+        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
       }
     }
 
@@ -323,13 +321,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    services.dataSource.inTransaction() { txn =>
       workspaceGroupRefs foreach { case groupRef =>
         assertResult(None) {
-          authDAO.loadGroup(groupRef, txn)
+          runAndWait(rawlsGroupQuery.load(groupRef))
         }
       }
-    }
 
   }
 
@@ -341,14 +337,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         val dateTime = org.joda.time.DateTime.now
-        services.dataSource.inTransaction() { txn =>
-          assertResult(Set(
-            WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
-            WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty),
-            WorkspaceListResponse(WorkspaceAccessLevels.NoAccess, testWorkspaces.workspace3.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
-          )) {
-            responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
-          }
+        assertResult(Set(
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
+          WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty),
+          WorkspaceListResponse(WorkspaceAccessLevels.NoAccess, testWorkspaces.workspace3.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
+        )) {
+          responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
       }
   }
@@ -392,9 +386,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          services.dataSource.inTransaction() { txn =>
-            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
-          }
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
         }
       }
 
@@ -406,9 +398,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(None) {
-          services.dataSource.inTransaction() { txn =>
-            workspaceDAO.loadContext(testData.wsName, txn).get.workspace.attributes.get("boo")
-          }
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
         }
       }
   }
@@ -418,23 +408,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
 
-        services.dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName), writeLocks=Set(workspaceCopy.toWorkspaceName)) { txn =>
-          withWorkspaceContext(testData.workspace, txn) { sourceWorkspaceContext =>
-            val copiedWorkspace = workspaceDAO.loadContext(workspaceCopy.toWorkspaceName, txn).get.workspace
-            assert(copiedWorkspace.attributes == testData.workspace.attributes)
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes)
 
-            withWorkspaceContext(copiedWorkspace, txn) { copiedWorkspaceContext =>
-              //Name, namespace, creation date, and owner might change, so this is all that remains.
-              assertResult(entityDAO.listEntitiesAllTypes(sourceWorkspaceContext, txn).toSet) {
-                entityDAO.listEntitiesAllTypes(copiedWorkspaceContext, txn).toSet
-              }
-              assertResult(methodConfigDAO.list(sourceWorkspaceContext, txn).toSet) {
-                methodConfigDAO.list(copiedWorkspaceContext, txn).toSet
-              }
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
             }
           }
         }
@@ -448,9 +436,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "clone a workspace's Realm if it exists" in withTestDataApiServices { services =>
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -486,9 +472,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup1 = RawlsGroup(RawlsGroupName(name1), RawlsGroupEmail("king@guilder.eu"), Set(testData.userOwner), Set.empty)
     val realmGroup2 = RawlsGroup(RawlsGroupName(name2), RawlsGroupEmail("king@florin.eu"), Set(testData.userOwner), Set.empty)
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup1, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup1))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -536,9 +520,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
     val realmGroupRef: RawlsGroupRef = realmGroup
 
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(realmGroup, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realmGroup))
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroup), Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
@@ -630,12 +612,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false){
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //add userWriter to realm
@@ -649,15 +629,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs and userOwner is a part of realm owner ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Owner), txn).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
-      }
+    assertResult(true){
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
+    }
+    assertResult(true){
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Owner))).get.users.contains(RawlsUserRef(testData.userOwner.userSubjectId))
     }
 
     //remove userWriter from realm
@@ -671,12 +649,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws3 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false){
+      runAndWait(rawlsGroupQuery.load(ws3.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -782,12 +758,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true) {
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(true) {
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group A
@@ -801,12 +775,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false) {
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false) {
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -910,12 +882,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws1 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(true){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(true) {
+      runAndWait(rawlsGroupQuery.load(ws1.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
 
     //remove userWriter from group C
@@ -929,12 +899,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //assert userWriter is not a part of realm writer ACLs
-    services.dataSource.inTransaction() { txn =>
-      val ws = containerDAO.workspaceDAO.loadContext(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name), txn).get.workspace
+    val ws2 = runAndWait(workspaceQuery.findByName(WorkspaceName(workspaceWithRealm.namespace, workspaceWithRealm.name))).get
 
-      assertResult(false){
-        containerDAO.authDAO.loadGroup(ws.realmACLs(WorkspaceAccessLevels.Write), txn).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
-      }
+    assertResult(false) {
+      runAndWait(rawlsGroupQuery.load(ws2.realmACLs(WorkspaceAccessLevels.Write))).get.users.contains(RawlsUserRef(testData.userWriter.userSubjectId))
     }
   }
 
@@ -1109,9 +1077,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser("owner-access") { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
-    services.dataSource.inTransaction() { txn =>
-      containerDAO.authDAO.saveGroup(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), txn)
-    }
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)))) ~>
@@ -1263,9 +1229,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
-    services.dataSource.inTransaction() { txn =>
-      billingDAO.saveProject(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl"), txn)
-    }
+    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl")))
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
@@ -1318,7 +1282,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "create realmACLs when creating a workspace if there is a realm" in withTestDataApiServices { services =>
     val realmName = "testRealm"
-    val realm = makeRawlsGroup(realmName, Set(testData.userOwner), Set.empty)
+    val realm = makeRawlsGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -1339,9 +1303,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-READER"))
     )
 
-    services.dataSource.inTransaction() { txn =>
-      authDAO.saveGroup(realm, txn)
-    }
+    runAndWait(rawlsGroupQuery.save(realm))
 
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>
