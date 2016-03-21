@@ -22,10 +22,10 @@ libraryDependencies ++= {
   val orientV = "2.0.8"
   val slickV = "3.1.1"
   Seq(
-    "com.gettyimages" %% "spray-swagger" % "0.5.0",
+    ("com.gettyimages" %% "spray-swagger" % "0.5.0").exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11").exclude("com.typesafe.scala-logging", "scala-logging-api_2.11"),
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
-    "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "2.1.2",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
     "com.typesafe.slick" %% "slick" % "3.1.1",
     "io.spray" %% "spray-can" % sprayV,
     "io.spray" %% "spray-routing" % sprayV,
@@ -44,7 +44,7 @@ libraryDependencies ++= {
     "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     "rhino" % "js" % "1.7R2",
-    "org.broadinstitute" %% "wdl4s" % "0.1",
+    ("org.broadinstitute" %% "wdl4s" % "0.1"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
@@ -63,6 +63,7 @@ assemblyMergeStrategy in assembly := {
   case "application.conf" => MergeStrategy.first
   case "logback.xml" => MergeStrategy.first
   case "cobertura.properties" => MergeStrategy.discard
+  case "overview.html" => MergeStrategy.first
   case x =>
     val oldStrategy = (assemblyMergeStrategy in assembly).value
     oldStrategy(x)
@@ -71,6 +72,8 @@ assemblyMergeStrategy in assembly := {
 Revolver.settings
 
 Revolver.enableDebugging(port = 5050, suspend = false)
+
+net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 def isIntegrationTest(name: String) = name contains "integrationtest"
 

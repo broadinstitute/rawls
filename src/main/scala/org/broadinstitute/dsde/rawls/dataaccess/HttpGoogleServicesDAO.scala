@@ -9,7 +9,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
-import com.typesafe.scalalogging.slf4j.LazyLogging
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
