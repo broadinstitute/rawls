@@ -2,8 +2,6 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
-import com.tinkerpop.blueprints.impls.orient.OrientVertex
-import com.tinkerpop.blueprints.Vertex
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -591,21 +589,21 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("both"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
-    val inGraphGroup = RawlsGroup(
-      RawlsGroupName("graph"),
-      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("graph"))),
+    val inDbGroup = RawlsGroup(
+      RawlsGroupName("db"),
+      RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("db"))),
       Set.empty[RawlsUserRef],
       Set.empty[RawlsGroupRef])
 
     val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
     val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
-    val inGraphUser = RawlsUser(RawlsUserSubjectId("graph"), RawlsUserEmail("graph@fc.org"))
+    val inDbUser = RawlsUser(RawlsUserSubjectId("db"), RawlsUserEmail("db@fc.org"))
 
     val topGroup = RawlsGroup(
       RawlsGroupName("synctest"),
       RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(RawlsGroupName("synctest"))),
-      Set[RawlsUserRef](inBothUser, inGraphUser),
-      Set[RawlsGroupRef](inBothGroup, inGraphGroup))
+      Set[RawlsUserRef](inBothUser, inDbUser),
+      Set[RawlsGroupRef](inBothGroup, inDbGroup))
 
     Await.result(services.gcsDAO.createGoogleGroup(topGroup), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inGoogleGroup)), Duration.Inf)
@@ -615,11 +613,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsUserQuery.save(inGoogleUser))
     runAndWait(rawlsUserQuery.save(inBothUser))
-    runAndWait(rawlsUserQuery.save(inGraphUser))
+    runAndWait(rawlsUserQuery.save(inDbUser))
 
     runAndWait(rawlsGroupQuery.save(inGoogleGroup))
     runAndWait(rawlsGroupQuery.save(inBothGroup))
-    runAndWait(rawlsGroupQuery.save(inGraphGroup))
+    runAndWait(rawlsGroupQuery.save(inDbGroup))
 
     runAndWait(rawlsGroupQuery.save(topGroup))
 
@@ -629,8 +627,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         responseAs[SyncReport].items should contain theSameElementsAs
           Seq(
-            SyncReportItem("added", Option(inGraphUser), None, None),
-            SyncReportItem("added", None, Option(inGraphGroup.toRawlsGroupShort), None),
+            SyncReportItem("added", Option(inDbUser), None, None),
+            SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
             SyncReportItem("removed", Option(inGoogleUser), None, None),
             SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
           )
@@ -652,21 +650,37 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(WorkspaceName(testData.workspace.namespace, testData.workspace.name)) {
           responseStatus.workspaceName
         }
+
         responseStatus.statuses should contain theSameElementsAs
-          Map(
+          Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
-            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
-            "GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
-            "GOOGLE_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_USER_ACCESS_LEVEL: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
-            "WORKSPACE_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
-            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER"
+            "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"
           )
+      }
+  }
+
+  it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
       }
   }
 }

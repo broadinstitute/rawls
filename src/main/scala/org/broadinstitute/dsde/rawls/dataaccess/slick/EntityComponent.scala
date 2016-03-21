@@ -149,6 +149,14 @@ trait EntityComponent {
       filter(_.workspaceId === workspaceContext.workspaceId).map(_.entityType).distinct.result
     }
 
+    def getEntityTypesWithCounts(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
+      groupBy(e => e.entityType).map { case (entityType, entities) =>
+        (entityType, entities.countDistinct)
+      }.result map { result =>
+        result.toMap
+      }
+    }
+
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
       unmarshalEntities(joinOnAttributesAndRefs(findEntityByWorkspace(workspaceContext.workspaceId)))
     }

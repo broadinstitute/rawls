@@ -1,77 +1,96 @@
-package org.broadinstitute.dsde.rawls.dataaccess.slick
+package org.broadinstitute.dsde.rawls.db
 
 import java.util.UUID
+import java.util.logging.{Logger, LogManager}
 
-import org.broadinstitute.dsde.rawls.{RawlsException, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import org.scalatest.{FlatSpec, BeforeAndAfterAll, Matchers}
-import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcProfile
-import _root_.slick.driver.H2Driver.api._
+import org.scalatest.BeforeAndAfterAll
 import spray.http.OAuth2BearerToken
 
-import scala.concurrent.duration._
-import scala.concurrent.Await
+abstract class TestData {
+  def save(txn: RawlsTransaction)
+}
 
-/**
- * Created by dvoet on 2/3/16.
- */
-trait TestDriverComponent extends DriverComponent with DataAccess {
+trait TestDb {
+  def withCustomTestDatabase(data: TestData)(testCode: DataSource => Any): Unit
+  def userInDb(dataSource: DataSource, user: RawlsUser): Boolean
+  def billingProjectInDb(dataSource: DataSource, project: RawlsBillingProject): Boolean
 
-  override implicit val executionContext = TestExecutionContext.testExecutionContext
+  val entityDAO: EntityDAO
+  val workspaceDAO: WorkspaceDAO
+  val methodConfigDAO: MethodConfigurationDAO
+  val authDAO: AuthDAO
+  val billingDAO: BillingDAO
+  val submissionDAO: SubmissionDAO
+  val workflowDAO: WorkflowDAO
 
-  val databaseConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig[JdbcProfile]("h2mem1")
-  override val driver: JdbcProfile = databaseConfig.driver
-  val database = databaseConfig.db
-  val slickDataSource = new SlickDataSource(databaseConfig)
+  lazy val containerDAO = DbContainerDAO(
+    workflowDAO,
+    workspaceDAO,
+    entityDAO,
+    methodConfigDAO,
+    authDAO,
+    billingDAO,
+    submissionDAO
+  )
+}
+
+trait DbTestFixture extends BeforeAndAfterAll {
+  this: org.scalatest.BeforeAndAfterAll with org.scalatest.Suite with TestDb =>
 
   val testDate = new DateTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
 
-  protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(database.run(action.transactionally), duration)
+  override def beforeAll: Unit = {
+    // TODO find a better way to set the log level. Nothing else seems to work.
+    LogManager.getLogManager().reset()
+    Logger.getLogger(java.util.logging.Logger.GLOBAL_LOGGER_NAME).setLevel(java.util.logging.Level.SEVERE)
   }
 
-  import driver.api._
+  override def afterAll: Unit = {}
 
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef, workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
     val workflows = (workflowEntities collect {
-      case ref: Entity => Workflow(UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
+      case ref: Entity => Workflow("workflow_" + UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
     })
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Option(AttributeEntityReference(submissionEntity.entityType, submissionEntity.name)),
+    Submission("submission_" + UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Option(AttributeEntityReference(submissionEntity.entityType, submissionEntity.name)),
       workflows,
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
   }
 
-  def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
-    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
+  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef]) =
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail("dummy@example.com"), users, groups)
 
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup))
 
-    override def save() = {
-      DBIO.seq(
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
-        workspaceQuery.save(workspace)
-      )
+    override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
+      workspaceDAO.save(workspace, txn)
     }
   }
 
@@ -80,24 +99,27 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup), isLocked = true )
 
-    override def save() = {
-      DBIO.seq (
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
-        workspaceQuery.save(workspace)
-      )
+    override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
+      workspaceDAO.save(workspace, txn)
     }
   }
 
@@ -108,9 +130,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner), Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter), Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader), Set.empty)
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), "testBucketUrl")
 
@@ -118,33 +140,38 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       "string" -> AttributeString("yep, it's a string"),
       "number" -> AttributeNumber(10),
       "empty" -> AttributeEmptyList,
-      "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
+      "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeBoolean(true)))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, "aWorkspaceId3", "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty, Map.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val workspace = Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs, Map(
+      WorkspaceAccessLevels.Owner -> ownerGroup,
+      WorkspaceAccessLevels.Write -> writerGroup,
+      WorkspaceAccessLevels.Read -> readerGroup),
+      Map(
+        WorkspaceAccessLevels.Owner -> ownerGroup,
+        WorkspaceAccessLevels.Write -> writerGroup,
+        WorkspaceAccessLevels.Read -> readerGroup))
 
-    val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
+    val realm = makeRawlsGroup(s"Test-Realm", Set.empty, Set.empty)
     val realmWsName = wsName.name + "withRealm"
-    val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG READER", Set(userReader))
-    val realmOwnerGroup = makeRawlsGroup(s"${realmWsName} OWNER", Set(userOwner))
-    val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter))
-    val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader))
+    val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner), Set.empty)
+    val realmWriterIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG WRITER", Set(userWriter), Set.empty)
+    val realmReaderIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG READER", Set(userReader), Set.empty)
+    val realmOwnerGroup = makeRawlsGroup(s"${realmWsName} OWNER", Set(userOwner), Set.empty)
+    val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter), Set.empty)
+    val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader), Set.empty)
 
     val realmWs2Name = wsName2.name + "withRealm"
-    val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG READER", Set(userReader))
-    val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner))
-    val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter))
-    val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner), Set.empty)
+    val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter), Set.empty)
+    val realmReaderIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG READER", Set(userReader), Set.empty)
+    val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner), Set.empty)
+    val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter), Set.empty)
+    val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader), Set.empty)
 
-    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup,
         WorkspaceAccessLevels.Write -> realmWriterGroup,
@@ -154,7 +181,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup,
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup))
 
-    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), "aWorkspaceId2", "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup2,
         WorkspaceAccessLevels.Write -> realmWriterGroup2,
@@ -168,17 +195,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Map(
         "type" -> AttributeString("normal"),
         "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeBoolean(true))),
         "quot" -> AttributeEntityReference("Aliquot", "aliquot1"),
         "somefoo" -> AttributeString("itsfoo")))
 
     val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ) )
     val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ) )
     val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
-    val sample8 = Entity("sample8", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
+    var sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -268,123 +294,98 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
     val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
+    val submissionTerminateTest = Submission("submissionTerminate",testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
       Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
         Workflow("workflowB",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
         Workflow("workflowC",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
         Workflow("workflowD",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    override def save() = {
-      DBIO.seq(
-        rawlsUserQuery.save(RawlsUser(userInfo)),
-        rawlsBillingProjectQuery.save(billingProject),
-        rawlsUserQuery.save(userOwner),
-        rawlsUserQuery.save(userWriter),
-        rawlsUserQuery.save(userReader),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
-        rawlsGroupQuery.save(realm),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup),
-        rawlsGroupQuery.save(realmOwnerGroup),
-        rawlsGroupQuery.save(realmWriterGroup),
-        rawlsGroupQuery.save(realmReaderGroup),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup2),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup2),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup2),
-        rawlsGroupQuery.save(realmOwnerGroup2),
-        rawlsGroupQuery.save(realmWriterGroup2),
-        rawlsGroupQuery.save(realmReaderGroup2),
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspaceNoGroups),
-        workspaceQuery.save(workspaceWithRealm),
-        workspaceQuery.save(otherWorkspaceWithRealm),
-        withWorkspaceContext(workspace)({ context =>
-          DBIO.seq(
-                entityQuery.save(context, aliquot1),
-                entityQuery.save(context, aliquot2),
-                entityQuery.save(context, sample1),
-                entityQuery.save(context, sample2),
-                entityQuery.save(context, sample3),
-                entityQuery.save(context, sample4),
-                entityQuery.save(context, sample5),
-                entityQuery.save(context, sample6),
-                entityQuery.save(context, sample7),
-                entityQuery.save(context, sample8),
-                entityQuery.save(context, pair1),
-                entityQuery.save(context, pair2),
-                entityQuery.save(context, ps1),
-                entityQuery.save(context, sset1),
-                entityQuery.save(context, sset2),
-                entityQuery.save(context, sset3),
-                entityQuery.save(context, sset4),
-                entityQuery.save(context, sset_empty),
-                entityQuery.save(context, indiv1),
+    override def save(txn:RawlsTransaction): Unit = {
+      authDAO.saveUser(RawlsUser(userInfo), txn)
+      billingDAO.saveProject(billingProject, txn)
+      authDAO.saveUser(userOwner, txn)
+      authDAO.saveUser(userWriter, txn)
+      authDAO.saveUser(userReader, txn)
+      authDAO.saveGroup(ownerGroup, txn)
+      authDAO.saveGroup(writerGroup, txn)
+      authDAO.saveGroup(readerGroup, txn)
+      authDAO.saveGroup(realm, txn)
+      authDAO.saveGroup(realmOwnerIntersectionGroup, txn)
+      authDAO.saveGroup(realmWriterIntersectionGroup, txn)
+      authDAO.saveGroup(realmReaderIntersectionGroup, txn)
+      authDAO.saveGroup(realmOwnerGroup, txn)
+      authDAO.saveGroup(realmWriterGroup, txn)
+      authDAO.saveGroup(realmReaderGroup, txn)
+      authDAO.saveGroup(realmOwnerIntersectionGroup2, txn)
+      authDAO.saveGroup(realmWriterIntersectionGroup2, txn)
+      authDAO.saveGroup(realmReaderIntersectionGroup2, txn)
+      authDAO.saveGroup(realmOwnerGroup2, txn)
+      authDAO.saveGroup(realmWriterGroup2, txn)
+      authDAO.saveGroup(realmReaderGroup2, txn)
+      workspaceDAO.save(workspace, txn)
+      workspaceDAO.save(workspaceNoGroups, txn)
+      workspaceDAO.save(workspaceWithRealm, txn)
+      workspaceDAO.save(otherWorkspaceWithRealm, txn)
+      withWorkspaceContext(workspace, txn, bSkipLockCheck=true) { context =>
+        entityDAO.save(context, aliquot1, txn)
+        entityDAO.save(context, aliquot2, txn)
+        entityDAO.save(context, sample1, txn)
+        entityDAO.save(context, sample2, txn)
+        entityDAO.save(context, sample3, txn)
+        entityDAO.save(context, sample4, txn)
+        entityDAO.save(context, sample5, txn)
+        entityDAO.save(context, sample6, txn)
+        entityDAO.save(context, sample7, txn)
+        entityDAO.save(context, pair1, txn)
+        entityDAO.save(context, pair2, txn)
+        entityDAO.save(context, ps1, txn)
+        entityDAO.save(context, sset1, txn)
+        entityDAO.save(context, sset2, txn)
+        entityDAO.save(context, sset3, txn)
+        entityDAO.save(context, sset4, txn)
+        entityDAO.save(context, sset_empty, txn)
+        entityDAO.save(context, indiv1, txn)
 
-                methodConfigurationQuery.save(context, methodConfig),
-                methodConfigurationQuery.save(context, methodConfig2),
-                methodConfigurationQuery.save(context, methodConfig3),
-                methodConfigurationQuery.save(context, methodConfigValid),
-                methodConfigurationQuery.save(context, methodConfigUnparseable),
-                methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-  
-                submissionQuery.create(context, submissionTerminateTest),
-                submissionQuery.create(context, submission1),
-                submissionQuery.create(context, submission2),
-                submissionQuery.create(context, submissionUpdateEntity),
-                submissionQuery.create(context, submissionUpdateWorkspace)
-          )
-        })
-      )
+        methodConfigDAO.save(context, methodConfig, txn)
+        methodConfigDAO.save(context, methodConfig2, txn)
+        methodConfigDAO.save(context, methodConfigValid, txn)
+        methodConfigDAO.save(context, methodConfigUnparseable, txn)
+        methodConfigDAO.save(context, methodConfigNotAllSamples, txn)
+        methodConfigDAO.save(context, methodConfigAttrTypeMixup, txn)
+
+        submissionDAO.save(context, submissionTerminateTest, txn)
+        submissionDAO.save(context, submission1, txn)
+        submissionDAO.save(context, submission2, txn)
+        submissionDAO.save(context, submissionUpdateEntity, txn)
+        submissionDAO.save(context, submissionUpdateWorkspace, txn)
+      }
     }
   }
-
   val testData = new DefaultTestData()
 
-  def withEmptyTestDatabase(testCode: => Any):Unit = {
+  def withEmptyTestDatabase(testCode:DataSource => Any):Unit = {
     val emptyData = new TestData() {
-      override def save() = {
-        DBIO.successful(Unit)
+      override def save(txn: RawlsTransaction): Unit = {
+        // no op
       }
     }
 
-    withCustomTestDatabaseInternal(emptyData)(testCode)
+    withCustomTestDatabase(emptyData)(testCode)
   }
 
-  def withDefaultTestDatabase(testCode: => Any):Unit = {
-    withCustomTestDatabaseInternal(testData)(testCode)
+  def withDefaultTestDatabase(testCode:DataSource => Any):Unit = {
+    withCustomTestDatabase(testData)(testCode)
   }
 
-  def withDefaultTestDatabase(testCode:SlickDataSource => Any):Unit = {
-    withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
-  }
-
-  def withCustomTestDatabase(data:TestData)(testCode:SlickDataSource => Any):Unit = {
-    withCustomTestDatabaseInternal(data)(testCode(slickDataSource))
-  }
-
-  def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
-    try {
-      runAndWait(allSchemas.create)
-      runAndWait(data.save())
-      testCode
-    } catch {
-      case t: Throwable => t.printStackTrace; throw t
-    } finally {
-      runAndWait(allSchemas.drop)
+  /**
+   * Only set bSkipLockCheck = true from fixture save calls.
+   */
+  def withWorkspaceContext[T](workspace: Workspace, txn: RawlsTransaction, bSkipLockCheck:Boolean=false)(testCode: WorkspaceContext => T) = {
+    if( !bSkipLockCheck ) {
+      assert( txn.readLocks.contains(workspace.toWorkspaceName) || txn.writeLocks.contains(workspace.toWorkspaceName),
+        s"Attempting to use context on workspace ${workspace.toWorkspaceName} but it's not read or write locked! Add it to inTransaction or inFutureTransaction")
     }
-  }
-
-  def withWorkspaceContext[T](workspace: Workspace)(testCode: (SlickWorkspaceContext) => T): T = {
-    testCode(SlickWorkspaceContext(workspace))
+    val workspaceContext = workspaceDAO.loadContext(workspace.toWorkspaceName, txn).getOrElse(throw new RawlsException(s"Unable to load workspaceContext for ${workspace.toWorkspaceName}"))
+    testCode(workspaceContext)
   }
 }
-
-trait TestData {
-  def save(): ReadWriteAction[Unit]
-}
-
-trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers

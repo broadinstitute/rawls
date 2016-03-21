@@ -699,6 +699,33 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/workspaces':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Workspace'
+        '403':
+          description: You must be an admin to list workspaces
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List all workspaces
+      tags:
+        - admin
+      summary: list all workspaces
+      operationId: listAllWorkspaces
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
@@ -1408,6 +1435,10 @@ paths:
             $ref: '#/definitions/ErrorReport'
         '409':
           description: One or more entities of that name/type already exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '422':
+          description: Destination workspace must match source's realm, if the source has a realm
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -2400,6 +2431,10 @@ paths:
           description: Destination workspace already exists
           schema:
             $ref: '#/definitions/ErrorReport'
+        '422':
+          description: Destination workspace must match source's realm, if the dest has a realm
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
@@ -2421,11 +2456,11 @@ paths:
           required: true
           type: string
         - in: body
-          description: Name of new workspace
-          name: workspaceNameJson
+          description: Request for new workspace
+          name: workspaceRequest
           required: true
           schema:
-            $ref: '#/definitions/WorkspaceName'
+            $ref: '#/definitions/WorkspaceRequest'
       security:
         - authorization:
             - openid
@@ -2686,8 +2721,6 @@ tags:
   - name: groups
     description: Group manipulation API
 
-schemes:
-  - http
 securityDefinitions:
   authorization:
     type: oauth2
@@ -3410,6 +3443,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
+      realm:
+        $ref: '#/definitions/RawlsGroupRef'
+        description: An optional realm for the workspace
       workspaceId:
         type: string
         description: A UUID associated with the workspace
@@ -3431,6 +3467,9 @@ definitions:
         $ref: ''
         description: Map[String, Attribute]
       accessLevels:
+         $ref: ''
+         description: Map[String, RawlsGroupRef]
+      realmACLs:
          $ref: ''
          description: Map[String, RawlsGroupRef]
       isLocked:
@@ -3467,6 +3506,9 @@ definitions:
       name:
         type: string
         description: The name of the workspace
+      realm:
+        $ref: '#/definitions/RawlsGroupRef'
+        description: An optional realm for the workspace
       attributes:
         $ref: ''
 

@@ -244,7 +244,11 @@ trait GraphDAO {
   }
 
   def entityPipeline(workspaceContext: WorkspaceContext, entityType: String, entityName: String) = {
-    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType)).filter(hasPropertyValue("name", entityName))
+    entityTypePipeline(workspaceContext, entityType).filter(hasPropertyValue("name", entityName))
+  }
+
+  def entityTypePipeline(workspaceContext: WorkspaceContext, entityType: String) = {
+    workspacePipeline(workspaceContext).out(EdgeSchema.Own.toLabel(entityType))
   }
 
   def methodConfigPipeline(workspaceContext: WorkspaceContext, methodConfigNamespace: String, methodConfigName: String) = {

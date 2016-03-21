@@ -5,6 +5,8 @@ import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import com.typesafe.scalalogging.slf4j.LazyLogging
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -46,7 +48,8 @@ object WorkspaceService {
   case class DeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
-  case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceName) extends WorkspaceServiceMessage
+  case object ListAllWorkspaces extends WorkspaceServiceMessage
+  case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -112,7 +115,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     case DeleteWorkspace(workspaceName) => pipe(deleteWorkspace(workspaceName)) to sender
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
-    case CloneWorkspace(sourceWorkspace, destWorkspace) => pipe(cloneWorkspace(sourceWorkspace, destWorkspace)) to sender
+    case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
+    case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
@@ -193,7 +197,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       }
     })
     
-    accessLevels.map { _.reduce(WorkspaceAccessLevels.max) }
+    accessLevels.map { als =>
+      if (als.isEmpty) WorkspaceAccessLevels.NoAccess
+      else als.reduce(WorkspaceAccessLevels.max)
+    }
   }
   
   def getWorkspaceOwners(workspace: Workspace, dataAccess: DataAccess): ReadAction[Seq[String]] = {
@@ -225,10 +232,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             case success => success
           }
         }) andThen {
-          DBIO.sequence(workspaceContext.workspace.accessLevels.values.map(dataAccess.rawlsGroupQuery.load)) flatMap { accessGroupOptions =>
-            val accessGroups = accessGroupOptions.collect { case Some(g) => g }
-            DBIO.from(gcsDAO.deleteWorkspace(workspaceContext.workspace.bucketName, accessGroups.toSeq, bucketDeletionMonitor))
-          }
+          DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
+        } andThen {
+          val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
+          DBIO.seq(groupRefs.map { groupRef => dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+            case Some(group) => DBIO.from(gcsDAO.deleteGoogleGroup(group))
+            case None => DBIO.successful(Unit)
+          } }.toSeq:_* )
         } andThen {
           DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
         } andThen {
@@ -274,15 +284,23 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       listWorkspaces(RawlsUser(userInfo), dataAccess) flatMap { permissionsPairs =>
         DBIO.sequence(permissionsPairs map { permissionsPair =>
           // database query to get details
-          dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
-            case Some(workspace) =>
-              for {
-                stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
-                owners <- getWorkspaceOwners(workspace, dataAccess)
-              } yield Option(WorkspaceListResponse(permissionsPair.accessLevel, workspace, stats, owners))
-            case None =>
-              // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
-              DBIO.successful(None)
+          dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo)) flatMap { realms =>
+            dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
+              case Some(workspace) =>
+                def trueAccessLevel = workspace.realm match {
+                  case None => permissionsPair.accessLevel
+                  case Some(realm) =>
+                    if(realms.flatten.contains(realm)) permissionsPair.accessLevel
+                    else WorkspaceAccessLevels.NoAccess
+                }
+                for {
+                  stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
+                  owners <- getWorkspaceOwners(workspace, dataAccess)
+                } yield Option(WorkspaceListResponse(trueAccessLevel, workspace, stats, owners))
+              case None =>
+                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
+                DBIO.successful(None)
+            }
           }
         }).map { responses => RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x }) }
       }
@@ -315,22 +333,41 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceName: WorkspaceName): Future[PerRequestMessage] =
+  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-        withNewWorkspaceContext(WorkspaceRequest(destWorkspaceName.namespace,destWorkspaceName.name,sourceWorkspaceContext.workspace.attributes),dataAccess) { destWorkspaceContext =>
-          dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-          dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-            val inserts = methodConfigShorts.map { methodConfigShort => dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-              dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
-            }}
-            DBIO.seq(inserts:_*)
-          } andThen {
-            DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceName.path))
+        withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
+
+          // add to or replace current attributes, on an individual basis
+          val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
+
+          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+            dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+              dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                val inserts = methodConfigShorts.map { methodConfigShort => dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                  dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
+                }
+                }
+                DBIO.seq(inserts: _*)
+              } andThen {
+              DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+            }
           }
         }
       }
     }
+
+  private def withClonedRealm(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceRequest: WorkspaceRequest)(op: (Option[RawlsGroupRef]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    // if the source has a realm, the dest must also have that realm or no realm, and the source realm is applied to the destination
+    // otherwise, the caller may choose to apply a realm
+    (sourceWorkspaceContext.workspace.realm, destWorkspaceRequest.realm) match {
+      case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
+        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot change it to $destRealm when cloning"
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case (Some(sourceRealm), _) => op(Option(sourceRealm))
+      case (None, destOpt) => op(destOpt)
+    }
+  }
 
   def withRawlsUser[T](userRef: RawlsUserRef, dataAccess: DataAccess)(op: (RawlsUser) => ReadWriteAction[T]): ReadWriteAction[T] = {
     dataAccess.rawlsUserQuery.load(userRef) flatMap {
@@ -474,26 +511,44 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       //we can't upgrade a read lock to a write.
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-          val entityNames = entityCopyDef.entityNames
-          val entityType = entityCopyDef.entityType
-          val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
-          copyResults.flatMap(conflicts => conflicts.size match {
-            case 0 => {
-              // get the entities that were copied into the destination workspace
-              dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities => 
-                val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
-                RequestComplete(StatusCodes.Created, entityCopies)
+          realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
+            val entityNames = entityCopyDef.entityNames
+            val entityType = entityCopyDef.entityType
+            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
+            copyResults.flatMap(conflicts => conflicts.size match {
+              case 0 => {
+                // get the entities that were copied into the destination workspace
+                dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
+                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
+                  RequestComplete(StatusCodes.Created, entityCopies)
+                }
               }
-            }
-            case _ => {
-              val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-              val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(),Seq.empty))
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
-            }
-          })
+              case _ => {
+                val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
+                val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
+              }
+            })
+          }
         }
       }
     }
+
+  // can't use withClonedRealm because the Realm -> no Realm logic is different
+  private def realmCheck(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Boolean] = {
+    // if the source has a realm, the dest must also have that realm
+    (sourceWorkspaceContext.workspace.realm, destWorkspaceContext.workspace.realm) match {
+      case (Some(sourceRealm), Some(destRealm)) if sourceRealm != destRealm =>
+        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities to realm $destRealm"
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case (Some(sourceRealm), None) =>
+        val errorMsg = s"Source workspace ${sourceWorkspaceContext.workspace.briefName} has realm $sourceRealm; cannot copy entities outside of a realm"
+        DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
+      case _ => DBIO.successful(true)
+    }
+  }
+
+
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -539,7 +594,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.getEntityTypes(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
+        dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
       }
     }
 
@@ -913,16 +968,39 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
         val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
-          val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-          val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
-          execStatusFuture map (execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions))
+          Try {
+            val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
+            val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
+            execStatusFuture map {
+              execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
+            } recover {
+              case t: Exception => {
+                val error = "Unable to submit workflow when creating submission"
+                logger.error(error, t)
+                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
+              }
+            }
+          } match {
+            case Success(result) => result
+            case Failure(t) => {
+              val error = "Unable to process workflow when creating submission"
+              logger.error(error, t)
+              Future.successful(WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage))))
+            }
+          }
         }))
 
         DBIO.from(submittedWorkflowsFuture) flatMap { submittedWorkflows =>
+          val succeededWorkflowSubmissions = submittedWorkflows.collect {
+            case w:Workflow => w
+          }
+          val failedWorkflowSubmissions = submittedWorkflows.collect {
+            case w:WorkflowFailure => w
+          }
           val failedWorkflows = failures.map { entityInputs =>
             val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
             WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-          }
+          } ++ failedWorkflowSubmissions
 
           val submission = Submission(submissionId = submissionId,
             submissionDate = DateTime.now(),
@@ -930,13 +1008,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
             methodConfigurationName = submissionRequest.methodConfigurationName,
             submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
-            workflows = submittedWorkflows,
+            workflows = succeededWorkflowSubmissions,
             notstarted = failedWorkflows,
-            status = if (submittedWorkflows.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
+            status = if (succeededWorkflowSubmissions.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
           )
 
           dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-            val workflowReports = submittedWorkflows.map { workflow =>
+            val workflowReports = succeededWorkflowSubmissions.map { workflow =>
               WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
             }
   
@@ -1138,6 +1216,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
+  def listAllWorkspaces() = {
+    asAdmin {
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
+      }
+    }
+  }
 
   // this function is a bit naughty because it waits for database results
   // this is acceptable because it is a seldom used admin functions, not part of the mainstream
@@ -1148,94 +1233,129 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
     
     asAdmin {
-      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get 
-          val STATUS_FOUND = "FOUND"
-          val STATUS_NOT_FOUND = "NOT_FOUND"
-          val STATUS_CAN_WRITE = "USER_CAN_WRITE"
-          val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
-          val STATUS_NA = "NOT_AVAILABLE"
+      val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
+      val STATUS_FOUND = "FOUND"
+      val STATUS_NOT_FOUND = "NOT_FOUND"
+      val STATUS_CAN_WRITE = "USER_CAN_WRITE"
+      val STATUS_CANNOT_WRITE = "USER_CANNOT_WRITE"
+      val STATUS_NA = "NOT_AVAILABLE"
 
-          val bucketName = workspace.bucketName
-          val rawlsGroupRefs = workspace.accessLevels
-          val googleGroupRefs = rawlsGroupRefs map { case (accessLevel, groupRef) =>
-            accessLevel -> run { _.rawlsGroupQuery.load(groupRef) }
-          }
+      val bucketName = workspace.bucketName
+      val rawlsAccessGroupRefs = workspace.accessLevels
+      val googleAccessGroupRefs = rawlsAccessGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
+        }
+      }
+      val rawlsIntersectionGroupRefs = workspace.realmACLs
+      val googleIntersectionGroupRefs = rawlsIntersectionGroupRefs map { case (accessLevel, groupRef) =>
+        accessLevel -> run {
+          _.rawlsGroupQuery.load(groupRef)
+        }
+      }
 
-          val userRef = userSubjectId.flatMap(id => run { _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id))) })
+      val userRef = userSubjectId.flatMap(id => run {
+        _.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(id)))
+      })
 
-          val userStatus = userRef match {
-            case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
-            case None => userSubjectId match {
-              case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
-              case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
-            }
-          }
+      val userStatus = userRef match {
+        case Some(user) => "FIRECLOUD_USER: " + user.userSubjectId.value -> STATUS_FOUND
+        case None => userSubjectId match {
+          case Some(id) => "FIRECLOUD_USER: " + id -> STATUS_NOT_FOUND
+          case None => "FIRECLOUD_USER: None Supplied" -> STATUS_NA
+        }
+      }
 
-          val rawlsGroupStatuses = rawlsGroupRefs map { case (_, groupRef) =>
-            run { _.rawlsGroupQuery.load(groupRef) } match {
-              case Some(group) => "WORKSPACE_GROUP: " + group.groupName.value -> STATUS_FOUND
-              case None => "WORKSPACE_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
-            }
-          }
+      val rawlsAccessGroupStatuses = rawlsAccessGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_ACCESS_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_ACCESS_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
 
-          val googleGroupStatuses = googleGroupRefs map { case (_, groupRef) =>
-            val groupEmail = groupRef.get.groupEmail.value
-            toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
-              case Some(_) => "GOOGLE_GROUP: " + groupEmail -> STATUS_FOUND
-              case None => "GOOGLE_GROUP: " + groupEmail -> STATUS_NOT_FOUND
-            }))
-          }
+      val googleAccessGroupStatuses = googleAccessGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_ACCESS_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
 
-          val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
-            case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
-            case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+      val rawlsIntersectionGroupStatuses = rawlsIntersectionGroupRefs map { case (_, groupRef) =>
+        run {
+          _.rawlsGroupQuery.load(groupRef)
+        } match {
+          case Some(group) => "WORKSPACE_INTERSECTION_GROUP: " + group.groupName.value -> STATUS_FOUND
+          case None => "WORKSPACE_INTERSECTION_GROUP: " + groupRef.groupName.value -> STATUS_NOT_FOUND
+        }
+      }
+
+      val googleIntersectionGroupStatuses = googleIntersectionGroupRefs map { case (_, groupRef) =>
+        val groupEmail = groupRef.get.groupEmail.value
+        toFutureTry(gcsDAO.getGoogleGroup(groupEmail).map(_ match {
+          case Some(_) => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_FOUND
+          case None => "GOOGLE_INTERSECTION_GROUP: " + groupEmail -> STATUS_NOT_FOUND
+        }))
+      }
+
+      val bucketStatus = toFutureTry(gcsDAO.getBucket(bucketName).map(_ match {
+        case Some(_) => "GOOGLE_BUCKET: " + bucketName -> STATUS_FOUND
+        case None => "GOOGLE_BUCKET: " + bucketName -> STATUS_NOT_FOUND
+      }))
+
+      val bucketWriteStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
+            case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
+            case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
           }))
+        }
+        case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
+      }
 
-          val bucketWriteStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.diagnosticBucketWrite(userRef.get, bucketName).map(_ match {
-                case None => "GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_CAN_WRITE
-                case Some(error) => "GOOGLE_BUCKET_WRITE: " + bucketName -> error.message
-              }))
-            }
-            case (_, _) => Future(Try("GOOGLE_BUCKET_WRITE: " + bucketName -> STATUS_NA))
-          }
+      val userProxyStatus = userStatus match {
+        case (_, STATUS_FOUND) => {
+          toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
+            if (status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
+            else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
+          })
+        }
+        case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
+      }
 
-          val userProxyStatus = userStatus match {
-            case (_, STATUS_FOUND) => {
-              toFutureTry(gcsDAO.isUserInProxyGroup(userRef.get).map { status =>
-                if(status) "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_FOUND
-                else "FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NOT_FOUND
-              })
-            }
-            case (_, _) => Future(Try("FIRECLOUD_USER_PROXY: " + bucketName -> STATUS_NA))
-          }
+      val userAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) =>
+          "WORKSPACE_USER_ACCESS_LEVEL" -> run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
+          }.toString()
+        case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+      }
 
-          val userAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) =>
-              "WORKSPACE_USER_ACCESS_LEVEL" -> run { getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _) }.toString()
-            case (_, _) => "WORKSPACE_USER_ACCESS_LEVEL" -> STATUS_NA
+      val googleAccessLevel = userStatus match {
+        case (_, STATUS_FOUND) => {
+          val accessLevel = run {
+            getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _)
           }
+          if (accessLevel >= WorkspaceAccessLevels.Read) {
+            val groupEmail = run {
+              _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get)
+            }.get.groupEmail.value
+            toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
+              if (status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
+              else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
+            })
+          }
+          else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
+        }
+        case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
+      }
 
-          val googleAccessLevel = userStatus match {
-            case (_, STATUS_FOUND) => {
-              val accessLevel = run { getMaximumAccessLevel(userRef.get, SlickWorkspaceContext(workspace), _) }
-              if(accessLevel >= WorkspaceAccessLevels.Read) {
-                val groupEmail = run { _.rawlsGroupQuery.load(workspace.accessLevels.get(accessLevel).get) }.get.groupEmail.value
-                toFutureTry(gcsDAO.isEmailInGoogleGroup(gcsDAO.toProxyFromUser(userRef.get.userSubjectId), groupEmail).map { status =>
-                  if(status) "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_FOUND
-                  else "GOOGLE_USER_ACCESS_LEVEL: " + groupEmail -> STATUS_NOT_FOUND
-                })
-              }
-              else Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> WorkspaceAccessLevels.NoAccess.toString))
-            }
-            case (_, _) => Future(Try("GOOGLE_USER_ACCESS_LEVEL" -> STATUS_NA))
-          }
-
-          Future.sequence(googleGroupStatuses++Seq(bucketStatus,bucketWriteStatus,userProxyStatus,googleAccessLevel)).map { tries =>
-            val statuses = tries.collect { case Success(s) => s }.toSeq
-            RequestComplete(WorkspaceStatus(workspaceName, (rawlsGroupStatuses++statuses++Seq(userStatus,userAccessLevel)).toMap))
-          }
+      Future.sequence(googleAccessGroupStatuses ++ googleIntersectionGroupStatuses ++ Seq(bucketStatus, bucketWriteStatus, userProxyStatus, googleAccessLevel)).map { tries =>
+        val statuses = tries.collect { case Success(s) => s }.toSeq
+        RequestComplete(WorkspaceStatus(workspaceName, (rawlsAccessGroupStatuses ++ rawlsIntersectionGroupStatuses ++ statuses ++ Seq(userStatus, userAccessLevel)).toMap))
+      }
     }
   }
 
@@ -1243,28 +1363,36 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    val workspaceName = workspaceRequest.toWorkspaceName
-    requireCreateWorkspaceAccess(workspaceName, dataAccess) {
-      dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
+    requireCreateWorkspaceAccess(workspaceRequest, dataAccess) {
+      dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceName)) flatMap { googleWorkspaceInfo =>
+          DBIO.from(gcsDAO.setupWorkspace(userInfo, workspaceRequest.namespace, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
             val currentDate = DateTime.now
 
-            val workspace = Workspace(workspaceRequest.namespace,
-              workspaceRequest.name,
-              workspaceId,
-              googleWorkspaceInfo.bucketName,
-              currentDate,
-              currentDate,
-              userInfo.userEmail,
-              workspaceRequest.attributes,
-              googleWorkspaceInfo.groupsByAccessLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))})
+            val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g))}
+            val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map { _.map { case (a, g) => (a -> RawlsGroup.toRef(g))} }
 
-            val groupInserts = googleWorkspaceInfo.groupsByAccessLevel.values.map(dataAccess.rawlsGroupQuery.save).toSeq
+            val workspace = Workspace(
+              namespace = workspaceRequest.namespace,
+              name = workspaceRequest.name,
+              realm = workspaceRequest.realm,
+              workspaceId = workspaceId,
+              bucketName = googleWorkspaceInfo.bucketName,
+              createdDate = currentDate,
+              lastModified = currentDate,
+              createdBy = userInfo.userEmail,
+              attributes = workspaceRequest.attributes,
+              accessLevels = accessGroups,
+              realmACLs = intersectionGroups getOrElse accessGroups
+            )
 
-            DBIO.seq(groupInserts:_*) andThen
+            val groupInserts =
+              googleWorkspaceInfo.accessGroupsByLevel.values.map(dataAccess.rawlsGroupQuery.save) ++
+              googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
+
+            DBIO.seq(groupInserts.toSeq:_*) andThen
               dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
           }
       }
@@ -1274,15 +1402,21 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   private def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist"
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
-  private def requireCreateWorkspaceAccess(workspaceName: WorkspaceName, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace)) flatMap {
+  private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.toWorkspaceName.namespace)) flatMap {
       case Some(billingProject) =>
         if (billingProject.users.contains(RawlsUser(userInfo))) {
-          op
+          workspaceRequest.realm match {
+            case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
+              case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
+              case Some(_) => op
+            }
+            case None => op
+          }
         } else {
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceName.namespace}")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
         }
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceName.namespace} not found")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"billing project ${workspaceRequest.toWorkspaceName.namespace} not found")))
     }
   }
 

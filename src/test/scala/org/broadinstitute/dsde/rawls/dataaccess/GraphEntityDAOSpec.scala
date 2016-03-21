@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.tinkerpop.blueprints.Direction
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.db.TestData
 import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -32,9 +33,30 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     }
   }
 
+  it should "correctly count entities of a certain type" in withDefaultTestDatabase { dataSource =>
+    dataSource.inTransaction(readLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
+      withWorkspaceContext(testData.workspace, txn) { context =>
+        val bernie = Entity("Bernie", "Politician", Map.empty)
+        val obama = Entity("Obama", "Politician", Map.empty)
+        val biden = Entity("Biden", "Politician", Map.empty)
+        val trump = Entity("Trump", "Politician", Map.empty)
+
+        entityDAO.save(context, bernie, txn)
+        entityDAO.save(context, obama, txn)
+        entityDAO.save(context, biden, txn)
+        entityDAO.save(context, trump, txn)
+
+        assertResult(4) {
+          dao.getEntityTypeCount(context, "Politician", txn)
+        }
+
+      }
+    }
+  }
+
   class BugTestData() extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
-    val workspace = new Workspace(wsName.namespace, wsName.name, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty)
+    val workspace = new Workspace(wsName.namespace, wsName.name, None, "aWorkspaceId", "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty, Map.empty, Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
       Map("aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")))
@@ -115,11 +137,13 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     val workspaceOriginal = Workspace(
       namespace = testData.wsName.namespace + "Original",
       name = testData.wsName.name + "Original",
+      None,
       workspaceId = "aWorkspaceId",
       bucketName = "aBucket",
       createdDate = DateTime.now,
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
+      Map.empty,
       Map.empty,
       Map.empty
     )
@@ -127,11 +151,13 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
     val workspaceClone = Workspace(
       namespace = testData.wsName.namespace + "Clone",
       name = testData.wsName.name + "Clone",
+      None,
       workspaceId = "anotherWorkspaceId",
       bucketName = "anotherBucket",
       createdDate = DateTime.now,
       lastModified = DateTime.now,
       createdBy = "Joe Biden",
+      Map.empty,
       Map.empty,
       Map.empty
     )
@@ -330,11 +356,13 @@ class GraphEntityDAOSpec extends FlatSpec with Matchers with OrientDbTestFixture
   val workspace2 = Workspace(
     namespace = testData.wsName.namespace + "2",
     name = testData.wsName.name + "2",
+    None,
     workspaceId = "aWorkspaceId",
     bucketName = "aBucket",
     createdDate = DateTime.now,
     lastModified = DateTime.now,
     createdBy = "Joe Biden",
+    Map.empty,
     Map.empty,
     Map.empty
   )

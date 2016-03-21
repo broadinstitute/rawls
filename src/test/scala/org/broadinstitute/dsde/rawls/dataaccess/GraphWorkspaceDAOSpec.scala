@@ -16,13 +16,15 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val workspace2 = Workspace(
         namespace = testData.wsName.namespace,
         name = testData.wsName.name,
+        realm = None,
         workspaceId = "aWorkspaceId",
         bucketName = "aBucket",
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Barack Obama",
         attributes = Map("workspace_attrib" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
 
       workspaceDAO.save(workspace2, txn)
@@ -34,6 +36,58 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
             v.getProperty[String]("name") == workspace2.name && v.getProperty[String]("namespace") == workspace2.namespace
           })
         }
+      }
+    }
+  }
+
+  it should "save a new workspace with a realm" in withEmptyTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
+      authDAO.saveUser(user, txn)
+      val secretGroup = makeRawlsGroup("SecretRealm", Set(user), Set.empty)
+      authDAO.saveGroup(secretGroup, txn)
+      val secretGroupRef = RawlsGroupRef(groupName = secretGroup.groupName)
+
+      val secretWorkspace = Workspace(
+        namespace = testData.wsName.namespace,
+        name = testData.wsName.name,
+        realm = Some(secretGroupRef),
+        workspaceId = "aWorkspaceId",
+        bucketName = "aBucket",
+        createdDate = testDate,
+        lastModified = testDate,
+        createdBy = "Secret User",
+        attributes = Map("workspace_attrib" -> AttributeString("foo")),
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
+      )
+      workspaceDAO.save(secretWorkspace, txn)
+      assertResult(secretWorkspace) {
+        workspaceDAO.findById(secretWorkspace.workspaceId, txn).get.workspace.copy(lastModified = testDate)
+      }
+    }
+  }
+
+  it should "fail to save a new workspace with a missing realm" in withEmptyTestDatabase { dataSource =>
+    dataSource.inTransaction() { txn =>
+      val user = RawlsUser(RawlsUserSubjectId("user@secret.com"), RawlsUserEmail("user@secret.com"))
+      val secretGroup = makeRawlsGroup("SecretRealm", Set(user), Set.empty)
+      val secretWorkspace = Workspace(
+        namespace = testData.wsName.namespace,
+        name = testData.wsName.name,
+        realm = Some(secretGroup),
+        workspaceId = "aWorkspaceId",
+        bucketName = "aBucket",
+        createdDate = testDate,
+        lastModified = testDate,
+        createdBy = "Secret User",
+        attributes = Map("workspace_attrib" -> AttributeString("foo")),
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
+      )
+
+      intercept[RawlsException] {
+        workspaceDAO.save(secretWorkspace, txn)
       }
     }
   }
@@ -88,13 +142,15 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val dottyWorkspace = Workspace(
         namespace = testData.wsName.namespace,
         name = "badness",
+        realm = None,
         workspaceId = "badWorkspaceId",
         bucketName = "badBucket",
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map("dots.dots.more.dots" -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
 
       intercept[RawlsException] {
@@ -121,13 +177,15 @@ class GraphWorkspaceDAOSpec extends FlatSpec with Matchers with OrientDbTestFixt
       val e = Workspace(
         namespace = testData.wsName.namespace,
         name = "badness",
+        realm = None,
         workspaceId = "badWorkspaceId",
         bucketName = "badBucket",
         createdDate = testDate,
         lastModified = testDate,
         createdBy = "Mitt Romney",
         attributes = Map(reserved -> AttributeString("foo")),
-        accessLevels = Map.empty
+        accessLevels = Map.empty,
+        realmACLs = Map.empty
       )
       dataSource.inTransaction(writeLocks=Set(testData.workspace.toWorkspaceName)) { txn =>
         withWorkspaceContext(testData.workspace, txn) { context =>

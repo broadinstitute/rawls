@@ -1,28 +1,34 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.io.StringReader
+
 import akka.actor.{Actor, ActorRefFactory, Props}
 import com.gettyimages.spray.swagger.SwaggerHttpService
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
+import com.google.api.client.json.jackson2.JacksonFactory
 import com.wordnik.swagger.model.ApiInfo
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.parboiled.common.FileUtils
 import spray.http.MediaTypes._
-import spray.http.{HttpResponse, StatusCodes}
+import spray.http.{ContentType, HttpEntity, HttpResponse, StatusCodes}
 import spray.routing.Directive.pimpApply
 import spray.routing._
 import spray.http.StatusCodes._
+import spray.util.actorSystem
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, appVersion: ApplicationVersion)(implicit executionContext: ExecutionContext): Props = {
-    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, appVersion))
+  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, appVersion: ApplicationVersion, googleClientId: String)(implicit executionContext: ExecutionContext): Props = {
+    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, appVersion, googleClientId))
   }
 }
 
-class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val appVersion: ApplicationVersion)(implicit val executionContext: ExecutionContext) extends Actor
+class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val appVersion: ApplicationVersion, val googleClientId: String)(implicit val executionContext: ExecutionContext) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
   with AdminApiService with UserApiService with StandardUserInfoDirectives {
 
@@ -40,6 +46,7 @@ class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => Workspac
 
 trait RootRawlsApiService extends HttpService {
   val appVersion: ApplicationVersion
+  val googleClientId: String
 
   val baseRoute = {
     path("headers") {
@@ -49,18 +56,20 @@ trait RootRawlsApiService extends HttpService {
     }
   }
 
+  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.1.1"
+
   val swaggerRoute = {
     get {
-      pathPrefix("swagger") {
+      pathPrefix("") {
         pathEnd {
-          getFromResource("swagger/index.html")
+          serveSwaggerIndex()
         } ~
           pathSingleSlash {
             complete {
               HttpResponse(StatusCodes.NotFound)
             }
           }
-      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory("META-INF/resources/webjars/swagger-ui/2.1.1/")
+      } ~ getFromResourceDirectory("swagger/") ~ getFromResourceDirectory(swaggerUiPath)
     }
   }
 
@@ -71,6 +80,29 @@ trait RootRawlsApiService extends HttpService {
       get {
         requestContext => requestContext.complete(appVersion)
       }
+    }
+  }
+
+  private def serveSwaggerIndex(): Route = {
+    val indexHtml = getResourceFileContents(swaggerUiPath + "/index.html")
+    complete {
+      HttpEntity(ContentType(`text/html`),
+        indexHtml
+          .replace("your-client-id", googleClientId)
+          .replace("scopeSeparator: \",\"", "scopeSeparator: \" \"")
+          .replace("url = \"http://petstore.swagger.io/v2/swagger.json\";",
+            "url = '/rawls.yaml';")
+      )
+    }
+  }
+
+  private def getResourceFileContents(path: String): String = {
+    val classLoader = actorSystem(actorRefFactory).dynamicAccess.classLoader
+    val inputStream = classLoader.getResource(path).openStream()
+    try {
+      FileUtils.readAllText(inputStream)
+    } finally {
+      inputStream.close()
     }
   }
 }

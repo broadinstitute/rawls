@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorRef
-import akka.pattern._
 import com.typesafe.scalalogging.slf4j.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, GraphContainerDAO, DataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
-import org.broadinstitute.dsde.rawls.model.{PendingBucketDeletions, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
@@ -38,11 +37,9 @@ object BootMonitors extends LazyLogging {
         val submitter = activeSub.submission.submitter
         val subId = activeSub.submission.submissionId
 
-        val subStartMessage = gcsDAO.getUserCredentials(submitter) map { credentialOpt =>
-          credentialOpt match {
-            case None => throw new RawlsException(s"Cannot start Submission Monitor because credentials were not retrieved for user ${submitter.userSubjectId.value}, submitter of ${subId}")
-            case Some(credential) => SubmissionStarted(wsName, subId, credential)
-          }
+        val subStartMessage = gcsDAO.getUserCredentials(submitter) map {
+          case None => throw new RawlsException(s"Cannot start Submission Monitor because credentials were not retrieved for user ${submitter.userSubjectId.value}, submitter of ${subId}")
+          case Some(credential) => SubmissionStarted(wsName, subId, credential)
         }
 
         subStartMessage onComplete {

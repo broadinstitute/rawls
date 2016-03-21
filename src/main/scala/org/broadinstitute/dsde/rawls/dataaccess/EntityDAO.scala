@@ -24,6 +24,8 @@ trait EntityDAO {
 
   def getEntityTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[String]
 
+  def getEntityTypeCount(workspaceContext: WorkspaceContext, entityType: String, txn: RawlsTransaction): Long
+
   def listEntitiesAllTypes(workspaceContext: WorkspaceContext, txn: RawlsTransaction): TraversableOnce[Entity]
 
   def cloneAllEntities(sourceWorkspaceContext: WorkspaceContext, destWorkspaceContext: WorkspaceContext, txn: RawlsTransaction): Unit
