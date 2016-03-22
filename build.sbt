@@ -52,7 +52,8 @@ libraryDependencies ++= {
     "com.typesafe.slick" %% "slick" % slickV,
     "com.typesafe.slick" %% "slick-hikaricp" % slickV,
     "mysql" % "mysql-connector-java" % "5.1.38",
-    "org.liquibase" % "liquibase-core" % "3.3.5"
+    "org.liquibase" % "liquibase-core" % "3.3.5",
+    "ch.qos.logback" % "logback-classic" % "1.1.6"
   )
 }
 
