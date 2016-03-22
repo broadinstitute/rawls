@@ -1,14 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.{AtomicInteger, AtomicBoolean}
-import java.util.concurrent.locks.{Lock, StampedLock, ReadWriteLock, ReentrantReadWriteLock}
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.StampedLock
 
 import _root_.slick.backend.DatabaseConfig
-import _root_.slick.dbio.Effect.Transactional
 import _root_.slick.driver.JdbcProfile
-import com.tinkerpop.blueprints.Element
-import com.tinkerpop.blueprints.impls.orient.OrientElement
 import com.orientechnologies.orient.core.exception.OConcurrentModificationException
 import com.tinkerpop.blueprints.Graph
 import com.tinkerpop.blueprints.impls.orient.OrientConfigurableGraph.THREAD_MODE
@@ -23,7 +20,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 
 import liquibase.{Contexts, Liquibase}
 import liquibase.database.jvm.JdbcConnection
-import liquibase.resource.{FileSystemResourceAccessor, ResourceAccessor}
+import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
 
 object DataSource {
   /**
@@ -73,7 +70,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
     val liquibaseConnection = new JdbcConnection(dbConnection)
 
     try {
-      val resourceAccessor: ResourceAccessor = new FileSystemResourceAccessor()
+      val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
       val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
       liquibase.update(new Contexts())
     } finally {
