@@ -150,7 +150,7 @@ trait EntityComponent {
     }
 
     def getEntityTypesWithCounts(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
-      groupBy(e => e.entityType).map { case (entityType, entities) =>
+      filter(_.workspaceId === workspaceContext.workspaceId).groupBy(e => e.entityType).map { case (entityType, entities) =>
         (entityType, entities.countDistinct)
       }.result map { result =>
         result.toMap
