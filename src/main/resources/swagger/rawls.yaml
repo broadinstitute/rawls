@@ -1377,51 +1377,52 @@ paths:
             - openid
             - email
             - profile
-    delete:
-      responses:
-        '200':
-          description: No response was specified
-        '204':
-          description: Successful Request
-        '404':
-          description: Workspace or Entity does not exist
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: ''
-      tags:
-        - entities
-      summary: delete entity in a workspace
-      operationId: delete_entity
-      parameters:
-        - in: path
-          description: Workspace Namespace
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: Workspace Name
-          name: workspaceName
-          required: true
-          type: string
-        - in: path
-          description: Entity Type
-          name: entityType
-          required: true
-          type: string
-        - in: path
-          description: Entity Name
-          name: entityName
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
+# Entity delete endpoint commented out until GAWB-422 is complete
+#    delete:
+#      responses:
+#        '200':
+#          description: No response was specified
+#        '204':
+#          description: Successful Request
+#        '404':
+#          description: Workspace or Entity does not exist
+#          schema:
+#            $ref: '#/definitions/ErrorReport'
+#        '500':
+#          description: Rawls Internal Error
+#          schema:
+#            $ref: '#/definitions/ErrorReport'
+#      description: ''
+#      tags:
+#        - entities
+#      summary: delete entity in a workspace
+#      operationId: delete_entity
+#      parameters:
+#        - in: path
+#          description: Workspace Namespace
+#          name: workspaceNamespace
+#          required: true
+#          type: string
+#        - in: path
+#          description: Workspace Name
+#          name: workspaceName
+#          required: true
+#          type: string
+#        - in: path
+#          description: Entity Type
+#          name: entityType
+#          required: true
+#          type: string
+#        - in: path
+#          description: Entity Name
+#          name: entityName
+#          required: true
+#          type: string
+#      security:
+#        - authorization:
+#            - openid
+#            - email
+#            - profile
   /api/workspaces/entities/copy:
     post:
       responses:

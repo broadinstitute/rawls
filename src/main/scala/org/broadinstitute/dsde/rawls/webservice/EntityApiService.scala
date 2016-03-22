@@ -60,12 +60,13 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
           }
         }
       } ~
-    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
-      delete {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
-      }
-    } ~
+    //This endpoint has been disabled as part of GAWB-423 and will return when GAWB-422 is complete
+//    path("workspaces" / Segment / Segment / "entities" / Segment / Segment) { (workspaceNamespace, workspaceName, entityType, entityName) =>
+//      delete {
+//        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+//          WorkspaceService.DeleteEntity(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityName))
+//      }
+//    } ~
     path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, entityType, entityName) =>
       post {
         entity(as[EntityName]) { newEntityName =>
