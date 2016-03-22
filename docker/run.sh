@@ -2,4 +2,4 @@
 
 set -e
 
-exec java -jar $(find /rawls -name 'rawls*.jar')
+exec java $JAVA_OPTS -jar $(find /rawls -name 'rawls*.jar')
