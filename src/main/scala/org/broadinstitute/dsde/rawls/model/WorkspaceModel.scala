@@ -1,14 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
-
-import scala.reflect.runtime.universe._
-import scala.reflect.runtime.{universe=>ru}
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -18,17 +13,6 @@ object Attributable {
 trait Attributable {
   def attributes: Map[String, Attribute]
   def briefName: String
-}
-
-trait DomainObject {
-  //the names of the fields on this object that uniquely identify it relative to any graph siblings
-  def idFields: Seq[String]
-
-  def getFieldValue(tpe: Type, field: String): String = {
-    val mirror = ru.runtimeMirror(this.getClass.getClassLoader)
-    val idFieldSym = tpe.decl(ru.TermName(field)).asMethod
-    mirror.reflect(this).reflectField(idFieldSym).get.asInstanceOf[String]
-  }
 }
 
 /**
@@ -64,10 +48,9 @@ case class Workspace(
                       accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
-                      ) extends Attributable with DomainObject {
+                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
-  def idFields = Seq("name")
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -82,10 +65,9 @@ case class Entity(
                    name: String,
                    entityType: String,
                    attributes: Map[String, Attribute]
-                   ) extends Attributable with DomainObject {
+                   ) extends Attributable {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
-  def idFields = Seq("name")
 }
 
 case class MethodConfigurationName(
@@ -110,9 +92,7 @@ case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
                    methodVersion: Int
-                   ) extends DomainObject {
-  def idFields = Seq("methodName")
-}
+                   )
 
 case class MethodInput(name: String, inputType: String, optional: Boolean)
 case class MethodOutput(name: String, outputType: String)
@@ -126,19 +106,16 @@ case class MethodConfiguration(
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
                    methodRepoMethod:MethodRepoMethod
-                   ) extends DomainObject {
+                   ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
-  def idFields = Seq("name", "namespace")
 }
 
 case class MethodConfigurationShort(
                                 name: String,
                                 rootEntityType: String,
                                 methodRepoMethod:MethodRepoMethod,
-                                namespace: String) extends DomainObject {
-  def idFields = Seq("name")
-}
+                                namespace: String)
 
 case class ValidatedMethodConfiguration(
                                          methodConfiguration: MethodConfiguration,
@@ -219,25 +196,6 @@ case object AttributeEmptyList extends Attribute
 case class AttributeValueList(val list: Seq[AttributeValue]) extends Attribute
 case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends Attribute
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends Attribute
-
-object AttributeConversions {
-  // need to do some casting to conform to this list: http://orientdb.com/docs/last/Types.html
-  def attributeToProperty(att: AttributeValue): Any = att match {
-    case AttributeBoolean(b) => b
-    case AttributeNumber(n) => n.bigDecimal
-    case AttributeString(s) => s
-    case AttributeNull => null
-    case _ => throw new IllegalArgumentException("Cannot serialize " + att + " as a property")
-  }
-
-  def propertyToAttribute(prop: Any): AttributeValue = prop match {
-    case b: Boolean => AttributeBoolean(b)
-    case n: java.math.BigDecimal => AttributeNumber(n)
-    case s: String => AttributeString(s)
-    case null => AttributeNull
-    case _ => throw new IllegalArgumentException("Cannot deserialize " + prop + " as an attribute")
-  }
-}
 
 object WorkspaceJsonSupport extends JsonSupport {
 

@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceRecord, ReadAction}
-import org.broadinstitute.dsde.rawls.model.{WorkspaceName, Workspace}
+import org.broadinstitute.dsde.rawls.model.Workspace
 
 /**
  * Holds information about a workspace inside a DB transaction.

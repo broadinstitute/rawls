@@ -67,9 +67,7 @@ case class Workflow(
   workflowEntity: Option[AttributeEntityReference],
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty
-) extends DomainObject {
-  def idFields = Seq("workflowId")
-}
+)
 
 // Encapsulating errors for workflows that failed to start
 case class WorkflowFailure(
@@ -77,9 +75,7 @@ case class WorkflowFailure(
   entityType: String,
   inputResolutions: Seq[SubmissionValidationValue],
   errors: Seq[AttributeString]
-) extends DomainObject {
-  def idFields = Seq("entityName")
-}
+)
 
 case class TaskOutput(
   logs: Option[Seq[ExecutionServiceCallLogs]],
@@ -102,9 +98,7 @@ case class Submission(
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
-) extends DomainObject {
-  def idFields = Seq("submissionId")
-}
+)
 
 case class SubmissionStatusResponse(
   submissionId: String,
@@ -137,9 +131,7 @@ case class SubmissionValidationValue(
   value: Option[Attribute],
   error: Option[String],
   inputName: String
-) extends DomainObject {
-  def idFields = Seq("inputName")
-}
+)
 
 // the results of parsing each of the inputs for one entity
 case class SubmissionValidationEntityInputs(

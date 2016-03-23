@@ -11,7 +11,6 @@ import spray.http.OAuth2BearerToken
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Try}
 import akka.pattern.pipe
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import scala.concurrent.Future
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
