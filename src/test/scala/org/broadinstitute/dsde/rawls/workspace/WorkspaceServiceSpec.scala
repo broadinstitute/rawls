@@ -5,7 +5,6 @@ import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor._
 import akka.pattern._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.{RawlsTransaction, GoogleServicesDAO, DataSource, DbContainerDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, DataSource}
 import org.broadinstitute.dsde.rawls.model.PendingBucketDeletions
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource

@@ -19,7 +19,6 @@ resolvers += "artifactory-snapshots" at artifactory + "libs-snapshot"
 libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
-  val orientV = "2.0.8"
   val slickV = "3.1.1"
   Seq(
     ("com.gettyimages" %% "spray-swagger" % "0.5.0").exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11").exclude("com.typesafe.scala-logging", "scala-logging-api_2.11"),
@@ -37,13 +36,7 @@ libraryDependencies ++= {
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
     "com.h2database" % "h2" % "1.4.191" % "test",
-    "com.orientechnologies" % "orientdb-core" % orientV,
-    "com.orientechnologies" % "orientdb-graphdb" % orientV,
-    "com.orientechnologies" % "orientdb-server" % orientV,
-    "com.orientechnologies" % "orientdb-client" % orientV,
-    "com.tinkerpop.gremlin" % "gremlin-java" % "2.6.0",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
-    "rhino" % "js" % "1.7R2",
     ("org.broadinstitute" %% "wdl4s" % "0.1"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),

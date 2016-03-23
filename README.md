@@ -18,6 +18,5 @@ See the wiki for detailed documentation.
 
 ##Developer quick links:
 * Swagger UI: https://rawls-dev.broadinstitute.org
-* OrientDB UI: http://orientdb-dev.broadinstitute.org:2480
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-environment
