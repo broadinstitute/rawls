@@ -10,4 +10,11 @@
             <column name="is_realm_acl" type="BIT"/>
         </addColumn>
     </changeSet>
+    <changeSet logicalFilePath="dummy" id="dvoet" author="fix_workspace_access_pk">
+        <dropAllForeignKeyConstraints baseTableName="WORKSPACE_ACCESS"/>
+        <dropPrimaryKey tableName="WORKSPACE_ACCESS" constraintName="PRIMARY"/>
+        <addPrimaryKey columnNames="workspace_id, access_level, is_realm_acl" constraintName="PRIMARY" tableName="WORKSPACE_ACCESS"/>
+        <addForeignKeyConstraint baseColumnNames="group_name" baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_GROUP" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="NAME" referencedTableName="GROUP"/>
+        <addForeignKeyConstraint baseColumnNames="workspace_id" baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
+    </changeSet>
 </databaseChangeLog>
