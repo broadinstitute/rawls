@@ -47,7 +47,7 @@ trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest w
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
       slickDataSource
-    ).withDispatcher("submission-monitor-dispatcher"), "test-wsapi-submission-supervisor")
+    ).withDispatcher("submission-monitor-dispatcher"))
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(
       slickDataSource,

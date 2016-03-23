@@ -189,7 +189,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
 
   def getMaximumAccessLevel(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceAccessLevel] = {
-    val accessLevels = DBIO.sequence(workspaceContext.workspace.accessLevels.map { case (accessLevel, groupRef) =>
+    val accessLevels = DBIO.sequence(workspaceContext.workspace.realmACLs.map { case (accessLevel, groupRef) =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(groupRef, user).map {
         case Some(_) => accessLevel
         case None => WorkspaceAccessLevels.NoAccess
