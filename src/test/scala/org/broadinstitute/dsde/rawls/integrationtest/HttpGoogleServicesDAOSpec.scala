@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.integrationtest
 import java.io.StringReader
 import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem}
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket

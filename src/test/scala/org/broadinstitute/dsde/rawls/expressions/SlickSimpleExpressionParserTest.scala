@@ -4,8 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
-import org.broadinstitute.dsde.rawls.dataaccess.{SlickWorkspaceContext, RawlsTransaction, WorkspaceContext}
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.FunSuite
 import org.scalatest.TryValues

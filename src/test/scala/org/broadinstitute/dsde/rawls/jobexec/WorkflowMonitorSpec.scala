@@ -10,7 +10,6 @@ import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.HttpCookie
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.graph.OrientDbTestFixture
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.Failed
 import org.broadinstitute.dsde.rawls.model._
 import scala.util.Success

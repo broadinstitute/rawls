@@ -11,11 +11,6 @@ trait IntegrationTestConfig {
   val etcConf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
   val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
 
-  val orientConfig = jenkinsConf.withFallback(etcConf).getConfig("orientdb")
-  val orientUrl = orientConfig.getString("connectionUrl")
-  val orientRootUser = orientConfig.getString("rootUser")
-  val orientRootPassword = orientConfig.getString("rootPassword")
-
   val methodRepoConfig = jenkinsConf.withFallback(etcConf).getConfig("methodrepo")
   val methodRepoServer = methodRepoConfig.getString("server")
   val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
