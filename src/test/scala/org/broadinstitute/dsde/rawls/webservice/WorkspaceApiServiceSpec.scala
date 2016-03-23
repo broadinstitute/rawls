@@ -369,10 +369,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
+    //this endpoint is only temporarily returning MethodNotAllowed. When GAWB-422 is complete, it should return NotFound
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) {
+        assertResult(StatusCodes.MethodNotAllowed) {
           status
         }
       }

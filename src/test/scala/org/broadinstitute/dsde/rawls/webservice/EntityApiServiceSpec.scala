@@ -315,22 +315,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 204 on entity delete" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample8.entityType}/${testData.sample8.name}") ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-        assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample8.entityType, testData.sample8.name))
-        }
-      }
-  }
-
   /*
-    test disabled until decision is made on how to handle deleting entities that have references to them
-    above test case handles deleting a normal entity with no references
+    following 2 tests disabled until entity deletion is re-implemented (see GAWB-422)
    */
   ignore should "*DISABLED* return 204 on entity delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
@@ -344,7 +330,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
-  it should "return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
+  ignore should "*DISABLED* return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/s2_changed") ~>
       sealRoute(services.entityRoutes) ~>
       check {
