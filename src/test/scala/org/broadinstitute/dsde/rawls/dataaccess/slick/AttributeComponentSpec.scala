@@ -201,4 +201,5 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       println(x) // test fails without this, compiler optimization maybe?
     }
   }
+
 }

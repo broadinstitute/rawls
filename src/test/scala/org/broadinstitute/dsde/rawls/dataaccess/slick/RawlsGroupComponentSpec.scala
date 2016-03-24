@@ -361,5 +361,36 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "save concurrently" in withEmptyTestDatabase {
+    val subjId = RawlsUserSubjectId("Subject!")
+    val email = RawlsUserEmail("email@email.email.com")
+    val user = RawlsUser(subjId, email)
+    runAndWait(rawlsUserQuery.save(user))
+
+    val subGroup = makeRawlsGroup("Sub", Set.empty)
+    runAndWait(rawlsGroupQuery.save(subGroup))
+
+    val group = makeRawlsGroup("Group", Set(user)).copy(subGroups = Set(subGroup))
+
+    def groupGenerator(i: Int) = {
+
+      val subjId = RawlsUserSubjectId(s"New User $i")
+      val email = RawlsUserEmail(s"email$i@email.email.com")
+      val newUser = RawlsUser(subjId, email)
+
+      val newSubGroup = makeRawlsGroup(s"Sub $i", Set.empty)
+
+      rawlsUserQuery.save(newUser) andThen
+        rawlsGroupQuery.save(newSubGroup) andThen
+        rawlsGroupQuery.save(group.copy(users = Set(newUser), subGroups = Set(newSubGroup)))
+    }
+
+    val count = 100
+    runMultipleAndWait(count)(groupGenerator)
+
+    assert {
+      runAndWait(rawlsGroupQuery.load(group)).nonEmpty
+    }
+  }
 
 }

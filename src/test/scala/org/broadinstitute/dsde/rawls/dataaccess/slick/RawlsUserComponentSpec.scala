@@ -62,4 +62,22 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(rawlsUserQuery.loadUserByEmail(user.userEmail))
     }
   }
+
+  it should "save concurrently" in withEmptyTestDatabase {
+    val subjId = RawlsUserSubjectId("SubjectID")
+    val email = RawlsUserEmail("emails@hotmail.com")
+    val user = RawlsUser(subjId, email)
+
+    def userGenerator(i: Int) = {
+      rawlsUserQuery.save(user.copy(userEmail = RawlsUserEmail(s"abby.testerson.$i@broad.example.com")))
+    }
+
+    val count = 100
+    runMultipleAndWait(count)(userGenerator)
+
+    assert {
+      runAndWait(rawlsUserQuery.load(user)).nonEmpty
+    }
+  }
+
 }
