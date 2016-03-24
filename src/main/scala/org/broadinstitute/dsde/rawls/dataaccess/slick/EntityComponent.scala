@@ -1,12 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
-import javax.xml.bind.DatatypeConverter
 
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import slick.dbio.Effect.Read
-import slick.jdbc.GetResult
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc.GetResult
 import spray.http.StatusCodes
@@ -14,7 +11,7 @@ import spray.http.StatusCodes
 /**
  * Created by dvoet on 2/4/16.
  */
-case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID)
+case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID, recordVersion: Long)
 
 trait EntityComponent {
   this: DriverComponent with WorkspaceComponent with AttributeComponent =>
@@ -26,16 +23,19 @@ trait EntityComponent {
     def name = column[String]("name", O.Length(254))
     def entityType = column[String]("entity_type", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
+    def version = column[Long]("record_version")
+
     def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
-    def * = (id, name, entityType, workspaceId) <> (EntityRecord.tupled, EntityRecord.unapply)
+
+    def * = (id, name, entityType, workspaceId, version) <> (EntityRecord.tupled, EntityRecord.unapply)
   }
 
   object entityQuery extends TableQuery(new EntityTable(_)) {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(EntityAttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(EntityAttributeRecord, Option[EntityRecord])]), Seq]
 
-    implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<) }
+    implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<) }
 
     // result structure from entity and attribute list raw sql
     case class EntityListResult(entityRecord: EntityRecord, attributeRecord: Option[EntityAttributeRecord], refEntityRecord: Option[EntityRecord])
@@ -43,7 +43,7 @@ trait EntityComponent {
     // tells slick how to convert a result row from a raw sql query to an instance of EntityListResult
     implicit val getEntityListResult = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
-      val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<)
+      val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<)
 
       val attributeIdOption: Option[Long] = r.<<
       val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
@@ -51,14 +51,16 @@ trait EntityComponent {
       val refEntityRecOption = for {
         attributeRec <- attributeRecOption
         refId <- attributeRec.valueEntityRef
-      } yield { EntityRecord(r.<<, r.<<, r.<<, r.<<) }
+      } yield { EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<) }
 
       EntityListResult(entityRec, attributeRecOption, refEntityRecOption)
     }
 
     // the where clause for this query is filled in specific to the use case
     val baseEntityAndAttributeSql =
-      s"""select e.id, e.name, e.entity_type, e.workspace_id, a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id
+      s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version,
+          a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index,
+          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
@@ -83,12 +85,16 @@ trait EntityComponent {
       filter(_.id === id)
     }
 
+    def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery = {
+      filter(rec => rec.id === id && rec.version === version)
+    }
+
     def lookupEntitiesByNames(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       if (entities.isEmpty) {
         DBIO.successful(Seq.empty)
       } else {
         // slick can't do a query with '(entityType, entityName) in ((?, ?), (?, ?), ...)' so we need raw sql
-        val baseSelect = sql"select id, name, entity_type, workspace_id from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
+        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
         val entityTypeNameTuples = entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
         concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
       }
@@ -151,7 +157,15 @@ trait EntityComponent {
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
         _ <- insertAttributes(entities, referencedAndSavingEntityRecs)
+        _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
       } yield entities
+    }
+
+    private def optimisticLockUpdate(originalRec: EntityRecord): ReadWriteAction[Int] = {
+      findEntityByIdAndVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
+        case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
+        case success => success
+      }
     }
 
     private def insertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord]) = {
@@ -186,14 +200,13 @@ trait EntityComponent {
           foundEntities
         }
       }
-
     }
 
     private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       val existingEntityTypeNames = preExistingEntityRecs.map(rec => (rec.entityType, rec.name))
       val newEntities = entities.filterNot(e => existingEntityTypeNames.exists(_ ==(e.entityType, e.name)))
 
-      val newEntityRecs = newEntities.map(e => marshalEntity(e, workspaceContext.workspaceId))
+      val newEntityRecs = newEntities.map(e => marshalNewEntity(e, workspaceContext.workspaceId))
       batchInsertEntities(workspaceContext, newEntityRecs.toSeq)
     }
 
@@ -282,7 +295,7 @@ trait EntityComponent {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
       val x = DBIO.sequence(entitiesGrouped map { batch =>
-        val baseSelect = sql"""select id, name, entity_type, workspace_id from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
+        val baseSelect = sql"""select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
         val entityTypeNameTuples = batch.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
         concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
       }).map{ z => z.flatten }
@@ -290,7 +303,7 @@ trait EntityComponent {
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
-      val entityInserts = batchInsertEntities(destWorkspaceContext, entities.toSeq.map(e => marshalEntity(e, destWorkspaceContext.workspaceId)))
+      val entityInserts = batchInsertEntities(destWorkspaceContext, entities.toSeq.map(e => marshalNewEntity(e, destWorkspaceContext.workspaceId)))
 
       val attributeInserts = entityInserts flatMap { ids =>
         val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
@@ -377,8 +390,8 @@ trait EntityComponent {
       DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
     }
 
-    def marshalEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
-      EntityRecord(0, entity.name, entity.entityType, workspaceId)
+    def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
+      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0)
     }
 
     def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[String, Attribute]) = {
