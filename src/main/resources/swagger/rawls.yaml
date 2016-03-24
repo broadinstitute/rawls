@@ -217,6 +217,10 @@ paths:
            description: You must be an admin to create a group
            schema:
              $ref: '#/definitions/ErrorReport'
+         '409':
+           description: Group already exists
+           schema:
+             $ref: '#/definitions/ErrorReport'
          '500':
            description: Rawls Internal Error
            schema:
@@ -241,10 +245,14 @@ paths:
              - profile
      delete:
        responses:
-         '201':
+         '200':
            description: Group deletion successful
          '403':
            description: You must be an admin to delete a group
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Group not found
            schema:
              $ref: '#/definitions/ErrorReport'
          '500':
@@ -279,7 +287,7 @@ paths:
            schema:
              $ref: '#/definitions/ErrorReport'
          '404':
-           description: Unable to find member(s)
+           description: Unable to find group or member(s)
            schema:
              $ref: '#/definitions/ErrorReport'
          '500':
@@ -318,7 +326,7 @@ paths:
            schema:
              $ref: '#/definitions/ErrorReport'
          '404':
-           description: Unable to find member(s)
+           description: Unable to find group or member(s)
            schema:
              $ref: '#/definitions/ErrorReport'
          '500':
@@ -357,7 +365,7 @@ paths:
            schema:
              $ref: '#/definitions/ErrorReport'
          '404':
-           description: Unable to find member(s)
+           description: Unable to find group or member(s)
            schema:
              $ref: '#/definitions/ErrorReport'
          '500':
@@ -434,7 +442,7 @@ paths:
            schema:
              $ref: '#/definitions/ErrorReport'
          '404':
-           description: Unable to group
+           description: Unable to find group
            schema:
              $ref: '#/definitions/ErrorReport'
          '502':
@@ -486,8 +494,53 @@ paths:
       description: List all active submissions in all workspaces
       tags:
         - admin
+        - submissions
       summary: list active submissions
       operationId: listAllActiveSubmissions
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
+    delete:
+      responses:
+        '204':
+          description: Successful Request
+        '403':
+          description: You must be an admin to abort a submission
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '502':
+          description: Trouble talking to Google or Cromwell
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Administratively abort an active submission
+      tags:
+        - admin
+        - submissions
+      summary: abort a submission
+      operationId: adminAbortSubmission
+      parameters:
+        - in: path
+          description: workspaceNamespace of the submission
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: workspaceName of the submission
+          name: workspaceName
+          required: true
+          type: string
+        - in: path
+          description: id of the submission
+          name: submissionId
+          required: true
+          type: string
       security:
         - authorization:
             - openid
@@ -508,11 +561,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: List all users in rawls
+      description: List all users
       tags:
         - admin
         - users
@@ -523,7 +572,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/users':
     post:
       responses:
         '201':
@@ -558,49 +606,6 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/submissions/{workspaceNamespace}/{workspaceName}/{submissionId}':
-    delete:
-      responses:
-        '204':
-          description: Successful Request
-        '403':
-          description: You must be an admin to abort a submission
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to Google or Cromwell
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: Administratively abort an active submission
-      tags:
-        - admin
-      summary: abort a submission
-      operationId: adminAbortSubmission
-      parameters:
-        - in: path
-          description: workspaceNamespace of the submission
-          name: workspaceNamespace
-          required: true
-          type: string
-        - in: path
-          description: workspaceName of the submission
-          name: workspaceName
-          required: true
-          type: string
-        - in: path
-          description: id of the submission
-          name: submissionId
-          required: true
-          type: string
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
   '/api/admin/allUserReadAccess/{workspaceNamespace}/{workspaceName}':
     get:
       responses:
@@ -612,10 +617,11 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Query all user read access status for a workspace
       tags:
         - admin
-      summary: Query all user read access status for a workspace
+        - workspaces
+      summary: Query workspace public access
       operationId: getAllUserReadAccess
       parameters:
         - in: path
@@ -638,16 +644,17 @@ paths:
         '201':
           description: Access granted
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Grant all user read access status for a workspace
       tags:
         - admin
+        - workspaces
       summary: Grant all user read access status for a workspace
       operationId: grantAllUserReadAccess
       parameters:
@@ -671,16 +678,17 @@ paths:
         '200':
           description: Access revoked
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Revoke all user read access status for a workspace
       tags:
         - admin
+        - workspaces
       summary: Revoke all user read access status for a workspace
       operationId: revokeAllUserReadAccess
       parameters:
@@ -719,6 +727,7 @@ paths:
       description: List all workspaces
       tags:
         - admin
+        - workspaces
       summary: list all workspaces
       operationId: listAllWorkspaces
       security:
@@ -743,7 +752,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: List all submissions run in this workspace
       tags:
         - submissions
       summary: List all submissions
@@ -766,22 +775,16 @@ paths:
             - profile
     post:
       responses:
-        '200':
-          description: No response was specified
-          schema:
-            $ref: '#/definitions/SubmissionReport'
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/SubmissionReport'
         '400':
-          description: Expression eval failed or entities are not of type required by method config
+          description: Expression evaluation failed or entities are not of type required by method config
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: Method Configuration or Entity not found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '409':
-          description: Method Configuration failed to resolve input expressions with the supplied Entity
+          description: Workspace, Method Configuration or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -789,10 +792,10 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '502':
-          description: Trouble talking to Cromwell
+          description: Trouble talking to Agora
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Submit a new job
       tags:
         - submissions
       summary: Create submission
@@ -827,11 +830,11 @@ paths:
           schema:
             $ref: '#/definitions/SubmissionValidationReport'
         '400':
-          description: Invalid Request
+          description: Expression evaluation failed or entities are not of type required by method config
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: No Entity
+          description: Workspace, Method Configuration or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -839,10 +842,10 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '502':
-          description: Trouble talking to Cromwell
+          description: Trouble talking to Agora
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Validate expression syntax for a submission
       tags:
         - submissions
       summary: Validate submission
@@ -877,14 +880,14 @@ paths:
           schema:
             $ref: '#/definitions/Submission'
         '404':
-          description: Submission Not Found
+          description: Workspace or submission not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Monitor submission status
       tags:
         - submissions
       summary: Monitor submission status
@@ -912,19 +915,21 @@ paths:
             - profile
     delete:
       responses:
-        '200':
-          description: No response was specified
         '204':
-          description: Successful Request
+          description: Submission successfully aborted
         '404':
-          description: Submission Not Found
+          description: Workspace or submission not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+        '502':
+          description: Unable to abort all workflows in this submission
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Abort a currently running submission
       tags:
         - submissions
       summary: Abort submission
@@ -958,7 +963,7 @@ paths:
           schema:
             $ref: '#/definitions/WorkflowOutputs'
         '404':
-          description: Submission or Workflow Not Found
+          description: Workspace, Submission or Workflow not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
@@ -966,10 +971,10 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '502':
-          description: Trouble talking to Cromwell
+          description: Unable to retrieve outputs or logs from Cromwell
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Retrieve outputs for a workflow
       tags:
         - submissions
       summary: Get workflow outputs
@@ -1008,14 +1013,14 @@ paths:
           schema:
             $ref: '#/definitions/ExecutionMetadata'
         '404':
-          description: Workspace, Submission or Workflow Not Found
+          description: Workspace, Submission or Workflow not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get call-level metadata for workflow
       tags:
         - submissions
       summary: Get call-level metadata for workflow
@@ -1049,23 +1054,21 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
     post:
       responses:
-        '200':
-          description: No response was specified
         '204':
           description: Successful Request
         '404':
-          description: Workspace or Entity does not exist
+          description: Workspace or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
-          description: Entity already exists in workspace
+          description: New name for entity already exists in workspace
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Rename an entity
       tags:
         - entities
       summary: rename entity in a workspace
@@ -1112,14 +1115,14 @@ paths:
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace or Entity does not exist
+          description: Workspace or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Evaluates an attribute expression taking the given entity as root
       tags:
         - entities
       summary: evaluate expression on an entity
@@ -1156,16 +1159,17 @@ paths:
         '200':
           description: Successful Request
           schema:
-            type: string
+            type: object
+            description: Map[String,Int]
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: List all entity types in a workspace, plus the number of entities of each type
       tags:
         - entities
       summary: list all entity types in a workspace
@@ -1188,12 +1192,14 @@ paths:
             - profile
     post:
       responses:
-        '200':
-          description: No response was specified
+        '201':
+          description: Entity created
+          headers:
+            Location:
+              description: The path to the newly created entity
+              type: string
           schema:
             $ref: '#/definitions/Entity'
-        '201':
-          description: Successful Request
         '404':
           description: Workspace not found
           schema:
@@ -1206,7 +1212,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Create entity
       tags:
         - entities
       summary: Create entity in a workspace
@@ -1243,14 +1249,14 @@ paths:
             items:
               $ref: '#/definitions/Entity'
         '404':
-          description: Workspace or entityType does not exist
+          description: Workspace or entityType not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: List all entities of a given type
       tags:
         - entities
       summary: list all entities of given type in a workspace
@@ -1284,14 +1290,14 @@ paths:
           schema:
             $ref: '#/definitions/Entity'
         '404':
-          description: Workspace or Entity does not exist
+          description: Workspace or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get an entity
       tags:
         - entities
       summary: Get entity in a workspace
@@ -1325,22 +1331,22 @@ paths:
     patch:
       responses:
         '200':
-          description: Successful Request
+          description: Entity updated
           schema:
             $ref: '#/definitions/Entity'
         '400':
-          description: Attribute does not exists or is of an unexpected type
+          description: Attribute does not exist or is of an unexpected type
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace or Entity does not exist
+          description: Workspace or Entity not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Update an entity
       tags:
         - entities
       summary: Update entity in a workspace
@@ -1380,19 +1386,17 @@ paths:
 # Entity delete endpoint commented out until GAWB-422 is complete
 #    delete:
 #      responses:
-#        '200':
-#          description: No response was specified
 #        '204':
 #          description: Successful Request
 #        '404':
-#          description: Workspace or Entity does not exist
+#          description: Workspace or Entity not found
 #          schema:
 #            $ref: '#/definitions/ErrorReport'
 #        '500':
 #          description: Rawls Internal Error
 #          schema:
 #            $ref: '#/definitions/ErrorReport'
-#      description: ''
+#      description: Delete an entity
 #      tags:
 #        - entities
 #      summary: delete entity in a workspace
@@ -1426,16 +1430,18 @@ paths:
   /api/workspaces/entities/copy:
     post:
       responses:
-        '200':
-          description: No response was specified
         '201':
           description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Entity'
         '404':
-          description: Source Workspace or source entities does not exist
+          description: Source workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
-          description: One or more entities of that name/type already exist
+          description: One or more entities with the destination name/type already exist
           schema:
             $ref: '#/definitions/ErrorReport'
         '422':
@@ -1446,7 +1452,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Copy entities from one workspace to another
       tags:
         - entities
       summary: copy entities from one workspace into another workspace
@@ -1466,23 +1472,21 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpsert':
     post:
       responses:
-        '200':
-          description: No response was specified
         '204':
-          description: No Content (Success)
+          description: Entities upserted
         '400':
           description: Invalid attribute update operation
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Batch upsert (update or insert if not already there) entities into a workspace
       tags:
         - entities
       summary: batch upsert entities into a workspace
@@ -1514,26 +1518,24 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/batchUpdate':
     post:
       responses:
-        '200':
-          description: No response was specified
         '204':
-          description: No Content (Success)
+          description: Entities updated
         '400':
           description: Invalid attribute update operation
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Batch update entities into a workspace. All referenced entities must already exist.
       tags:
         - entities
-      summary: batch update entities into a workspace. All referenced entities must already exist
+      summary: Batch update entities
       operationId: batch_update_entities
       parameters:
         - in: path
@@ -1560,12 +1562,14 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs':
     post:
       responses:
-        '200':
-          description: No response was specified
-          schema:
-            $ref: '#/definitions/ValidatedMethodConfiguration'
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/ValidatedMethodConfiguration'
+          headers:
+            Location:
+              description: The path to the newly created method configuration
+              type: string
         '404':
           description: Workspace not found
           schema:
@@ -1578,7 +1582,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Create method configurations
       tags:
         - methodconfigs
       summary: Create Method configuration in a workspace
@@ -1614,14 +1618,14 @@ paths:
             items:
               $ref: '#/definitions/MethodConfiguration'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: List all method configurations in a workspace
       tags:
         - methodconfigs
       summary: list method configurations in a workspace
@@ -1650,18 +1654,14 @@ paths:
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
         '404':
-          description: Workspace or Method Configuration does not exist
+          description: Workspace or Method Configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-        '502':
-          description: Trouble talking to method repository
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Validate a method configuration
       tags:
         - methodconfigs
       summary: get syntax validation information for a method configuration
@@ -1700,14 +1700,14 @@ paths:
           schema:
             $ref: '#/definitions/MethodConfiguration'
         '404':
-          description: Workspace or Method Configuration does not exist
+          description: Workspace or Method Configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get a method configuration
       tags:
         - methodconfigs
       summary: get method configuration in a workspace
@@ -1740,19 +1740,17 @@ paths:
             - profile
     delete:
       responses:
-        '200':
-          description: No response was specified
         '204':
           description: Successful Request
         '404':
-          description: Workspace or Method Configuration does not exist
+          description: Workspace or Method Configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Delete a method configuration
       tags:
         - methodconfigs
       summary: delete method configuration in a workspace
@@ -1790,17 +1788,17 @@ paths:
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
         '404':
-          description: Workspace or method configuration does not exists
+          description: Workspace or method configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Overwrite method configuration in a workspace
       tags:
         - methodconfigs
-      summary: Update method configuration in a workspace
+      summary: Overwrite method configuration in a workspace
       operationId: update_method_configuration
       parameters:
         - in: path
@@ -1837,23 +1835,21 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/rename':
     post:
       responses:
-        '200':
-          description: No response was specified
         '204':
           description: Successful Request
         '404':
-          description: Workspace or Method Configuration does not exists
+          description: Workspace or Method Configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
-          description: Method config by that name already exists in workspace
+          description: Method config with the new name already exists in workspace
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Rename method configuration
       tags:
         - methodconfigs
       summary: rename method configuration in a workspace
@@ -1893,14 +1889,16 @@ paths:
   /api/methodconfigs/copy:
     post:
       responses:
-        '200':
-          description: No response was specified
-          schema:
-            $ref: '#/definitions/MethodConfiguration'
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+          headers:
+            Location:
+              description: The path to the copied method configuration
+              type: string
         '404':
-          description: Source Workspace or method configuration does not exist
+          description: Source workspace or method configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -1911,7 +1909,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Copy method configuration from another workspace
       tags:
         - methodconfigs
       summary: Copy method configuration in a workspace from another workspace
@@ -1931,14 +1929,16 @@ paths:
   /api/methodconfigs/copyFromMethodRepo:
     post:
       responses:
-        '200':
-          description: No response was specified
-          schema:
-            $ref: '#/definitions/MethodConfiguration'
         '201':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/MethodConfiguration'
+          headers:
+            Location:
+              description: The path to the newly created method configuration
+              type: string
         '404':
-          description: Source method configuration does not exist
+          description: Source method configuration not found in method repo
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -1953,7 +1953,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Copy a method configuration from method repo to a workspace
       tags:
         - methodconfigs
       summary: Copy method configuration from the method repository
@@ -1978,14 +1978,14 @@ paths:
           schema:
             $ref: '#/definitions/AgoraEntity'
         '404':
-          description: Source method configuration does not exist
+          description: Source method configuration not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Copy method configuration from workspace to method repo
       tags:
         - methodconfigs
       summary: Copy method configuration from workspace to the method repository
@@ -2017,7 +2017,7 @@ paths:
           description: No such method
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Create a template for a method configuration from a method in the method repository
       tags:
         - methodconfigs
       summary: Create a template for a method configuration from a method in the method repository
@@ -2049,7 +2049,7 @@ paths:
           description: No such method
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get information about a method's inputs and outputs
       tags:
         - methodconfigs
       summary: Get information about a method's inputs and outputs
@@ -2069,23 +2069,25 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
-        '200':
-          description: No response was specified
         '204':
           description: Successful Request
         '403':
-          description: Not Owner
+          description: Insufficient permissions to lock workspace (must be owner)
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace Not Found
           schema:
             $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Workspace cannot be locked due to running submissions
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Lock a workspace
       tags:
         - workspaces
       summary: Lock workspace
@@ -2109,12 +2111,10 @@ paths:
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/unlock':
     put:
       responses:
-        '200':
-          description: No response was specified
         '204':
           description: Successful Request
         '403':
-          description: Not Owner
+          description: Insufficient permissions to lock workspace (must be owner)
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -2125,7 +2125,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Unlock a workspace
       tags:
         - workspaces
       summary: Unlock workspace
@@ -2153,8 +2153,8 @@ paths:
           description: Successful Request
           schema:
             $ref: '#/definitions/WorkspaceACL'
-        '400':
-          description: 'Can''t retrieve ACL for workspace'
+        '403':
+          description: Insufficient permissions to get workspace ACLs (must be owner)
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -2165,7 +2165,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get access control list for a workspace
       tags:
         - workspaces
       summary: Get workspace ACL
@@ -2190,19 +2190,23 @@ paths:
       responses:
         '200':
           description: Successful Request
-        '404':
-          description: Workspace, user or group not found
+        '400':
+          description: Attempting to change access controls you can't (your own, or public-access group)
           schema:
             $ref: '#/definitions/ErrorReport'
-        '409':
-          description: 'Error altering some ACLs'
+        '403':
+          description: Insufficient permissions to edit workspace ACLs (must be owner)
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Workspace, user or group not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Edit access control list for a workspace
       tags:
         - workspaces
       summary: Update workspace ACL
@@ -2234,10 +2238,12 @@ paths:
   '/api/workspaces':
     post:
       responses:
-        '200':
-          description: No response was specified
         '201':
           description: Successful Request
+          headers:
+            Location:
+              description: The path to the newly created workspace
+              type: string
         '400':
           description: Namespace does not exist
           schema:
@@ -2254,10 +2260,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Create a new workspace
       tags:
         - workspaces
-      summary: Create/replace workspace
+      summary: Create new workspace
       operationId: create
       parameters:
         - in: body
@@ -2284,7 +2290,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: List workspaces you have access to
       tags:
         - workspaces
       summary: List workspaces
@@ -2305,15 +2311,19 @@ paths:
           description: Attribute does not exist or is of an unexpected type
           schema:
             $ref: '#/definitions/ErrorReport'
+        '403':
+          description: Insufficient permissions to edit workspace attributes
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Update workspace attributes
       tags:
         - workspaces
       summary: Update attributes of a workspace
@@ -2347,17 +2357,17 @@ paths:
           schema:
             $ref: '#/definitions/WorkspaceListResponse'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Get workspace details
       tags:
         - workspaces
-      summary: Get workspace
+      summary: Get workspace details
       operationId: list
       parameters:
         - in: path
@@ -2377,19 +2387,21 @@ paths:
             - profile
     delete:
       responses:
-        '200':
-          description: No response was specified
         '202':
-          description: Request Accepted
+          description: Delete request accepted. Workspace bucket will be deleted within 24 hours.
+        '403':
+          description: Insufficient permissions to delete workspace (must be owner)
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
-          description: Workspace does not exist
+          description: Workspace not found
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Delete a workspace
       tags:
         - workspaces
       summary: Delete workspace
@@ -2416,6 +2428,10 @@ paths:
       responses:
         '201':
           description: Successful Request
+          headers:
+            Location:
+              description: The path to the newly cloned workspace
+              type: string
         '400':
           description: Namespace does not exist
           schema:
@@ -2440,7 +2456,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: ''
+      description: Clone a workspace
       tags:
         - workspaces
       summary: Clone workspace
@@ -2473,11 +2489,15 @@ paths:
        responses:
          '201':
            description: Successful Request
+           headers:
+            Location:
+              description: The path to the newly created user
+              type: string
          '500':
            description: Rawls Internal Error
            schema:
              $ref: '#/definitions/ErrorReport'
-       description: "creates a user in the Rawls system"
+       description: Create a new user
        tags:
          - users
        summary: Create user
@@ -2500,7 +2520,7 @@ paths:
            description: Rawls Internal Error
            schema:
              $ref: '#/definitions/ErrorReport'
-       description: "gets the status of a user"
+       description: Get the status of a user
        tags:
          - users
        summary: gets the status of a user
@@ -2511,18 +2531,48 @@ paths:
             - openid
             - email
             - profile
-            
+  '/api/user/{userSubjectId}/enable':
+       post:
+         responses:
+           '204':
+             description: Successful Request
+           '403':
+             description: Only administrators can enable users
+           '500':
+             description: Rawls Internal Error
+             schema:
+               $ref: '#/definitions/ErrorReport'
+         description: "creates a user in the Rawls system"
+         tags:
+           - admin
+           - users
+         summary: Enable user
+         operationId: enable
+         parameters:
+          - in: path
+            description: subject id of user
+            name: userSubjectId
+            required: true
+            type: string
+         security:
+           - authorization:
+              - openid
+              - email
+              - profile
   '/api/user/{userSubjectId}/disable':
      post:
        responses:
          '204':
            description: Successful Request
+         '403':
+           description: Only administrators can disable users
          '500':
            description: Rawls Internal Error
            schema:
              $ref: '#/definitions/ErrorReport'
-       description: "creates a user in the Rawls system"
+       description: "disables a user in the Rawls system"
        tags:
+         - admin
          - users
        summary: Disable user
        operationId: disable
@@ -2537,6 +2587,27 @@ paths:
             - openid
             - email
             - profile
+  '/api/user':
+       get:
+         responses:
+           '200':
+             description: Successful Request
+             schema:
+               $ref: '#/definitions/UserStatus'
+           '500':
+             description: Rawls Internal Error
+             schema:
+               $ref: '#/definitions/ErrorReport'
+         description: "gets the status of a user"
+         tags:
+           - users
+         summary: Get status of the current user
+         operationId: userStatus
+         security:
+           - authorization:
+              - openid
+              - email
+              - profile
   '/api/user/{userSubjectId}':
      get:
        responses:
@@ -2544,41 +2615,18 @@ paths:
            description: Successful Request
            schema:
              $ref: '#/definitions/UserStatus'
+         '403':
+           description: You must be an administrator to get user status
          '500':
            description: Rawls Internal Error
            schema:
              $ref: '#/definitions/ErrorReport'
        description: "gets the status of a user"
        tags:
-         - users
          - admin
+         - users
        summary: Get status of user
        operationId: adminStatus
-       parameters:
-        - in: path
-          description: subject id of user
-          name: userSubjectId
-          required: true
-          type: string
-       security:
-         - authorization:
-            - openid
-            - email
-            - profile
-  '/api/user/{userSubjectId}/enable':
-     post:
-       responses:
-         '204':
-           description: Successful Request
-         '500':
-           description: Rawls Internal Error
-           schema:
-             $ref: '#/definitions/ErrorReport'
-       description: "creates a user in the Rawls system"
-       tags:
-         - users
-       summary: Enable user
-       operationId: enable
        parameters:
         - in: path
           description: subject id of user
