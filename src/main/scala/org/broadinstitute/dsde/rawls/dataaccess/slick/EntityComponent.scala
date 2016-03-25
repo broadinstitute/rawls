@@ -169,13 +169,19 @@ trait EntityComponent {
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
       //1. First save JUST the entity record for the entity without any attributes (references)
-      val insertEntitiesOnly = DBIO.seq(entities.map(entity => save(destWorkspaceContext, entity.copy(attributes = Map.empty))).toSeq:_*)
+      val entityInserts = DBIO.sequence(entities.map { entity =>
+        val entityInsert = (entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, entity.name, entity.entityType, destWorkspaceContext.workspaceId)
+        entityInsert map(_ -> entity)
+      })
 
-      //2. Re-save the entities, but this time with the attributes that were previously omitted
-      //Since all entities were already saved in step 1, we can now save the entities again with their references to other entities
-      val insertEntitiesAndAttributes = DBIO.seq(entities.map(entity => save(destWorkspaceContext, entity)).toSeq:_*)
+      //2. Save the attributes that were previously omitted
+      val attributeInserts = entityInserts flatMap { idToEntityMap =>
+        DBIO.seq(idToEntityMap.map { case (id, entity) =>
+          DBIO.sequence(insertEntityAttributes(entity, id, destWorkspaceContext.workspaceId))
+        }.toSeq:_*)
+      }
 
-      insertEntitiesOnly andThen insertEntitiesAndAttributes
+      attributeInserts
     }
 
     /**
