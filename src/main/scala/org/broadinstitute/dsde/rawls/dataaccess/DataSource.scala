@@ -4,7 +4,6 @@ import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcProfile
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 
 import scala.concurrent.duration.Duration

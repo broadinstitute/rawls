@@ -152,7 +152,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
   }
 
   private def parse(expression: String, parser: Parser[PipelineQuery] ) = {
-    //Attempt to parse the expression into a pipeline query to hand off to Gremlin
     parseAll(parser, expression) match {
       case Success(result, _) => scala.util.Success(result)
       case NoSuccess(msg, next) => scala.util.Failure(new RuntimeException("Failed at line %s, column %s: %s".format(next.pos.line, next.pos.column, msg)))

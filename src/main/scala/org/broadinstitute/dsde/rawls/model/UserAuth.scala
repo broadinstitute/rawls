@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import spray.json._
 
 sealed trait UserAuthRef
@@ -17,9 +16,7 @@ case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroup
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
 case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
 
-case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail) extends DomainObject {
-  def idFields = Seq("userSubjectId")
-}
+case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail)
 
 object RawlsUser {
   implicit def toRef(u: RawlsUser) = RawlsUserRef(u.userSubjectId)
@@ -28,8 +25,7 @@ object RawlsUser {
     RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail))
 }
 
-case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]) extends DomainObject {
-  def idFields = Seq("groupName")
+case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]) {
   def toRawlsGroupShort = RawlsGroupShort(groupName, groupEmail)
 }
 
@@ -39,9 +35,7 @@ object RawlsGroup {
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String) extends DomainObject {
-  def idFields = Seq("projectName")
-}
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
 case class SyncReport(items: Seq[SyncReportItem])

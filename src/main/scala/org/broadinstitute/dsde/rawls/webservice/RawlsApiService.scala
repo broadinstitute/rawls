@@ -20,7 +20,6 @@ import spray.http.StatusCodes._
 import spray.util.actorSystem
 
 import scala.concurrent.ExecutionContext
-import scala.reflect.runtime.universe._
 
 object RawlsApiServiceActor {
   def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, appVersion: ApplicationVersion, googleClientId: String)(implicit executionContext: ExecutionContext): Props = {
