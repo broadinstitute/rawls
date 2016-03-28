@@ -100,17 +100,19 @@ trait AttributeComponent {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
-    def unmarshalAttributes(allAttributeRecsWithRef: Seq[(AttributeRecord, Option[EntityRecord])]): Map[String, Attribute] = {
-      allAttributeRecsWithRef.groupBy(_._1.name).map { case (name, attributeRecsWithRefForNameWithDupes) =>
-        val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.toSet
-        if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
-          name -> unmarshalList(attributeRecsWithRefForName)
-        } else if (attributeRecsWithRefForName.size > 1) {
-          throw new RawlsException(s"more than one value exists for attribute $name but list index is not defined for all, records: $attributeRecsWithRefForName")
-        } else if (attributeRecsWithRefForName.head._2.isDefined) {
-          name -> unmarshalReference(attributeRecsWithRefForName.head._2.get)
-        } else {
-          name -> unmarshalValue(attributeRecsWithRefForName.head._1)
+    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, AttributeRecord), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
+      allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.mapValues { workspaceAttributeRecsWithRef =>
+        workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.mapValues { case (attributeRecsWithRefForNameWithDupes) =>
+          val attributeRecsWithRefForName: Set[(AttributeRecord, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
+          if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
+            unmarshalList(attributeRecsWithRefForName)
+          } else if (attributeRecsWithRefForName.size > 1) {
+            throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
+          } else if (attributeRecsWithRefForName.head._2.isDefined) {
+            unmarshalReference(attributeRecsWithRefForName.head._2.get)
+          } else {
+            unmarshalValue(attributeRecsWithRefForName.head._1)
+          }
         }
       }
     }

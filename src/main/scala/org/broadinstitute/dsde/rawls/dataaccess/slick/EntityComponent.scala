@@ -73,12 +73,13 @@ trait EntityComponent {
      */
     def unmarshalEntities(entityAndAttributesQuery: EntityQueryWithAttributesAndRefs): ReadAction[Iterable[Entity]] = {
       entityAndAttributesQuery.result map { entityAttributeRecords =>
-        val attributeRecsByEntityRec = entityAttributeRecords.groupBy(_._1)
-        attributeRecsByEntityRec map { case (entityRec, attributeRecs) =>
-          val attributes = attributeQuery.unmarshalAttributes(attributeRecs.collect {
-            case (_, Some(((attributeRec), entityRef: Option[EntityRecord]))) => (attributeRec, entityRef)
-          })
-          unmarshalEntity(entityRec, attributes)
+        val entityRecords = entityAttributeRecords.map(_._1).toSet
+        val attributesByEntityId = attributeQuery.unmarshalAttributes(entityAttributeRecords.collect {
+          case (entityRec, Some((attributeRec, referenceOption))) => ((entityRec.id, attributeRec), referenceOption)
+        })
+
+        entityRecords.map { entityRec =>
+          unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
         }
       }
     }

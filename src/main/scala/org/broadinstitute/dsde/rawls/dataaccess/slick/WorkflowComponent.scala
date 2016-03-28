@@ -296,7 +296,7 @@ trait WorkflowComponent {
 
     private def unmarshalInputResolution(validationRec: SubmissionValidationRecord, value: Option[AttributeRecord]): SubmissionValidationValue = {
       value match {
-        case Some(attr) => SubmissionValidationValue(Some(attributeQuery.unmarshalAttributes(Seq((attr, None))).values.head), validationRec.errorText, validationRec.inputName)
+        case Some(attr) => SubmissionValidationValue(Some(attributeQuery.unmarshalAttributes(Seq(((validationRec.valueId, attr), None)))(validationRec.valueId).values.head), validationRec.errorText, validationRec.inputName)
         case None => SubmissionValidationValue(None, validationRec.errorText, validationRec.inputName)
       }
     }

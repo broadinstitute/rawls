@@ -86,7 +86,7 @@ trait WorkspaceComponent {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
 
     def listAll(): ReadAction[Seq[Workspace]] = {
-      workspaceQuery.result.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
+      loadWorkspaces(workspaceQuery)
     }
 
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
@@ -105,9 +105,9 @@ trait WorkspaceComponent {
         DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
 
       } andThen {
-        workspaceAttributes(workspaceRecord.id).result.flatMap { attributeRecords =>
+        workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap { wsIdAndAttributeRecords =>
           // clear existing attributes, any concurrency locking should be handled at the workspace level
-          val deleteActions = deleteWorkspaceAttributes(attributeRecords)
+          val deleteActions = deleteWorkspaceAttributes(wsIdAndAttributeRecords.map(_._2))
 
           // insert attributes
           val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
@@ -129,11 +129,15 @@ trait WorkspaceComponent {
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
     }
 
+    def listByIds(workspaceIds: Seq[UUID]): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(findByIdsQuery(workspaceIds))
+    }
+
     def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
         case None => DBIO.successful(false)
         case Some(workspaceRecord) =>
-          workspaceAttributes(workspaceRecord.id).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs):_*)) flatMap { _ =>
+          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)):_*)) flatMap { _ =>
             //should we be deleting ALL workspace-related things inside of this method?
             workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
           } flatMap { _ =>
@@ -202,29 +206,89 @@ trait WorkspaceComponent {
     }
 
     def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {
-      DBIO.sequence(workspaceIds.map { id =>
-        findById(id) flatMap {
-          case None => DBIO.successful(None)
-          case Some(workspace) => DBIO.successful(workspace.realm)
-        }
-      }) flatMap { allRealms =>
+      val realmQuery = for {
+        workspace <- workspaceQuery if workspace.id.inSetBind(workspaceIds.map(UUID.fromString))
+      } yield workspace.realmGroupName
+
+      realmQuery.result flatMap { allRealms =>
         val flatRealms = allRealms.flatten.toSet
         DBIO.sequence(flatRealms.toSeq.map { realm =>
-          rawlsGroupQuery.loadGroupIfMember(realm, user) flatMap {
+          val groupRef = RawlsGroupRef(RawlsGroupName(realm))
+          rawlsGroupQuery.loadGroupIfMember(groupRef, user) flatMap {
             case None => DBIO.successful(None)
-            case Some(_) => DBIO.successful(Some(realm))
+            case Some(_) => DBIO.successful(Some(groupRef))
           }
         })
       }
     }
 
-    private def workspaceAttributes(workspaceId: UUID) = for {
-      workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId === workspaceId
-      attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id
-    } yield (attributeRec)
+    def listAccessGroupMemberEmails(workspaceIds: Seq[UUID], accessLevel: WorkspaceAccessLevel): ReadAction[Map[UUID, Seq[String]]] = {
+      val accessQuery = workspaceAccessQuery.filter(access => access.workspaceId.inSetBind(workspaceIds) && access.isRealmAcl === false && access.accessLevel === accessLevel.toString)
 
-    private def workspaceAttributesWithReferences(workspaceId: UUID) = {
-      workspaceAttributes(workspaceId) joinLeft entityQuery on (_.valueEntityRef === _.id)
+      val subGroupEmailQuery = accessQuery join rawlsGroupQuery.subGroupEmailsQuery on {
+        case (wsAccess, (parentGroupName, subGroupEmail)) => wsAccess.groupName === parentGroupName } map {
+        case (wsAccess, (parentGroupName, subGroupEmail)) => (wsAccess.workspaceId, subGroupEmail) }
+
+      val userEmailQuery = accessQuery join rawlsGroupQuery.userEmailsQuery on {
+        case (wsAccess, (parentGroupName, userEmail)) => wsAccess.groupName === parentGroupName } map {
+        case (wsAccess, (parentGroupName, userEmail)) => (wsAccess.workspaceId, userEmail) }
+
+      (subGroupEmailQuery union userEmailQuery).result.map { wsIdAndEmails =>
+        wsIdAndEmails.groupBy { case (wsId, email) => wsId }.
+          mapValues(_.map { case (wsId, email) => email }) }
+    }
+
+    /**
+     * gets the submission stats (last workflow failed date, last workflow success date, running submission count)
+     * for each workspace
+     *
+     * @param workspaceIds the workspace ids to query for
+     * @return WorkspaceSubmissionStats keyed by workspace id
+     */
+    def listSubmissionSummaryStats(workspaceIds: Seq[UUID]): ReadAction[Map[UUID, WorkspaceSubmissionStats]] = {
+      // workflow date query: select workspaceId, workflow.status, max(workflow.statusLastChangedDate) ... group by workspaceId, workflow.status
+      val workflowDatesQuery = for {
+        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
+        workflows <- workflowQuery if submissions.id === workflows.submissionId
+      } yield (submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
+
+      val workflowDatesGroupedQuery = workflowDatesQuery.groupBy { case (wsId, status, _) => (wsId, status) }.
+        map { case ((wsId, wfStatus), records) => (wsId, wfStatus, records.map { case (_, _, lastChanged) => lastChanged }.max) }
+
+      // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
+      val runningSubmissionsQuery = (for {
+        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status === SubmissionStatuses.Submitted.toString
+      } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
+
+      for {
+        workflowDates <- workflowDatesGroupedQuery.result
+        runningSubmissions <- runningSubmissionsQuery.result
+      } yield {
+        val workflowDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(workflowDates)
+        val runningSubmissionCountByWorkspace: Map[UUID, Int] = groupByWorkspaceId(runningSubmissions)
+
+        workspaceIds.map { wsId =>
+          val (lastFailedDate, lastSuccessDate) = workflowDatesByWorkspaceByStatus.get(wsId) match {
+            case None => (None, None)
+            case Some(datesByStatus) =>
+              (datesByStatus.getOrElse(WorkflowStatuses.Failed.toString, None), datesByStatus.getOrElse(WorkflowStatuses.Succeeded.toString, None))
+          }
+          wsId -> WorkspaceSubmissionStats(
+            lastSuccessDate.map(t => new DateTime(t.getTime)),
+            lastFailedDate.map(t => new DateTime(t.getTime)),
+            runningSubmissionCountByWorkspace.getOrElse(wsId, 0)
+          )
+        }
+      } toMap
+    }
+
+    private def workspaceAttributes(lookup: WorkspaceQueryType) = for {
+      workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId.in(lookup.map(_.id))
+      attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id
+    } yield (workspaceAttrRec.workspaceId, attributeRec)
+
+    private def workspaceAttributesWithReferences(lookup: WorkspaceQueryType) = {
+      workspaceAttributes(lookup) joinLeft entityQuery on (_._2.valueEntityRef === _.id)
     }
 
     private def deleteWorkspaceAttributes(attributeRecords: Seq[AttributeRecord]) = {
@@ -246,7 +310,11 @@ trait WorkspaceComponent {
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
     }
-    
+
+    def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType = {
+      filter(_.id.inSetBind(workspaceIds))
+    }
+
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
       val query = for {
         accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
@@ -273,7 +341,7 @@ trait WorkspaceComponent {
         byRealm <- byRealmAction
       } yield (byAccessGroup.toSet ++ byRealm).toSeq
 
-      workspaceRecs.flatMap(recs => DBIO.sequence(recs.map(loadWorkspace)))
+      workspaceRecs.flatMap(recs => loadWorkspaces(findByIdsQuery(recs.map(_.id))))
     }
 
     private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
@@ -290,17 +358,22 @@ trait WorkspaceComponent {
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
-      uniqueResult[WorkspaceRecord](lookup).flatMap {
-        case None => DBIO.successful(None)
-        case Some(workspaceRec) => loadWorkspace(workspaceRec).map(Option(_))
-      }
+      uniqueResult(loadWorkspaces(lookup))
     }
 
-    private def loadWorkspace(workspaceRec: WorkspaceRecord): ReadAction[Workspace] = {
-      for (
-        attributes <- loadAttributes(workspaceRec.id);
-        (realmACLs, accessGroups) <- loadAccessGroupRefs(workspaceRec.id)
-      ) yield unmarshalWorkspace(workspaceRec, attributes, accessGroups, realmACLs)
+    private def loadWorkspaces(lookup: WorkspaceQueryType): DBIOAction[Seq[Workspace], NoStream, Read] = {
+      for {
+        workspaceRecs <- lookup.result
+        workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result
+        workspaceAccessGroupRecs <- workspaceAccessQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
+      } yield {
+        val attributeMap = attributeQuery.unmarshalAttributes(workspaceAttributeRecs)
+        val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).mapValues(unmarshalRawlsGroupRefs)
+        workspaceRecs.map { workspaceRec =>
+          val workspaceGroups = workspaceGroupsByWsId.getOrElse(workspaceRec.id, WorkspaceGroups(Map.empty[WorkspaceAccessLevel, RawlsGroupRef], Map.empty[WorkspaceAccessLevel, RawlsGroupRef]))
+          unmarshalWorkspace(workspaceRec, attributeMap.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.realmAcls)
+        }
+      }
     }
 
     private def marshalWorkspace(workspace: Workspace) = {
@@ -312,20 +385,24 @@ trait WorkspaceComponent {
       Workspace(workspaceRec.namespace, workspaceRec.name, realm, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, realmACLs, workspaceRec.isLocked)
     }
 
-    private def loadAttributes(workspaceId: UUID) = {
-      workspaceAttributesWithReferences(workspaceId).result.map(attributeQuery.unmarshalAttributes)
-    }
-
-    private def loadAccessGroupRefs(workspaceId: UUID) = {
-      (workspaceAccessQuery filter (_.workspaceId === workspaceId)).result.map(unmarshalRawlsGroupRefs)
-    }
-
     private def unmarshalRawlsGroupRefs(workspaceAccessRecords: Seq[WorkspaceAccessRecord]) = {
       def toGroupMap(recs: Seq[WorkspaceAccessRecord]) =
         recs.map(rec => WorkspaceAccessLevels.withName(rec.accessLevel) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
 
       val (realmAclRecs, accessGroupRecs) = workspaceAccessRecords.partition(_.isRealmAcl)
-      (toGroupMap(realmAclRecs), toGroupMap(accessGroupRecs))
+      WorkspaceGroups(toGroupMap(realmAclRecs), toGroupMap(accessGroupRecs))
     }
   }
+
+  private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {
+    runningSubmissions.groupBy{ case (wsId, count) => wsId }.mapValues { case Seq((_, count)) => count }
+  }
+
+  private def groupByWorkspaceIdThenStatus(workflowDates: Seq[(UUID, String, Option[Timestamp])]): Map[UUID, Map[String, Option[Timestamp]]] = {
+    workflowDates.groupBy { case (wsId, _, _) => wsId }.mapValues(_.groupBy { case (_, status, _) => status }.mapValues { case Seq((_, _, timestamp)) => timestamp })
+  }
 }
+
+private case class WorkspaceGroups(
+  realmAcls: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef],
+  accessGroups:  Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef])

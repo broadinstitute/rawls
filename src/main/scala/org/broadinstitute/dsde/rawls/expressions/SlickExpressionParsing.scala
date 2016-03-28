@@ -171,11 +171,20 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def workspaceAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Iterable[Attribute]] = {
     assert(shouldBeNone.isEmpty)
 
-    (for {
+    val wsIdAndAttributeQuery = for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
       workspaceAttribute <- workspaceAttributeQuery if workspaceAttribute.workspaceId === workspace.id
       attribute <- attributeQuery if workspaceAttribute.attributeId === attribute.id && attribute.name === attributeName
-    } yield attribute).result.map(x => Seq(attributeQuery.unmarshalAttributes(x.map((_, None))).getOrElse(attributeName, AttributeNull)))
+    } yield (workspace.id, attribute)
+
+    wsIdAndAttributeQuery.result.map { wsIdAndAttributes =>
+      // the query restricts all results to have workspace id === context.workspaceContext.workspaceId
+      // unmarshalAttributes requires a structure of ((ws id, attribute rec), option[entity rec]) where
+      // the optional entity rec is used for references. Since we know we are not dealing with a reference here
+      // as this is the attribute final func, we can pass in None.
+      val attributesOption = attributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
+      attributesOption.map { attributes => Seq(attributes.getOrElse(attributeName, AttributeNull)) }.getOrElse(Seq.empty)
+    }
   }
 
   // root func that gets an entity reference off a workspace
@@ -190,7 +199,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // add pipe to an entity referenced by the current entity
   private def entityNameAttributePipeFunc(entityRefName: String)(context: SlickExpressionContext, queryPipeline: PipeType): PipeType = {
-      for {
+    for {
       (entity, ordering) <- queryPipeline
       entityAttribute <- entityAttributeQuery if entity.id === entityAttribute.entityId
       attribute <- attributeQuery if entityAttribute.attributeId === attribute.id && attribute.name === entityRefName
@@ -206,17 +215,23 @@ trait SlickExpressionParser extends JavaTokenParsers {
       (entity, ordering) <- queryPipeline.get
       entityAttribute <- entityAttributeQuery if entity.id === entityAttribute.entityId
       attribute <- attributeQuery if entityAttribute.attributeId === attribute.id && attribute.name === attributeName
-    } yield (attribute, ordering)).result
+    } yield (entity.id, attribute, ordering)).result
 
 
     attributeForNameQuery.map { entityWithAttributeRecs =>
-      // split up the attribute records by entity and strip out the junk we don't care about
-      val attributeRecsGroupedByEntity = entityWithAttributeRecs.groupBy(rec => (rec._1, rec._2)).toSeq.sortBy(_._1._2).map(_._2).map(_.map { case (attributeRec, ordering) => (attributeRec, None) })
+      // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where
+      // the optional entity rec is used for references. Since we know we are not dealing with a reference here
+      // as this is the attribute final func, we can pass in None.
+      val attributesByEntityId = attributeQuery.unmarshalAttributes(entityWithAttributeRecs.map { case (entityId, attrRec, _) => ((entityId, attrRec), None) })
+      val namedAttributesOnlyByEntityId = attributesByEntityId.mapValues(_.getOrElse(attributeName, AttributeNull)).toSeq
 
-      // unmarshall all the records, unmarshall returns a map keyed by attribute name, there should be at most 1 attribute name
-      // because attributeForNameQuery applied that filter. There may be none in which case the attribute does not exist
-      // for the entity
-      attributeRecsGroupedByEntity.map(attributeQuery.unmarshalAttributes).map(_.getOrElse(attributeName, AttributeNull))
+      // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query
+      val orderByEntityId = entityWithAttributeRecs.map { case (entityId, _, ordering) => (entityId, ordering) }.toMap
+      val orderedEntityIdAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityId1, _), (entityId2, _)) =>
+        orderByEntityId(entityId1) < orderByEntityId(entityId2)
+      }
+
+      orderedEntityIdAndAttributes.map { case (_, attribute) => attribute }
     }
   }
 
