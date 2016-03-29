@@ -280,29 +280,32 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      listWorkspaces(RawlsUser(userInfo), dataAccess) flatMap { permissionsPairs =>
-        DBIO.sequence(permissionsPairs map { permissionsPair =>
-          // database query to get details
-          dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo)) flatMap { realms =>
-            dataAccess.workspaceQuery.findById(permissionsPair.workspaceId) flatMap {
-              case Some(workspace) =>
-                def trueAccessLevel = workspace.realm match {
-                  case None => permissionsPair.accessLevel
-                  case Some(realm) =>
-                    if(realms.flatten.contains(realm)) permissionsPair.accessLevel
-                    else WorkspaceAccessLevels.NoAccess
-                }
-                for {
-                  stats <- getWorkspaceSubmissionStats(SlickWorkspaceContext(workspace), dataAccess)
-                  owners <- getWorkspaceOwners(workspace, dataAccess)
-                } yield Option(WorkspaceListResponse(trueAccessLevel, workspace, stats, owners))
-              case None =>
-                // this case will happen when permissions exist for workspaces that don't, use None here and ignore later
-                DBIO.successful(None)
+
+      val query = for {
+        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
+        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
+        ownerEmails <- dataAccess.workspaceQuery.listAccessGroupMemberEmails(permissionsPairs.map(p => UUID.fromString(p.workspaceId)), WorkspaceAccessLevels.Owner)
+        submissionSummaryStats <- dataAccess.workspaceQuery.listSubmissionSummaryStats(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
+        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
+      } yield (permissionsPairs, realmsForUser, ownerEmails, submissionSummaryStats, workspaces)
+
+      val results = query.map { case (permissionsPairs, realmsForUser, ownerEmails, submissionSummaryStats, workspaces) =>
+        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
+        permissionsPairs.map { permissionsPair =>
+          workspacesById.get(permissionsPair.workspaceId).map { workspace =>
+            def trueAccessLevel = workspace.realm match {
+              case None => permissionsPair.accessLevel
+              case Some(realm) =>
+                if (realmsForUser.flatten.contains(realm)) permissionsPair.accessLevel
+                else WorkspaceAccessLevels.NoAccess
             }
+            val wsId = UUID.fromString(workspace.workspaceId)
+            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty))
           }
-        }).map { responses => RequestComplete(StatusCodes.OK, responses.collect { case Some(x) => x }) }
+        }
       }
+
+      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }
 
   def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {

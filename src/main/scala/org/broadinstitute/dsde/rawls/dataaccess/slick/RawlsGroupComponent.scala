@@ -46,9 +46,10 @@ trait RawlsGroupComponent {
 
   protected val groupUsersQuery = TableQuery[GroupUsersTable]
   protected val groupSubgroupsQuery = TableQuery[GroupSubgroupsTable]
-  private type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
+  type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
   private type GroupUsersQuery = Query[GroupUsersTable, GroupUsersRecord, Seq]
   private type GroupSubgroupsQuery = Query[GroupSubgroupsTable, GroupSubgroupsRecord, Seq]
+  private type GroupMemberEmailQuery = Query[(Rep[String], Rep[String]), (String, String), Seq]
 
   object rawlsGroupQuery extends TableQuery(new RawlsGroupTable(_)) {
 
@@ -71,6 +72,20 @@ trait RawlsGroupComponent {
 
     def load(groupRef: RawlsGroupRef): ReadAction[Option[RawlsGroup]] = {
       loadGroup(findGroupByName(groupRef.groupName.value))
+    }
+
+    def subGroupEmailsQuery: GroupMemberEmailQuery = {
+      for {
+        groupSubGroupRec <- groupSubgroupsQuery
+        subGroupRec <- rawlsGroupQuery if (groupSubGroupRec.childGroupName === subGroupRec.groupName)
+      } yield (groupSubGroupRec.parentGroupName, subGroupRec.groupEmail)
+    }
+
+    def userEmailsQuery: GroupMemberEmailQuery = {
+      for {
+        groupUserRec <- groupUsersQuery
+        userRec <- rawlsUserQuery if (groupUserRec.userSubjectId === userRec.userSubjectId)
+      } yield (groupUserRec.groupName, userRec.userEmail)
     }
 
     def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadAction[Option[RawlsGroup]] = {

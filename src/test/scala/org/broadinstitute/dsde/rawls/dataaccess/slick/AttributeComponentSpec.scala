@@ -154,30 +154,32 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "unmarshall attribute records" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     val attributeRecs = Seq(
-      (AttributeRecord(0, "string", Some("value"), None, None, None, None), None),
-      (AttributeRecord(0, "num", None, Some(1), None, None, None), None),
-      (AttributeRecord(0, "bool", None, None, Some(true), None, None), None),
-      (AttributeRecord(0, "ref", None, None, None, Some(1), None), Some(EntityRecord(0, "name", "type", workspaceId))),
-      (AttributeRecord(0, "null", None, None, None, None, None), None),
-      (AttributeRecord(0, "valList", None, Some(1), None, None, Some(2)), None),
-      (AttributeRecord(0, "valList", None, Some(2), None, None, Some(1)), None),
-      (AttributeRecord(0, "valList", None, Some(3), None, None, Some(0)), None),
-      (AttributeRecord(0, "refList", None, None, None, Some(1), Some(2)), Some(EntityRecord(0, "name1", "type", workspaceId))),
-      (AttributeRecord(0, "refList", None, None, None, Some(2), Some(1)), Some(EntityRecord(0, "name2", "type", workspaceId))),
-      (AttributeRecord(0, "refList", None, None, None, Some(3), Some(0)), Some(EntityRecord(0, "name3", "type", workspaceId))),
-      (AttributeRecord(0, "emptyList", None, Some(1), None, None, Some(-1)), None)
+      ((1, AttributeRecord(0, "string", Some("value"), None, None, None, None)), None),
+      ((1, AttributeRecord(0, "num", None, Some(1), None, None, None)), None),
+      ((1, AttributeRecord(0, "bool", None, None, Some(true), None, None)), None),
+      ((1, AttributeRecord(0, "ref", None, None, None, Some(1), None)), Some(EntityRecord(0, "name", "type", workspaceId))),
+      ((1, AttributeRecord(0, "null", None, None, None, None, None)), None),
+      ((2, AttributeRecord(0, "valList", None, Some(1), None, None, Some(2))), None),
+      ((2, AttributeRecord(0, "valList", None, Some(2), None, None, Some(1))), None),
+      ((2, AttributeRecord(0, "valList", None, Some(3), None, None, Some(0))), None),
+      ((1, AttributeRecord(0, "refList", None, None, None, Some(1), Some(2))), Some(EntityRecord(0, "name1", "type", workspaceId))),
+      ((1, AttributeRecord(0, "refList", None, None, None, Some(2), Some(1))), Some(EntityRecord(0, "name2", "type", workspaceId))),
+      ((1, AttributeRecord(0, "refList", None, None, None, Some(3), Some(0))), Some(EntityRecord(0, "name3", "type", workspaceId))),
+      ((1, AttributeRecord(0, "emptyList", None, Some(1), None, None, Some(-1))), None)
     )
 
-    assertResult(Map(
-      "string" -> AttributeString("value"),
-      "num" -> AttributeNumber(1),
-      "bool" -> AttributeBoolean(true),
-      "ref" -> AttributeEntityReference("type", "name"),
-      "valList" -> AttributeValueList(Seq(AttributeNumber(3), AttributeNumber(2), AttributeNumber(1))),
-      "refList" -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name3"), AttributeEntityReference("type", "name2"), AttributeEntityReference("type", "name1"))),
-      "emptyList" -> AttributeEmptyList,
-      "null" -> AttributeNull
-    )) {
+    assertResult(
+      Map(
+        1 -> Map(
+          "string" -> AttributeString("value"),
+          "num" -> AttributeNumber(1),
+          "bool" -> AttributeBoolean(true),
+          "ref" -> AttributeEntityReference("type", "name"),
+          "refList" -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name3"), AttributeEntityReference("type", "name2"), AttributeEntityReference("type", "name1"))),
+          "emptyList" -> AttributeEmptyList,
+          "null" -> AttributeNull),
+        2 -> Map("valList" -> AttributeValueList(Seq(AttributeNumber(3), AttributeNumber(2), AttributeNumber(1))))
+      )) {
       attributeQuery.unmarshalAttributes(attributeRecs)
     }
   }
@@ -185,13 +187,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     val attributeRecs = Seq(
-      (AttributeRecord(0, "valList", None, Some(1), None, None, Some(2)), None),
-      (AttributeRecord(0, "valList", None, Some(2), None, None, None), None),
-      (AttributeRecord(0, "valList", None, Some(3), None, None, Some(0)), None)
+      ((1 -> AttributeRecord(0, "valList", None, Some(1), None, None, Some(2))), None),
+      ((1 -> AttributeRecord(0, "valList", None, Some(2), None, None, None)), None),
+      ((1 -> AttributeRecord(0, "valList", None, Some(3), None, None, Some(0))), None)
     )
 
     intercept[RawlsException] {
-      attributeQuery.unmarshalAttributes(attributeRecs)
+      val x = attributeQuery.unmarshalAttributes(attributeRecs)
+      println(x) // test fails without this, compiler optimization maybe?
     }
   }
 }

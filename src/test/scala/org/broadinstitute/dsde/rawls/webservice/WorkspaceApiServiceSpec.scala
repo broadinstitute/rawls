@@ -333,7 +333,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Get("/workspaces") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         val dateTime = org.joda.time.DateTime.now

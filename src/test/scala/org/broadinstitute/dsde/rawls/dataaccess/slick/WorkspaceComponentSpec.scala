@@ -65,6 +65,10 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.findById(workspaceId.toString))
     }
 
+    assertResult(Seq(workspace)) {
+      runAndWait(workspaceQuery.listByIds(Seq(workspaceId)))
+    }
+
     assertResult(Option(workspace)) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }

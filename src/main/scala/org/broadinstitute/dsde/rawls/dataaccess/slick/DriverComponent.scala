@@ -26,6 +26,14 @@ trait DriverComponent {
     }
   }
 
+  def uniqueResult[V](results: ReadAction[Seq[V]]): ReadAction[Option[V]] = {
+    results map {
+      case Seq() => None
+      case Seq(one) => Option(one)
+      case tooMany => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
+    }
+  }
+
   //in general, we only support alphanumeric, spaces, _, and - for user-input
   def validateUserDefinedString(s: String) = {
     if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
