@@ -7,17 +7,16 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.scalatest.{Matchers, FlatSpec}
 import spray.http.{ContentTypes, HttpEntity}
 import spray.httpx.SprayJsonSupport
 import spray.json._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
 import scala.concurrent.duration._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends FlatSpec with HttpService with ScalatestRouteTest with Matchers with TestDriverComponent with SprayJsonSupport {
+trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)

@@ -9,6 +9,9 @@ if [ -e "jenkins_env.sh" ]; then
 	source "jenkins_env.sh"
 fi
 
+# catch sbt issues separately
+sbt update && echo "sbt updated successefully."
+
 sbt -J-Xms4g -J-Xmx4g test
 sbt -J-Xms4g -J-Xmx4g assembly
 RAWLS_JAR=$(find target | grep 'rawls.*\.jar')

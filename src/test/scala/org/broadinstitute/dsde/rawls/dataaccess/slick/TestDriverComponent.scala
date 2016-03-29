@@ -2,9 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsException, TestExecutionContext}
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, BeforeAndAfterAll, Matchers}
 import _root_.slick.backend.DatabaseConfig
@@ -22,7 +24,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver]("h2mem1")
+  // to override, e.g. to run against mysql:
+  // $ sbt -Dtestdb=mysql test
+  val testdb = ConfigFactory.load.getStringOr("testdb", "h2mem1")
+
+  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver](testdb)
   override val driver: JdbcDriver = databaseConfig.driver
   override val batchSize: Int = databaseConfig.config.getInt("batchSize")
   val database = databaseConfig.db
@@ -394,4 +400,6 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
-trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers
+trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers with BeforeAndAfterAll {
+  override def afterAll() = slickDataSource.databaseConfig.db.shutdown
+}

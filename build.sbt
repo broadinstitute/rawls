@@ -28,7 +28,6 @@ libraryDependencies ++= {
   Seq(
     ("com.gettyimages" %% "spray-swagger" % "0.5.0").exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11").exclude("com.typesafe.scala-logging", "scala-logging-api_2.11"),
     "com.typesafe.akka" %% "akka-actor" % akkaV,
-    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
     "com.typesafe.slick" %% "slick" % "3.1.1",
     "io.spray" %% "spray-can" % sprayV,
@@ -37,10 +36,6 @@ libraryDependencies ++= {
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
     "org.webjars" % "swagger-ui" % "2.1.1",
-    "io.spray" %% "spray-testkit" % sprayV % "test",
-    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-    "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
-    "com.h2database" % "h2" % "1.4.191" % "test",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     ("org.broadinstitute" %% "wdl4s" % "0.1"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
@@ -52,7 +47,12 @@ libraryDependencies ++= {
     "com.typesafe.slick" %% "slick-hikaricp" % slickV,
     "mysql" % "mysql-connector-java" % "5.1.38",
     "org.liquibase" % "liquibase-core" % "3.3.5",
-    "ch.qos.logback" % "logback-classic" % "1.1.6"
+    "ch.qos.logback" % "logback-classic" % "1.1.6",
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
+    "io.spray" %% "spray-testkit" % sprayV % "test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
+    "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
+    "com.h2database" % "h2" % "1.4.191" % "test"
   )
 }
 
