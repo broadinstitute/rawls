@@ -8,7 +8,12 @@ version       := "0.1"
 
 scalaVersion  := "2.11.7"
 
-scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
+scalacOptions := Seq(
+  "-unchecked",
+  "-deprecation",
+  "-encoding", "utf8",
+  "-Xmax-classfile-name", "100"
+)
 
 val artifactory = "https://artifactory.broadinstitute.org/artifactory/"
 
