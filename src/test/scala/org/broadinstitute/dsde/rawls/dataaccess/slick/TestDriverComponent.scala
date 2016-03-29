@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.{RawlsException, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import org.scalatest.{FlatSpec, BeforeAndAfterAll, Matchers}
+import org.scalatest.{Suite, FlatSpec, BeforeAndAfterAll, Matchers}
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
 import _root_.slick.driver.H2Driver.api._
@@ -22,10 +22,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver]("h2mem1")
+  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver]("mysql")
   override val driver: JdbcDriver = databaseConfig.driver
   val database = databaseConfig.db
   val slickDataSource = new SlickDataSource(databaseConfig)
+  val localMySQL = new EmbeddedMySQLServer(databaseConfig)
 
   val testDate = new DateTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -393,4 +394,9 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
-trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers
+trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers with BeforeAndAfterAll {
+
+  override def beforeAll() = localMySQL.start
+
+  override def afterAll() = localMySQL.shutdown
+}
