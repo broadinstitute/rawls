@@ -1,22 +1,28 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
+import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model.{Attributable, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
-import slick.driver.JdbcProfile
+import slick.driver.JdbcDriver
+import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
 import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
 
 trait DriverComponent {
-  val driver: JdbcProfile
+  val driver: JdbcDriver
   implicit val executionContext: ExecutionContext
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
 
   import driver.api._
+
+  // these are used in getting and setting UUIDs in raw sql
+  implicit val GetUUIDResult = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
+  implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
 
   def uniqueResult[V](readAction: driver.api.Query[_, _, Seq]): ReadAction[Option[V]] = {
     readAction.result map {

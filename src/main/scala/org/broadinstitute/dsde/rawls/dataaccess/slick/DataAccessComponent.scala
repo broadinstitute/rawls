@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import slick.driver.JdbcProfile
+import slick.driver.JdbcDriver
 
 import scala.concurrent.ExecutionContext
 
-class DataAccessComponent(val driver: JdbcProfile)(implicit val executionContext: ExecutionContext)
+class DataAccessComponent(val driver: JdbcDriver)(implicit val executionContext: ExecutionContext)
 extends DriverComponent with DataAccess

@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, BeforeAndAfterAll, Matchers}
 import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcProfile
+import _root_.slick.driver.JdbcDriver
 import _root_.slick.driver.H2Driver.api._
 import spray.http.OAuth2BearerToken
 
@@ -22,8 +22,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  val databaseConfig: DatabaseConfig[JdbcProfile] = DatabaseConfig.forConfig[JdbcProfile]("h2mem1")
-  override val driver: JdbcProfile = databaseConfig.driver
+  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver]("h2mem1")
+  override val driver: JdbcDriver = databaseConfig.driver
   val database = databaseConfig.db
   val slickDataSource = new SlickDataSource(databaseConfig)
 
