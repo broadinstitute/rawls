@@ -17,14 +17,12 @@
 
     Make sure those lines are uncommented!
 
-3. Create a plaintext config.txt file in your {GATLING_HOME}/user-files which is of the following form:
+3. Create a plaintext config.txt file in your {GATLING_HOME}/user-files which currently contains:
 
-    	{YOUR_ACCESS_TOKEN}
     	{NUM_USERS}
 
 	Example:
 
-    	ya29.ZZZZZZ_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
         100
 
 4. Run ./gatling.sh in located in {GATLING_HOME}/bin
