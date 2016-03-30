@@ -23,6 +23,6 @@ class listWorkspaces extends RawlsSimulation {
 
   //NOTE: be sure to re-configure time if needed
   setUp(
-    scn.inject(constantUsersPerSec(500) during (30 seconds))
-  ).protocols(httpProtocol).throttle(jumpToRps(50), holdFor(30 seconds))
+    scn.inject(constantUsersPerSec(numUsers) during (30 seconds)).protocols(httpProtocol)
+  )
 }
