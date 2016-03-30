@@ -33,7 +33,7 @@ class importMethod extends Simulation {
     "Content-Type" -> "application/json")
 
   val scn = scenario(s"importConfig_request_${numUsers}")
-    .feed(tsv(s"../user-files/data/createWorkspaces_NAMES_gatling_creation_1123642607.tsv"))
+    .feed(tsv(s"../user-files/data/<NAMES FILE FROM CREATE WORKSPACES>.tsv"))
     .exec(http("importConfig_request")
     .post("/api/methodconfigs/copyFromMethodRepo")
     .headers(headers)
