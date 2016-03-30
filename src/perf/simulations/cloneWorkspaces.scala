@@ -16,7 +16,7 @@ class cloneWorkspaces extends RawlsSimulation {
 		p.println("workspaceJson")
 		val i = 0
 		for(i <- 1 to numUsers){
-			p.println(s""""{""namespace"":""broad-dsde-dev"",""name"":""${runID}_${i}""}"""")
+			p.println(s""""{""namespace"":""broad-dsde-dev"",""name"":""${runID}_${i}"",""attributes"":{}}"""")
 		}
 	}
 

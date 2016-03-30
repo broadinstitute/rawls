@@ -1,6 +1,7 @@
 package default
 
 import io.gatling.core.Predef._
+import sys.process._
 
 trait RawlsSimulation extends Simulation {
 
@@ -13,7 +14,9 @@ trait RawlsSimulation extends Simulation {
   //Helpers to set up the run
 
   val lines = scala.io.Source.fromFile("../user-files/config.txt").getLines
-  val accessToken = lines.next
+
+  // uses currently gcloud-auth'd user
+  val accessToken = ("gcloud auth print-access-token" !!) replaceAll("\n", "")
   val numUsers = lines.next.toInt
 
 }

@@ -7,23 +7,7 @@ import io.gatling.core.Predef._
 import io.gatling.http.Predef._
 import io.gatling.jdbc.Predef._
 
-class importMethod extends Simulation {
-
-  //Helpers to set up the run
-
-  val lines = scala.io.Source.fromFile("../user-files/config.txt").getLines
-  val accessToken = lines.next
-  val numUsers = lines.next.toInt
-
-  def fileGenerator(f: java.io.File)(op: java.io.PrintWriter => Unit) {
-    val p = new java.io.PrintWriter(f)
-    try { op(p) } finally { p.close() }
-  }
-
-  val r = scala.util.Random
-  val runID = s"gatling_creations_${r.nextInt}"
-
-  //The run itself
+class importMethod extends RawlsSimulation {
 
   val httpProtocol = http
     .baseURL("https://rawls.dsde-dev.broadinstitute.org")
@@ -33,7 +17,7 @@ class importMethod extends Simulation {
     "Content-Type" -> "application/json")
 
   val scn = scenario(s"importConfig_request_${numUsers}")
-    .feed(tsv(s"../user-files/data/createWorkspaces_NAMES_gatling_creation_1123642607.tsv"))
+    .feed(tsv(s"../user-files/data/<NAMES FILE FROM CREATE WORKSPACES>.tsv"))
     .exec(http("importConfig_request")
     .post("/api/methodconfigs/copyFromMethodRepo")
     .headers(headers)
