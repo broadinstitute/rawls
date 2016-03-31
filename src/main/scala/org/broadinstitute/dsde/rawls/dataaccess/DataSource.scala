@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcProfile
+import _root_.slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 
 import scala.concurrent.duration.Duration
@@ -16,12 +16,12 @@ import liquibase.database.jvm.JdbcConnection
 import liquibase.resource.{ClassLoaderResourceAccessor, ResourceAccessor}
 
 object DataSource {
-  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {
+  def apply(databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext): SlickDataSource = {
     new SlickDataSource(databaseConfig)
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) {
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) {
   private val database = databaseConfig.db
 
   /**

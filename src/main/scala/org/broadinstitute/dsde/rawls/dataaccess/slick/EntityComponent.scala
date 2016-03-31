@@ -4,6 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.{Attribute, Entity}
+import slick.jdbc.GetResult
 
 /**
  * Created by dvoet on 2/4/16.
@@ -42,6 +43,33 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
 
+    // result structure from entity and attribute list raw sql
+    case class EntityListResult( workspaceId: UUID,
+                                 entityName: String,
+                                 entityType: String,
+                                 entityId: Long,
+                                 attributeId: Option[Long], // if this is None it means there are no attributes
+                                 listIndex: Option[Int],
+                                 valueString: Option[String],
+                                 valueNumber: Option[Double],
+                                 valueBoolean: Option[Boolean],
+                                 attributeName: Option[String], // if this is None it means there are no attributes
+                                 refId: Option[Long], // if any of the ref fields are None it means it is not a reference
+                                 refName: Option[String],
+                                 refType: Option[String])
+
+    // tells slick how to convert a result row from a raw sql query to an instance of EntityListResult
+    implicit val getEntityListResult = GetResult(r => EntityListResult(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+    import driver.quoteIdentifier
+    // the where clause for this query is filled in specific to the use case
+    val baseEntityAndAttributeSql =
+      s"""select e.${quoteIdentifier("workspace_id")}, e.${quoteIdentifier("name")}, e.${quoteIdentifier("entity_type")}, e.${quoteIdentifier("id")}, ea.${quoteIdentifier("attribute_id")}, a.${quoteIdentifier("list_index")}, a.${quoteIdentifier("value_string")}, a.${quoteIdentifier("value_number")}, a.${quoteIdentifier("value_boolean")}, a.${quoteIdentifier("name")}, a.${quoteIdentifier("value_entity_ref")}, e_ref.${quoteIdentifier("name")}, e_ref.${quoteIdentifier("entity_type")}
+          from ENTITY e
+          left outer join ENTITY_ATTRIBUTE ea on e.${quoteIdentifier("id")} = ea.${quoteIdentifier("entity_id")}
+          left outer join ATTRIBUTE a on ea.${quoteIdentifier("attribute_id")} = a.${quoteIdentifier("id")}
+          left outer join ENTITY e_ref on a.${quoteIdentifier("value_entity_ref")} = e_ref.${quoteIdentifier("id")}"""
+
     def entityAttributes(entityId: Long) = for {
       entityAttrRec <- entityAttributeQuery if entityAttrRec.entityId === entityId
       attributeRec <- attributeQuery if entityAttrRec.attributeId === attributeRec.id
@@ -65,7 +93,8 @@ trait EntityComponent {
 
     /** gets the given entity */
     def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
-      unmarshalEntities(joinOnAttributesAndRefs(findEntityByName(workspaceContext.workspaceId, entityType, entityName))).map(_.headOption)
+      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("name")} = ${entityName} and e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId.toString}""".as[EntityListResult]
+      unmarshalEntities(sql).map(_.headOption)
     }
 
     /**
@@ -76,6 +105,20 @@ trait EntityComponent {
         val entityRecords = entityAttributeRecords.map(_._1).toSet
         val attributesByEntityId = attributeQuery.unmarshalAttributes(entityAttributeRecords.collect {
           case (entityRec, Some((attributeRec, referenceOption))) => ((entityRec.id, attributeRec), referenceOption)
+        })
+
+        entityRecords.map { entityRec =>
+          unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
+        }
+      }
+    }
+
+    def unmarshalEntities(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Iterable[Entity]] = {
+      entityAttributeAction.map { entityAttributeRecords =>
+        val entityRecords = entityAttributeRecords.map(r => EntityRecord(r.entityId, r.entityName, r.entityType, r.workspaceId)).toSet
+        val attributesByEntityId = attributeQuery.unmarshalAttributes[Long](entityAttributeRecords.collect {
+          case EntityListResult(workspaceId, entityName, entityType, entityId, Some(attributeId), listIndex, valueString, valueNumber, valueBoolean, Some(attributeName), refId, refName, refType) =>
+            ((entityId, AttributeRecord(attributeId, attributeName, valueString, valueNumber, valueBoolean, refId, listIndex)), refId.map(_ => EntityRecord(refId.get, refName.get, refType.get, workspaceId)))
         })
 
         entityRecords.map { entityRec =>
@@ -124,7 +167,8 @@ trait EntityComponent {
 
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      unmarshalEntities(joinOnAttributesAndRefs(findEntityByType(workspaceContext.workspaceId, entityType)))
+      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
+      unmarshalEntities(sql)
     }
 
     /**
@@ -159,7 +203,8 @@ trait EntityComponent {
     }
 
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
-      unmarshalEntities(joinOnAttributesAndRefs(findEntityByWorkspace(workspaceContext.workspaceId)))
+      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
+      unmarshalEntities(sql)
     }
 
     def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Unit] = {
@@ -226,7 +271,8 @@ trait EntityComponent {
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
         DBIO.sequence(ids.map { id =>
-          unmarshalEntities(joinOnAttributesAndRefs(findEntityById(id)))
+          val sql = sql"""#$baseEntityAndAttributeSql where e."id" = ${id}""".as[EntityListResult]
+          unmarshalEntities(sql)
         }.toSeq)
       }
       entitiesQuery.map(_.flatten)

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls
 import java.io.{File, StringReader}
 
 import _root_.slick.backend.DatabaseConfig
-import _root_.slick.driver.JdbcProfile
+import _root_.slick.driver.JdbcDriver
 import akka.actor.ActorSystem
 import akka.io.IO
 import akka.pattern.ask
@@ -34,7 +34,7 @@ object Boot extends App {
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
 
-    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
+    val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcDriver]("slick", conf))
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
