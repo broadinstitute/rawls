@@ -75,6 +75,7 @@ trait AttributeComponent {
     }
 
     private def marshalAttributeEntityReference(name: String, listIndex: Option[Int], entityRecord: EntityRecord): AttributeRecord = {
+      println(s"entityRecord.id = ${entityRecord.id}")
       AttributeRecord(0, name, None, None, None, Option(entityRecord.id), listIndex)
     }
 

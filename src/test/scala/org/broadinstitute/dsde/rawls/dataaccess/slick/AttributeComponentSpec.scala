@@ -79,16 +79,23 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
-    val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId))
+    val entityId = runAndWait {
+      println("entityId runAndWait")
+      entityQuery += EntityRecord(0, "name", "type", workspaceId)
+    }
+    println(s"entityId = $entityId")
     val testAttribute = AttributeEntityReference("type", "name")
-    val insertedIds = attributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val insertedIds = attributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait {
+      println("insertAttributeRecords runAndWait")
+      x
+    })
     assertResult(1) { insertedIds.size }
 
     assertResult(Seq(AttributeRecord(insertedIds.head, "test", None, None, None, Option(entityId), None))) {
       runAndWait(attributeQuery.filter(_.id inSet insertedIds).result)
     }
   }
-
+                                /*
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
@@ -110,7 +117,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(attributeQuery.filter(_.id inSet insertedIds).result).map(_.copy(id=0)).toSet
     }
   }
-
+                                  */
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
