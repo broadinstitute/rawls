@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -79,7 +78,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId))
     val testAttribute = AttributeEntityReference("type", "name")
     val insertedIds = attributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
@@ -92,7 +91,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId))
     val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId))
     val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId))
@@ -114,7 +113,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       attributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
