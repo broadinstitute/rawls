@@ -4,7 +4,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 /**
  * Created by mbemis on 2/22/16.
@@ -133,7 +132,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow2.workflowEntity.get.entityType, workflow2.workflowEntity.get.entityName))
     }
 
-    val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, DateTime.now, workflow1.workflowEntity, testData.inputResolutions)
+    val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, currentTime(), workflow1.workflowEntity, testData.inputResolutions)
 
     runAndWait(workflowQuery.update(workspaceContext, UUID.fromString(testData.submission1.submissionId), workflow3))
 

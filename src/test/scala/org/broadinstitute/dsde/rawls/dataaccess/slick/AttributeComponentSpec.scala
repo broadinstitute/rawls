@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -79,7 +78,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val entityId = UUID.randomUUID()
     runAndWait(entityQuery += EntityRecord(entityId, "name", "type", workspaceId))
     val testAttribute = AttributeEntityReference("type", "name")
@@ -93,7 +92,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val ids = List.fill(4) { UUID.randomUUID() }
     val entityId1 = runAndWait((entityQuery += EntityRecord(ids(0), "name1", "type", workspaceId)).map(_ => ids(0)))
     val entityId2 = runAndWait((entityQuery += EntityRecord(ids(1), "name2", "type", workspaceId)).map(_ => ids(1)))
@@ -118,7 +117,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
-    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", new Timestamp(0), new Timestamp(0), "me", false, None))
+    runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
       attributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))

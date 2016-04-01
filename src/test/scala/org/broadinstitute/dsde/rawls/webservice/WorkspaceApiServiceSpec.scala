@@ -272,7 +272,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        val dateTime = org.joda.time.DateTime.now
+        val dateTime = currentTime()
         assertResult(
           WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
         ){
@@ -336,7 +336,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
-        val dateTime = org.joda.time.DateTime.now
+        val dateTime = currentTime()
         assertResult(Set(
           WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
           WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty),

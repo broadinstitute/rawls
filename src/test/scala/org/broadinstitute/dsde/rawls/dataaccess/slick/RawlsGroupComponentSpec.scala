@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
-import org.h2.jdbc.JdbcSQLException
+import java.sql.SQLException
 
 class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
@@ -287,7 +287,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val user2 = userFromId("subjectId2")
     val group = makeRawlsGroup("Two User Group", Set(user1, user2))
 
-    intercept[JdbcSQLException] {
+    intercept[SQLException] {
       // note that the users have not first been saved
       runAndWait(rawlsGroupQuery.save(group))
     }
@@ -301,7 +301,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val group1 = makeRawlsGroup("Group One", Set.empty)
     val group2 = makeRawlsGroup("Group Two", Set.empty).copy(subGroups = Set(group1))
 
-    intercept[JdbcSQLException] {
+    intercept[SQLException] {
       // note that group1 has not first been saved
       runAndWait(rawlsGroupQuery.save(group2))
     }
