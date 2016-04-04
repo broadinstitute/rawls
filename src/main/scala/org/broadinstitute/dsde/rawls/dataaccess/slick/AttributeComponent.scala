@@ -35,7 +35,7 @@ trait AttributeComponent {
 
     def * = (id, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (AttributeRecord.tupled, AttributeRecord.unapply)
 
-    def workspace = foreignKey("FK_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
+    def entity = foreignKey("FK_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
   }
 
   protected object attributeQuery extends TableQuery(new AttributeTable(_)) {
@@ -75,6 +75,7 @@ trait AttributeComponent {
     }
 
     private def marshalAttributeEntityReference(name: String, listIndex: Option[Int], entityRecord: EntityRecord): AttributeRecord = {
+      println(s"entityRecord.id = ${entityRecord.id}")
       AttributeRecord(0, name, None, None, None, Option(entityRecord.id), listIndex)
     }
 
