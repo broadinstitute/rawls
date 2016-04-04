@@ -107,6 +107,14 @@ trait SubmissionComponent {
       }))
     }
 
+    def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
+      filter(_.workspaceId === workspaceContext.workspaceId).groupBy(s => s.status).map { case (status, submissions) =>
+        (status, submissions.length)
+      }.result map { result =>
+        result.toMap
+      }
+    }
+
     /* creates a submission and associated workflows in a workspace */
     def create(workspaceContext: SlickWorkspaceContext, submission: Submission): ReadWriteAction[Submission] = {
 

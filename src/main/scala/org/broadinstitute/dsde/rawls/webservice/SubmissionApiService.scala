@@ -24,6 +24,12 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
           WorkspaceService.ListSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
+    path("workspaces" / Segment / Segment / "submissionsCount" ) { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.CountSubmissions(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
+    } ~
     path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
       post {
         entity(as[SubmissionRequest]) { submission =>

@@ -80,6 +80,29 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "count submissions by their statuses" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    // test data contains 5 submissions, all in "Submitted" state
+    // update one of the submissions to "Done"
+    runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission1.submissionId, SubmissionStatuses.Done))
+    assertResult(Some(testData.submission1.copy(status = SubmissionStatuses.Done))) {
+      runAndWait(submissionQuery.get(workspaceContext, testData.submission1.submissionId))
+    }
+
+    // update another of the submissions to "Aborted"
+    runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission2.submissionId, SubmissionStatuses.Aborted))
+    assertResult(Some(testData.submission2.copy(status = SubmissionStatuses.Aborted))) {
+      runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
+    }
+
+    // should return {"Submitted" : 3, "Done" : 1, "Aborted" : 1}
+    assert(3 == runAndWait(submissionQuery.countByStatus(workspaceContext)).size)
+    assert(Option(3) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Submitted.toString))
+    assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Done.toString))
+    assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Aborted.toString))
+  }
+
   it should "save a submission with workflow failures" in withDefaultTestDatabase {
     val workspaceContext= SlickWorkspaceContext(testData.workspace)
 
