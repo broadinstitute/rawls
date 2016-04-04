@@ -47,6 +47,7 @@ libraryDependencies ++= {
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
     ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0"),
+    "com.google.guava" % "guava" % "19.0",
     "com.typesafe.slick" %% "slick" % slickV,
     "com.typesafe.slick" %% "slick-hikaricp" % slickV,
     "mysql" % "mysql-connector-java" % "5.1.38",

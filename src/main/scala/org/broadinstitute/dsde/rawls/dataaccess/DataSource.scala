@@ -26,7 +26,7 @@ object DataSource {
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) {
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
   private val database = databaseConfig.db
 
   /**
@@ -66,16 +66,16 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
       database.source.createConnection()
     } catch {
       case e: SQLTimeoutException =>
-        // TODO(dmohs): Throwables is not in our build.sbt.
         val isCertProblem = Throwables.getRootCause(e).isInstanceOf[SunCertPathBuilderException]
         if (isCertProblem) {
           val k = "javax.net.ssl.keyStore"
           if (System.getProperty(k) == null) {
-            // TODO(dmohs): Log warning.
-            println("***")
-            println("*** The system property '" + k + "' is null. This is likely the cause of the")
-            println("*** database connection failure.")
-            println("***")
+            logger.warn("************")
+            logger.warn(
+              s"The system property '${k}' is null. This is likely the cause of the database"
+              + " connection failure."
+            )
+            logger.warn("************")
           }
         }
         throw e
