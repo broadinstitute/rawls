@@ -1,10 +1,15 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import java.sql.SQLTimeoutException
 import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
+import _root_.slick.driver.JdbcProfile
+import com.google.common.base.Throwables
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
+import sun.security.provider.certpath.SunCertPathBuilderException
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -21,7 +26,7 @@ object DataSource {
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) {
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
   private val database = databaseConfig.db
 
   /**
@@ -57,7 +62,24 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
   }
 
   def initWithLiquibase(liquibaseChangeLog: String) = {
-    val dbConnection = database.source.createConnection()
+    val dbConnection = try {
+      database.source.createConnection()
+    } catch {
+      case e: SQLTimeoutException =>
+        val isCertProblem = Throwables.getRootCause(e).isInstanceOf[SunCertPathBuilderException]
+        if (isCertProblem) {
+          val k = "javax.net.ssl.keyStore"
+          if (System.getProperty(k) == null) {
+            logger.warn("************")
+            logger.warn(
+              s"The system property '${k}' is null. This is likely the cause of the database"
+              + " connection failure."
+            )
+            logger.warn("************")
+          }
+        }
+        throw e
+    }
     val liquibaseConnection = new JdbcConnection(dbConnection)
 
     try {
