@@ -322,17 +322,10 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   }
   
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
-    dataAccess.submissionQuery.list(workspaceContext) map { submissions => 
-      val workflowsOrderedByDateDesc = submissions.flatMap(_.workflows).toVector.sortWith { (first, second) =>
-        first.statusLastChangedDate.isAfter(second.statusLastChangedDate)
-      }
-  
-      WorkspaceSubmissionStats(
-        lastSuccessDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Succeeded).map(_.statusLastChangedDate),
-        lastFailureDate = workflowsOrderedByDateDesc.find(_.status == WorkflowStatuses.Failed).map(_.statusLastChangedDate),
-        runningSubmissionsCount = submissions.count(_.status == SubmissionStatuses.Submitted)
-      )
-    }
+    // listSubmissionSummaryStats works against a sequence of workspaces; we call it just for this one workspace
+    dataAccess.workspaceQuery
+      .listSubmissionSummaryStats(Seq(workspaceContext.workspaceId))
+      .map {p => p.get(workspaceContext.workspaceId).get}
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
