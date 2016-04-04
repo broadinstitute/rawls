@@ -44,27 +44,28 @@ trait EntityComponent {
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
 
     // result structure from entity and attribute list raw sql
-    case class EntityListResult( workspaceId: UUID,
-                                 entityName: String,
-                                 entityType: String,
-                                 entityId: Long,
-                                 attributeId: Option[Long], // if this is None it means there are no attributes
-                                 listIndex: Option[Int],
-                                 valueString: Option[String],
-                                 valueNumber: Option[Double],
-                                 valueBoolean: Option[Boolean],
-                                 attributeName: Option[String], // if this is None it means there are no attributes
-                                 refId: Option[Long], // if any of the ref fields are None it means it is not a reference
-                                 refName: Option[String],
-                                 refType: Option[String])
+    case class EntityListResult(entityRecord: EntityRecord, attributeRecord: Option[AttributeRecord], refEntityRecord: Option[EntityRecord])
 
     // tells slick how to convert a result row from a raw sql query to an instance of EntityListResult
-    implicit val getEntityListResult = GetResult(r => EntityListResult(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    implicit val getEntityListResult = GetResult { r =>
+      // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
+      val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<)
+
+      val attributeIdOption: Option[Long] = r.<<
+      val attributeRecOption = attributeIdOption.map(id => AttributeRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+      val refEntityRecOption = for {
+        attributeRec <- attributeRecOption
+        refId <- attributeRec.valueEntityRef
+      } yield { EntityRecord(r.<<, r.<<, r.<<, r.<<) }
+
+      EntityListResult(entityRec, attributeRecOption, refEntityRecOption)
+    }
 
     import driver.quoteIdentifier
     // the where clause for this query is filled in specific to the use case
     val baseEntityAndAttributeSql =
-      s"""select e.${quoteIdentifier("workspace_id")}, e.${quoteIdentifier("name")}, e.${quoteIdentifier("entity_type")}, e.${quoteIdentifier("id")}, ea.${quoteIdentifier("attribute_id")}, a.${quoteIdentifier("list_index")}, a.${quoteIdentifier("value_string")}, a.${quoteIdentifier("value_number")}, a.${quoteIdentifier("value_boolean")}, a.${quoteIdentifier("name")}, a.${quoteIdentifier("value_entity_ref")}, e_ref.${quoteIdentifier("name")}, e_ref.${quoteIdentifier("entity_type")}
+      s"""select e.${quoteIdentifier("id")}, e.${quoteIdentifier("name")}, e.${quoteIdentifier("entity_type")}, e.${quoteIdentifier("workspace_id")}, a.${quoteIdentifier("id")}, a.${quoteIdentifier("name")}, a.${quoteIdentifier("value_string")}, a.${quoteIdentifier("value_number")}, a.${quoteIdentifier("value_boolean")}, a.${quoteIdentifier("value_entity_ref")}, a.${quoteIdentifier("list_index")}, e_ref.${quoteIdentifier("id")}, e_ref.${quoteIdentifier("name")}, e_ref.${quoteIdentifier("entity_type")}, e_ref.${quoteIdentifier("workspace_id")}
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE ea on e.${quoteIdentifier("id")} = ea.${quoteIdentifier("entity_id")}
           left outer join ATTRIBUTE a on ea.${quoteIdentifier("attribute_id")} = a.${quoteIdentifier("id")}
@@ -115,13 +116,16 @@ trait EntityComponent {
 
     def unmarshalEntities(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Iterable[Entity]] = {
       entityAttributeAction.map { entityAttributeRecords =>
-        val entityRecords = entityAttributeRecords.map(r => EntityRecord(r.entityId, r.entityName, r.entityType, r.workspaceId)).toSet
-        val attributesByEntityId = attributeQuery.unmarshalAttributes[Long](entityAttributeRecords.collect {
-          case EntityListResult(workspaceId, entityName, entityType, entityId, Some(attributeId), listIndex, valueString, valueNumber, valueBoolean, Some(attributeName), refId, refName, refType) =>
-            ((entityId, AttributeRecord(attributeId, attributeName, valueString, valueNumber, valueBoolean, refId, listIndex)), refId.map(_ => EntityRecord(refId.get, refName.get, refType.get, workspaceId)))
-        })
+        val allEntityRecords = entityAttributeRecords.map(_.entityRecord).toSet
 
-        entityRecords.map { entityRec =>
+        // note that not all entities have attributes, thus the collect below
+        val entitiesWithAttributes = entityAttributeRecords.collect {
+          case EntityListResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
+        }
+
+        val attributesByEntityId = attributeQuery.unmarshalAttributes[Long](entitiesWithAttributes)
+
+        allEntityRecords.map { entityRec =>
           unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
         }
       }
