@@ -155,4 +155,15 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "return 200 when counting submissions" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissionsCount") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        assertResult(Map("Submitted" -> 5)) {
+          responseAs[Map[String, Int]]
+        }
+      }
+  }
 }

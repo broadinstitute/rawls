@@ -81,6 +81,7 @@ object WorkspaceService {
   case class GetAndValidateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
 
   case class ListSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class CountSubmissions(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CreateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class ValidateSubmission(workspaceName: WorkspaceName, submission: SubmissionRequest) extends WorkspaceServiceMessage
   case class GetSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
@@ -148,6 +149,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     case GetAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName) => pipe(getAndValidateMethodConfiguration(workspaceName, methodConfigurationNamespace, methodConfigurationName)) to sender
 
     case ListSubmissions(workspaceName) => pipe(listSubmissions(workspaceName)) to sender
+    case CountSubmissions(workspaceName) => pipe(countSubmissions(workspaceName)) to sender
     case CreateSubmission(workspaceName, submission) => pipe(createSubmission(workspaceName, submission)) to sender
     case ValidateSubmission(workspaceName, submission) => pipe(validateSubmission(workspaceName, submission)) to sender
     case GetSubmissionStatus(workspaceName, submissionId) => pipe(getSubmissionStatus(workspaceName, submissionId)) to sender
@@ -953,6 +955,13 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             case (submission, user) => new SubmissionStatusResponse(submission, user) 
           }
         }.map(RequestComplete(StatusCodes.OK, _))
+      }
+    }
+
+  def countSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.submissionQuery.countByStatus(workspaceContext).map(RequestComplete(StatusCodes.OK, _))
       }
     }
 
