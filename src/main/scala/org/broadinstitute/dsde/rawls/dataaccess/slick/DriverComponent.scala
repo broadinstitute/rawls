@@ -5,7 +5,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model.{Attributable, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
-import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
 import spray.http.StatusCodes
@@ -24,9 +23,6 @@ trait DriverComponent {
   // these are used in getting and setting UUIDs in raw sql
   implicit val GetUUIDResult = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
   implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
-
-  // converter for Joda DateTime
-  implicit val GetDateTimeResult = GetResult(r => new DateTime(r.nextTimestamp.getTime))
 
   def uniqueResult[V](readAction: driver.api.Query[_, _, Seq]): ReadAction[Option[V]] = {
     readAction.result map {
