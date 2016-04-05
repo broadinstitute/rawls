@@ -18,12 +18,14 @@
             update ATTRIBUTE set id=unhex(replace(uuid(), '-', ''));
             alter table ATTRIBUTE drop primary key;
             alter table ATTRIBUTE modify id binary(16) not null primary key;
+            alter table ATTRIBUTE modify old_id bigint(20) unsigned null;
 
             alter table ENTITY change id old_id bigint(20) unsigned not null;
             alter table ENTITY add column id binary(16);
             update ENTITY set id=unhex(replace(uuid(), '-', ''));
             alter table ENTITY drop primary key;
             alter table ENTITY modify id binary(16) not null primary key;
+            alter table ENTITY modify old_id bigint(20) unsigned null;
 
             alter table ATTRIBUTE change value_entity_ref old_value_entity_ref bigint(20) unsigned;
             alter table ATTRIBUTE add column value_entity_ref binary(16);
@@ -35,6 +37,7 @@
             update ENTITY_ATTRIBUTE ea join ENTITY e on ea.old_entity_id=e.old_id set ea.entity_id=e.id;
             alter table ENTITY_ATTRIBUTE change entity_id entity_id binary(16) not null;
             alter table ENTITY_ATTRIBUTE add foreign key (entity_id) references ENTITY(id);
+            alter table ENTITY_ATTRIBUTE modify old_entity_id bigint(20) unsigned null;
 
             alter table ENTITY_ATTRIBUTE change attribute_id old_attribute_id bigint(20) unsigned not null;
             alter table ENTITY_ATTRIBUTE add column attribute_id binary(16);
@@ -42,6 +45,9 @@
             set ea.attribute_id=a.id;
             alter table ENTITY_ATTRIBUTE change attribute_id attribute_id binary(16) not null;
             alter table ENTITY_ATTRIBUTE add foreign key (attribute_id) references ATTRIBUTE(id);
+            alter table ENTITY_ATTRIBUTE drop primary key;
+            alter table ENTITY_ATTRIBUTE modify old_attribute_id bigint(20) unsigned null;
+            alter table ENTITY_ATTRIBUTE modify attribute_id binary(16) primary key;
 
             alter table SUBMISSION change entity_id old_entity_id bigint(20) unsigned;
             alter table SUBMISSION add column entity_id binary(16);
@@ -75,6 +81,9 @@
             set wa.attribute_id=a.id;
             alter table WORKSPACE_ATTRIBUTE change attribute_id attribute_id binary(16) not null;
             alter table WORKSPACE_ATTRIBUTE add foreign key (attribute_id) references ATTRIBUTE(id);
+            alter table WORKSPACE_ATTRIBUTE drop primary key;
+            alter table WORKSPACE_ATTRIBUTE modify old_attribute_id bigint(20) unsigned null;
+            alter table WORKSPACE_ATTRIBUTE modify attribute_id binary(16) primary key;
         </sql>
 
     </changeSet>
