@@ -743,7 +743,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/definitions/Submission'
+              $ref: '#/definitions/SubmissionListResponse'
         '404':
           description: Workspace not found
           schema:
@@ -2906,6 +2906,32 @@ definitions:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
 
+  SubmissionListResponse:
+    description: 'An abbreviated Submission, without workflow information, good for listings'
+    properties:
+      submissionId:
+        type: string
+        description: Submission unique identifier
+      submissionDate:
+        type: string
+        format: date-time
+        description: Submission date
+      submitter:
+        type: string
+        description: user that created the submission
+      methodConfigurationNamespace:
+        type: string
+        description: Method configuration namespace
+      methodConfigurationName:
+        type: string
+        description: Method configuration name
+      submissionEntity:
+        $ref: '#/definitions/AttributeEntityReference'
+        description: Status
+      status:
+        $ref: '#/definitions/SubmissionStatus'
+        description: Status
+
   ActiveSubmission:
     description: a submission that's still a going concern
     properties:
@@ -3259,6 +3285,19 @@ definitions:
       attributes:
         type: ''
         description: Map[String,Attribute]
+
+  AttributeEntityReference:
+    description: ''
+    required:
+      - entityType
+      - entityName
+    properties:
+      entityType:
+        type: string
+        description: The type of the entity
+      entityName:
+        type: string
+        description: The name of the entity
 
   AttributeUpdateOperation:
     description: ''

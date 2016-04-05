@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -145,13 +145,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(List(
-          new SubmissionStatusResponse(testData.submissionTerminateTest, testData.userOwner),
-          new SubmissionStatusResponse(testData.submission1, testData.userOwner),
-          new SubmissionStatusResponse(testData.submission2, testData.userOwner),
-          new SubmissionStatusResponse(testData.submissionUpdateEntity, testData.userOwner),
-          new SubmissionStatusResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
-
-          responseAs[List[SubmissionStatusResponse]]
+          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner),
+          new SubmissionListResponse(testData.submission1, testData.userOwner),
+          new SubmissionListResponse(testData.submission2, testData.userOwner),
+          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner),
+          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
+          responseAs[List[SubmissionListResponse]]
         }
       }
   }

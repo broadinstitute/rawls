@@ -96,15 +96,23 @@ trait SubmissionComponent {
       }))
     }
 
-    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(Submission, RawlsUser)]] = {
+    def listWithSubmitter(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[SubmissionListResponse]] = {
       val query = for {
         submissionRec <- findByWorkspaceId(workspaceContext.workspaceId)
         userRec <- rawlsUserQuery if (submissionRec.submitterId === userRec.userSubjectId)
-      } yield (submissionRec, userRec)
-      
-      query.result.flatMap(recs => DBIO.sequence(recs.map { case (submissionRec, userRec) =>
-        loadSubmission(submissionRec.id).map(sub => (sub.get, rawlsUserQuery.unmarshalRawlsUser(userRec)))
-      }))
+        methodConfigRec <- methodConfigurationQuery if (submissionRec.methodConfigurationId === methodConfigRec.id)
+        entityRec <- entityQuery if (submissionRec.submissionEntityId === entityRec.id)
+      } yield (submissionRec, userRec, methodConfigRec, entityRec)
+
+      query.result.map{recs => recs.map {
+          case (submissionRec, userRec, methodConfigRec, entityRec) =>
+            val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
+            val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
+            val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
+            val sub = unmarshalSubmission(submissionRec, config, Some(entity), Seq.empty, Seq.empty)
+            new SubmissionListResponse(sub, user)
+        }
+      }
     }
 
     def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {

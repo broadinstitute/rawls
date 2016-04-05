@@ -32,7 +32,7 @@ import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import scala.concurrent.Await
@@ -951,10 +951,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.submissionQuery.listWithSubmitter(workspaceContext).map { _.map {
-            case (submission, user) => new SubmissionStatusResponse(submission, user) 
-          }
-        }.map(RequestComplete(StatusCodes.OK, _))
+        dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
+          .map(RequestComplete(StatusCodes.OK, _))
       }
     }
 
