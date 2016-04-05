@@ -23,7 +23,7 @@ case class WorkspaceRecord(
   isLocked: Boolean,
   realmGroupName: Option[String]
 )
-case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: Long)
+case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: UUID)
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
 
 trait WorkspaceComponent {
@@ -56,7 +56,7 @@ trait WorkspaceComponent {
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends Table[WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
-    def attributeId = column[Long]("attribute_id", O.PrimaryKey)
+    def attributeId = column[UUID]("attribute_id", O.PrimaryKey)
     def workspaceId = column[UUID]("workspace_id")
 
     def workspace = foreignKey("FK_WS_ATTR_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -295,7 +295,7 @@ trait WorkspaceComponent {
       Seq(deleteWorkspaceAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
     }
 
-    private def insertWorkspaceAttributeMapping(workspaceRecord: WorkspaceRecord, attrId: Long): FixedSqlAction[Int, driver.api.NoStream, Write] = {
+    private def insertWorkspaceAttributeMapping(workspaceRecord: WorkspaceRecord, attrId: UUID): FixedSqlAction[Int, driver.api.NoStream, Write] = {
       workspaceAttributeQuery += WorkspaceAttributeRecord(workspaceRecord.id, attrId)
     }
 

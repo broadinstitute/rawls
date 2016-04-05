@@ -53,7 +53,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
   private val actionExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(
     actionThreadPool, database.executor.executionContext.reportFailure)
 
-  val dataAccess = new DataAccessComponent(databaseConfig.driver)
+  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"))
   import dataAccess.driver.api._
 
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {

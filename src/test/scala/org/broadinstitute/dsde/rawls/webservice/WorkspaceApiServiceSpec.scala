@@ -510,7 +510,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyNoRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         assertResult(None) {
@@ -527,7 +527,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         assertResult(Some(realmGroupRef)) {
@@ -912,7 +912,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceNoAttrs)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         assertResult(testData.workspace.attributes) {

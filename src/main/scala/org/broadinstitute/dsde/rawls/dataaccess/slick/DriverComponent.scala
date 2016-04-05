@@ -6,13 +6,14 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.model.{Attributable, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import slick.driver.JdbcDriver
-import slick.jdbc.{PositionedParameters, SetParameter, GetResult}
+import slick.jdbc.{SQLActionBuilder, PositionedParameters, SetParameter, GetResult}
 import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
 
 trait DriverComponent {
   val driver: JdbcDriver
+  val batchSize: Int
   implicit val executionContext: ExecutionContext
 
   // needed by MySQL but not actually used; we will always overwrite
@@ -22,7 +23,9 @@ trait DriverComponent {
 
   // these are used in getting and setting UUIDs in raw sql
   implicit val GetUUIDResult = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
+  implicit val GetUUIDOptionResult = GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
   implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
+  implicit object SetUUIDOptionParameter extends SetParameter[Option[UUID]] { def apply(v: Option[UUID], pp: PositionedParameters) { pp.setBytesOption(v.map(uuidColumnType.toBytes)) } }
 
   def uniqueResult[V](readAction: driver.api.Query[_, _, Seq]): ReadAction[Option[V]] = {
     readAction.result map {
@@ -54,4 +57,18 @@ trait DriverComponent {
   def createBatches[T](items: Set[T], batchSize: Int = 1000): Iterable[Set[T]] = {
     items.zipWithIndex.groupBy(_._2 % batchSize).values.map(_.map(_._1))
   }
+
+  def concatSqlActions(a: SQLActionBuilder, b: SQLActionBuilder): SQLActionBuilder = {
+    SQLActionBuilder(a.queryParts ++ b.queryParts, new SetParameter[Unit] {
+      def apply(p: Unit, pp: PositionedParameters): Unit = {
+        a.unitPConv.apply(p, pp)
+        b.unitPConv.apply(p, pp)
+      }
+    })
+  }
+
+  def concatSqlActionsWithDelim(a: SQLActionBuilder, b: SQLActionBuilder, delim: SQLActionBuilder): SQLActionBuilder = {
+    concatSqlActions(concatSqlActions(a, delim), b)
+  }
+
 }

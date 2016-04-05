@@ -18,14 +18,14 @@ case class WorkflowRecord(id: Long,
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
-                          workflowEntityId: Option[Long]
+                          workflowEntityId: Option[UUID]
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
 
 case class WorkflowFailureRecord(id: Long,
                                  submissionId: UUID,
-                                 entityId: Option[Long]
+                                 entityId: Option[UUID]
                                 )
 
 case class WorkflowErrorRecord(workflowFailureId: Long, errorText: String)
@@ -44,7 +44,7 @@ trait WorkflowComponent {
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
-    def workflowEntityId = column[Option[Long]]("ENTITY_ID")
+    def workflowEntityId = column[Option[UUID]]("ENTITY_ID")
 
     def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
@@ -66,7 +66,7 @@ trait WorkflowComponent {
   class WorkflowFailureTable(tag: Tag) extends Table[WorkflowFailureRecord](tag, "WORKFLOW_FAILURE") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def submissionId = column[UUID]("SUBMISSION_ID")
-    def entityId = column[Option[Long]]("ENTITY_ID")
+    def entityId = column[Option[UUID]]("ENTITY_ID")
 
     def * = (id, submissionId, entityId) <> (WorkflowFailureRecord.tupled, WorkflowFailureRecord.unapply)
 
@@ -174,7 +174,7 @@ trait WorkflowComponent {
       }
     }
 
-    private def loadWorkflowEntity(entityId: Option[Long]): ReadAction[Option[AttributeEntityReference]] = {
+    private def loadWorkflowEntity(entityId: Option[UUID]): ReadAction[Option[AttributeEntityReference]] = {
       entityId match {
         case None => DBIO.successful(None)
         case Some(id) => uniqueResult[EntityRecord](entityQuery.findEntityById(id)).flatMap { rec =>
@@ -223,7 +223,7 @@ trait WorkflowComponent {
       filter(_.id === id)
     }
 
-    def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType = {
+    def findWorkflowByEntityId(submissionId: UUID, entityId: UUID): WorkflowQueryType = {
       filter(rec => rec.submissionId === submissionId && rec.workflowEntityId === entityId)
     }
 
@@ -262,7 +262,7 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
+    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[UUID]): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
@@ -284,7 +284,7 @@ trait WorkflowComponent {
       )
     }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, valueId: Option[Long], workflowId: Option[Long]): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, valueId: Option[UUID], workflowId: Option[Long]): SubmissionValidationRecord = {
       SubmissionValidationRecord(
         workflowId,
         None,
