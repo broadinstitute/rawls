@@ -54,38 +54,38 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
-                                          services: TestApiService): SubmissionStatusResponse = {
-      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", httpJson(methodConf)) ~>
-          sealRoute(services.methodConfigRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
+                                         services: TestApiService): SubmissionStatusResponse = {
+    Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", httpJson(methodConf)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
+      }
 
-      val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
-      Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", httpJson(submissionRq)) ~>
-          sealRoute(services.submissionRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-          val submission = responseAs[SubmissionReport]
-          Get(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions/${submission.submissionId}") ~>
-                  sealRoute(services.submissionRoutes) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              return responseAs[SubmissionStatusResponse]
-            }
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
+    Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", httpJson(submissionRq)) ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
         }
+        val submission = responseAs[SubmissionReport]
+        Get(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions/${submission.submissionId}") ~>
+          sealRoute(services.submissionRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK) {
+              status
+            }
+            return responseAs[SubmissionStatusResponse]
+          }
+      }
 
     fail("Unable to create and monitor submissions")
   }
 
   it should "return 201 Created when creating and monitoring a submission with no expression" in withTestDataApiServices { services =>
-  val wsName = testData.wsName
+    val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
 

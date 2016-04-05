@@ -24,6 +24,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver]("h2mem1")
   override val driver: JdbcDriver = databaseConfig.driver
+  override val batchSize: Int = databaseConfig.config.getInt("batchSize")
   val database = databaseConfig.db
   val slickDataSource = new SlickDataSource(databaseConfig)
 

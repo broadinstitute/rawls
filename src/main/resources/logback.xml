@@ -48,6 +48,11 @@
         <appender-ref ref="SYSLOG"/>
     </logger>
 
+    <!--<logger name="slick.jdbc.JdbcBackend.statement" level="DEBUG">-->
+        <!--<appender-ref ref="file"/>-->
+        <!--<appender-ref ref="console"/>-->
+    <!--</logger>-->
+
     <root level="warn">
         <appender-ref ref="file"/>
         <appender-ref ref="console"/>

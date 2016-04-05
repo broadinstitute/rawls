@@ -1,5 +1,8 @@
 package org.broadinstitute.dsde.rawls.expressions
 
+import java.nio.ByteBuffer
+import java.util.UUID
+
 import _root_.slick.dbio
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -32,7 +35,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   type FinalFunc = (SlickExpressionContext, Option[PipeType]) => ReadAction[Iterable[Any]]
 
   // a query that results in entity records and a sort ordering
-  type PipeType = Query[(EntityTable, Rep[Long]), (EntityRecord, Long), Seq]
+  type PipeType = Query[EntityTable, EntityRecord, Seq]
 
   /** Parser definitions **/
   // Entity expressions take the general form entity.ref.ref.attribute.
@@ -164,7 +167,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def entityRootFunc(context: SlickExpressionContext): PipeType = {
     for {
       entity <- entityQuery.findEntityByName(context.workspaceContext.workspaceId, context.rootType, context.rootName)
-    } yield (entity, entity.id)
+    } yield entity
   }
 
   // final func that gets an attribute off a workspace
@@ -194,17 +197,17 @@ trait SlickExpressionParser extends JavaTokenParsers {
       workspaceAttribute <- workspaceAttributeQuery if workspaceAttribute.workspaceId === workspace.id
       attribute <- attributeQuery if workspaceAttribute.attributeId === attribute.id && attribute.name === entityRefName
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
-    } yield (nextEntity, nextEntity.id)
+    } yield nextEntity
   }
 
   // add pipe to an entity referenced by the current entity
   private def entityNameAttributePipeFunc(entityRefName: String)(context: SlickExpressionContext, queryPipeline: PipeType): PipeType = {
     for {
-      (entity, ordering) <- queryPipeline
+      entity <- queryPipeline
       entityAttribute <- entityAttributeQuery if entity.id === entityAttribute.entityId
       attribute <- attributeQuery if entityAttribute.attributeId === attribute.id && attribute.name === entityRefName
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
-    } yield (nextEntity, nextEntity.id)
+    } yield nextEntity
   }
 
   // filter attributes to only the given attributeName and convert to attribute
@@ -212,35 +215,34 @@ trait SlickExpressionParser extends JavaTokenParsers {
     // attributeForNameQuery will only contain attribute records of the given name but for possibly more than 1 entity
     // and in the case of a list there will be more than one attribute record for an entity
     val attributeForNameQuery = (for {
-      (entity, ordering) <- queryPipeline.get
+      entity <- queryPipeline.get
       entityAttribute <- entityAttributeQuery if entity.id === entityAttribute.entityId
       attribute <- attributeQuery if entityAttribute.attributeId === attribute.id && attribute.name === attributeName
-    } yield (entity.id, attribute, ordering)).result
+    } yield (entity.name, attribute)).result
 
 
     attributeForNameQuery.map { entityWithAttributeRecs =>
       // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where
       // the optional entity rec is used for references. Since we know we are not dealing with a reference here
       // as this is the attribute final func, we can pass in None.
-      val attributesByEntityId = attributeQuery.unmarshalAttributes(entityWithAttributeRecs.map { case (entityId, attrRec, _) => ((entityId, attrRec), None) })
+      val attributesByEntityId = attributeQuery.unmarshalAttributes(entityWithAttributeRecs.map { case (entityId, attrRec) => ((entityId, attrRec), None) })
       val namedAttributesOnlyByEntityId = attributesByEntityId.mapValues(_.getOrElse(attributeName, AttributeNull)).toSeq
 
       // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query
-      val orderByEntityId = entityWithAttributeRecs.map { case (entityId, _, ordering) => (entityId, ordering) }.toMap
-      val orderedEntityIdAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityId1, _), (entityId2, _)) =>
-        orderByEntityId(entityId1) < orderByEntityId(entityId2)
+      val orderedEntityNameAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityName1, _), (entityName2, _)) =>
+        entityName1 < entityName2
       }
 
-      orderedEntityIdAndAttributes.map { case (_, attribute) => attribute }
+      orderedEntityNameAndAttributes.map { case (_, attribute) => attribute }
     }
   }
 
   // final func that handles reserved attributes on an entity
   private def entityReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Iterable[Attribute]] = {
-    val baseQuery = queryPipeline.get join entityQuery on (_._1.id === _.id)
+    val baseQuery = queryPipeline.get join entityQuery on (_.id === _.id)
     attributeName match {
-      case "name" => baseQuery.sortBy(_._1._2).distinct.result.map(_.map(rec => AttributeString(rec._2.name)))
-      case "entityType" => baseQuery.sortBy(_._1._2).distinct.result.map(_.map(x => AttributeString(x._2.entityType)))
+      case "name" => baseQuery.sortBy(_._1.name).distinct.result.map(_.map(rec => AttributeString(rec._2.name)))
+      case "entityType" => baseQuery.sortBy(_._1.name).distinct.result.map(_.map(x => AttributeString(x._2.entityType)))
     }
   }
 
@@ -256,15 +258,14 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   //Takes a list of entities at the end of a pipeline and returns them in final format.
   private def entityFinalFunc(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Iterable[Entity]] = {
-    val query: entityQuery.EntityQuery = queryPipeline.get.map(_._1)
+    val query: entityQuery.EntityQuery = queryPipeline.get
     val entitiesAction = entityQuery.unmarshalEntities(entityQuery.joinOnAttributesAndRefs(query))
-    entitiesAction.zip(queryPipeline.get.result).map { case (entities, ordering) => sortEntities(entities, ordering) }
+    entitiesAction.zip(queryPipeline.get.result).map { case (entities, ordering) => sortEntities(entities) }
   }
 
-  private def sortEntities(entities: Iterable[Entity], ordering: Seq[(EntityRecord, Long)]): Seq[Entity] = {
-    val orderingMap = ordering.map { case (entityRec, index) => (entityRec.entityType, entityRec.name) -> index }.toMap
+  private def sortEntities(entities: Iterable[Entity]): Seq[Entity] = {
     entities.toSeq.sortWith { (e1, e2) =>
-      orderingMap((e1.entityType, e1.name)) < orderingMap((e2.entityType, e2.name))
+      e1.name < e2.name
     }
   }
 
@@ -277,10 +278,10 @@ trait SlickExpressionParser extends JavaTokenParsers {
       workspaceAttribute <- workspaceAttributeQuery if workspaceAttribute.workspaceId === workspace.id
       attribute <- attributeQuery if workspaceAttribute.attributeId === attribute.id && attribute.name === entityRefName
       entity <- entityQuery if attribute.valueEntityRef === entity.id
-    } yield (entity, entity.id)
+    } yield entity
 
-    val entitiesAction = entityQuery.unmarshalEntities(entityQuery.joinOnAttributesAndRefs(query.map(_._1)))
-    entitiesAction.zip(query.result).map { case (entities, ordering) => sortEntities(entities, ordering) }
+    val entitiesAction = entityQuery.unmarshalEntities(entityQuery.joinOnAttributesAndRefs(query))
+    entitiesAction.map { case (entities) => sortEntities(entities) }
   }
 
   private def stringFunc(str: String)(context: SlickExpressionContext, shouldBeNone: Option[PipeType]): ReadAction[Iterable[Attribute]] = {
@@ -321,4 +322,5 @@ class SlickExpressionEvaluator(parser: SlickExpressionParser)(implicit execution
       case Failure(regret) => dbio.DBIO.failed(regret)
     }
   }
+
 }

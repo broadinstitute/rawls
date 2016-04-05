@@ -401,7 +401,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
                       sealRoute(services.entityRoutes) ~>
               check {
-                assertResult(StatusCodes.Created) {
+                assertResult(StatusCodes.Created, response.entity.asString) {
                   status
                 }
                 assertResult(z1) {
@@ -452,7 +452,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
         assertResult(Some(newRealmRef)) {
