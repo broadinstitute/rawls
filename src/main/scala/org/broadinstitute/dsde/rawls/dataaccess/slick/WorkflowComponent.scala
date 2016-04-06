@@ -112,6 +112,10 @@ trait WorkflowComponent {
       }
     }
 
+    def getByExternalId(externalId: String, submissionId: String): ReadAction[Option[Workflow]] = {
+      loadWorkflow(findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)))
+    }
+
     def delete(id: Long): ReadWriteAction[Boolean] = {
       deleteWorkflowAction(id).map(_ > 0)
     }
@@ -221,6 +225,10 @@ trait WorkflowComponent {
 
     def findWorkflowById(id: Long): WorkflowQueryType = {
       filter(_.id === id)
+    }
+
+    def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {
+      filter(wf => wf.externalid === externalId && wf.submissionId === submissionId)
     }
 
     def findWorkflowByEntityId(submissionId: UUID, entityId: UUID): WorkflowQueryType = {

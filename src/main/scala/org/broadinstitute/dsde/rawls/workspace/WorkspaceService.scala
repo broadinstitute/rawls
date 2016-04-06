@@ -1117,22 +1117,20 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withWorkflow(workspaceName, submission, workflowId) { workflow =>
-            val outputFTs = toFutureTry(executionServiceDAO.outputs(workflowId, userInfo))
-            val logFTs = toFutureTry(executionServiceDAO.logs(workflowId, userInfo))
-            DBIO.from(outputFTs zip logFTs map {
-              case (Success(outputs), Success(logs)) =>
-                mergeWorkflowOutputs(outputs, logs, workflowId)
-              case (Failure(outputsFailure), Success(logs)) =>
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceDAO.toErrorReport(outputsFailure)))
-              case (Success(outputs), Failure(logsFailure)) =>
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceDAO.toErrorReport(logsFailure)))
-              case (Failure(outputsFailure), Failure(logsFailure)) =>
-                throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs and unable to get logs for ${submissionId}.",
-                  Seq(executionServiceDAO.toErrorReport(outputsFailure),executionServiceDAO.toErrorReport(logsFailure))))
-            })
-          }
+        withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
+          val outputFTs = toFutureTry(executionServiceDAO.outputs(workflowId, userInfo))
+          val logFTs = toFutureTry(executionServiceDAO.logs(workflowId, userInfo))
+          DBIO.from(outputFTs zip logFTs map {
+            case (Success(outputs), Success(logs)) =>
+              mergeWorkflowOutputs(outputs, logs, workflowId)
+            case (Failure(outputsFailure), Success(logs)) =>
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceDAO.toErrorReport(outputsFailure)))
+            case (Success(outputs), Failure(logsFailure)) =>
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceDAO.toErrorReport(logsFailure)))
+            case (Failure(outputsFailure), Failure(logsFailure)) =>
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs and unable to get logs for ${submissionId}.",
+                Seq(executionServiceDAO.toErrorReport(outputsFailure),executionServiceDAO.toErrorReport(logsFailure))))
+          })
         }
       }
     }
@@ -1141,10 +1139,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withWorkflow(workspaceName, submission, workflowId) { workflow =>
-            DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
-          }
+        withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
+          DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
     }
@@ -1492,9 +1488,9 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withWorkflow(workspaceName: WorkspaceName, submission: Submission, workflowId: String)(op: (Workflow) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    submission.workflows.find(wf => wf.workflowId == workflowId) match {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submission.submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
+  private def withWorkflow(workspaceName: WorkspaceName, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (Workflow) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.workflowQuery.getByExternalId(workflowId, submissionId) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
       case Some(workflow) => op(workflow)
     }
   }
