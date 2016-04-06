@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="dvoet" id="add-realm">
+        <addColumn tableName="WORKSPACE">
+            <column name="realm_group_name" type="VARCHAR(254)"/>
+        </addColumn>
+        <addForeignKeyConstraint baseColumnNames="realm_group_name" baseTableName="WORKSPACE" constraintName="FK_WS_REALM_GROUP" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="NAME" referencedTableName="GROUP"/>
+
+        <addColumn tableName="WORKSPACE_ACCESS">
+            <column name="is_realm_acl" type="BIT"/>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" id="dvoet" author="fix_workspace_access_pk">
+        <dropAllForeignKeyConstraints baseTableName="WORKSPACE_ACCESS"/>
+        <dropPrimaryKey tableName="WORKSPACE_ACCESS" constraintName="PRIMARY"/>
+        <addPrimaryKey columnNames="workspace_id, access_level, is_realm_acl" constraintName="PRIMARY" tableName="WORKSPACE_ACCESS"/>
+        <addForeignKeyConstraint baseColumnNames="group_name" baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_GROUP" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="NAME" referencedTableName="GROUP"/>
+        <addForeignKeyConstraint baseColumnNames="workspace_id" baseTableName="WORKSPACE_ACCESS" constraintName="FK_WS_ACCESS_WORKSPACE" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="id" referencedTableName="WORKSPACE"/>
+    </changeSet>
+</databaseChangeLog>

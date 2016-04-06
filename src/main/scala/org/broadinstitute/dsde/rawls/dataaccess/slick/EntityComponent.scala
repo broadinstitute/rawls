@@ -34,7 +34,7 @@ trait EntityComponent {
     def attributeId = column[UUID]("attribute_id", O.PrimaryKey)
 
     def entity = foreignKey("FK_ENT_ATTR_ENTITY", entityId, entityQuery)(_.id)
-    def attribute = foreignKey("FK_ENT_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id)
+    def attribute = foreignKey("FK_ENT_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id, onDelete = ForeignKeyAction.Cascade)
 
     def * = (entityId, attributeId) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
   }
@@ -360,11 +360,7 @@ trait EntityComponent {
     }
 
     def deleteEntityAttributes(attributeRecords: Seq[AttributeRecord]) = {
-      Seq(deleteEntityAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
-    }
-
-    private def deleteEntityAttributeMappings(attributeRecords: Seq[AttributeRecord]): WriteAction[Int] = {
-      entityAttributeQuery.filter(_.attributeId inSetBind attributeRecords.map(_.id)).delete
+      Seq(attributeQuery.deleteAttributeRecords(attributeRecords))
     }
   }
 }
