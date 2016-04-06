@@ -19,4 +19,39 @@ See the wiki for detailed documentation.
 ##Developer quick links:
 * Swagger UI: https://rawls-dev.broadinstitute.org
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
-* Running locally in docker https://github.com/broadinstitute/firecloud-environment
+* Running locally in docker https://github.com/broadinstitute/firecloud-develop
+
+##Unit Testing in Docker with MySQL
+
+###Docker Builds
+Check to see that you have a Dev Base image for Rawls:
+```
+$ docker pull broadinstitute/rawls:dev-base
+```
+
+If this fails, it is necessary to build this image, which may take a long time (~20 minutes).
+```
+$ docker build -t broadinstitute/rawls:dev-base ${RAWLS_SRC_DIR}
+```
+
+When that is done, build a Test MySQL image:
+```
+$ docker build -t broadinstitute/rawls:test-mysql ${RAWLS_SRC_DIR}/docker/test-mysql
+```
+
+###Docker Run
+Run docker with the following arguments to ensure your local Rawls source is mounted inside the container.
+```
+$ docker run -d --name rawls-test -v ${RAWLS_SRC_DIR}:/app:rw broadinstitute/rawls:test-mysql
+```
+
+Enter the container:
+```
+docker exec -it rawls-test bash
+```
+
+Run the unit tests:
+```
+# cd /app
+# sbt -Dtestdb=mysql test
+```
