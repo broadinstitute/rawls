@@ -166,7 +166,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   def getUserGroup(rawlsGroupRef: RawlsGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(rawlsGroupRef, RawlsUser(userInfo)) map {
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group"))
+        case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group"))
         case Some(group) => RequestComplete(group.toRawlsGroupShort)
       }
     }
