@@ -219,7 +219,6 @@ trait SubmissionComponent {
     /*
       the load methods
      */
-
     def loadSubmission(submissionId: UUID): ReadAction[Option[Submission]] = {
       uniqueResult[SubmissionRecord](findById(submissionId)) flatMap {
         case None => DBIO.successful(None)
@@ -246,9 +245,72 @@ trait SubmissionComponent {
     }
 
     def loadSubmissionWorkflows(submissionId: UUID): ReadAction[Seq[Workflow]] = {
-      workflowQuery.findWorkflowsBySubmissionId(submissionId).result.flatMap(recs => DBIO.sequence(recs.map { rec =>
-        workflowQuery.get(rec.id) map(wf => wf.get)
-      }))
+      // get all workflows for this submission, with their entity and messages:
+      // WORKFLOW left join ENTITY left outer join WORKFLOW_MESSAGE
+      val workflows = for {
+        ((workflow, entity), message) <-
+          workflowQuery.filter(_.submissionId === submissionId) join
+            entityQuery on (_.workflowEntityId === _.id) joinLeft
+            workflowMessageQuery on (_._1.id === _.workflowId)
+      } yield (workflow, entity, message)
+
+      // get all input resolutions for all workflows in this submission
+      // we *could* do this in the same query as above, but since workflow:message and workflow:inputResolution
+      // are both one-to-many, this would cause a cartesian product
+      // WORKFLOW left outer join SUBMISSION_VALIDATION left outer join ATTRIBUTE
+      val inputResolutions = for {
+        (workflow, validationPair) <-
+        workflowQuery.filter(_.submissionId === submissionId) joinLeft {
+          submissionValidationQuery  joinLeft
+          attributeQuery on (_.valueId === _.id) } on (_.id === _._1.workflowId)
+      } yield (workflow, validationPair)
+
+
+
+      inputResolutions.result.flatMap { resolutions =>
+        workflows.result.map { recs =>
+
+          // first, prepare all the input resolutions
+          val groupedResolutions = resolutions.groupBy { case (workflow, validationPair) => workflow.id }
+
+          // group the workflow/entity/message records by workflowId, which creates a map keyed by workflowId
+          val recordsByWorkflowId: Map[Long, Seq[(WorkflowRecord, EntityRecord, Option[WorkflowMessageRecord])]] = recs.groupBy { case (workflow, entity, message) => workflow.id }
+          // now that we're grouped, process each workflow's records, translating into a Workflow object
+          recordsByWorkflowId.map{ case (workflowId, recordTuple) =>
+            // because we are grouped by workflow id, and because workflow:entity is an inner join, we know that the
+            // workflow and entity records are the same throughout this sequence. We can safely take the head
+            // for each of them.
+            val wr: WorkflowRecord = recordTuple.head._1 // first in the recordTuple
+            val er: EntityRecord = recordTuple.head._2 // second in the recordTuple
+            // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
+            // translate any/all messages that exist into a Seq[AttributeString]
+            // messages are third in the recordTuple
+            val messages: Seq[AttributeString] = recordTuple.map {_._3}.collect { case Some(wm) => AttributeString(wm.message) }
+
+            // attach the input resolutions to the workflow object
+            val workflowResolutions = groupedResolutions.get(wr.id).map {seq =>
+              seq.collect {
+                case (workflow, Some(validationPair)) =>
+                  // unmarshalAttributes returns a highly nested structure; it is meant for bulk translation of
+                  // attributes, but we use it here for just one
+                  val attr = validationPair._2.map{attrRec =>
+                    attributeQuery.unmarshalAttributes(Seq( ((attrRec.id,attrRec), None) ))
+                  }.map{_.values.head}.map{_.values.head}
+                SubmissionValidationValue(attr, validationPair._1.errorText, validationPair._1.inputName)
+              }
+            }.getOrElse(Seq.empty)
+
+            // create the Workflow object, now that we've processed all records for this workflow.
+            Workflow(wr.externalId,
+              WorkflowStatuses.withName(wr.status),
+              new DateTime(wr.statusLastChangedDate.getTime),
+              Some(AttributeEntityReference(er.entityType, er.name)),
+              workflowResolutions,
+              messages
+            )
+          }.toSeq
+        }
+      }
     }
 
     def loadSubmissionEntity(entityId: Option[UUID]): ReadAction[Option[AttributeEntityReference]] = {
