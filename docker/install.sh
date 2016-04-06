@@ -10,7 +10,7 @@ if [ -e "jenkins_env.sh" ]; then
 fi
 
 # catch sbt issues separately
-sbt update && echo "sbt updated successefully."
+sbt update && echo "sbt updated successfully."
 
 sbt -J-Xms4g -J-Xmx4g test
 sbt -J-Xms4g -J-Xmx4g assembly
