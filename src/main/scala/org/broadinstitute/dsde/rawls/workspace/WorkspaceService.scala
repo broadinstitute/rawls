@@ -923,31 +923,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  /**
-   * This is the function that would get called if we had a validate method config endpoint.
-   */
-  def validateMethodConfig(workspaceName: WorkspaceName,
-    methodConfigurationNamespace: String, methodConfigurationName: String,
-    entityType: String, entityName: String, userInfo: UserInfo): Future[PerRequestMessage] = {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-          withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfig =>
-            withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, userInfo) { method =>
-              withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-                withWdl(method) { wdl =>
-                  MethodConfigResolver.resolveInputsOrGatherErrors(workspaceContext, methodConfig, entity, wdl, dataAccess) flatMap {
-                    case Left(failures) => DBIO.successful(RequestComplete(StatusCodes.OK, failures))
-                    case Right(unpacked) =>
-                      DBIO.from(executionServiceDAO.validateWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(unpacked), userInfo)) map(RequestComplete(StatusCodes.OK, _))
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
   def listSubmissions(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
