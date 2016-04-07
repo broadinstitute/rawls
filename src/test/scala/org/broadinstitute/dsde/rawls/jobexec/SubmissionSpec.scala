@@ -604,7 +604,5 @@ class MockExecutionServiceDAO(timeout:Boolean = false) extends ExecutionServiceD
 
   override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
 
-  override def validateWorkflow(wdl: String, inputs: String, userInfo: UserInfo) = Future.successful(ExecutionServiceValidation(true, ""))
-
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 }
