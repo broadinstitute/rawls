@@ -588,32 +588,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         }
 
         saveAction.map(_ => RequestComplete(StatusCodes.NoContent))
-//
-//        val results = entityUpdates.map { entityUpdate =>
-//          val updateAction = dataAccess.entityQuery.get(workspaceContext, entityUpdate.entityType, entityUpdate.name) flatMap {
-//            case Some(e) =>
-//              val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
-//              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-//            case None =>
-//              if (upsert) {
-//                val updatedEntity = applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations)
-//                dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-//              } else {
-//                DBIO.failed(new RuntimeException("Entity does not exist"))
-//              }
-//          }
-//
-//          updateAction.asTry.map { trial => (entityUpdate, trial) }
-//        }
-//
-//        val errorReports = DBIO.sequence(results).map(_.collect {
-//          case (entityUpdate, Failure(regrets)) => ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}",ErrorReport(regrets))
-//        })
-//
-//        errorReports.map {
-//          case Seq() => RequestComplete(StatusCodes.NoContent)
-//          case reports => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.",reports))
-//        }
       }
     }
 
