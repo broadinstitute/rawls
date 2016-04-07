@@ -182,10 +182,7 @@ trait WorkspaceComponent {
 
     def deleteWorkspaceEntityAttributes(workspaceId: UUID) = {
       entityQuery.filter(_.workspaceId === workspaceId).result flatMap { recs =>
-        DBIO.sequence(recs.map(e => entityQuery.entityAttributes(e.id).result.flatMap { recs =>
-          val attributeDeletes = entityQuery.deleteEntityAttributes(recs)
-          DBIO.seq(attributeDeletes:_*)
-        }))
+        entityQuery.deleteEntityAttributes(recs)
       }
     }
 

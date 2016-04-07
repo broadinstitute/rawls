@@ -68,6 +68,7 @@ case class Entity(
                    ) extends Attributable {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
+  def toReference = AttributeEntityReference(entityType, name)
 }
 
 case class MethodConfigurationName(

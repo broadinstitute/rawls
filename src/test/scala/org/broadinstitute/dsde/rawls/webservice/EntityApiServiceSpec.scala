@@ -104,7 +104,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
-    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq.empty)
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("baz"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -113,6 +113,44 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> AttributeString("bar"))))) {
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + ("newAttribute" -> AttributeString("baz"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
+        }
+      }
+  }
+
+  it should "return 204 when batch upserting an entities with valid references" in withTestDataApiServices { services =>
+    val newEntity = Entity("new_entity", testData.sample2.entityType, Map.empty)
+    val referenceList = AttributeEntityReferenceList(Seq(testData.sample2.toReference, newEntity.toReference))
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", referenceList)))
+    val update2 = EntityUpdateDefinition(newEntity.name, newEntity.entityType, Seq.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent, response.entity.asString) {
+          status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + ("newAttribute" -> referenceList)))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+        assertResult(Some(newEntity)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newEntity.entityType, newEntity.name))
+        }
+      }
+  }
+
+  it should "return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeEntityReference("bar", "baz"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeEntityReference("bar", "bing"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        assertResult(2) {
+          responseAs[ErrorReport].causes.length
         }
       }
   }
