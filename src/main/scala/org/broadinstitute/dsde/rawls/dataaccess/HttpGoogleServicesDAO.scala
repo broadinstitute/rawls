@@ -407,12 +407,10 @@ class HttpGoogleServicesDAO(
   override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
-    retry(when500) {
-      () => Future {
-        blocking {
-          executeGoogleRequest(groups.delete(group.groupEmail.value))
-        }
-      }
+    val deleter = groups.delete(group.groupEmail.value)
+    val deleteFuture: Future[Unit] = retry(when500)(() => Future { blocking { executeGoogleRequest(deleter) } })
+    deleteFuture recover {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // if the group is already gone, don't fail
     }
   }
 
