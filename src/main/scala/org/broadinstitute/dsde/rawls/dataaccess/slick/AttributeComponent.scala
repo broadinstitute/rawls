@@ -3,11 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.dbio.Effect.{Read, Write}
 import slick.profile.FixedSqlAction
+import spray.http.StatusCodes
 
 /**
  * Created by dvoet on 2/4/16.
@@ -69,7 +70,7 @@ trait AttributeComponent {
         case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")
         case Seq(entityRecord) =>
           val attributeId = UUID.randomUUID()
-          (attributeQuery += marshalAttributeEntityReference(attributeId, name, listIndex, entityRecord.id)).map(_ => attributeId)
+          (attributeQuery += marshalAttributeEntityReference(attributeId, name, listIndex, ref, Map(ref -> entityRecord.id))).map(_ => attributeId)
       }
     }
 
@@ -78,16 +79,16 @@ trait AttributeComponent {
       (attributeQuery += marshalAttributeValue(attributeId, name, value, listIndex)).map(_ => attributeId)
     }
 
-    def marshalAttribute(name: String, attribute: Attribute, entityIdsByName: Map[(String, String), UUID]): Seq[AttributeRecord] = {
+    def marshalAttribute(name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, UUID]): Seq[AttributeRecord] = {
       attribute match {
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(UUID.randomUUID(), name, Option(index), entityIdsByName((ref.entityName, ref.entityType)))}
+          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(UUID.randomUUID(), name, Option(index), ref, entityIdsByRef)}
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
           values.zipWithIndex.map { case (value, index) => marshalAttributeValue(UUID.randomUUID(), name, value, Option(index))}
         case value: AttributeValue => Seq(marshalAttributeValue(UUID.randomUUID(), name, value, None))
-        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(UUID.randomUUID(), name, None, entityIdsByName((ref.entityName, ref.entityType))))
+        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(UUID.randomUUID(), name, None, ref, entityIdsByRef))
         case AttributeEmptyList => Seq(marshalAttributeValue(UUID.randomUUID(), name, AttributeNull, Option(-1))) // storing empty list as an element with index -1
       }
     }
@@ -106,7 +107,8 @@ trait AttributeComponent {
       }:_*)
     }
 
-    private def marshalAttributeEntityReference(id: UUID, name: String, listIndex: Option[Int], entityId: UUID): AttributeRecord = {
+    private def marshalAttributeEntityReference(id: UUID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, UUID]): AttributeRecord = {
+      val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
       AttributeRecord(id, name, None, None, None, Option(entityId), listIndex)
     }
 
@@ -165,14 +167,14 @@ trait AttributeComponent {
     private def assertConsistentValueListMembers(attributes: Seq[AttributeValue]): Unit = {
       val headAttribute = attributes.head
       if (!attributes.forall(_.getClass == headAttribute.getClass)) {
-        throw new RawlsException(s"inconsistent attributes for list: $attributes")
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent attributes for list: $attributes"))
       }
     }
 
     private def assertConsistentReferenceListMembers(attributes: Seq[AttributeEntityReference]): Unit = {
       val headAttribute = attributes.head
       if (!attributes.forall(_.entityType == headAttribute.entityType)) {
-        throw new RawlsException(s"inconsistent entity types for list: $attributes")
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent entity types for list: $attributes"))
       }
     }
 

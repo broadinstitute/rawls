@@ -2,11 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import slick.dbio.Effect.Read
 import slick.jdbc.GetResult
 import org.broadinstitute.dsde.rawls.model._
 import slick.jdbc.GetResult
+import spray.http.StatusCodes
 
 /**
  * Created by dvoet on 2/4/16.
@@ -34,7 +36,7 @@ trait EntityComponent {
     def attributeId = column[UUID]("attribute_id", O.PrimaryKey)
 
     def entity = foreignKey("FK_ENT_ATTR_ENTITY", entityId, entityQuery)(_.id)
-    def attribute = foreignKey("FK_ENT_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id)
+    def attribute = foreignKey("FK_ENT_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id, onDelete = ForeignKeyAction.Cascade)
 
     def * = (entityId, attributeId) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
   }
@@ -44,6 +46,8 @@ trait EntityComponent {
   object entityQuery extends TableQuery(new EntityTable(_)) {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
+
+    implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<) }
 
     // result structure from entity and attribute list raw sql
     case class EntityListResult(entityRecord: EntityRecord, attributeRecord: Option[AttributeRecord], refEntityRecord: Option[EntityRecord])
@@ -94,6 +98,17 @@ trait EntityComponent {
       filter(_.id === id)
     }
 
+    def lookupEntitiesByNames(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+      if (entities.isEmpty) {
+        DBIO.successful(Seq.empty)
+      } else {
+        // slick can't do a query with '(entityType, entityName) in ((?, ?), (?, ?), ...)' so we need raw sql
+        val baseSelect = sql"select id, name, entity_type, workspace_id from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
+        val entityTypeNameTuples = entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+        concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
+      }
+    }
+
     /** gets the given entity */
     def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
       val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("name")} = ${entityName} and e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
@@ -135,27 +150,63 @@ trait EntityComponent {
 
     /** creates or replaces an entity */
     def save(workspaceContext: SlickWorkspaceContext, entity: Entity): ReadWriteAction[Entity] = {
-      validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
-      validateUserDefinedString(entity.name)
-      entity.attributes.keys.foreach { value =>
-        validateUserDefinedString(value)
-        validateAttributeName(value)
+      save(workspaceContext, Seq(entity)).map(_.head)
+    }
+
+    def save(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
+      entities.foreach(validateEntity)
+
+      for {
+        preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference))
+        _ <- deleteEntityAttributes(preExistingEntityRecs)
+        savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
+        referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
+        _ <- insertAttributes(entities, referencedAndSavingEntityRecs)
+      } yield entities
+    }
+
+    private def insertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord]) = {
+      val entityIdsByName = entityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
+      val attributeRecsToEntityId = (for {
+        entity <- entities
+        (attributeName, attribute) <- entity.attributes
+        attributeRec <- attributeQuery.marshalAttribute(attributeName, attribute, entityIdsByName)
+      } yield attributeRec -> entityIdsByName(entity.toReference)).toMap
+
+      attributeQuery.insertAttributesSql(attributeRecsToEntityId.keys.toSeq) andThen
+        insertEntityAttributesSql(attributeRecsToEntityId.map { case (attr, entityId) => attr.id -> entityId })
+    }
+
+    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Traversable[EntityRecord]) = {
+      val notYetLoadedEntityRecs = (for {
+        entity <- entities
+        (_, attribute) <- entity.attributes
+        ref <- attribute match {
+          case AttributeEntityReferenceList(l) => l
+          case r: AttributeEntityReference => Seq(r)
+          case _ => Seq.empty
+        }
+      } yield ref).toSet -- alreadyLoadedEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name))
+
+      lookupEntitiesByNames(workspaceContext.workspaceId, notYetLoadedEntityRecs) map { foundEntities =>
+        if (foundEntities.size != notYetLoadedEntityRecs.size) {
+          val notFoundRefs = notYetLoadedEntityRecs -- foundEntities.map(r => AttributeEntityReference(r.entityType, r.name))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Could not resolve some entity references", notFoundRefs.map { missingRef =>
+            ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
+          }.toSeq))
+        } else {
+          foundEntities
+        }
       }
 
-      uniqueResult[EntityRecord](findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name)) flatMap {
-        case None =>
-          val entityId = UUID.randomUUID()
-          val entityInsert = Seq(entityQuery += EntityRecord(entityId, entity.name, entity.entityType, workspaceContext.workspaceId))
-          val insertAttributes = insertEntityAttributes(entity, entityId, workspaceContext.workspaceId)
-          DBIO.seq(entityInsert ++ insertAttributes:_*)
-        case Some(entityRec) =>
-          // note that there is nothing in the entity record itself that is actually updateable
-          entityAttributes(entityRec.id).result.flatMap { attributeRecords =>
-            val deleteActions = deleteEntityAttributes(attributeRecords)
-            val insertActions = insertEntityAttributes(entity, entityRec.id, workspaceContext.workspaceId)
-            DBIO.seq(deleteActions ++ insertActions:_*)
-          }
-      } map { _ => entity }
+    }
+
+    private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): WriteAction[Traversable[EntityRecord]] = {
+      val existingEntityTypeNames = preExistingEntityRecs.map(rec => (rec.entityType, rec.name))
+      val newEntities = entities.filterNot(e => existingEntityTypeNames.exists(_ ==(e.entityType, e.name)))
+
+      val newEntityRecs = newEntities.map(e => marshalEntity(UUID.randomUUID(), e, workspaceContext.workspaceId))
+      insertEntitiesSql(newEntityRecs.toSeq).map(_ => newEntityRecs)
     }
 
     /** deletes an entity */
@@ -163,11 +214,9 @@ trait EntityComponent {
       uniqueResult[EntityRecord](findEntityByName(workspaceContext.workspaceId, entityType, entityName)) flatMap {
         case None => DBIO.successful(false)
         case Some(entityRec) =>
-          entityAttributes(entityRec.id).result.flatMap { attributeRecords =>
-            val deleteActions = deleteEntityAttributes(attributeRecords)
-            val deleteEntity = findEntityByName(workspaceContext.workspaceId, entityType, entityName).delete
-            DBIO.seq(deleteActions:_*) andThen deleteEntity.map(_ > 0)
-          }
+          val deleteActions = deleteEntityAttributes(Seq(entityRec))
+          val deleteEntity = findEntityByName(workspaceContext.workspaceId, entityType, entityName).delete
+          deleteActions andThen deleteEntity.map(_ > 0)
       }
     }
 
@@ -175,6 +224,12 @@ trait EntityComponent {
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
       unmarshalEntities(sql)
+    }
+
+    def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
+      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId} and (e.#${quoteIdentifier("entity_type")}, e.#${quoteIdentifier("name")}) in ("""
+      val entityTypeNameTuples = entityRefs.map { case ref => sql"(${ref.entityType}, ${ref.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      unmarshalEntities(concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityListResult])
     }
 
     /**
@@ -219,7 +274,7 @@ trait EntityComponent {
       allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _))
     }
 
-    private def insertEntitiesSql(destWorkspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]) = {
+    private def insertEntitiesSql(entities: Seq[EntityRecord]): driver.api.DBIOAction[Unit, driver.api.NoStream, driver.api.Effect] = {
       val insertBatches = entities.map { entity =>
         sql"(${entity.id}, ${entity.name}, ${entity.entityType}, ${entity.workspaceId})"
       }.grouped(batchSize).toSeq
@@ -250,11 +305,11 @@ trait EntityComponent {
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
 
       val entityIdsByName = entities.map { entity =>
-        (entity.name, entity.entityType) -> UUID.randomUUID()
+        entity.toReference -> UUID.randomUUID()
       }.toMap
 
       val entityRecordsWithAttributes = entities.map { entity =>
-        marshalEntity(entityIdsByName((entity.name, entity.entityType)), entity, destWorkspaceContext.workspaceId) -> entity.attributes
+        marshalEntity(entityIdsByName(entity.toReference), entity, destWorkspaceContext.workspaceId) -> entity.attributes
       }.toSeq
 
       val attributeRecordsWithEntity = entityRecordsWithAttributes.flatMap { case (entity, attrs) =>
@@ -267,7 +322,7 @@ trait EntityComponent {
         (attrRec.id, entityRec.id)
       }.toMap
 
-      insertEntitiesSql(destWorkspaceContext, entityRecordsWithAttributes.map(_._1)) andThen
+      insertEntitiesSql(entityRecordsWithAttributes.map(_._1)) andThen
         attributeQuery.insertAttributesSql(attributeRecordsWithEntity.map(_._1)) andThen
         insertEntityAttributesSql(attributesWithEntityIds)
     }
@@ -359,12 +414,18 @@ trait EntityComponent {
       attributeInserts.toSeq
     }
 
-    def deleteEntityAttributes(attributeRecords: Seq[AttributeRecord]) = {
-      Seq(deleteEntityAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
+    def deleteEntityAttributes(entityRecords: Seq[EntityRecord]) = {
+      val entityAttributes = entityAttributeQuery.filter(_.entityId.inSetBind(entityRecords.map(_.id)))
+      attributeQuery.filter(_.id in entityAttributes.map(_.attributeId)).delete
     }
+  }
 
-    private def deleteEntityAttributeMappings(attributeRecords: Seq[AttributeRecord]): WriteAction[Int] = {
-      entityAttributeQuery.filter(_.attributeId inSetBind attributeRecords.map(_.id)).delete
+  def validateEntity(entity: Entity): Unit = {
+    validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
+    validateUserDefinedString(entity.name)
+    entity.attributes.keys.foreach { value =>
+      validateUserDefinedString(value)
+      validateAttributeName(value)
     }
   }
 }

@@ -560,31 +560,34 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        val results = entityUpdates.map { entityUpdate =>
-          val updateAction = dataAccess.entityQuery.get(workspaceContext, entityUpdate.entityType, entityUpdate.name) flatMap {
-            case Some(e) =>
-              val updatedEntity = applyOperationsToEntity(e, entityUpdate.operations)
-              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-            case None =>
-              if (upsert) {
-                val updatedEntity = applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations)
-                dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-              } else {
-                DBIO.failed(new RuntimeException("Entity does not exist"))
-              }
+        val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
+          val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+          entityUpdates.map { entityUpdate =>
+            entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+              case Some(e) =>
+                Try(applyOperationsToEntity(e, entityUpdate.operations))
+              case None =>
+                if (upsert) {
+                  Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
+                } else {
+                  Failure(new RuntimeException("Entity does not exist"))
+                }
+            })
           }
-          
-          updateAction.asTry.map { trial => (entityUpdate, trial) }
         }
-        
-        val errorReports = DBIO.sequence(results).map(_.collect {
-          case (entityUpdate, Failure(regrets)) => ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}",ErrorReport(regrets))
-        })
-        
-        errorReports.map {
-          case Seq() => RequestComplete(StatusCodes.NoContent)
-          case reports => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.",reports))
+
+        val saveAction = updateTrialsAction flatMap { updateTrials =>
+          val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+            ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+          }
+          if (!errorReports.isEmpty) {
+            DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+          } else {
+            dataAccess.entityQuery.save(workspaceContext, updateTrials.collect { case (entityUpdate, Success(entity)) => entity } )
+          }
         }
+
+        saveAction.map(_ => RequestComplete(StatusCodes.NoContent))
       }
     }
 

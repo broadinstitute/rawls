@@ -4,4 +4,5 @@
     <include file="changesets/20160316.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160318.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160330_refactor_entities_attributes.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160406.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
