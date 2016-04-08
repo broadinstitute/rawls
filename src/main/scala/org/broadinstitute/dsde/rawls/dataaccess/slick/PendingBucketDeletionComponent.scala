@@ -8,14 +8,17 @@ trait PendingBucketDeletionComponent {
   import driver.api._
 
   class PendingBucketDeletionTable(tag: Tag) extends Table[PendingBucketDeletionRecord](tag, "BUCKET_DELETION") {
-    def bucket = column[String]("bucket", O.PrimaryKey)
+    def bucket = column[String]("bucket", O.PrimaryKey, O.Length(254))
 
-    def * = (bucket) <> (PendingBucketDeletionRecord.apply _, PendingBucketDeletionRecord.unapply)
+    def * = bucket <> (PendingBucketDeletionRecord, PendingBucketDeletionRecord.unapply)
   }
 
   object pendingBucketDeletionQuery extends TableQuery(new PendingBucketDeletionTable(_)) {
-    def save(pendingBucketDeletion: PendingBucketDeletionRecord): WriteAction[PendingBucketDeletionRecord] = {
-      pendingBucketDeletionQuery insertOrUpdate pendingBucketDeletion map(_ => pendingBucketDeletion)
+
+    def save(pendingBucketDeletion: PendingBucketDeletionRecord): ReadWriteAction[PendingBucketDeletionRecord] = {
+      filter(_.bucket === pendingBucketDeletion.bucket).result.flatMap { records =>
+        if (records.isEmpty) pendingBucketDeletionQuery += pendingBucketDeletion else DBIO.successful(None)
+      } map(_ => pendingBucketDeletion)
     }
 
     def list(): ReadAction[Seq[PendingBucketDeletionRecord]] = {

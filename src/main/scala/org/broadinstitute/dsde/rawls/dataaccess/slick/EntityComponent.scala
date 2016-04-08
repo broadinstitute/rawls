@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
+import javax.xml.bind.DatatypeConverter
 
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
@@ -368,7 +369,7 @@ trait EntityComponent {
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
         DBIO.sequence(ids.map { id =>
-          val sql = sql"""#$baseEntityAndAttributeSql where e."id" = ${id}""".as[EntityListResult]
+          val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("id")} = ${id}""".as[EntityListResult]
           unmarshalEntities(sql)
         }.toSeq)
       }

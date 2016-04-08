@@ -144,13 +144,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(List(
+        assertResult(Set(
           new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner),
           new SubmissionListResponse(testData.submission1, testData.userOwner),
           new SubmissionListResponse(testData.submission2, testData.userOwner),
           new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner),
           new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
-          responseAs[List[SubmissionListResponse]]
+          responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
   }

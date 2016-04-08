@@ -34,8 +34,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   val database = databaseConfig.db
   val slickDataSource = new SlickDataSource(databaseConfig)
 
-  val testDate = new DateTime()
+  val testDate = currentTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
+
+  // NOTE: we are setting the millis here to 0 to match the truncation from the database - if we switch to using liquibase for tests, we may need to revert this
+  def currentTime(): DateTime = {
+    new DateTime().withMillisOfSecond(0)
+  }
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(database.run(action.transactionally), duration)
@@ -65,7 +70,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
@@ -91,7 +96,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", Map.empty,
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup), isLocked = true)
 
@@ -128,9 +133,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
-    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", DateTime.now, DateTime.now, "testUser", wsAttrs, Map.empty, Map.empty)
+    val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
@@ -151,7 +156,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter))
     val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
 
-    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup,
         WorkspaceAccessLevels.Write -> realmWriterGroup,
@@ -161,7 +166,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup,
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup))
 
-    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", DateTime.now, DateTime.now, "testUser", wsAttrs,
+    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup2,
         WorkspaceAccessLevels.Write -> realmWriterGroup2,
