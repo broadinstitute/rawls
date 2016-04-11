@@ -163,6 +163,18 @@ trait WorkflowComponent {
         findWorkflowById(id).delete
     }
 
+    def deleteWorkflowErrors(submissionId: UUID) = {
+      findInactiveWorkflows(submissionId).result flatMap { result =>
+        DBIO.seq(result.map(f => workflowQuery.findWorkflowErrorsByWorkflowFailureId(f.id).delete).toSeq:_*)
+      }
+    }
+
+    def deleteWorkflowFailures(submissionId: UUID) = {
+      submissionQuery.filter(_.id === submissionId).result flatMap { result =>
+        DBIO.seq(result.map(sub => workflowQuery.findInactiveWorkflows(submissionId).delete).toSeq:_*)
+      }
+    }
+
     def loadWorkflow(query: WorkflowQueryType): ReadAction[Option[Workflow]] = {
       uniqueResult[WorkflowRecord](query) flatMap {
         case None =>
