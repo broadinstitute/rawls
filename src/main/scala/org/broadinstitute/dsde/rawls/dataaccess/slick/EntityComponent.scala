@@ -426,8 +426,16 @@ trait EntityComponent {
     }
 
     def deleteEntityAttributes(entityRecords: Seq[EntityRecord]) = {
-      val entityAttributes = entityAttributeQuery.filter(_.entityId.inSetBind(entityRecords.map(_.id)))
-      attributeQuery.filter(_.id in entityAttributes.map(_.attributeId)).delete
+      if (entityRecords.isEmpty) {
+        // 0 records deleted
+        DBIO.successful(0)
+      }
+      else {
+        // use plain sql to delete from a join - we were doing a subselect before, which had awful performance, and slick can't do this
+        val deleteBase = sql"delete a from ATTRIBUTE AS a join ENTITY_ATTRIBUTE AS ea ON a.id = ea.attribute_id where ea.entity_id in ("
+        val ids = entityRecords.map { case entity => sql"${entity.id}" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+        concatSqlActions(concatSqlActions(deleteBase, ids), sql")").as[Int]
+      }
     }
   }
 
