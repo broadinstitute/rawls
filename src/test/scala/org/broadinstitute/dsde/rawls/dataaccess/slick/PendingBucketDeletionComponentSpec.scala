@@ -36,6 +36,7 @@ class PendingBucketDeletionComponentSpec extends TestDriverComponentWithFlatSpec
     }
   }
 
+  // fails when run with other tests but not by itself
   it should "save concurrently" in withEmptyTestDatabase {
     val deletion = PendingBucketDeletionRecord("foo")
 
