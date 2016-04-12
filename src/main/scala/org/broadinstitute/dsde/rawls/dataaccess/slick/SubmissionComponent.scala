@@ -197,7 +197,10 @@ trait SubmissionComponent {
       val workflowDeletes = workflowQuery.filter(_.submissionId === submissionId).result flatMap { result =>
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
       }
-      workflowDeletes andThen submissionQuery.filter(_.id === submissionId).delete
+      workflowDeletes andThen
+        workflowQuery.deleteWorkflowErrors(submissionId) andThen
+        workflowQuery.deleteWorkflowFailures(submissionId) andThen
+        submissionQuery.filter(_.id === submissionId).delete
     }
 
     /*
