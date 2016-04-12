@@ -1,12 +1,13 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import java.util.UUID
+
 import akka.actor.SupervisorStrategy.Restart
 import akka.actor.{Props, OneForOneStrategy, Actor}
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
-import org.broadinstitute.dsde.rawls.model.{UserInfo, Submission, WorkspaceName}
-import akka.pattern._
+import org.broadinstitute.dsde.rawls.model.WorkspaceName
 
 import scala.concurrent.duration._
 
@@ -16,13 +17,12 @@ import scala.concurrent.duration._
 object SubmissionSupervisor {
   sealed trait SubmissionSupervisorMessage
 
-  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: String, credential: Credential)
+  case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential)
 
   def props(executionServiceDAO: ExecutionServiceDAO,
             datasource: SlickDataSource,
-            workflowPollInterval: Duration = 1 minutes,
-            submissionPollInterval: Duration = 30 minutes): Props = {
-    Props(new SubmissionSupervisor(executionServiceDAO, datasource, workflowPollInterval, submissionPollInterval))
+            submissionPollInterval: FiniteDuration = 1 minutes): Props = {
+    Props(new SubmissionSupervisor(executionServiceDAO, datasource, submissionPollInterval))
   }
 }
 
@@ -32,22 +32,19 @@ object SubmissionSupervisor {
  * 
  * @param executionServiceDAO
  * @param datasource
- * @param workflowPollInterval
  * @param submissionPollInterval
  */
 class SubmissionSupervisor(executionServiceDAO: ExecutionServiceDAO,
                            datasource: SlickDataSource,
-                           workflowPollInterval: Duration,
-                           submissionPollInterval: Duration) extends Actor {
+                           submissionPollInterval: FiniteDuration) extends Actor {
   import context._
 
   override def receive = {
-    case SubmissionStarted(workspaceName, submissionId, credential) => startSubmissionMonitor(workspaceName, submissionId, credential)
+    case SubmissionStarted(workspaceContext, submissionId, credential) => startSubmissionMonitor(workspaceContext, submissionId, credential)
   }
 
-  private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: String, credential: Credential): Unit = {
-    actorOf(SubmissionMonitor.props(workspaceName, submissionId, datasource, workflowPollInterval, submissionPollInterval,
-      WorkflowMonitor.props(workflowPollInterval, executionServiceDAO, datasource, credential)), submissionId)
+  private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): Unit = {
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceDAO, credential, submissionPollInterval), submissionId.toString)
   }
 
   override val supervisorStrategy =

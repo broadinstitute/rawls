@@ -133,6 +133,10 @@ trait EntityComponent {
     }
 
     def unmarshalEntities(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Iterable[Entity]] = {
+      unmarshalEntitiesWithIds(entityAttributeAction).map(_.map { case (id, entity) => entity })
+    }
+
+    def unmarshalEntitiesWithIds(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Map[UUID, Entity]] = {
       entityAttributeAction.map { entityAttributeRecords =>
         val allEntityRecords = entityAttributeRecords.map(_.entityRecord).toSet
 
@@ -144,8 +148,8 @@ trait EntityComponent {
         val attributesByEntityId = attributeQuery.unmarshalAttributes[UUID](entitiesWithAttributes)
 
         allEntityRecords.map { entityRec =>
-          unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
-        }
+          entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
+        }.toMap
       }
     }
 
@@ -229,8 +233,14 @@ trait EntityComponent {
 
     def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
       val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId} and (e.#${quoteIdentifier("entity_type")}, e.#${quoteIdentifier("name")}) in ("""
-      val entityTypeNameTuples = entityRefs.map { case ref => sql"(${ref.entityType}, ${ref.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      val entityTypeNameTuples = entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
       unmarshalEntities(concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityListResult])
+    }
+
+    def listByIds(entityIds: Traversable[UUID]): ReadAction[Map[UUID, Entity]] = {
+      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("id")}  in ("""
+      val entityIdSql = entityIds.map { id => sql"$id" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      unmarshalEntitiesWithIds(concatSqlActions(concatSqlActions(baseSelect, entityIdSql), sql")").as[EntityListResult])
     }
 
     /**

@@ -4,9 +4,12 @@ import java.sql.Timestamp
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import slick.dbio.Effect.Write
 import slick.driver.H2Driver.api._
+import slick.profile.FixedSqlAction
 
 /**
  * Created by mbemis on 2/18/16.
@@ -144,11 +147,11 @@ trait SubmissionComponent {
 
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {
         case None =>
-          val configId = uniqueResult(methodConfigurationQuery.findByName(
+          val configIdAction = uniqueResult[Long](methodConfigurationQuery.findByName(
             workspaceContext.workspaceId, submission.methodConfigurationNamespace, submission.methodConfigurationName).map(_.id))
 
           loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity) flatMap { entityId =>
-            configId flatMap { configId =>
+            configIdAction flatMap { configId =>
               (submissionQuery += marshalSubmission(workspaceContext.workspaceId, submission, entityId, configId.get))
             } andThen
               saveSubmissionWorkflows(submission.workflows) andThen
@@ -160,8 +163,8 @@ trait SubmissionComponent {
     } map { _ => submission }
 
     /* updates the status of a submission */
-    def updateStatus(workspaceContext: SlickWorkspaceContext, submissionId: String, newStatus: SubmissionStatuses.SubmissionStatus) = {
-      findById(UUID.fromString(submissionId)).map(_.status).update(newStatus.toString)
+    def updateStatus(submissionId: UUID, newStatus: SubmissionStatus): FixedSqlAction[Int, driver.api.NoStream, Write] = {
+      findById(submissionId).map(_.status).update(newStatus.toString)
     }
 
     /* deletes a submission and all associated records */
@@ -331,6 +334,15 @@ trait SubmissionComponent {
         case Some(ref) =>
           uniqueResult(entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).map(_.id))
       }
+    }
+
+    def getMethodConfigOutputExpressions(submissionId: UUID): ReadAction[Map[String, String]] = {
+      val query = for {
+        submission <- submissionQuery if submission.id === submissionId
+        methodConfigOutputs <- methodConfigurationOutputQuery if methodConfigOutputs.methodConfigId === submission.methodConfigurationId
+      } yield (methodConfigOutputs.key, methodConfigOutputs.value)
+
+      query.result.map(_.toMap)
     }
 
     /*

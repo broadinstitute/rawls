@@ -72,7 +72,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   it should "update a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission1.submissionId, SubmissionStatuses.Done))
+    runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Done))
 
     assertResult(Some(testData.submission1.copy(status = SubmissionStatuses.Done))) {
       runAndWait(submissionQuery.get(workspaceContext, testData.submission1.submissionId))
@@ -84,13 +84,13 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     // test data contains 5 submissions, all in "Submitted" state
     // update one of the submissions to "Done"
-    runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission1.submissionId, SubmissionStatuses.Done))
+    runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Done))
     assertResult(Some(testData.submission1.copy(status = SubmissionStatuses.Done))) {
       runAndWait(submissionQuery.get(workspaceContext, testData.submission1.submissionId))
     }
 
     // update another of the submissions to "Aborted"
-    runAndWait(submissionQuery.updateStatus(workspaceContext, testData.submission2.submissionId, SubmissionStatuses.Aborted))
+    runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission2.submissionId), SubmissionStatuses.Aborted))
     assertResult(Some(testData.submission2.copy(status = SubmissionStatuses.Aborted))) {
       runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
     }

@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor
 
+import java.util.UUID
+
 import akka.actor.ActorRef
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -39,7 +41,7 @@ object BootMonitors extends LazyLogging {
 
         val subStartMessage = gcsDAO.getUserCredentials(submitter) map {
           case None => throw new RawlsException(s"Cannot start Submission Monitor because credentials were not retrieved for user ${submitter.userSubjectId.value}, submitter of ${subId}")
-          case Some(credential) => SubmissionStarted(wsName, subId, credential)
+          case Some(credential) => SubmissionStarted(wsName, UUID.fromString(subId), credential)
         }
 
         subStartMessage onComplete {
