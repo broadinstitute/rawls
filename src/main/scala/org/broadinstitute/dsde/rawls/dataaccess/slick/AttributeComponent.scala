@@ -145,7 +145,7 @@ trait AttributeComponent extends LazyLogging {
             //HACK: Work around corrupted data due to GAWB-443. If there are duplicate records for this attribute,
             //log an error (not an exception) and then just take the first one.
             if (attributeRecsWithRefForName.size > 1) {
-              logger.error(s"more than one value exists for attribute but list index is not defined for all records: $attributeRecsWithRefForName size: ${attributeRecsWithRefForName.size} numEmpty: ${attributeRecsWithRefForName.collect(_._1.listIndex.isEmpty).size}")
+              logger.error(s"more than one value exists for attribute but list index is not defined for all records: $attributeRecsWithRefForName size: ${attributeRecsWithRefForName.size} numEmpty: ${attributeRecsWithRefForName.count(_._1.listIndex.isEmpty)}")
             }
             if (attributeRecsWithRefForName.head._2.isDefined) {
               unmarshalReference(attributeRecsWithRefForName.head._2.get)
