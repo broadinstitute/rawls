@@ -169,11 +169,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       assert {
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
       }
-    }
 
-    withWorkspaceContext(testData.workspace) { context =>
+      def entityGenerator(i: Int) = {
+        val newAttrs = pair2.attributes + (s"attr$i" -> AttributeNumber(i))
+        entityQuery.save(context, pair2.copy(attributes = newAttrs))
+      }
+
       val count = 100
-      runMultipleAndWait(count)(_ => entityQuery.save(context, pair2))
+      runMultipleAndWait(count)(entityGenerator)
       assert {
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
       }
