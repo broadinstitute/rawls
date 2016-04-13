@@ -147,10 +147,14 @@ trait AttributeComponent extends LazyLogging {
             if (attributeRecsWithRefForName.size > 1) {
               logger.error(s"more than one value exists for attribute but list index is not defined for all records: $attributeRecsWithRefForName size: ${attributeRecsWithRefForName.size} numEmpty: ${attributeRecsWithRefForName.count(_._1.listIndex.isEmpty)}")
             }
-            if (attributeRecsWithRefForName.head._2.isDefined) {
-              unmarshalReference(attributeRecsWithRefForName.head._2.get)
+
+            // sort by the uuid of the attribute to give a predictable order
+            val sortedAttributes = attributeRecsWithRefForName.toList.sortBy(_._1.id)
+
+            if (sortedAttributes.head._2.isDefined) {
+              unmarshalReference(sortedAttributes.head._2.get)
             } else {
-              unmarshalValue(attributeRecsWithRefForName.head._1)
+              unmarshalValue(sortedAttributes.head._1)
             }
           }
         }
