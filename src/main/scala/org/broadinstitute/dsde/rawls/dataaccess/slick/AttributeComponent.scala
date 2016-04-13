@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
@@ -21,7 +22,7 @@ case class AttributeRecord(id: UUID,
                            valueEntityRef: Option[UUID],
                            listIndex: Option[Int])
 
-trait AttributeComponent {
+trait AttributeComponent extends LazyLogging {
   this: DriverComponent with EntityComponent =>
 
   import driver.api._
@@ -140,12 +141,21 @@ trait AttributeComponent {
           val attributeRecsWithRefForName: Set[(AttributeRecord, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
           if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
-          } else if (attributeRecsWithRefForName.size > 1) {
-            throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
-          } else if (attributeRecsWithRefForName.head._2.isDefined) {
-            unmarshalReference(attributeRecsWithRefForName.head._2.get)
           } else {
-            unmarshalValue(attributeRecsWithRefForName.head._1)
+            //HACK: Work around corrupted data due to GAWB-443. If there are duplicate records for this attribute,
+            //log an error (not an exception) and then just take the first one.
+            if (attributeRecsWithRefForName.size > 1) {
+              logger.error(s"more than one value exists for attribute but list index is not defined for all records: $attributeRecsWithRefForName size: ${attributeRecsWithRefForName.size} numEmpty: ${attributeRecsWithRefForName.count(_._1.listIndex.isEmpty)}")
+            }
+
+            // sort by the uuid of the attribute to give a predictable order
+            val sortedAttributes = attributeRecsWithRefForName.toList.sortBy(_._1.id)
+
+            if (sortedAttributes.head._2.isDefined) {
+              unmarshalReference(sortedAttributes.head._2.get)
+            } else {
+              unmarshalValue(sortedAttributes.head._1)
+            }
           }
         }
       }
