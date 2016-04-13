@@ -188,7 +188,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
-  it should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
+  ignore should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
     val workspaceId = UUID.randomUUID()
     val attributeRecs = Seq(
       ((1 -> AttributeRecord(UUID.randomUUID(), "valList", None, Some(1), None, None, Some(2))), None),
