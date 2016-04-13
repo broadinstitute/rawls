@@ -1,7 +1,9 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import _root_.slick.dbio.DBIO
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -168,6 +170,95 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //still needs to be implemented fully
     assertResult(true) {
       true
+    }
+  }
+
+
+  it should "pull entity records for a single entity given no expression" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "Sample", "sample1", None)
+
+      //Lookup succeeds
+      runAndWait(
+        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Sample", this) { entityRecs =>
+          assertResult(1) {
+            entityRecs.size
+          }
+          assertResult("sample1") {
+            entityRecs.head.name
+          }
+          DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+        })
+
+      //Lookup fails because it's not there
+      val notFoundExc = intercept[RawlsExceptionWithErrorReport] {
+        runAndWait(
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(entityName = "sampel1"), ctx, "Sample", this) { entityRecs =>
+            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          })
+      }
+      assertResult(StatusCodes.NotFound) {
+        notFoundExc.errorReport.statusCode.get
+      }
+
+      //Lookup fails because it doesn't match the method type
+      val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
+        runAndWait(
+          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Pair", this) { entityRecs =>
+            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          })
+      }
+      assertResult(StatusCodes.BadRequest) {
+        noMatchyMethodTypeExc.errorReport.statusCode.get
+      }
+    }
+  }
+
+  it should "pull multiple entity records given an entity expression" in withTestDataServices { services =>
+    withWorkspaceContext(testData.workspace) { ctx =>
+      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "SampleSet", "sset1", Some("this.samples"))
+
+      //Lookup succeeds
+      runAndWait(
+        services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Sample", this) { entityRecs =>
+          assertResult(Set("sample1", "sample2", "sample3")) {
+            entityRecs.map(_.name).toSet
+          }
+          DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+        })
+
+      //Lookup fails due to parse failure
+      val badExpressionExc = intercept[RawlsExceptionWithErrorReport] {
+        runAndWait(
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("nonsense!")), ctx, "Sample", this) { entityRecs =>
+            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          })
+      }
+      assertResult(StatusCodes.BadRequest) {
+        badExpressionExc.errorReport.statusCode.get
+      }
+
+      //Lookup fails due to no results
+      val noResultExc = intercept[RawlsExceptionWithErrorReport] {
+        runAndWait(
+          services.workspaceService.withSubmissionEntityRecs(subRq.copy(expression = Some("this.bonk")), ctx, "Sample", this) { entityRecs =>
+            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          })
+      }
+      assertResult(StatusCodes.BadRequest) {
+        noResultExc.errorReport.statusCode.get
+      }
+
+      //Lookup fails because it doesn't match the method type
+      val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
+        runAndWait(
+          services.workspaceService.withSubmissionEntityRecs(subRq, ctx, "Pair", this) { entityRecs =>
+            DBIO.successful(RequestComplete(StatusCodes.Created)) //has to be here because inner function needs to return a RqComplete
+          })
+      }
+      assertResult(StatusCodes.BadRequest) {
+        noMatchyMethodTypeExc.errorReport.statusCode.get
+      }
     }
   }
 

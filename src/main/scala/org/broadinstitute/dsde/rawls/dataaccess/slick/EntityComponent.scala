@@ -411,4 +411,16 @@ trait EntityComponent {
       validateAttributeName(value)
     }
   }
+
+  case class ExprEvalRecord(id: Long, name: String)
+  class ExprEvalTemp(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_TEMP") {
+    def id = column[Long]("id")
+    def name = column[String]("name", O.Length(254))
+
+    //No foreign key constraint here because MySQL won't allow them on temp tables :(
+    //def entityId = foreignKey("FK_EXPREVAL_ENTITY", id, entityQuery)(_.id)
+
+    def * = (id, name) <> (ExprEvalRecord.tupled, ExprEvalRecord.unapply)
+  }
+  val exprEvalQuery = TableQuery[ExprEvalTemp]
 }
