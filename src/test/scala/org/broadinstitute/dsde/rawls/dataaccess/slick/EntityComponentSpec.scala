@@ -158,7 +158,32 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "clone all entities from a workspace containing cycles" in withDefaultTestDatabase { 
+  it should "update an entity's attributes many times concurrently" in withDefaultTestDatabase {
+    val pair2 = Entity("pair2", "Pair",
+      Map(
+        "case" -> AttributeEntityReference("Sample", "sample3"),
+        "control" -> AttributeEntityReference("Sample", "sample1")))
+
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(entityQuery.save(context, pair2))
+      assert {
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
+      }
+
+      def entityGenerator(i: Int) = {
+        val newAttrs = pair2.attributes + (s"attr$i" -> AttributeNumber(i))
+        entityQuery.save(context, pair2.copy(attributes = newAttrs))
+      }
+
+      val count = 100
+      runMultipleAndWait(count)(entityGenerator)
+      assert {
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
+      }
+    }
+  }
+
+  it should "clone all entities from a workspace containing cycles" in withDefaultTestDatabase {
     val workspaceOriginal = Workspace(
       namespace = testData.wsName.namespace + "Original",
       name = testData.wsName.name + "Original",

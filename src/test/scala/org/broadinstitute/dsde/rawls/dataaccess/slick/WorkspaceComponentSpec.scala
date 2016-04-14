@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 /**
  * Created by dvoet on 2/8/16.
@@ -109,4 +108,54 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.delete(workspace.toWorkspaceName))
     }
   }
+
+  it should "save concurrently" in withEmptyTestDatabase {
+    insertTestGroups
+
+    val workspaceId: UUID = UUID.randomUUID()
+
+    val workspace: Workspace = Workspace(
+      "test_namespace",
+      "test_name",
+      None,
+      workspaceId.toString,
+      "bucketname",
+      currentTime(),
+      currentTime(),
+      "me",
+      Map("attributeString" -> AttributeString("value"),
+        "attributeBool" -> AttributeBoolean(true),
+        "attributeNum" -> AttributeNumber(3.14159)),
+      Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
+        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
+        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
+      Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
+        WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
+        WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
+      false)
+
+    runAndWait(workspaceQuery.save(workspace))
+
+    def workspaceGenerator(i: Int) = {
+      val newAttrs = Map(s"attribute_$i" -> AttributeNumber(i))
+      val readerRef: RawlsGroupRef = saveRawlsGroup(s"Reader $i", s"reader$i@broad.example.com")
+      val writerRef: RawlsGroupRef = saveRawlsGroup(s"Writer $i", s"writer$i@broad.example.com")
+      val ownerRef: RawlsGroupRef = saveRawlsGroup(s"Owner $i", s"owner$i@broad.example.com")
+
+      val newGroups: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef] = Map(
+        WorkspaceAccessLevels.Read -> readerRef,
+        WorkspaceAccessLevels.Write -> writerRef,
+        WorkspaceAccessLevels.Owner -> ownerRef)
+
+      workspaceQuery.save(workspace.copy(attributes = newAttrs, accessLevels = newGroups, realmACLs = newGroups))
+    }
+
+    val count = 100
+    runMultipleAndWait(count)(workspaceGenerator)
+
+    assert {
+      runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName)).nonEmpty
+    }
+  }
+
 }

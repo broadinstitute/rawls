@@ -142,6 +142,34 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     assertResult(Seq(projectName1)) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
-
   }
+
+  it should "save concurrently" in withEmptyTestDatabase {
+    val subjId = RawlsUserSubjectId("Subject!")
+    val email = RawlsUserEmail("email@email.email.com")
+    val user = RawlsUser(subjId, email)
+    runAndWait(rawlsUserQuery.save(user))
+
+    val projectName = RawlsBillingProjectName("Science!")
+    val project = RawlsBillingProject(projectName, Set(user), "http://cromwell-auth-url.science.example.com")
+
+
+    def billingGenerator(i: Int) = {
+
+      val subjId = RawlsUserSubjectId(s"New User $i")
+      val email = RawlsUserEmail(s"email$i@email.email.com")
+      val newUser = RawlsUser(subjId, email)
+
+      rawlsUserQuery.save(newUser) andThen
+      rawlsBillingProjectQuery.save(project.copy(users = Set(newUser)))
+    }
+
+    val count = 100
+    runMultipleAndWait(count)(billingGenerator)
+
+    assert {
+      runAndWait(rawlsBillingProjectQuery.load(projectName)).nonEmpty
+    }
+  }
+
 }

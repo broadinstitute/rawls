@@ -114,6 +114,39 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "create multiple unique submissions concurrently" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val origCount = runAndWait(submissionQuery.list(context)).length
+
+      def submissionGenerator(dummy: Int) = {
+        val uniqueSubmission = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
+        submissionQuery.create(context, uniqueSubmission)
+      }
+
+      val count = 100
+      runMultipleAndWait(count)(submissionGenerator)
+      assertResult(origCount) {
+        runAndWait(submissionQuery.list(context)).length - count
+      }
+    }
+  }
+
+  // fails
+  it should "not create the same submission multiple times when run concurrently" in withDefaultTestDatabase {
+    val sameSubmission = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
+
+    withWorkspaceContext(testData.workspace) { context =>
+      val count = 100
+      runMultipleAndWait(count)(_ => submissionQuery.create(context, sameSubmission))
+      assertResult(1) {
+        runAndWait(submissionQuery.list(context))
+      }
+      assert {
+        runAndWait(submissionQuery.get(context, sameSubmission.submissionId)).isDefined
+      }
+    }
+  }
+
   "WorkflowComponent" should "let you modify Workflows within a submission" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
@@ -150,5 +183,49 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "save multiple unique workflows concurrently" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val subId = UUID.fromString(testData.submission1.submissionId)
+      val origCount = runAndWait(submissionQuery.loadSubmissionWorkflows(subId)).length
+
+      def workflowGenerator(dummy: Int) = {
+        val uuid = UUID.randomUUID.toString
+        val uniqueEntity = Entity(s"indiv_for_$uuid", "Individual", Map.empty)
+        val uniqueWorkflow = Workflow(uuid, WorkflowStatuses.Submitted, currentTime(), Option(uniqueEntity.toReference), testData.inputResolutions)
+
+        entityQuery.save(context, uniqueEntity) andThen
+        workflowQuery.save(context, subId, uniqueWorkflow)
+      }
+      val count = 100
+      runMultipleAndWait(count)(workflowGenerator)
+      assertResult(origCount) {
+        runAndWait(submissionQuery.loadSubmissionWorkflows(subId)).length - count
+      }
+    }
+  }
+
+  it should "update the workflow when run concurrently" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val subId = UUID.fromString(testData.submission1.submissionId)
+
+      val ent = Entity("new_indiv", "Individual", Map.empty)
+      runAndWait(entityQuery.save(context, ent))
+
+      val workflow = Workflow(UUID.randomUUID.toString, WorkflowStatuses.Submitted, currentTime(), Option(ent.toReference), testData.inputResolutions)
+      runAndWait(workflowQuery.save(context, subId, workflow))
+
+      def updateGenerator(i: Int) = {
+        val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString(s"value_$i")), Option(s"message_$i"), s"input_$i"))
+        val messages = Seq(AttributeString(s"New Message $i"))
+        workflowQuery.update(context, subId, workflow.copy(inputResolutions = inputResolutions, messages = messages))
+      }
+
+      val count = 100
+      runMultipleAndWait(count)(updateGenerator)
+      assert {
+        runAndWait(workflowQuery.get(context, testData.submission1.submissionId, ent.entityType, ent.name)).isDefined
+      }
+    }
+  }
 
 }

@@ -15,7 +15,8 @@ import _root_.slick.driver.H2Driver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._
-import scala.concurrent.Await
+import scala.concurrent.{Future, Await}
+import scala.util.{Success, Try}
 
 /**
  * Created by dvoet on 2/3/16.
@@ -44,6 +45,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(database.run(action.transactionally), duration)
+  }
+
+  protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
+    val futures = (1 to count) map { i => retryConcurrentModificationException(actionGenerator(i)) }
+    Await.result(Future.sequence(futures), duration).head
+  }
+
+  private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
+    database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith { case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action) }
   }
 
   import driver.api._

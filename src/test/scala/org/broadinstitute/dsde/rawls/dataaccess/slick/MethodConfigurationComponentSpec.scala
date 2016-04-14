@@ -35,6 +35,38 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
+  // fails
+  it should "update method config concurrently" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val methodConfig2 = MethodConfiguration(
+      "ns",
+      "config2",
+      "sample",
+
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("output.expr")),
+      MethodRepoMethod("ns-config", "meth2", 2)
+    )
+
+    runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfig2))
+
+    val count = 50
+    runMultipleAndWait(count) { iteration =>
+      methodConfigurationQuery.save(workspaceContext, methodConfig2.copy(
+        prerequisites = methodConfig2.prerequisites ++ Map(s"prereq.expression.$iteration" -> AttributeString("this..wont.parse")),
+        inputs = methodConfig2.inputs ++ Map(s"input.expression.$iteration" -> AttributeString("input.expr")),
+        outputs = methodConfig2.outputs ++ Map(s"output.expression.$iteration" -> AttributeString("output.expr"))
+      ))
+    }
+
+    val resultingConfg = runAndWait(methodConfigurationQuery.get(workspaceContext, methodConfig2.namespace, methodConfig2.name)).get
+    assert(resultingConfg.prerequisites.size == 2)
+    assert(resultingConfg.inputs.size == 2)
+    assert(resultingConfg.outputs.size == 2)
+  }
+
   it should "overwrite method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 

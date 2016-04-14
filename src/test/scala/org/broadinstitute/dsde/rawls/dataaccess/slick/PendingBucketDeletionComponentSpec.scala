@@ -35,4 +35,16 @@ class PendingBucketDeletionComponentSpec extends TestDriverComponentWithFlatSpec
       runAndWait(pendingBucketDeletionQuery.list())
     }
   }
+
+  // fails when run with other tests but not by itself
+  it should "save concurrently" in withEmptyTestDatabase {
+    val deletion = PendingBucketDeletionRecord("foo")
+
+    val count = 100
+    runMultipleAndWait(count)( _ => pendingBucketDeletionQuery.save(deletion))
+
+    assertResult(Seq(deletion)) {
+      runAndWait(pendingBucketDeletionQuery.list())
+    }
+  }
 }

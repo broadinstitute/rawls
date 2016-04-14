@@ -95,6 +95,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       submission.workflows.size
     }
   }
+
   it should "return 201 Created when creating and monitoring a submission with valid expression" in withTestDataApiServices { services =>
     val wsName = testData.wsName
     val mcName = MethodConfigurationName("no_input", "dsde", wsName)
@@ -104,6 +105,28 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     assertResult(3) {
       submission.workflows.size
+    }
+  }
+
+  it should "return 201 Created and unique UUIDs when creating and monitoring many submissions concurrently" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    def submissionWithNewEntity(dummy: Int) = {
+      val newSample = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor")))
+      slickDataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(testData.workspace) { context =>
+          dataAccess.entityQuery.save(context, newSample)
+        }
+      }
+      createAndMonitorSubmission(wsName, methodConf, newSample, Option("this"), services)
+    }
+
+    val submissions = (1 to 1).map(submissionWithNewEntity)
+
+    submissions.foreach { case sub =>
+      println(sub.submissionId)
     }
   }
 
