@@ -176,7 +176,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
             case SubmissionStatuses.Submitted => SubmissionStatuses.Done
             case _ => throw new RawlsException(s"submission $submissionId in unexpected state $status, expected Aborting or Submitted")
           }
-        } flatMap { newStatus => dataAccess.submissionQuery.updateStatus(submissionId, newStatus) } map(_ => true)
+        } flatMap { newStatus =>
+          logger.debug(s"submission $submissionId terminating to status $newStatus")
+          dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
+        } map(_ => true)
       } else {
         DBIO.successful(false)
       }
