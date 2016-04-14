@@ -1008,7 +1008,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     submissionFuture.zip(credFuture) map {
       case (RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)), Some(credential)) =>
         if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, submissionReport.submissionId, credential)
+          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), credential)
         }
         RequestComplete(StatusCodes.Created, submissionReport)
 
@@ -1045,7 +1045,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-      dataAccess.submissionQuery.updateStatus(workspaceContext, submission.submissionId, SubmissionStatuses.Aborting) flatMap { _ =>
+      dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) flatMap { _ =>
         val aborts = DBIO.from(Future.traverse(submission.workflows)(wf =>
           Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
         ))

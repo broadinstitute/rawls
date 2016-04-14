@@ -142,8 +142,8 @@ trait WorkflowComponent {
       }: _*)
     }
 
-    private def saveMessages(messages: Seq[AttributeString], workflowId: Long) = {
-      DBIO.seq(messages.map { message => workflowMessageQuery += WorkflowMessageRecord(workflowId, message.value) }: _*)
+    def saveMessages(messages: Seq[AttributeString], workflowId: Long) = {
+      workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
     def update(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
@@ -188,6 +188,14 @@ trait WorkflowComponent {
             Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
           }
       }
+    }
+
+    def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID, statuses: WorkflowStatuses.WorkflowStatus*): ReadAction[Seq[WorkflowRecord]] = {
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSet(statuses.map(_.toString))).result
+    }
+
+    def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] = {
+      findWorkflowsBySubmissionId(submissionId).result
     }
 
     private def loadWorkflowEntity(entityId: Option[UUID]): ReadAction[Option[AttributeEntityReference]] = {
@@ -237,6 +245,10 @@ trait WorkflowComponent {
 
     def findWorkflowById(id: Long): WorkflowQueryType = {
       filter(_.id === id)
+    }
+
+    def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType = {
+      filter(_.id inSetBind(ids))
     }
 
     def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {

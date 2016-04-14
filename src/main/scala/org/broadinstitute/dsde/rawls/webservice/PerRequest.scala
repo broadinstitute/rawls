@@ -89,6 +89,9 @@ trait PerRequest extends Actor {
       case (statusCode: StatusCode, payload: Any) =>
         logResponse(statusCode, payload)
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
+      case (statusCode: StatusCode) =>
+        logResponse(statusCode, None)
+        r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
       case _ =>
         logResponse(StatusCodes.OK, response)
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(response)
