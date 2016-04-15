@@ -370,7 +370,7 @@ class HttpGoogleServicesDAO(
     val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val directory = getGroupDirectory
     val groups = directory.groups
-    retryExponentially(when500orGoogleError) {
+    val future = retryExponentially(when500orGoogleError) {
       () => Future {
         val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))) // group names have a 60 char limit
         blocking {
@@ -378,6 +378,10 @@ class HttpGoogleServicesDAO(
         }
       }
     } map { _ => newGroup}
+    future recover {
+      // Group already exists. Consider this success.
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => newGroup
+    }
   }
 
   override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
