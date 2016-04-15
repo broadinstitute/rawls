@@ -135,8 +135,8 @@ trait AttributeComponent {
     }
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, AttributeRecord), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
-      allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.mapValues { workspaceAttributeRecsWithRef =>
-        workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.map { case (name, attributeRecsWithRefForNameWithDupes) =>
+      allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (attrid, workspaceAttributeRecsWithRef) =>
+        val attrs = workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.map { case (name, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName: Set[(AttributeRecord, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
           val unmarshalledAttrs = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
@@ -149,6 +149,7 @@ trait AttributeComponent {
           }
           (name, unmarshalledAttrs)
         }
+        (attrid, attrs)
       }
     }
 
