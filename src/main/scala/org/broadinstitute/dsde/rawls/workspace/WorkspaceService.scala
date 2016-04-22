@@ -4,6 +4,7 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
+import kamon.Kamon
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
@@ -282,7 +283,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-
+      Kamon.metrics.histogram("test-histogram").record(scala.util.Random.nextInt(1000))
       val query = for {
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
         realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
