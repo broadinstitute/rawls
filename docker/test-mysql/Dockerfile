@@ -2,13 +2,13 @@
 
 FROM broadinstitute/rawls:dev-base
 
-# NOTE: our Google Cloud SQL uses MySQL version 5.6.26, possibly with some Google customizations
-# the closest available apt-get version is 5.6.28
+# NOTE: our Google Cloud SQL uses MySQL version 5.6.29, possibly with some Google customizations
+# the closest available apt-get version is a moving target: 5.6.28 at script creation time, 5.6.30 currently
 
 # Install MySQL
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    mysql-server-5.6=5.6.28-0ubuntu0.14.04.1 mysql-client-5.6=5.6.28-0ubuntu0.14.04.1 && \
+    mysql-server-5.6 mysql-client-5.6 && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Setup test user
