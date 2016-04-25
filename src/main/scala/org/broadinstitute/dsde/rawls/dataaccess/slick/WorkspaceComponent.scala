@@ -365,7 +365,7 @@ trait WorkspaceComponent {
         workspaceAccessGroupRecs <- workspaceAccessQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
       } yield {
         val attributeMap = attributeQuery.unmarshalAttributes(workspaceAttributeRecs)
-        val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).mapValues(unmarshalRawlsGroupRefs)
+        val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).map{ case(workspaceId, accessRecords) => (workspaceId, unmarshalRawlsGroupRefs(accessRecords)) }
         workspaceRecs.map { workspaceRec =>
           val workspaceGroups = workspaceGroupsByWsId.getOrElse(workspaceRec.id, WorkspaceGroups(Map.empty[WorkspaceAccessLevel, RawlsGroupRef], Map.empty[WorkspaceAccessLevel, RawlsGroupRef]))
           unmarshalWorkspace(workspaceRec, attributeMap.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.realmAcls)
