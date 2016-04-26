@@ -42,7 +42,7 @@ $ docker build -t broadinstitute/rawls:test-mysql ${RAWLS_SRC_DIR}/docker/test-m
 ###Docker Run
 Run docker with the following arguments to ensure your local Rawls source is mounted inside the container.
 ```
-$ docker run -d --name rawls-test -v ${RAWLS_SRC_DIR}:/app:rw broadinstitute/rawls:test-mysql
+$ docker run -d --name rawls-test -v ${ABSOLUTE_PATH_TO_RAWLS_SRC_DIR}:/app:rw broadinstitute/rawls:test-mysql
 ```
 
 Enter the container:
