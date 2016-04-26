@@ -26,7 +26,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   // to override, e.g. to run against mysql:
   // $ sbt -Dtestdb=mysql test
-  val testdb = ConfigFactory.load.getStringOr("testdb", "h2mem1")
+  val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
 
   val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver](testdb)
   override val driver: JdbcDriver = databaseConfig.driver

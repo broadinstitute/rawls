@@ -1,7 +1,21 @@
 jdk:
   - oraclejdk8
+
 language: scala
+
 scala:
   - 2.11.1
-script: SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test it:compile
+
+sudo: required
+
+services:
+  - docker
+
+before_install:
+  - docker pull mysql/mysql-server:5.7
+  - docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.7
+
+script:
+  - SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test -Dmysql.host=localhost it:compile
+
 after_success: SBT_OPTS=-Xmx3g sbt coveralls

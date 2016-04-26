@@ -21,37 +21,29 @@ See the wiki for detailed documentation.
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
 * Running locally in docker https://github.com/broadinstitute/firecloud-develop
 
-##Unit Testing in Docker with MySQL
-
-###Docker Builds
-Check to see that you have a Dev Base image for Rawls:
+## Unit Testing with MySQL in Docker 
+Ensure that docker is up to date and initialized.
+Spin up mysql locally:
 ```
-$ docker pull broadinstitute/rawls:dev-base
+docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.7
 ```
-
-If this fails, it is necessary to build this image, which may take a long time (~20 minutes).
+Run tests. Replace the `default` value with your docker machine name (or leave it out altogether if you have only a single machine):
 ```
-$ docker build -t broadinstitute/rawls:dev-base ${RAWLS_SRC_DIR}
+sbt clean compile test -Dmysql.host=`docker-machine ip default`
 ```
-
-When that is done, build a Test MySQL image:
+And when you're done, spin down mysql:
 ```
-$ docker build -t broadinstitute/rawls:test-mysql ${RAWLS_SRC_DIR}/docker/test-mysql
+docker stop mysql && docker rm mysql
 ```
 
-###Docker Run
-Run docker with the following arguments to ensure your local Rawls source is mounted inside the container.
+## Unit Testing
+Unit tests require a mysql host configured similarly to the above docker instance.  
 ```
-$ docker run -d --name rawls-test -v ${ABSOLUTE_PATH_TO_RAWLS_SRC_DIR}:/app:rw broadinstitute/rawls:test-mysql
-```
-
-Enter the container:
-```
-docker exec -it rawls-test bash
+sbt clean compile test -Dmysql.host=<mysql hostname>
 ```
 
-Run the unit tests:
+Unit tests can optionally include a custom mysql port. 
+The default is 3306 but can be changed with an optional environment variable:
 ```
-# cd /app
-# sbt -Dtestdb=mysql test
+sbt clean compile test -Dmysql.host=<mysql hostname> -Dmysql.port=<mysql port>
 ```
