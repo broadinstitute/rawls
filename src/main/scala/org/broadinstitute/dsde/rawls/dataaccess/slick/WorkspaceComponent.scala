@@ -21,7 +21,8 @@ case class WorkspaceRecord(
   lastModified: Timestamp,
   createdBy: String,
   isLocked: Boolean,
-  realmGroupName: Option[String]
+  realmGroupName: Option[String],
+  recordVersion: Long
 )
 case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: UUID)
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
@@ -48,11 +49,12 @@ trait WorkspaceComponent {
     def createdBy = column[String]("created_by")
     def isLocked = column[Boolean]("is_locked")
     def realmGroupName = column[Option[String]]("realm_group_name", O.Length(254))
+    def recordVersion = column[Long]("record_version")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
     def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName.?)
 
-    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends Table[WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
@@ -97,28 +99,51 @@ trait WorkspaceComponent {
         validateAttributeName(value)
       }
 
-      val workspaceRecord = marshalWorkspace(workspace)
+      uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
+        case None =>
+          (workspaceQuery += marshalNewWorkspace(workspace)) andThen
+            insertOrUpdateAccessRecords(workspace) andThen
+            insertAttributes(workspace)
+        case Some(workspaceRecord) =>
+          insertOrUpdateAccessRecords(workspace) andThen
+            deleteAttributes(workspace) andThen
+            insertAttributes(workspace) andThen
+            optimisticLockUpdate(workspaceRecord)
+      } map { _ => workspace }
+    }
 
-      workspaceQuery insertOrUpdate workspaceRecord andThen {
-        val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString, false) }
-        val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(workspaceRecord.id, group.groupName.value, accessLevel.toString, true) }
-        DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
+    private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Unit] = {
+      val id = UUID.fromString(workspace.workspaceId)
+      val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, false) }
+      val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
+      DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
+    }
 
-      } andThen {
-        workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap { wsIdAndAttributeRecords =>
-          // clear existing attributes, any concurrency locking should be handled at the workspace level
-          val deleteActions = deleteWorkspaceAttributes(wsIdAndAttributeRecords.map(_._2))
+    private def deleteAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+      val workspaceId = UUID.fromString(workspace.workspaceId)
+      workspaceAttributes(findByIdQuery(workspaceId)).result.flatMap { wsIdAndAttributeRecords =>
+        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => attrRec }
+        // clear existing attributes, any concurrency locking should be handled at the workspace level
+        val deleteActions = deleteWorkspaceAttributes(records)
+        DBIO.seq(deleteActions.toSeq:_*)
+      }
+    }
 
-          // insert attributes
-          val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
-            attributeQuery.insertAttributeRecords(name, attribute, workspaceRecord.id).map(_.flatMap{ attrId =>
-              insertWorkspaceAttributeMapping(workspaceRecord, attrId)
-            })
-          }
+    private def insertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+      val workspaceId = UUID.fromString(workspace.workspaceId)
+      val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
+        attributeQuery.insertAttributeRecords(name, attribute, workspaceId).map(_.flatMap{ attrId =>
+          insertWorkspaceAttributeMapping(workspaceId, attrId)
+        })
+      }
+      DBIO.seq(insertActions.toSeq:_*)
+    }
 
-          DBIO.seq(deleteActions ++ insertActions:_*)
-        }
-      } map(_ => workspace)
+    private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
+      findByIdAndRecordVersionQuery(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
+        case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
+        case success => success
+      }
     }
 
     def findByName(workspaceName: WorkspaceName): ReadAction[Option[Workspace]] = {
@@ -292,8 +317,8 @@ trait WorkspaceComponent {
       Seq(deleteWorkspaceAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
     }
 
-    private def insertWorkspaceAttributeMapping(workspaceRecord: WorkspaceRecord, attrId: UUID): FixedSqlAction[Int, driver.api.NoStream, Write] = {
-      workspaceAttributeQuery += WorkspaceAttributeRecord(workspaceRecord.id, attrId)
+    private def insertWorkspaceAttributeMapping(workspaceId: UUID, attrId: UUID): FixedSqlAction[Int, driver.api.NoStream, Write] = {
+      workspaceAttributeQuery += WorkspaceAttributeRecord(workspaceId, attrId)
     }
 
     private def deleteWorkspaceAttributeMappings(attributeRecords: Seq[AttributeRecord]): FixedSqlAction[Int, driver.api.NoStream, Write] = {
@@ -306,6 +331,10 @@ trait WorkspaceComponent {
 
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
+    }
+
+    def findByIdAndRecordVersionQuery(workspaceId: UUID, recordVersion: Long): WorkspaceQueryType = {
+      filter(w => w.id === workspaceId && w.recordVersion === recordVersion)
     }
 
     def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType = {
@@ -373,8 +402,8 @@ trait WorkspaceComponent {
       }
     }
 
-    private def marshalWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value))
+    private def marshalNewWorkspace(workspace: Workspace) = {
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value), 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[String, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {

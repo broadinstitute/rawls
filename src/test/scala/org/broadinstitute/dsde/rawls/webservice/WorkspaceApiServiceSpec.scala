@@ -12,7 +12,7 @@ import spray.http._
 import spray.json._
 import spray.routing._
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -265,6 +265,28 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "concurrently create workspaces" in withTestDataApiServices { services =>
+    def generator(i: Int): ReadAction[Option[Workspace]] = {
+      val newWorkspace = WorkspaceRequest(
+        namespace = testData.wsName.namespace,
+        name = s"newWorkspace$i",
+        None,
+        Map.empty
+      )
+
+      Post(s"/workspaces", httpJson(newWorkspace)) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, response.entity.asString) {
+            status
+          }
+          workspaceQuery.findByName(newWorkspace.toWorkspaceName)
+        }
+    }
+
+    runMultipleAndWait(100)(generator)
+  }
+
   it should "get a workspace" in withTestWorkspacesApiServices { services =>
     Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -402,6 +424,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
         }
       }
+  }
+
+  it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
+    def generator(i: Int): ReadAction[Option[Workspace]] = {
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
+        sealRoute(services.workspaceRoutes) ~> check {
+          assertResult(StatusCodes.OK, responseAs[String]) {
+            status
+          }
+          workspaceQuery.findByName(testData.wsName)
+        }
+    }
+
+    runMultipleAndWait(100)(generator)
   }
 
   it should "clone a workspace if the source exists" in withTestDataApiServices { services =>
