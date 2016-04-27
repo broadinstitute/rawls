@@ -37,7 +37,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-json" % "1.3.1",
     "org.webjars" % "swagger-ui" % "2.1.1",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
-    ("org.broadinstitute" %% "wdl4s" % "0.1"),
+    ("org.broadinstitute" %% "wdl4s" % "0.4"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     ("com.google.apis" % "google-api-services-storage" % "v1-rev30-1.20.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
