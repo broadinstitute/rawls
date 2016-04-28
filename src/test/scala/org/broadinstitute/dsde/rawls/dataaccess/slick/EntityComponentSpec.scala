@@ -14,7 +14,7 @@ import org.joda.time.DateTime
 class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* crud entities" in withEmptyTestDatabase {
+  it should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, None, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
@@ -143,7 +143,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* save a new entity" in withDefaultTestDatabase {
+  it should "save a new entity" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
         val pair2 = Entity("pair2", "Pair",
@@ -158,7 +158,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* clone all entities from a workspace containing cycles" in withDefaultTestDatabase {
+  it should "clone all entities from a workspace containing cycles" in withDefaultTestDatabase {
     val workspaceOriginal = Workspace(
       namespace = testData.wsName.namespace + "Original",
       name = testData.wsName.name + "Original",
@@ -238,7 +238,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* add cycles to entity graph" in withDefaultTestDatabase {
+  it should "add cycles to entity graph" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
         val sample1Copy = Entity("sample1", "Sample",
@@ -319,7 +319,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     Map.empty
   )
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* copy entities without a conflict" in withDefaultTestDatabase {
+  it should "copy entities without a conflict" in withDefaultTestDatabase {
 
       runAndWait(workspaceQuery.save(workspace2))
       withWorkspaceContext(testData.workspace) { context1 =>
@@ -349,7 +349,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "*REENABLE WITH MYSQL UNIT TESTS* copy entities without a conflict with a cycle" in withDefaultTestDatabase {
+  it should "copy entities without a conflict with a cycle" in withDefaultTestDatabase {
 
     runAndWait(workspaceQuery.save(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
