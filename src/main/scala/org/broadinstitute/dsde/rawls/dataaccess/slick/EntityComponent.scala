@@ -270,18 +270,24 @@ trait EntityComponent {
     }
 
     def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
-      //val records = entities.map(entity => marshalEntity(entity, workspaceContext.workspaceId))
-
-      if(!entities.isEmpty)
-        (entityQuery ++= entities) andThen selectEntityIds(workspaceContext, entities)
+      if(!entities.isEmpty) {
+        val recordsGrouped = entities.grouped(batchSize).toSeq
+        DBIO.sequence(recordsGrouped map { batch  =>
+          (entityQuery ++= batch)
+        })
+      } andThen selectEntityIds(workspaceContext, entities)
       else DBIO.successful(Seq.empty[EntityRecord])
     }
 
-    //TODO: make this use batchSize to select in batches to avoid someone inserting 10,000 entities at once and breaking this select
     def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
-      val baseSelect = sql"""select id, name, entity_type, workspace_id from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
-      val entityTypeNameTuples = entities.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-      concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
+      val entitiesGrouped = entities.grouped(batchSize).toSeq
+
+      val x = DBIO.sequence(entitiesGrouped map { batch =>
+        val baseSelect = sql"""select id, name, entity_type, workspace_id from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
+        val entityTypeNameTuples = batch.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+        concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
+      }).map{ z => z.flatten }
+      x
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {

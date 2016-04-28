@@ -143,7 +143,10 @@ trait AttributeComponent {
     }
 
     def batchInsertAttributes(attributes: Seq[EntityAttributeRecord]) = {
-      (entityAttributeQuery ++= attributes)
+      val recordsGrouped = attributes.grouped(batchSize).toSeq
+      DBIO.sequence(recordsGrouped map { batch  =>
+        (entityAttributeQuery ++= batch)
+      })
     }
 
     private def marshalAttributeEntityReference(parentEntityId: Long, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long]): EntityAttributeRecord = {
@@ -286,7 +289,10 @@ trait AttributeComponent {
     }
 
     def batchInsertAttributes(attributes: Seq[WorkspaceAttributeRecord]) = {
-      (workspaceAttributeQuery ++= attributes)
+      val recordsGrouped = attributes.grouped(batchSize).toSeq
+      DBIO.sequence(recordsGrouped map { batch  =>
+        (workspaceAttributeQuery ++= batch)
+      })
     }
 
     private def marshalAttributeEntityReference(workspaceId: UUID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long]): WorkspaceAttributeRecord = {
@@ -429,7 +435,10 @@ trait AttributeComponent {
     }
 
     def batchInsertAttributes(attributes: Seq[SubmissionAttributeRecord]) = {
-      (submissionAttributeQuery ++= attributes)
+      val recordsGrouped = attributes.grouped(batchSize).toSeq
+      DBIO.sequence(recordsGrouped map { batch  =>
+        (submissionAttributeQuery ++= batch)
+      })
     }
 
     private def marshalAttributeEntityReference(name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long]): SubmissionAttributeRecord = {

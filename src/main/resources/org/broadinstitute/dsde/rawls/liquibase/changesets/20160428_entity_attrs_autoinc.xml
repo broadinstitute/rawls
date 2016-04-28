@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <!--Removing foreign keys-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-1">
+        <sql stripComments="true">
+            alter table ATTRIBUTE drop foreign key ATTRIBUTE_ibfk_1;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-2">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE drop foreign key FK_ENT_ATTR_ENTITY;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-3">
+        <sql stripComments="true">
+            alter table SUBMISSION drop foreign key SUBMISSION_ibfk_1;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-4">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION drop foreign key SUBMISSION_VALIDATION_ibfk_1;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-5">
+        <sql stripComments="true">
+            alter table WORKFLOW drop foreign key WORKFLOW_ibfk_1;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-6">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE drop foreign key WORKFLOW_FAILURE_ibfk_1;
+        </sql>
+    </changeSet>
+
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-7">
+        <sql stripComments="true">
+            alter table ENTITY change id old_uuid binary(16) not null;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-8">
+        <sql stripComments="true">
+            alter table ENTITY drop primary key;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-9">
+        <sql stripComments="true">
+            alter table ENTITY add column id bigint(20) unsigned AUTO_INCREMENT primary key;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-10">
+        <sql stripComments="true">
+            alter table ENTITY modify old_uuid binary(16) null;
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-11">
+        <sql stripComments="true">
+            CREATE TABLE NEW_ENTITY_ATTRIBUTE (
+                id bigint(20) unsigned AUTO_INCREMENT,
+                uuid binary(16) NULL,
+                name text NOT NULL,
+                value_string text,
+                value_number double DEFAULT NULL,
+                value_boolean bit(1) DEFAULT NULL,
+                value_entity_ref_uuid binary(16) DEFAULT NULL,
+                list_index int(11) DEFAULT NULL,
+                entity_uuid binary(16) NOT NULL,
+                PRIMARY KEY (id)
+            );
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-12">
+        <sql stripComments="true">
+            CREATE TABLE NEW_WORKSPACE_ATTRIBUTE (
+                id bigint(20) unsigned AUTO_INCREMENT,
+                uuid binary(16) NULL,
+                name text NOT NULL,
+                value_string text,
+                value_number double DEFAULT NULL,
+                value_boolean bit(1) DEFAULT NULL,
+                value_entity_ref_uuid binary(16) DEFAULT NULL,
+                list_index int(11) DEFAULT NULL,
+                workspace_id binary(16) NOT NULL,
+                PRIMARY KEY (id)
+            );
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-13">
+        <sql stripComments="true">
+            CREATE TABLE SUBMISSION_ATTRIBUTE (
+                id bigint(20) unsigned AUTO_INCREMENT,
+                uuid binary(16) NULL,
+                name text NOT NULL,
+                value_string text,
+                value_number double DEFAULT NULL,
+                value_boolean bit(1) DEFAULT NULL,
+                value_entity_ref_uuid binary(16)  DEFAULT NULL,
+                list_index int(11) DEFAULT NULL,
+                PRIMARY KEY (id)
+            );
+        </sql>
+    </changeSet>
+
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-14">
+        <sql stripComments="true">
+            insert into NEW_ENTITY_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref_uuid, list_index, entity_uuid)
+                select a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e.id
+                from ENTITY e
+                join ENTITY_ATTRIBUTE ea on ea.entity_id = e.id
+                join ATTRIBUTE a on ea.attribute_id = a.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-15">
+        <sql stripComments="true">
+            insert into NEW_WORKSPACE_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref_uuid, list_index, workspace_id)
+                select a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, w.id
+                from WORKSPACE w
+                join WORKSPACE_ATTRIBUTE wa on wa.workspace_id = w.id
+                join ATTRIBUTE a on wa.attribute_id = a.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-16">
+        <sql stripComments="true">
+            insert into SUBMISSION_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref_uuid, list_index)
+                select a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index
+                from SUBMISSION_VALIDATION sv
+                join ATTRIBUTE a on a.id = sv.value_id;
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-17">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE add column value_entity_ref bigint(20) unsigned;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-18">
+        <sql stripComments="true">
+            update NEW_ENTITY_ATTRIBUTE a join ENTITY e on a.value_entity_ref_uuid=e.old_uuid set a.value_entity_ref=e.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-19">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE drop column value_entity_ref_uuid;
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-20">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE add column entity_id bigint(20) unsigned;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-21">
+        <sql stripComments="true">
+            update NEW_ENTITY_ATTRIBUTE a join ENTITY e on a.entity_uuid=e.old_uuid set a.entity_id=e.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-22">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE drop column entity_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-23">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE drop column uuid;
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-24">
+        <sql stripComments="true">
+            alter table NEW_WORKSPACE_ATTRIBUTE add column value_entity_ref bigint(20) unsigned;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-25">
+        <sql stripComments="true">
+            update NEW_WORKSPACE_ATTRIBUTE a join ENTITY e on a.value_entity_ref_uuid=e.old_uuid set a.value_entity_ref=e.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-26">
+        <sql stripComments="true">
+            alter table NEW_WORKSPACE_ATTRIBUTE drop column value_entity_ref_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-27">
+        <sql stripComments="true">
+            alter table NEW_WORKSPACE_ATTRIBUTE drop column uuid;
+        </sql>
+    </changeSet>
+
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-28">
+        <sql stripComments="true">
+            alter table SUBMISSION_ATTRIBUTE add column value_entity_ref bigint(20) unsigned;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-29">
+        <sql stripComments="true">
+            update SUBMISSION_ATTRIBUTE a join ENTITY e on a.value_entity_ref_uuid=e.old_uuid set a.value_entity_ref=e.id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-30">
+        <sql stripComments="true">
+            alter table SUBMISSION_ATTRIBUTE drop column value_entity_ref_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-31">
+        <sql stripComments="true">
+            alter table SUBMISSION_ATTRIBUTE drop column uuid;
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-32">
+        <sql stripComments="true">
+            alter table NEW_ENTITY_ATTRIBUTE add CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF FOREIGN KEY (value_entity_ref) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-33">
+        <sql stripComments="true">
+            alter table	NEW_ENTITY_ATTRIBUTE add CONSTRAINT FK_ENT_ATTRIBUTE_PARENT_ENTITY FOREIGN KEY (entity_id) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-34">
+        <sql stripComments="true">
+            alter table NEW_WORKSPACE_ATTRIBUTE add CONSTRAINT FK_WS_ATTRIBUTE_ENTITY_REF FOREIGN KEY (value_entity_ref) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-35">
+        <sql stripComments="true">
+            alter table NEW_WORKSPACE_ATTRIBUTE add CONSTRAINT FK_WS_ATTRIBUTE_PARENT_WORKSPACE FOREIGN KEY (workspace_id) REFERENCES WORKSPACE(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-36">
+        <sql stripComments="true">
+            alter table SUBMISSION_ATTRIBUTE add CONSTRAINT FK_SUB_ATTRIBUTE_ENTITY_REF FOREIGN KEY (value_entity_ref) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+
+
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-37">
+        <sql stripComments="true">
+            rename table ENTITY_ATTRIBUTE to OLD_ENTITY_ATTRIBUTE;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-38">
+        <sql stripComments="true">
+            rename table WORKSPACE_ATTRIBUTE to OLD_WORKSPACE_ATTRIBUTE;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-39">
+        <sql stripComments="true">
+            rename table NEW_ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-40">
+        <sql stripComments="true">
+            rename table NEW_WORKSPACE_ATTRIBUTE to WORKSPACE_ATTRIBUTE;
+        </sql>
+    </changeSet>
+
+
+
+    <!--re-add other dropped foreign keys-->
+
+</databaseChangeLog>
