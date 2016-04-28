@@ -56,7 +56,6 @@ trait EntityComponent {
       EntityListResult(entityRec, attributeRecOption, refEntityRecOption)
     }
 
-    import driver.quoteIdentifier
     // the where clause for this query is filled in specific to the use case
     val baseEntityAndAttributeSql =
       s"""select e.id, e.name, e.entity_type, e.workspace_id, a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id
@@ -97,7 +96,7 @@ trait EntityComponent {
 
     /** gets the given entity */
     def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
-      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("name")} = ${entityName} and e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
+      val sql = sql"""#$baseEntityAndAttributeSql where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityListResult]
       unmarshalEntities(sql).map(_.headOption)
     }
 
@@ -211,18 +210,18 @@ trait EntityComponent {
 
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
-      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("entity_type")} = ${entityType} and e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
+      val sql = sql"""#$baseEntityAndAttributeSql where e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityListResult]
       unmarshalEntities(sql)
     }
 
     def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
-      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId} and (e.#${quoteIdentifier("entity_type")}, e.#${quoteIdentifier("name")}) in ("""
+      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
       val entityTypeNameTuples = entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
       unmarshalEntities(concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityListResult])
     }
 
     def listByIds(entityIds: Traversable[Long]): ReadAction[Map[Long, Entity]] = {
-      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("id")}  in ("""
+      val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id  in ("""
       val entityIdSql = entityIds.map { id => sql"$id" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
       unmarshalEntitiesWithIds(concatSqlActions(concatSqlActions(baseSelect, entityIdSql), sql")").as[EntityListResult])
     }
@@ -259,7 +258,7 @@ trait EntityComponent {
     }
 
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
-      val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("workspace_id")} = ${workspaceContext.workspaceId}""".as[EntityListResult]
+      val sql = sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityListResult]
       unmarshalEntities(sql)
     }
 
@@ -349,7 +348,7 @@ trait EntityComponent {
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
         DBIO.sequence(ids.map { id =>
-          val sql = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("id")} = ${id}""".as[EntityListResult]
+          val sql = sql"""#$baseEntityAndAttributeSql where e.id = ${id}""".as[EntityListResult]
           unmarshalEntities(sql)
         }.toSeq)
       }

@@ -86,7 +86,7 @@
                 value_boolean bit(1) DEFAULT NULL,
                 value_entity_ref_uuid binary(16) DEFAULT NULL,
                 list_index int(11) DEFAULT NULL,
-                entity_uuid binary(16) NOT NULL,
+                entity_id bigint(20) unsigned NOT NULL,
                 PRIMARY KEY (id)
             );
         </sql>
@@ -132,10 +132,10 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-14">
         <sql stripComments="true">
-            insert into NEW_ENTITY_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref_uuid, list_index, entity_uuid)
+            insert into NEW_ENTITY_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref_uuid, list_index, entity_id)
                 select a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e.id
                 from ENTITY e
-                join ENTITY_ATTRIBUTE ea on ea.entity_id = e.id
+                join ENTITY_ATTRIBUTE ea on ea.entity_id = e.old_uuid
                 join ATTRIBUTE a on ea.attribute_id = a.id;
         </sql>
     </changeSet>
@@ -185,29 +185,29 @@
 
 
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-20">
-        <sql stripComments="true">
-            alter table NEW_ENTITY_ATTRIBUTE add column entity_id bigint(20) unsigned;
-        </sql>
-    </changeSet>
+    <!--<changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-20">-->
+        <!--<sql stripComments="true">-->
+            <!--alter table NEW_ENTITY_ATTRIBUTE add column entity_id bigint(20) unsigned;-->
+        <!--</sql>-->
+    <!--</changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-21">
-        <sql stripComments="true">
-            update NEW_ENTITY_ATTRIBUTE a join ENTITY e on a.entity_uuid=e.old_uuid set a.entity_id=e.id;
-        </sql>
-    </changeSet>
+    <!--<changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-21">-->
+        <!--<sql stripComments="true">-->
+            <!--update NEW_ENTITY_ATTRIBUTE a join ENTITY e on a.entity_uuid=e.old_uuid set a.entity_id=e.id;-->
+        <!--</sql>-->
+    <!--</changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-22">
-        <sql stripComments="true">
-            alter table NEW_ENTITY_ATTRIBUTE drop column entity_uuid;
-        </sql>
-    </changeSet>
+    <!--<changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-22">-->
+        <!--<sql stripComments="true">-->
+            <!--alter table NEW_ENTITY_ATTRIBUTE drop column entity_uuid;-->
+        <!--</sql>-->
+    <!--</changeSet>-->
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-23">
-        <sql stripComments="true">
-            alter table NEW_ENTITY_ATTRIBUTE drop column uuid;
-        </sql>
-    </changeSet>
+    <!--<changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-23">-->
+        <!--<sql stripComments="true">-->
+            <!--alter table NEW_ENTITY_ATTRIBUTE drop column uuid;-->
+        <!--</sql>-->
+    <!--</changeSet>-->
 
 
 
@@ -297,6 +297,30 @@
     <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-36">
         <sql stripComments="true">
             alter table SUBMISSION_ATTRIBUTE add CONSTRAINT FK_SUB_ATTRIBUTE_ENTITY_REF FOREIGN KEY (value_entity_ref) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-41">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION add CONSTRAINT FK_SUB_VALIDATION_VAL FOREIGN KEY (value_entity_ref) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-42">
+        <sql stripComments="true">
+            alter table SUBMISSION add CONSTRAINT FK_SUB_ENTITY FOREIGN KEY (value_id) REFERENCES SUBMISSION_ATTRIBUTE(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-43">
+        <sql stripComments="true">
+            alter table WORKFLOW add CONSTRAINT FK_WF_ENTITY FOREIGN KEY (ENTITY_ID) REFERENCES ENTITY(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-44">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE add CONSTRAINT FK_WF_FAILURE_ENTITY FOREIGN KEY (ENTITY_ID) REFERENCES ENTITY(id);
         </sql>
     </changeSet>
 
