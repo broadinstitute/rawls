@@ -102,7 +102,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
     val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("baz"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
@@ -120,7 +120,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch upserting an entities with valid references" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch upserting an entities with valid references" in withTestDataApiServices { services =>
     val newEntity = Entity("new_entity", testData.sample2.entityType, Map.empty)
     val referenceList = AttributeEntityReferenceList(Seq(testData.sample2.toReference, newEntity.toReference))
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", referenceList)))
@@ -140,7 +140,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 400 when batch upserting an entity with references that don't exist" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeEntityReference("bar", "baz"))))
     val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeEntityReference("bar", "bing"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
@@ -183,7 +183,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute("newAttribute", AttributeString("bar"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
       sealRoute(services.entityRoutes) ~>
@@ -253,7 +253,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 200 on update entity" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 200 on update entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -266,7 +266,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* return 200 on remove attribute from entity" in withTestDataApiServices { services =>
+  it should "*REENABLE WITH MYSQL UNIT TESTS* return 200 on remove attribute from entity" in withTestDataApiServices { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(RemoveAttribute("bar"): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
