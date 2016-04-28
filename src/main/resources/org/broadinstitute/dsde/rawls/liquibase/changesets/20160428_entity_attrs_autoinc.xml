@@ -149,10 +149,10 @@
         <sql stripComments="true">
             insert into NEW_WORKSPACE_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref, list_index, workspace_id)
                 select a.id, a.name, a.value_string, a.value_number, a.value_boolean, ref.id, a.list_index, w.id
-                from WORKSPACE w
-                join WORKSPACE_ATTRIBUTE wa on wa.workspace_id = w.id
-                join ATTRIBUTE a on wa.attribute_id = a.id
-                left join ENTITY ref on a.value_entity_ref=ref.old_uuid;
+                    from WORKSPACE w
+                    join WORKSPACE_ATTRIBUTE wa on wa.workspace_id = w.id
+                    join ATTRIBUTE a on wa.attribute_id = a.id
+                    left join ENTITY ref on a.value_entity_ref=ref.old_uuid;
         </sql>
     </changeSet>
 
@@ -160,9 +160,9 @@
         <sql stripComments="true">
             insert into SUBMISSION_ATTRIBUTE (uuid, name, value_string, value_number, value_boolean, value_entity_ref, list_index)
                 select a.id, a.name, a.value_string, a.value_number, a.value_boolean, ref.id, a.list_index
-                from SUBMISSION_VALIDATION sv
-                join ATTRIBUTE a on a.id = sv.value_id
-                left join ENTITY ref on a.value_entity_ref=ref.old_uuid;
+                    from SUBMISSION_VALIDATION sv
+                    join ATTRIBUTE a on a.id = sv.value_id
+                    left join ENTITY ref on a.value_entity_ref=ref.old_uuid;
         </sql>
     </changeSet>
 
