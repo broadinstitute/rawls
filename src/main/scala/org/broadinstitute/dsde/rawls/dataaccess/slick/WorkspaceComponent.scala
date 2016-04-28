@@ -24,7 +24,7 @@ case class WorkspaceRecord(
   realmGroupName: Option[String],
   recordVersion: Long
 )
-case class WorkspaceAttributeRecord(workspaceId: UUID, attributeId: UUID)
+
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
 
 trait WorkspaceComponent {
@@ -57,16 +57,6 @@ trait WorkspaceComponent {
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
 
-  class WorkspaceAttributeTable(tag: Tag) extends Table[WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
-    def attributeId = column[UUID]("attribute_id", O.PrimaryKey)
-    def workspaceId = column[UUID]("workspace_id")
-
-    def workspace = foreignKey("FK_WS_ATTR_WORKSPACE", workspaceId, workspaceQuery)(_.id)
-    def attribute = foreignKey("FK_WS_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id)
-
-    def * = (workspaceId, attributeId) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
-  }
-
   class WorkspaceAccessTable(tag: Tag) extends Table[WorkspaceAccessRecord](tag, "WORKSPACE_ACCESS") {
     def groupName = column[String]("group_name", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
@@ -81,7 +71,6 @@ trait WorkspaceComponent {
     def * = (workspaceId, groupName, accessLevel, isRealmAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
   }
 
-  protected val workspaceAttributeQuery = TableQuery[WorkspaceAttributeTable]
   protected val workspaceAccessQuery = TableQuery[WorkspaceAccessTable]
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
@@ -125,16 +114,14 @@ trait WorkspaceComponent {
         val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => attrRec }
         // clear existing attributes, any concurrency locking should be handled at the workspace level
         val deleteActions = deleteWorkspaceAttributes(records)
-        DBIO.seq(deleteActions.toSeq:_*)
+        DBIO.seq(deleteActions)
       }
     }
 
     private def insertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
       val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
-        attributeQuery.insertAttributeRecords(name, attribute, workspaceId).map(_.flatMap{ attrId =>
-          insertWorkspaceAttributeMapping(workspaceId, attrId)
-        })
+        workspaceAttributeQuery.insertAttributeRecords(name, attribute, workspaceId)
       }
       DBIO.seq(insertActions.toSeq:_*)
     }
@@ -162,7 +149,7 @@ trait WorkspaceComponent {
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
         case None => DBIO.successful(false)
         case Some(workspaceRecord) =>
-          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)):_*)) flatMap { _ =>
+          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))) flatMap { _ =>
             //should we be deleting ALL workspace-related things inside of this method?
             workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
           } flatMap { _ =>
@@ -306,23 +293,14 @@ trait WorkspaceComponent {
 
     private def workspaceAttributes(lookup: WorkspaceQueryType) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId.in(lookup.map(_.id))
-      attributeRec <- attributeQuery if workspaceAttrRec.attributeId === attributeRec.id
-    } yield (workspaceAttrRec.workspaceId, attributeRec)
+    } yield (workspaceAttrRec.workspaceId, workspaceAttrRec)
 
     private def workspaceAttributesWithReferences(lookup: WorkspaceQueryType) = {
       workspaceAttributes(lookup) joinLeft entityQuery on (_._2.valueEntityRef === _.id)
     }
 
-    private def deleteWorkspaceAttributes(attributeRecords: Seq[AttributeRecord]) = {
-      Seq(deleteWorkspaceAttributeMappings(attributeRecords), attributeQuery.deleteAttributeRecords(attributeRecords))
-    }
-
-    private def insertWorkspaceAttributeMapping(workspaceId: UUID, attrId: UUID): FixedSqlAction[Int, driver.api.NoStream, Write] = {
-      workspaceAttributeQuery += WorkspaceAttributeRecord(workspaceId, attrId)
-    }
-
-    private def deleteWorkspaceAttributeMappings(attributeRecords: Seq[AttributeRecord]): FixedSqlAction[Int, driver.api.NoStream, Write] = {
-      workspaceAttributeQuery.filter(_.attributeId inSetBind (attributeRecords.map(_.id))).delete
+    private def deleteWorkspaceAttributes(attributeRecords: Seq[WorkspaceAttributeRecord]) = {
+      workspaceAttributeQuery.deleteAttributeRecords(attributeRecords)
     }
 
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {
@@ -393,7 +371,7 @@ trait WorkspaceComponent {
         workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result
         workspaceAccessGroupRecs <- workspaceAccessQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
       } yield {
-        val attributeMap = attributeQuery.unmarshalAttributes(workspaceAttributeRecs)
+        val attributeMap = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).map{ case(workspaceId, accessRecords) => (workspaceId, unmarshalRawlsGroupRefs(accessRecords)) }
         workspaceRecs.map { workspaceRec =>
           val workspaceGroups = workspaceGroupsByWsId.getOrElse(workspaceRec.id, WorkspaceGroups(Map.empty[WorkspaceAccessLevel, RawlsGroupRef], Map.empty[WorkspaceAccessLevel, RawlsGroupRef]))

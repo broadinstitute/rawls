@@ -14,8 +14,7 @@ import spray.http.StatusCodes
 /**
  * Created by dvoet on 2/4/16.
  */
-case class EntityRecord(id: UUID, name: String, entityType: String, workspaceId: UUID)
-case class EntityAttributeRecord(entityId: UUID, attributeId: UUID)
+case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID)
 
 trait EntityComponent {
   this: DriverComponent with WorkspaceComponent with AttributeComponent =>
@@ -23,7 +22,7 @@ trait EntityComponent {
   import driver.api._
 
   class EntityTable(tag: Tag) extends Table[EntityRecord](tag, "ENTITY") {
-    def id = column[UUID]("id", O.PrimaryKey)
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def name = column[String]("name", O.Length(254))
     def entityType = column[String]("entity_type", O.Length(254))
     def workspaceId = column[UUID]("workspace_id")
@@ -32,34 +31,22 @@ trait EntityComponent {
     def * = (id, name, entityType, workspaceId) <> (EntityRecord.tupled, EntityRecord.unapply)
   }
 
-  class EntityAttributeTable(tag: Tag) extends Table[EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
-    def entityId = column[UUID]("entity_id")
-    def attributeId = column[UUID]("attribute_id", O.PrimaryKey)
-
-    def entity = foreignKey("FK_ENT_ATTR_ENTITY", entityId, entityQuery)(_.id)
-    def attribute = foreignKey("FK_ENT_ATTR_ATTRIBUTE", attributeId, attributeQuery)(_.id, onDelete = ForeignKeyAction.Cascade)
-
-    def * = (entityId, attributeId) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
-  }
-
-  protected val entityAttributeQuery = TableQuery[EntityAttributeTable]
-  
   object entityQuery extends TableQuery(new EntityTable(_)) {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
-    type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(AttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(AttributeRecord, Option[EntityRecord])]), Seq]
+    type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(EntityAttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(EntityAttributeRecord, Option[EntityRecord])]), Seq]
 
     implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<) }
 
     // result structure from entity and attribute list raw sql
-    case class EntityListResult(entityRecord: EntityRecord, attributeRecord: Option[AttributeRecord], refEntityRecord: Option[EntityRecord])
+    case class EntityListResult(entityRecord: EntityRecord, attributeRecord: Option[EntityAttributeRecord], refEntityRecord: Option[EntityRecord])
 
     // tells slick how to convert a result row from a raw sql query to an instance of EntityListResult
     implicit val getEntityListResult = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
       val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<)
 
-      val attributeIdOption: Option[UUID] = r.<<
-      val attributeRecOption = attributeIdOption.map(id => AttributeRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+      val attributeIdOption: Option[Long] = r.<<
+      val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
       val refEntityRecOption = for {
         attributeRec <- attributeRecOption
@@ -72,16 +59,14 @@ trait EntityComponent {
     import driver.quoteIdentifier
     // the where clause for this query is filled in specific to the use case
     val baseEntityAndAttributeSql =
-      s"""select e.${quoteIdentifier("id")}, e.${quoteIdentifier("name")}, e.${quoteIdentifier("entity_type")}, e.${quoteIdentifier("workspace_id")}, a.${quoteIdentifier("id")}, a.${quoteIdentifier("name")}, a.${quoteIdentifier("value_string")}, a.${quoteIdentifier("value_number")}, a.${quoteIdentifier("value_boolean")}, a.${quoteIdentifier("value_entity_ref")}, a.${quoteIdentifier("list_index")}, e_ref.${quoteIdentifier("id")}, e_ref.${quoteIdentifier("name")}, e_ref.${quoteIdentifier("entity_type")}, e_ref.${quoteIdentifier("workspace_id")}
+      s"""select e.id, e.name, e.entity_type, e.workspace_id, a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id
           from ENTITY e
-          left outer join ENTITY_ATTRIBUTE ea on e.${quoteIdentifier("id")} = ea.${quoteIdentifier("entity_id")}
-          left outer join ATTRIBUTE a on ea.${quoteIdentifier("attribute_id")} = a.${quoteIdentifier("id")}
-          left outer join ENTITY e_ref on a.${quoteIdentifier("value_entity_ref")} = e_ref.${quoteIdentifier("id")}"""
+          left outer join ENTITY_ATTRIBUTE a on a.entity_id = e.id
+          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
-    def entityAttributes(entityId: UUID) = for {
+    def entityAttributes(entityId: Long) = for {
       entityAttrRec <- entityAttributeQuery if entityAttrRec.entityId === entityId
-      attributeRec <- attributeQuery if entityAttrRec.attributeId === attributeRec.id
-    } yield attributeRec
+    } yield entityAttrRec
 
     def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQuery = {
       filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
@@ -95,7 +80,7 @@ trait EntityComponent {
       filter(_.workspaceId === workspaceId)
     }
 
-    def findEntityById(id: UUID): EntityQuery = {
+    def findEntityById(id: Long): EntityQuery = {
       filter(_.id === id)
     }
 
@@ -122,7 +107,7 @@ trait EntityComponent {
     def unmarshalEntities(entityAndAttributesQuery: EntityQueryWithAttributesAndRefs): ReadAction[Iterable[Entity]] = {
       entityAndAttributesQuery.result map { entityAttributeRecords =>
         val entityRecords = entityAttributeRecords.map(_._1).toSet
-        val attributesByEntityId = attributeQuery.unmarshalAttributes(entityAttributeRecords.collect {
+        val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(entityAttributeRecords.collect {
           case (entityRec, Some((attributeRec, referenceOption))) => ((entityRec.id, attributeRec), referenceOption)
         })
 
@@ -136,7 +121,7 @@ trait EntityComponent {
       unmarshalEntitiesWithIds(entityAttributeAction).map(_.map { case (id, entity) => entity })
     }
 
-    def unmarshalEntitiesWithIds(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Map[UUID, Entity]] = {
+    def unmarshalEntitiesWithIds(entityAttributeAction: ReadAction[Seq[EntityListResult]]): ReadAction[Map[Long, Entity]] = {
       entityAttributeAction.map { entityAttributeRecords =>
         val allEntityRecords = entityAttributeRecords.map(_.entityRecord).toSet
 
@@ -145,7 +130,7 @@ trait EntityComponent {
           case EntityListResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
         }
 
-        val attributesByEntityId = attributeQuery.unmarshalAttributes[UUID](entitiesWithAttributes)
+        val attributesByEntityId = entityAttributeQuery.unmarshalAttributes[Long](entitiesWithAttributes)
 
         allEntityRecords.map { entityRec =>
           entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
@@ -166,23 +151,22 @@ trait EntityComponent {
         _ <- deleteEntityAttributes(preExistingEntityRecs)
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
-        _ <- insertAttributes(entities, referencedAndSavingEntityRecs)
+        _ <- insertAttributes(workspaceContext, entities, referencedAndSavingEntityRecs)
       } yield entities
     }
 
-    private def insertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord]) = {
+    private def insertAttributes(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], entityRecs: Traversable[EntityRecord]) = {
       val entityIdsByName = entityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
       val attributeRecsToEntityId = (for {
         entity <- entities
         (attributeName, attribute) <- entity.attributes
-        attributeRec <- attributeQuery.marshalAttribute(attributeName, attribute, entityIdsByName)
+        attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeName, attribute, entityIdsByName)
       } yield attributeRec -> entityIdsByName(entity.toReference)).toMap
 
-      attributeQuery.insertAttributesSql(attributeRecsToEntityId.keys.toSeq) andThen
-        insertEntityAttributesSql(attributeRecsToEntityId.map { case (attr, entityId) => attr.id -> entityId })
+      entityAttributeQuery.batchInsertAttributes(attributeRecsToEntityId.keys.toSeq)
     }
 
-    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Traversable[EntityRecord]) = {
+    private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
       val notYetLoadedEntityRecs = (for {
         entity <- entities
         (_, attribute) <- entity.attributes
@@ -206,12 +190,12 @@ trait EntityComponent {
 
     }
 
-    private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): WriteAction[Traversable[EntityRecord]] = {
+    private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       val existingEntityTypeNames = preExistingEntityRecs.map(rec => (rec.entityType, rec.name))
       val newEntities = entities.filterNot(e => existingEntityTypeNames.exists(_ ==(e.entityType, e.name)))
 
-      val newEntityRecs = newEntities.map(e => marshalEntity(UUID.randomUUID(), e, workspaceContext.workspaceId))
-      insertEntitiesSql(newEntityRecs.toSeq).map(_ => newEntityRecs)
+      val newEntityRecs = newEntities.map(e => marshalEntity(e, workspaceContext.workspaceId))
+      batchInsertEntities(workspaceContext, newEntityRecs.toSeq)
     }
 
     /** deletes an entity */
@@ -237,7 +221,7 @@ trait EntityComponent {
       unmarshalEntities(concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityListResult])
     }
 
-    def listByIds(entityIds: Traversable[UUID]): ReadAction[Map[UUID, Entity]] = {
+    def listByIds(entityIds: Traversable[Long]): ReadAction[Map[Long, Entity]] = {
       val baseSelect = sql"""#$baseEntityAndAttributeSql where e.#${quoteIdentifier("id")}  in ("""
       val entityIdSql = entityIds.map { id => sql"$id" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
       unmarshalEntitiesWithIds(concatSqlActions(concatSqlActions(baseSelect, entityIdSql), sql")").as[EntityListResult])
@@ -251,10 +235,10 @@ trait EntityComponent {
      */
     def joinOnAttributesAndRefs(query: EntityQuery): EntityQueryWithAttributesAndRefs = {
       query joinLeft {
-        entityAttributeQuery join attributeQuery on (_.attributeId === _.id) joinLeft
-          entityQuery on (_._2.valueEntityRef === _.id)
-      } on (_.id === _._1._1.entityId) map { result =>
-        (result._1, result._2.map { case (a, b) => (a._2, b) })
+        entityAttributeQuery joinLeft
+          entityQuery on (_.valueEntityRef === _.id)
+      } on (_.id === _._1.entityId) map { result =>
+        (result._1, result._2.map { case (a, b) => (a, b) })
       }
     }
 
@@ -285,57 +269,38 @@ trait EntityComponent {
       allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _))
     }
 
-    private def insertEntitiesSql(entities: Seq[EntityRecord]): driver.api.DBIOAction[Unit, driver.api.NoStream, driver.api.Effect] = {
-      val insertBatches = entities.map { entity =>
-        sql"(${entity.id}, ${entity.name}, ${entity.entityType}, ${entity.workspaceId})"
-      }.grouped(batchSize).toSeq
+    def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
+      //val records = entities.map(entity => marshalEntity(entity, workspaceContext.workspaceId))
 
-      DBIO.seq(insertBatches.map { insertBatch =>
-        val prefix = sql"insert into ENTITY (id, name, entity_type, workspace_id) values "
-        val suffix = insertBatch.reduce { (a, b) =>
-          concatSqlActionsWithDelim(a, b, sql", ")
-        }
-        concatSqlActions(prefix, suffix).as[Int]
-      }:_*)
+      if(!entities.isEmpty)
+        (entityQuery ++= entities) andThen selectEntityIds(workspaceContext, entities)
+      else DBIO.successful(Seq.empty[EntityRecord])
     }
 
-    private def insertEntityAttributesSql(attributeIdToEntityId: Map[UUID, UUID]) = {
-      val insertBatches = attributeIdToEntityId.map { case (attrId, entityId) =>
-          sql"($entityId, $attrId)"
-      }.grouped(batchSize).toSeq
-
-      DBIO.seq(insertBatches.map { insertBatch =>
-        val prefix = sql"insert into ENTITY_ATTRIBUTE (entity_id, attribute_id) values "
-        val suffix = insertBatch.reduce { (a, b) =>
-          concatSqlActionsWithDelim(a, b, sql", ")
-        }
-        concatSqlActions(prefix, suffix).as[Int]
-      }:_*)
+    //TODO: make this use batchSize to select in batches to avoid someone inserting 10,000 entities at once and breaking this select
+    def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
+      val baseSelect = sql"""select id, name, entity_type, workspace_id from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
+      val entityTypeNameTuples = entities.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
+      val entityInserts = batchInsertEntities(destWorkspaceContext, entities.toSeq.map(e => marshalEntity(e, destWorkspaceContext.workspaceId)))
 
-      val entityIdsByName = entities.map { entity =>
-        entity.toReference -> UUID.randomUUID()
-      }.toMap
+      val attributeInserts = entityInserts flatMap { ids =>
+        val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
+        val entityIdsByRef = entityIdByEntity.map{ case (entityId, entity) => entity.toReference -> entityId}.toMap
 
-      val entityRecordsWithAttributes = entities.map { entity =>
-        marshalEntity(entityIdsByName(entity.toReference), entity, destWorkspaceContext.workspaceId) -> entity.attributes
-      }.toSeq
-
-      val attributeRecordsWithEntity = entityRecordsWithAttributes.flatMap { case (entity, attrs) =>
-        attrs.flatMap { case (name, attr) =>
-          attributeQuery.marshalAttribute(name, attr, entityIdsByName).map(_ -> entity)
+        val attributeRecords = entityIdByEntity flatMap { case (entityId, entity) =>
+          entity.attributes.toIterable.flatMap { case (name, attr) =>
+            entityAttributeQuery.marshalAttribute(entityId, name, attr, entityIdsByRef)
+          }
         }
+
+        entityAttributeQuery.batchInsertAttributes(attributeRecords)
       }
 
-      val attributesWithEntityIds = attributeRecordsWithEntity.map { case (attrRec, entityRec) =>
-        (attrRec.id, entityRec.id)
-      }.toMap
-
-      insertEntitiesSql(entityRecordsWithAttributes.map(_._1)) andThen
-        attributeQuery.insertAttributesSql(attributeRecordsWithEntity.map(_._1)) andThen
-        insertEntityAttributesSql(attributesWithEntityIds)
+      attributeInserts.map(_ => Unit)
     }
 
     /**
@@ -346,14 +311,13 @@ trait EntityComponent {
      *                       that if there is a cycle some of entityIds may be in the result anyway
      * @return the ids of all the entities referred to by entityIds
      */
-    private def recursiveGetEntityReferenceIds(entityIds: Set[UUID], accumulatedIds: Set[UUID]): ReadAction[Set[UUID]] = {
+    private def recursiveGetEntityReferenceIds(entityIds: Set[Long], accumulatedIds: Set[Long]): ReadAction[Set[Long]] = {
       // need to batch because some RDBMSes have a limit on the length of an in clause
       val batchedEntityIds = createBatches(entityIds)
 
       val batchQueries = batchedEntityIds.map {
         idBatch => filter(_.id inSetBind(idBatch)) join
-          entityAttributeQuery on (_.id === _.entityId) join
-          attributeQuery on (_._2.attributeId === _.id) filter(_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef)
+          entityAttributeQuery on (_.id === _.entityId) filter(_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef)
       }
 
       val referencesResults = DBIO.sequence(batchQueries.map(_.result))
@@ -408,22 +372,14 @@ trait EntityComponent {
       DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
     }
 
-    def marshalEntity(entityId: UUID, entity: Entity, workspaceId: UUID): EntityRecord = {
-      EntityRecord(entityId, entity.name, entity.entityType, workspaceId)
+    def marshalEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
+      EntityRecord(0, entity.name, entity.entityType, workspaceId)
     }
 
     def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[String, Attribute]) = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
-    private def insertEntityAttributes(entity: Entity, entityId: UUID, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
-      val attributeInserts = entity.attributes.flatMap { case (name, attribute) =>
-        attributeQuery.insertAttributeRecords(name, attribute, workspaceId)
-      } map (_.flatMap { attributeId =>
-        entityAttributeQuery += EntityAttributeRecord(entityId, attributeId)
-      })
-      attributeInserts.toSeq
-    }
 
     def deleteEntityAttributes(entityRecords: Seq[EntityRecord]) = {
       if (entityRecords.isEmpty) {

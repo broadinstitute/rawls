@@ -20,13 +20,13 @@ case class SubmissionRecord(id: UUID,
                             submissionDate: Timestamp,
                             submitterId: String,
                             methodConfigurationId: Long,
-                            submissionEntityId: Option[UUID],
+                            submissionEntityId: Option[Long],
                             status: String
                            )
 
 case class SubmissionValidationRecord(workflowId: Option[Long],
                                       workflowFailureId: Option[Long],
-                                      valueId: Option[UUID],
+                                      valueId: Option[Long],
                                       errorText: Option[String],
                                       inputName: String
                                      )
@@ -48,7 +48,7 @@ trait SubmissionComponent {
     def submissionDate = column[Timestamp]("DATE_SUBMITTED", O.Default(defaultTimeStamp))
     def submitterId = column[String]("SUBMITTER", O.Length(254))
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
-    def submissionEntityId = column[Option[UUID]]("ENTITY_ID")
+    def submissionEntityId = column[Option[Long]]("ENTITY_ID")
     def status = column[String]("STATUS")
 
     def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
@@ -66,7 +66,7 @@ trait SubmissionComponent {
      */
     def workflowId = column[Option[Long]]("WORKFLOW_ID")
     def workflowFailureId = column[Option[Long]]("WORKFLOW_FAILURE_ID")
-    def valueId = column[Option[UUID]]("VALUE_ID")
+    def valueId = column[Option[Long]]("VALUE_ID")
     def errorText = column[Option[String]]("ERROR_TEXT")
     def inputName = column[String]("INPUT_NAME")
 
@@ -74,7 +74,7 @@ trait SubmissionComponent {
 
     def workflow = foreignKey("FK_SUB_VALIDATION_WF", workflowId, workflowQuery)(_.id.?)
     def workflowFailure = foreignKey("FK_SUB_VALIDATION_FAIL", workflowFailureId, workflowFailureQuery)(_.id.?)
-    def value = foreignKey("FK_SUB_VALIDATION_VAL", valueId, attributeQuery)(_.id.?)
+    def value = foreignKey("FK_SUB_VALIDATION_VAL", valueId, submissionAttributeQuery)(_.id.?)
   }
 
   protected val submissionValidationQuery = TableQuery[SubmissionValidationTable]
@@ -268,7 +268,7 @@ trait SubmissionComponent {
         (workflow, validationPair) <-
         workflowQuery.filter(_.submissionId === submissionId) joinLeft {
           submissionValidationQuery  joinLeft
-          attributeQuery on (_.valueId === _.id) } on (_.id === _._1.workflowId)
+          submissionAttributeQuery on (_.valueId === _.id) } on (_.id === _._1.workflowId)
       } yield (workflow, validationPair)
 
 
@@ -300,7 +300,7 @@ trait SubmissionComponent {
                   // unmarshalAttributes returns a highly nested structure; it is meant for bulk translation of
                   // attributes, but we use it here for just one
                   val attr = validationPair._2.map{attrRec =>
-                    attributeQuery.unmarshalAttributes(Seq( ((attrRec.id,attrRec), None) ))
+                    submissionAttributeQuery.unmarshalAttributes(Seq( ((attrRec.id,attrRec), None) ))
                   }.map{_.values.head}.map{_.values.head}
                 SubmissionValidationValue(attr, validationPair._1.errorText, validationPair._1.inputName)
               }
@@ -319,7 +319,7 @@ trait SubmissionComponent {
       }
     }
 
-    def loadSubmissionEntity(entityId: Option[UUID]): ReadAction[Option[AttributeEntityReference]] = {
+    def loadSubmissionEntity(entityId: Option[Long]): ReadAction[Option[AttributeEntityReference]] = {
       entityId match {
         case None => DBIO.successful(None)
         case Some(id) => uniqueResult[EntityRecord](entityQuery.findEntityById(id)).flatMap { rec =>
@@ -328,7 +328,7 @@ trait SubmissionComponent {
       }
     }
 
-    def loadSubmissionEntityId(workspaceId: UUID, entityRef: Option[AttributeEntityReference]): ReadAction[Option[UUID]] = {
+    def loadSubmissionEntityId(workspaceId: UUID, entityRef: Option[AttributeEntityReference]): ReadAction[Option[Long]] = {
       entityRef match {
         case None => DBIO.successful(None)
         case Some(ref) =>
@@ -349,7 +349,7 @@ trait SubmissionComponent {
       the marshal/unmarshal methods
      */
 
-    private def marshalSubmission(workspaceId: UUID, submission: Submission, entityId: Option[UUID], configId: Long): SubmissionRecord = {
+    private def marshalSubmission(workspaceId: UUID, submission: Submission, entityId: Option[Long], configId: Long): SubmissionRecord = {
       SubmissionRecord(
         UUID.fromString(submission.submissionId),
         workspaceId,
@@ -384,7 +384,7 @@ trait SubmissionComponent {
       )
     }
 
-    private def marshalWorkflowFailure(entityId: Option[UUID], submissionId: UUID): WorkflowFailureRecord = {
+    private def marshalWorkflowFailure(entityId: Option[Long], submissionId: UUID): WorkflowFailureRecord = {
       WorkflowFailureRecord(0, submissionId, entityId)
     }
 

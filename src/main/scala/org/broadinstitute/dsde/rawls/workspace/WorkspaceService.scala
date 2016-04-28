@@ -504,8 +504,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      //NOTE: Order here is important. If the src and dest workspaces are the same, we need to get the write lock first, since
-      //we can't upgrade a read lock to a write.
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
           realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
@@ -583,7 +581,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           if (!errorReports.isEmpty) {
             DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
           } else {
-            dataAccess.entityQuery.save(workspaceContext, updateTrials.collect { case (entityUpdate, Success(entity)) => entity } )
+            val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+            dataAccess.entityQuery.save(workspaceContext, t )
           }
         }
 

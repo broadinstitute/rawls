@@ -3,7 +3,12 @@
     <include file="changesets/initial_schema.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160316.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160318.xml" relativeToChangelogFile="true"/>
+<<<<<<< ba643b6247d86761d1a6e41876e6fcdd4b6a392d
     <include file="changesets/20160330_refactor_entities_attributes.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160406.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160420_workspace_record_version.xml" relativeToChangelogFile="true"/>
+=======
+    <!--<include file="changesets/20160330_refactor_entities_attributes.xml" relativeToChangelogFile="true"/>-->
+    <!--<include file="changesets/20160406.xml" relativeToChangelogFile="true"/>-->
+>>>>>>> entities and attributes use autoincremented ids. removed attribute mapping table.
 </databaseChangeLog>

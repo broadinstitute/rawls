@@ -353,7 +353,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 methodConfigurationQuery.save(context, methodConfigNotAllSamples),
                 methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
                 methodConfigurationQuery.save(context, methodConfigEntityUpdate),
-
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submission1),
                 submissionQuery.create(context, submission2),

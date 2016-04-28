@@ -424,7 +424,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", httpJson(z1)) ~>
-              sealRoute(services.entityRoutes) ~>
+          sealRoute(services.entityRoutes) ~>
           check {
             assertResult(StatusCodes.Created, response.entity.asString) {
               status
@@ -437,7 +437,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
             val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
             Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
-                      sealRoute(services.entityRoutes) ~>
+              sealRoute(services.entityRoutes) ~>
               check {
                 assertResult(StatusCodes.Created, response.entity.asString) {
                   status

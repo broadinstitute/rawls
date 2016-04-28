@@ -215,7 +215,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
   }
 
-  def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess): ReadAction[Map[UUID, Entity]] = {
+  def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess): ReadAction[Map[Long, Entity]] = {
     dataAccess.entityQuery.listByIds(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId.get })
   }
 
@@ -232,7 +232,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     else dataAccess.entityQuery.save(SlickWorkspaceContext(workspace), entities)
   }
 
-  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: Map[UUID, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
+  def attachOutputs(workspace: Workspace, workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], entitiesById: Map[Long, Entity], outputExpressions: Map[String, String]): Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] = {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
 
