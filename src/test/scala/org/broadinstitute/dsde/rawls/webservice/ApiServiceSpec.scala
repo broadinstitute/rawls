@@ -43,8 +43,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     def actorRefFactory = system
 
+    val executionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
+
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      executionServiceDAO,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"))
 
@@ -64,7 +66,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+      executionServiceDAO,
       gcsDAO,
       submissionSupervisor,
       bucketDeletionMonitor,

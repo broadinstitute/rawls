@@ -26,6 +26,7 @@ libraryDependencies ++= {
   val sprayV = "1.3.2"
   val slickV = "3.1.1"
   Seq(
+    "com.typesafe" % "config" % "1.3.0",
     ("com.gettyimages" %% "spray-swagger" % "0.5.0").exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11").exclude("com.typesafe.scala-logging", "scala-logging-api_2.11").exclude("com.google.guava", "guava"),
     "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
