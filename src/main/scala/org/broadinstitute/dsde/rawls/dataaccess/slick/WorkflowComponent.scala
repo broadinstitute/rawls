@@ -18,14 +18,14 @@ case class WorkflowRecord(id: Long,
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
-                          workflowEntityId: Option[UUID]
+                          workflowEntityId: Option[Long]
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
 
 case class WorkflowFailureRecord(id: Long,
                                  submissionId: UUID,
-                                 entityId: Option[UUID]
+                                 entityId: Option[Long]
                                 )
 
 case class WorkflowErrorRecord(workflowFailureId: Long, errorText: String)
@@ -44,7 +44,7 @@ trait WorkflowComponent {
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
-    def workflowEntityId = column[Option[UUID]]("ENTITY_ID")
+    def workflowEntityId = column[Option[Long]]("ENTITY_ID")
 
     def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
@@ -66,7 +66,7 @@ trait WorkflowComponent {
   class WorkflowFailureTable(tag: Tag) extends Table[WorkflowFailureRecord](tag, "WORKFLOW_FAILURE") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def submissionId = column[UUID]("SUBMISSION_ID")
-    def entityId = column[Option[UUID]]("ENTITY_ID")
+    def entityId = column[Option[Long]]("ENTITY_ID")
 
     def * = (id, submissionId, entityId) <> (WorkflowFailureRecord.tupled, WorkflowFailureRecord.unapply)
 
@@ -90,7 +90,7 @@ trait WorkflowComponent {
   object workflowQuery extends TableQuery(new WorkflowTable(_)) {
 
     type WorkflowQueryType = Query[WorkflowTable, WorkflowRecord, Seq]
-    type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, AttributeTable), (SubmissionValidationRecord, AttributeRecord), Seq]
+    type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable), (SubmissionValidationRecord, SubmissionAttributeRecord), Seq]
 
     def get(workspaceContext: SlickWorkspaceContext, submissionId: String, entityType: String, entityName: String): ReadAction[Option[Workflow]] = {
       loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceId, entityType, entityName))
@@ -133,10 +133,10 @@ trait WorkflowComponent {
     private def saveInputResolutions(workspaceContext: SlickWorkspaceContext, values: Seq[SubmissionValidationValue], workflowId: Long) = {
       DBIO.seq(values.map { case (v) =>
         v.value match {
-          case None => (submissionValidationQuery += marshalInputResolution(v, None, Some(workflowId)))
+          case None => (submissionValidationQuery += marshalInputResolution(v, Some(workflowId)))
           case Some(attr) =>
-            DBIO.sequence(attributeQuery.insertAttributeRecords(v.inputName, attr, workspaceContext.workspaceId)) flatMap { ids =>
-              (submissionValidationQuery += marshalInputResolution(v, Some(ids.head), Some(workflowId)))
+            ((submissionValidationQuery returning submissionValidationQuery.map(_.id)) += marshalInputResolution(v, Some(workflowId))) flatMap { validationId =>
+              DBIO.sequence(submissionAttributeQuery.insertAttributeRecords(validationId, v.inputName, attr, workspaceContext.workspaceId))
             }
         }
       }: _*)
@@ -150,16 +150,18 @@ trait WorkflowComponent {
       uniqueResult[WorkflowRecord](findWorkflowByEntity(submissionId, workspaceContext.workspaceId, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName)) flatMap {
         case None => throw new RawlsException(s"workflow does not exist: ${workflow}")
         case Some(rec) =>
-          deleteMessagesAndInputs(rec.id) andThen
-          saveInputResolutions(workspaceContext, workflow.inputResolutions, rec.id) andThen
-          saveMessages(workflow.messages, rec.id) andThen
-          findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
+          deleteWorkflowAttributes(rec.id) andThen
+            deleteMessagesAndInputs(rec.id) andThen
+            saveInputResolutions(workspaceContext, workflow.inputResolutions, rec.id) andThen
+            saveMessages(workflow.messages, rec.id) andThen
+            findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
       }
     } map { _ => workflow }
 
 
     def deleteWorkflowAction(id: Long) = {
-      deleteMessagesAndInputs(id) andThen
+      deleteWorkflowAttributes(id) andThen
+        deleteMessagesAndInputs(id) andThen
         findWorkflowById(id).delete
     }
 
@@ -172,6 +174,32 @@ trait WorkflowComponent {
     def deleteWorkflowFailures(submissionId: UUID) = {
       submissionQuery.filter(_.id === submissionId).result flatMap { result =>
         DBIO.seq(result.map(sub => workflowQuery.findInactiveWorkflows(submissionId).delete).toSeq:_*)
+      }
+    }
+
+    //gather all workflowIds and workflowFailureIds in a submission and delete their attributes
+    def deleteSubmissionAttributes(submissionId: UUID) = {
+      val workflows = workflowQuery.filter(_.submissionId === submissionId).result
+      val workflowFailures = workflowFailureQuery.filter(_.submissionId === submissionId).result
+
+      workflows flatMap { workflowRecs =>
+        val workflowIds = workflowRecs.map(_.id)
+        workflowFailures flatMap { workflowFailureRecs =>
+          val workflowFailureIds = workflowFailureRecs.map(_.id)
+          DBIO.sequence(workflowIds.map(deleteWorkflowAttributes) ++ workflowFailureIds.map(deleteWorkflowFailureAttributes))
+        }
+      }
+    }
+
+    def deleteWorkflowAttributes(id: Long) = {
+      submissionValidationQuery.filter(_.workflowId === id).result flatMap { validations =>
+        submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
+      }
+    }
+
+    def deleteWorkflowFailureAttributes(id: Long) = {
+      submissionValidationQuery.filter(_.workflowFailureId === id).result flatMap { validations =>
+        submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
       }
     }
 
@@ -198,7 +226,7 @@ trait WorkflowComponent {
       findWorkflowsBySubmissionId(submissionId).result
     }
 
-    private def loadWorkflowEntity(entityId: Option[UUID]): ReadAction[Option[AttributeEntityReference]] = {
+    private def loadWorkflowEntity(entityId: Option[Long]): ReadAction[Option[AttributeEntityReference]] = {
       entityId match {
         case None => DBIO.successful(None)
         case Some(id) => uniqueResult[EntityRecord](entityQuery.findEntityById(id)).flatMap { rec =>
@@ -212,12 +240,12 @@ trait WorkflowComponent {
     }
 
     def loadInputResolutions(workflowId: Long): ReadAction[Seq[SubmissionValidationValue]] = {
-      val inputResolutionsAttributeJoin = findInputResolutionsByWorkflowId(workflowId) join attributeQuery on (_.valueId === _.id)
+      val inputResolutionsAttributeJoin = findInputResolutionsByWorkflowId(workflowId) join submissionAttributeQuery on (_.id === _.ownerId)
       unmarshalInputResolutions(inputResolutionsAttributeJoin)
     }
 
     def loadFailedInputResolutions(failureId: Long): ReadAction[Seq[SubmissionValidationValue]] = {
-      val failedInputResolutionsAttributeJoin = findInputResolutionsByFailureId(failureId) join attributeQuery on (_.valueId === _.id)
+      val failedInputResolutionsAttributeJoin = findInputResolutionsByFailureId(failureId) join submissionAttributeQuery on (_.id === _.ownerId)
       unmarshalInputResolutions(failedInputResolutionsAttributeJoin)
     }
 
@@ -255,7 +283,7 @@ trait WorkflowComponent {
       filter(wf => wf.externalid === externalId && wf.submissionId === submissionId)
     }
 
-    def findWorkflowByEntityId(submissionId: UUID, entityId: UUID): WorkflowQueryType = {
+    def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType = {
       filter(rec => rec.submissionId === submissionId && rec.workflowEntityId === entityId)
     }
 
@@ -294,7 +322,7 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[UUID]): WorkflowRecord = {
+    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
@@ -316,19 +344,19 @@ trait WorkflowComponent {
       )
     }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, valueId: Option[UUID], workflowId: Option[Long]): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Option[Long]): SubmissionValidationRecord = {
       SubmissionValidationRecord(
+        0,
         workflowId,
         None,
-        valueId,
         value.error,
         value.inputName
       )
     }
 
-    private def unmarshalInputResolution(validationRec: SubmissionValidationRecord, value: Option[AttributeRecord]): SubmissionValidationValue = {
+    private def unmarshalInputResolution(validationRec: SubmissionValidationRecord, value: Option[SubmissionAttributeRecord]): SubmissionValidationValue = {
       value match {
-        case Some(attr) => SubmissionValidationValue(Some(attributeQuery.unmarshalAttributes(Seq(((validationRec.valueId, attr), None)))(validationRec.valueId).values.head), validationRec.errorText, validationRec.inputName)
+        case Some(attr) => SubmissionValidationValue(Some(submissionAttributeQuery.unmarshalAttributes(Seq(((attr.id, attr), None)))(attr.id).values.head), validationRec.errorText, validationRec.inputName)
         case None => SubmissionValidationValue(None, validationRec.errorText, validationRec.inputName)
       }
     }
@@ -362,7 +390,7 @@ trait WorkflowComponent {
     private def deleteMessagesAndInputs(id: Long): DBIOAction[Int, NoStream, Write with Write] = {
 //    attributeQuery.filter(_.id in (findWorkflowMessagesById(id))).delete andThen
         findWorkflowMessagesById(id).delete andThen
-        findInputResolutionsByWorkflowId(id).delete
+          findInputResolutionsByWorkflowId(id).delete
     }
   }
 }
