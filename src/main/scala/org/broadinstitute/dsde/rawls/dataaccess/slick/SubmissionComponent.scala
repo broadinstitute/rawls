@@ -136,12 +136,8 @@ trait SubmissionComponent {
 
       def saveSubmissionWorkflowFailures(workflowFailures: Seq[WorkflowFailure]) = {
         DBIO.seq(workflowFailures.map { case (wff) =>
-          for {
-            entityId <- loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity)
-            failureId <- (workflowFailureQuery returning workflowFailureQuery.map(_.id)) += marshalWorkflowFailure(entityId, UUID.fromString(submission.submissionId))
-            messageInserts <- DBIO.sequence(wff.errors.map(message => workflowErrorQuery += WorkflowErrorRecord(failureId, message.value)))
-          } yield messageInserts
-        }: _*)
+          workflowFailureQuery.save(workspaceContext, UUID.fromString(submission.submissionId), wff)
+        }.toSeq: _*)
       }
 
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {
@@ -168,23 +164,10 @@ trait SubmissionComponent {
 
     /* deletes a submission and all associated records */
     def delete(workspaceContext: SlickWorkspaceContext, submissionId: String): ReadWriteAction[Boolean] = {
-
-      def deleteSubmissionWorkflows(submissionId: UUID) = {
-        workflowQuery.findWorkflowsBySubmissionId(submissionId).result.flatMap { recs => DBIO.sequence(recs.map { rec =>
-          workflowQuery.delete(rec.id)
-        })}
-      }
-
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submissionId))) flatMap {
         case None =>
           DBIO.successful(false)
-        case Some(submissionRec) => {
-          deleteSubmissionWorkflows(UUID.fromString(submissionId)) andThen
-            workflowQuery.findInactiveWorkflows(UUID.fromString(submissionId)).delete andThen
-            findById(UUID.fromString(submissionId)).delete
-        } map { count =>
-          count > 0
-        }
+        case Some(submissionRec) => deleteSubmissionAction(UUID.fromString(submissionId)).map(_ > 0)
       }
     }
 
@@ -200,7 +183,12 @@ trait SubmissionComponent {
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
       }
 
+      val workflowFailureResolutionDeletes = workflowFailureQuery.filter(_.submissionId === submissionId).result flatMap { result =>
+        DBIO.seq(result.map(wff => workflowQuery.deleteFailureResolutions(wff.id)).toSeq:_*)
+      }
+
       workflowDeletes andThen
+        workflowFailureResolutionDeletes andThen
         workflowQuery.deleteWorkflowErrors(submissionId) andThen
         workflowQuery.deleteWorkflowFailures(submissionId) andThen
         submissionQuery.filter(_.id === submissionId).delete
@@ -384,7 +372,7 @@ trait SubmissionComponent {
       )
     }
 
-    private def marshalWorkflowFailure(entityId: Option[Long], submissionId: UUID): WorkflowFailureRecord = {
+    def marshalWorkflowFailure(entityId: Option[Long], submissionId: UUID): WorkflowFailureRecord = {
       WorkflowFailureRecord(0, submissionId, entityId)
     }
 

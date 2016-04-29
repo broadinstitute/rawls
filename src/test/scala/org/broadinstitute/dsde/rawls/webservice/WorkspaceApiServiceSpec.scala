@@ -123,6 +123,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
     val sample3 = Entity("sample3", "sample", Map.empty)
+    val sample4 = Entity("sample4", "sample", Map.empty)
+    val sample5 = Entity("sample5", "sample", Map.empty)
+    val sample6 = Entity("sample6", "sample", Map.empty)
     val sampleSet = Entity("sampleset", "sample_set", Map("samples" -> AttributeEntityReferenceList(Seq(
       AttributeEntityReference(sample1.entityType, sample1.name),
       AttributeEntityReference(sample2.entityType, sample2.name),
@@ -131,7 +134,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(workspaceName.namespace, "method-a", 1))
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, workspaceName)
-    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions))
+    val submissionTemplate = createTestSubmission(workspace, methodConfig, sampleSet, userOwner,
+      Seq(sample1, sample2, sample3), Map(sample1 -> testData.inputResolutions, sample2 -> testData.inputResolutions, sample3 -> testData.inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> testData.inputResolutions2, sample5 -> testData.inputResolutions2, sample6 -> testData.inputResolutions2))
     val submissionSuccess = submissionTemplate.copy(
       submissionId = UUID.randomUUID().toString,
       status = SubmissionStatuses.Done,

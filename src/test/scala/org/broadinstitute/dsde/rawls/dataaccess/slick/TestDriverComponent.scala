@@ -57,14 +57,21 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   import driver.api._
 
-  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef, workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
+  def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef
+                           , workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]
+                           , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
     val workflows = (workflowEntities collect {
       case ref: Entity => Workflow(UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
     })
 
+    val failedWorkflows = (failedWorkflowEntities collect {
+      case ref: Entity =>
+        WorkflowFailure(ref.name, ref.entityType, failedInputResolutions(ref), Seq(AttributeString("errorMessage1"), AttributeString("errorMessage2")))
+    })
+
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Option(AttributeEntityReference(submissionEntity.entityType, submissionEntity.name)),
       workflows,
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      failedWorkflows, SubmissionStatuses.Submitted)
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
@@ -238,6 +245,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val indiv1 = Entity("indiv1", "Individual",
       Map( "sset" -> AttributeEntityReference("SampleSet", "sset1") ) )
 
+    val indiv2 = Entity("indiv2", "Individual",
+      Map( "sset" -> AttributeEntityReference("SampleSet", "sset2") ) )
+
     val methodConfig = MethodConfiguration(
       "ns",
       "testConfig1",
@@ -283,12 +293,21 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
 
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
+    val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
 
-    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions))
-    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner, Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions))
+    val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+      Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
+    val submission2 = createTestSubmission(workspace, methodConfig2, indiv1, userOwner,
+      Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
 
-    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
-    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner, Seq(indiv1), Map(indiv1 -> inputResolutions))
+    val submissionUpdateEntity = createTestSubmission(workspace, methodConfigEntityUpdate, indiv1, userOwner,
+      Seq(indiv1), Map(indiv1 -> inputResolutions),
+      Seq(indiv2), Map(indiv2 -> inputResolutions2))
+    val submissionUpdateWorkspace = createTestSubmission(workspace, methodConfigWorkspaceUpdate, indiv1, userOwner,
+      Seq(indiv1), Map(indiv1 -> inputResolutions),
+      Seq(indiv2), Map(indiv2 -> inputResolutions2))
 
     val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
       Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
@@ -344,6 +363,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 entityQuery.save(context, sset4),
                 entityQuery.save(context, sset_empty),
                 entityQuery.save(context, indiv1),
+                entityQuery.save(context, indiv2),
 
                 methodConfigurationQuery.save(context, methodConfig),
                 methodConfigurationQuery.save(context, methodConfig2),
