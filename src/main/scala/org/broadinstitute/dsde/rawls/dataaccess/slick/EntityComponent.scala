@@ -60,11 +60,11 @@ trait EntityComponent {
     val baseEntityAndAttributeSql =
       s"""select e.id, e.name, e.entity_type, e.workspace_id, a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id
           from ENTITY e
-          left outer join ENTITY_ATTRIBUTE a on a.entity_id = e.id
+          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
     def entityAttributes(entityId: Long) = for {
-      entityAttrRec <- entityAttributeQuery if entityAttrRec.entityId === entityId
+      entityAttrRec <- entityAttributeQuery if entityAttrRec.ownerId === entityId
     } yield entityAttrRec
 
     def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQuery = {
@@ -236,7 +236,7 @@ trait EntityComponent {
       query joinLeft {
         entityAttributeQuery joinLeft
           entityQuery on (_.valueEntityRef === _.id)
-      } on (_.id === _._1.entityId) map { result =>
+      } on (_.id === _._1.ownerId) map { result =>
         (result._1, result._2.map { case (a, b) => (a, b) })
       }
     }
@@ -322,7 +322,7 @@ trait EntityComponent {
 
       val batchQueries = batchedEntityIds.map {
         idBatch => filter(_.id inSetBind(idBatch)) join
-          entityAttributeQuery on (_.id === _.entityId) filter(_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef)
+          entityAttributeQuery on (_.id === _.ownerId) filter(_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef)
       }
 
       val referencesResults = DBIO.sequence(batchQueries.map(_.result))
@@ -386,7 +386,7 @@ trait EntityComponent {
     }
 
     def deleteEntityAttributes(entityRecords: Seq[EntityRecord]) = {
-      entityAttributeQuery.filter(_.entityId.inSetBind(entityRecords.map(_.id))).delete
+      entityAttributeQuery.filter(_.ownerId.inSetBind(entityRecords.map(_.id))).delete
     }
   }
 
