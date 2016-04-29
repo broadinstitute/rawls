@@ -122,10 +122,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val entityId = UUID.randomUUID()
+    val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId)), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
-    val entitiesById: Map[UUID, Entity] = Map(entityId -> entity)
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -138,10 +138,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attachOutputs only entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val entityId = UUID.randomUUID()
+    val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId)), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
-    val entitiesById: Map[UUID, Entity] = Map(entityId -> entity)
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -154,10 +154,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attachOutputs none" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val entityId = UUID.randomUUID()
+    val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId)), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
-    val entitiesById: Map[UUID, Entity] = Map(entityId -> entity)
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map.empty
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -168,11 +168,11 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   it should "attachOutputs missing expected output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val entityId = UUID.randomUUID()
+    val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
     val workflowRecord = WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId))
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!")))))
-    val entitiesById: Map[UUID, Entity] = Map(entityId -> entity)
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("missing" -> "this.bar")
 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -200,7 +200,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  ignore should "*REENABLE WITH MYSQL UNIT TESTS* handle outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should "handle outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
@@ -235,7 +235,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
-  ignore should s"*REENABLE WITH MYSQL UNIT TESTS* handleStatusResponses from exec svc - success with outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+  it should s"handleStatusResponses from exec svc - success with outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val status = WorkflowStatuses.Succeeded
     val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
@@ -252,7 +252,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
-    ignore should s"*REENABLE WITH MYSQL UNIT TESTS* terminate when workflow is done - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    it should s"terminate when workflow is done - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
       watch(monitorRef)
       expectMsgClass(5 seconds, classOf[Terminated])
@@ -264,7 +264,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   WorkflowStatuses.terminalStatuses.foreach { status =>
-    ignore should s"*REENABLE WITH MYSQL UNIT TESTS* terminate when workflow is aborted - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    it should s"terminate when workflow is aborted - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       runAndWait(submissionQuery.findById(UUID.fromString(testData.submissionUpdateEntity.submissionId)).map(_.status).update(SubmissionStatuses.Aborting.toString))
       val monitorRef = createSubmissionMonitorActor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
       watch(monitorRef)

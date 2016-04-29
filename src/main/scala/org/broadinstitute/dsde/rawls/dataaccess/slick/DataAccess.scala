@@ -30,10 +30,9 @@ trait DataAccess
       groupUsersQuery.schema ++
       groupSubgroupsQuery.schema ++
       projectUsersQuery.schema ++
-      attributeQuery.schema ++
       workspaceQuery.schema ++
-      workspaceAttributeQuery.schema ++
       workspaceAccessQuery.schema ++
+      workspaceAttributeQuery.schema ++
       entityQuery.schema ++
       entityAttributeQuery.schema ++
       methodConfigurationQuery.schema ++
@@ -41,6 +40,7 @@ trait DataAccess
       methodConfigurationOutputQuery.schema ++
       methodConfigurationPrereqQuery.schema ++
       submissionQuery.schema ++
+      submissionAttributeQuery.schema ++
       submissionValidationQuery.schema ++
       workflowQuery.schema ++
       workflowErrorQuery.schema ++
