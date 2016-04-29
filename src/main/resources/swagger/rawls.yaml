@@ -3706,6 +3706,9 @@ definitions:
       backendStatus:
         type: string
         description: status of the backend
+      backendLogs:
+        type: object
+        description: map of log files from backend
       outputs:
         type: object
         description: map from output names to local files

@@ -184,6 +184,7 @@ case class CallMetadata(
   executionStatus: String,
   backend: Option[String],
   backendStatus: Option[String],
+  backendLogs: Option[Map[String, Attribute]],
   outputs: Option[Map[String, Attribute]],
   start: Option[DateTime],
   end: Option[DateTime],
@@ -273,7 +274,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionListResponseFormat = jsonFormat7(SubmissionListResponse)
 
-  implicit val CallMetadataFormat = jsonFormat12(CallMetadata)
+  implicit val CallMetadataFormat = jsonFormat13(CallMetadata)
 
   implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
 
