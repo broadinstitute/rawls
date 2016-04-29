@@ -121,7 +121,7 @@ trait WorkspaceComponent {
     private def insertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
       val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
-        workspaceAttributeQuery.insertAttributeRecords(name, attribute, workspaceId)
+        workspaceAttributeQuery.insertAttributeRecords(workspaceId, name, attribute, workspaceId)
       }
       DBIO.seq(insertActions.toSeq:_*)
     }
@@ -292,8 +292,8 @@ trait WorkspaceComponent {
     }
 
     private def workspaceAttributes(lookup: WorkspaceQueryType) = for {
-      workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.workspaceId.in(lookup.map(_.id))
-    } yield (workspaceAttrRec.workspaceId, workspaceAttrRec)
+      workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.ownerId.in(lookup.map(_.id))
+    } yield (workspaceAttrRec.ownerId, workspaceAttrRec)
 
     private def workspaceAttributesWithReferences(lookup: WorkspaceQueryType) = {
       workspaceAttributes(lookup) joinLeft entityQuery on (_._2.valueEntityRef === _.id)

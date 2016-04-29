@@ -18,40 +18,40 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   "AttributeComponent" should "insert string attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", Option("test"), None, None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result)
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     }
   }
 
   it should "insert number attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNumber(3.14159)
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, Option(3.14159), None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result)
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     }
   }
 
   it should "insert boolean attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeBoolean(true)
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, Option(true), None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result)
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     }
   }
 
   it should "insert attribute value list" in withEmptyTestDatabase {
     val testAttribute = AttributeValueList(Seq(AttributeNumber(9), AttributeNumber(8), AttributeNumber(7), AttributeNumber(6)))
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
     assertResult(Set(
@@ -60,29 +60,29 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(7), None, None, Option(2)),
       WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(6), None, None, Option(3)))) {
 
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result).map(_.copy(id=0)).toSet
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).map(_.copy(id=0)).toSet
     }
   }
 
   it should "insert empty list" in withEmptyTestDatabase {
     val testAttribute = AttributeEmptyList
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Set(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, None, Option(-1)))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result).toSet
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).toSet
     }
   }
 
   it should "insert null attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNull
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Set(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result).toSet
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).toSet
     }
   }
 
@@ -90,11 +90,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
     val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId))
     val testAttribute = AttributeEntityReference("type", "name")
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
     assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, Option(entityId), None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result)
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     }
   }
 
@@ -106,7 +106,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val entityId4 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name4", "type", workspaceId))
 
     val testAttribute = AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2"), AttributeEntityReference("type", "name3"), AttributeEntityReference("type", "name4")))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
     assertResult(Set(
@@ -115,7 +115,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId3), Option(2)),
       WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId4), Option(3)))) {
 
-      runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result).map(_.copy(id=0)).toSet
+      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).map(_.copy(id=0)).toSet
     }
   }
 
@@ -123,21 +123,21 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname3", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
     val testAttribute = AttributeEntityReference("type", "name")
     intercept[RawlsException] {
-      workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+      workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     }
   }
 
   it should "throw exception inserting inconsistent list values" in withEmptyTestDatabase {
     val testAttribute = AttributeValueList(Seq(AttributeNumber(9), AttributeString("oops"), AttributeNumber(7), AttributeNumber(6)))
     intercept[RawlsException] {
-      workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+      workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     }
   }
 
   it should "throw exception inserting inconsistent list references" in withEmptyTestDatabase {
     val testAttribute = AttributeEntityReferenceList(Seq(AttributeEntityReference("type1", "foo"), AttributeEntityReference("type2", "foo"), AttributeEntityReference("type1", "foo")))
     intercept[RawlsException] {
-      workspaceAttributeQuery.insertAttributeRecords("test", testAttribute, workspaceId).map(x => runAndWait(x))
+      workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     }
   }
 
@@ -150,12 +150,12 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
       runAndWait(insert)
     }
-    val attributeRecs = runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result)
+    val attributeRecs = runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
     assertResult(3) { attributeRecs.size }
 
     assertResult(3) { runAndWait(workspaceAttributeQuery.deleteAttributeRecords(attributeRecs)) }
 
-    assertResult(0) { runAndWait(workspaceAttributeQuery.filter(_.workspaceId === workspaceId).result).size }
+    assertResult(0) { runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).size }
   }
 
   it should "unmarshall attribute records" in withEmptyTestDatabase {

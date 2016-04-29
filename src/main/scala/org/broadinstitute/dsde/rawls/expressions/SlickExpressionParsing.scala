@@ -176,7 +176,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
     val wsIdAndAttributeQuery = for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
-      attribute <- workspaceAttributeQuery if attribute.workspaceId === workspace.id && attribute.name === attributeName
+      attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attributeName
     } yield (workspace.id, attribute)
 
     wsIdAndAttributeQuery.result.map { wsIdAndAttributes =>
@@ -193,7 +193,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def workspaceEntityRefRootFunc(entityRefName: String)(context: SlickExpressionContext): PipeType = {
     for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
-      attribute <- workspaceAttributeQuery if attribute.workspaceId === workspace.id && attribute.name === entityRefName
+      attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === entityRefName
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
     } yield nextEntity
   }
@@ -202,7 +202,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def entityNameAttributePipeFunc(entityRefName: String)(context: SlickExpressionContext, queryPipeline: PipeType): PipeType = {
     for {
       entity <- queryPipeline
-      attribute <- entityAttributeQuery if entity.id === attribute.entityId && attribute.name === entityRefName
+      attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === entityRefName
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
     } yield nextEntity
   }
@@ -213,7 +213,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     // and in the case of a list there will be more than one attribute record for an entity
     val attributeForNameQuery = (for {
       entity <- queryPipeline.get
-      attribute <- entityAttributeQuery if entity.id === attribute.entityId && attribute.name === attributeName
+      attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attributeName
     } yield (entity.name, attribute)).result
 
 
@@ -271,7 +271,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
     val query = for {
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
-      attribute <- workspaceAttributeQuery if attribute.workspaceId === workspace.id && attribute.name === entityRefName
+      attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === entityRefName
       entity <- entityQuery if attribute.valueEntityRef === entity.id
     } yield entity
 
