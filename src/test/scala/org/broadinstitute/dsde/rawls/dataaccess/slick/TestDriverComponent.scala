@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
+import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -52,7 +53,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   }
 
   private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
-    database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith { case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action) }
+    database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith {
+      case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
+      case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
+    }
   }
 
   import driver.api._
