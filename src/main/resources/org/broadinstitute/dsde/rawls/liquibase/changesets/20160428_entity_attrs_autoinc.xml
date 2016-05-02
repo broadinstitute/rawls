@@ -71,7 +71,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="entity-attrs-autoinc-12">
         <sql stripComments="true">
-            CREATE INDEX temp_uuid_index ON entity (old_uuid);
+            CREATE INDEX temp_uuid_index ON ENTITY (old_uuid);
         </sql>
     </changeSet>
 
