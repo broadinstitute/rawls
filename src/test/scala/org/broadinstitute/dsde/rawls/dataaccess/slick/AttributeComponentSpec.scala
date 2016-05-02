@@ -88,7 +88,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
-    val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId))
+    val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId, 0))
     val testAttribute = AttributeEntityReference("type", "name")
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
@@ -100,10 +100,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname2", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
-    val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId))
-    val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId))
-    val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId))
-    val entityId4 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name4", "type", workspaceId))
+    val entityId1 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name1", "type", workspaceId, 0))
+    val entityId2 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name2", "type", workspaceId, 0))
+    val entityId3 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name3", "type", workspaceId, 0))
+    val entityId4 = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name4", "type", workspaceId, 0))
 
     val testAttribute = AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2"), AttributeEntityReference("type", "name3"), AttributeEntityReference("type", "name4")))
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
@@ -163,14 +163,14 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       ((1, WorkspaceAttributeRecord(0, workspaceId, "string", Some("value"), None, None, None, None)), None),
       ((1, WorkspaceAttributeRecord(0, workspaceId, "num", None, Some(1), None, None, None)), None),
       ((1, WorkspaceAttributeRecord(0, workspaceId, "bool", None, None, Some(true), None, None)), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "ref", None, None, None, Some(1), None)), Some(EntityRecord(0, "name", "type", workspaceId))),
+      ((1, WorkspaceAttributeRecord(0, workspaceId, "ref", None, None, None, Some(1), None)), Some(EntityRecord(0, "name", "type", workspaceId, 0))),
       ((1, WorkspaceAttributeRecord(0, workspaceId, "null", None, None, None, None, None)), None),
       ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(1), None, None, Some(2))), None),
       ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(2), None, None, Some(1))), None),
       ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(3), None, None, Some(0))), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(1), Some(2))), Some(EntityRecord(0, "name1", "type", workspaceId))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(2), Some(1))), Some(EntityRecord(0, "name2", "type", workspaceId))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(3), Some(0))), Some(EntityRecord(0, "name3", "type", workspaceId))),
+      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(1), Some(2))), Some(EntityRecord(0, "name1", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(2), Some(1))), Some(EntityRecord(0, "name2", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(3), Some(0))), Some(EntityRecord(0, "name3", "type", workspaceId, 0))),
       ((1, WorkspaceAttributeRecord(0, workspaceId, "emptyList", None, Some(1), None, None, Some(-1))), None)
     )
 
