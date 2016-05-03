@@ -13,7 +13,7 @@ fi
 sbt update && echo "sbt updated successfully."
 
 # Tests are run in jenkins which has a custom mysql instance just for testing
-sbt -J-Xms4g -J-Xmx4g test -Dmysql.host=127.0.0.1 -Dmysql.port=3310
+sbt -J-Xms4g -J-Xmx4g test -Dmysql.host=172.17.42.1 -Dmysql.port=3310
 sbt -J-Xms4g -J-Xmx4g assembly
 RAWLS_JAR=$(find target | grep 'rawls.*\.jar')
 mv $RAWLS_JAR .
