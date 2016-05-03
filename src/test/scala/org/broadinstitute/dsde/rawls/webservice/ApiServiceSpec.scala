@@ -63,10 +63,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       directoryDAO
     )_
 
+    val execServiceBatchSize = 3
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       executionServiceDAO,
+      execServiceBatchSize,
       gcsDAO,
       submissionSupervisor,
       bucketDeletionMonitor,

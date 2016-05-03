@@ -61,10 +61,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       directoryDAO
     )_
 
+    val execServiceBatchSize = 3
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       executionServiceDAO,
+      execServiceBatchSize,
       gcsDAO,
       submissionSupervisor,
       bucketDeletionMonitor,

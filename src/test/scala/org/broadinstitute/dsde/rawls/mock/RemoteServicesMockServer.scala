@@ -230,6 +230,19 @@ class RemoteServicesMockServer(port:Int) {
           .withStatusCode(StatusCodes.Created.intValue)
       )
 
+    val submissionBatchPath = "/workflows/v1/batch"
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath(submissionBatchPath)
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """[{"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},{"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},{"status": "error", "message": "stuff happens"}]""")
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
+
     mockServer.when(
       request()
         .withMethod("POST")

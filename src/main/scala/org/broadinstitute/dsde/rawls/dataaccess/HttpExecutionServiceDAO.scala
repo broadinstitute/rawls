@@ -20,11 +20,19 @@ class HttpExecutionServiceDAO( executionServiceURL: String, workflowSubmissionTi
 
   override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     implicit val timeout = Timeout(workflowSubmissionTimeout)
-    // TODO: how to get the version?
     val url = executionServiceURL+"/workflows/v1"
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
     val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs) ++ options.map("workflowOptions" -> _).toSeq)
+    pipeline(Post(url,formData))
+  }
+
+  override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
+    val url = executionServiceURL+"/workflows/v1/batch"
+    import system.dispatcher
+
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
+    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs.mkString("[", ",", "]")) ++ options.map("workflowOptions" -> _).toSeq)
     pipeline(Post(url,formData))
   }
 
