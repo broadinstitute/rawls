@@ -194,10 +194,10 @@ trait AttributeComponent {
     }
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
-      allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.mapValues { workspaceAttributeRecsWithRef =>
-        workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.mapValues { case (attributeRecsWithRefForNameWithDupes) =>
+      allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
+        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.map { case (name, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName: Set[(RECORD, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
-          if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
+          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
           } else if (attributeRecsWithRefForName.size > 1) {
             throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
@@ -206,6 +206,7 @@ trait AttributeComponent {
           } else {
             unmarshalValue(attributeRecsWithRefForName.head._1)
           }
+          name -> unmarshalled
         }
       }
     }
