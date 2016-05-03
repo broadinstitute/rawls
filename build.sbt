@@ -51,8 +51,7 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "io.spray" %% "spray-testkit" % sprayV % "test",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test",
-    "org.mock-server" % "mockserver-netty" % "3.9.2" % "test",
-    "com.h2database" % "h2" % "1.4.191" % "test"
+    "org.mock-server" % "mockserver-netty" % "3.9.2" % "test"
   )
 }
 
@@ -78,9 +77,21 @@ def isIntegrationTest(name: String) = name contains "integrationtest"
 
 lazy val IntegrationTest = config ("it") extend (Test)
 
+lazy val validMysqlHost = taskKey[Unit]("Determine if mysql.host is provided.")
+
+validMysqlHost := {
+  val hostName = sys.props.getOrElse("mysql.host", "")
+  if (hostName.length == 0) {
+    val log = streams.value.log
+    log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")
+    sys.exit()
+  }
+}
+
 lazy val rawls = project.in(file("."))
   .configs(IntegrationTest)
   .settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
+  .settings((test in Test) <<= (test in Test) dependsOn validMysqlHost)
   .settings(
     testOptions in Test ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s)))
