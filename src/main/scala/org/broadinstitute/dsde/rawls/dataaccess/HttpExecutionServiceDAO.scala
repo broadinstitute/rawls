@@ -1,23 +1,25 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
-import scala.concurrent.{Future, Await}
-import scala.concurrent.duration.Duration
+import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
 import spray.http.FormData
 import spray.httpx.SprayJsonSupport._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
  * @author tsharpe
  */
-class HttpExecutionServiceDAO( executionServiceURL: String )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
+class HttpExecutionServiceDAO( executionServiceURL: String, workflowSubmissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
 
   override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
+    implicit val timeout = Timeout(workflowSubmissionTimeout)
     // TODO: how to get the version?
     val url = executionServiceURL+"/workflows/v1"
     import system.dispatcher

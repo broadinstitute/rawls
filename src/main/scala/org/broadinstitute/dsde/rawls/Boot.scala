@@ -76,8 +76,14 @@ object Boot extends App {
       slickDataSource.databaseConfig.db.shutdown
     }
 
+    val executionServiceConfig = conf.getConfig("executionservice")
+    val executionServiceDAO = new HttpExecutionServiceDAO(
+      executionServiceConfig.getString("server"),
+      Duration.fromNanos(executionServiceConfig.getDuration("workflowSubmissionTimeout").toNanos)
+    )
+
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
+      executionServiceDAO,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -87,15 +93,19 @@ object Boot extends App {
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val service = system.actorOf(RawlsApiServiceActor.props(
-                    WorkspaceService.constructor(slickDataSource,
-                                                  new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
-                                                  new HttpExecutionServiceDAO(conf.getConfig("executionservice").getString("server")),
-                                                  gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor),
-                    userServiceConstructor,
-                    ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
-                    clientSecrets.getDetails.getClientId
+      WorkspaceService.constructor(
+        slickDataSource,
+        new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
+        executionServiceDAO,
+        gcsDAO,
+        submissionSupervisor,
+        bucketDeletionMonitor,
+        userServiceConstructor),
+      userServiceConstructor,
+      ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
+      clientSecrets.getDetails.getClientId
     ),
-                    "rawls-service")
+      "rawls-service")
 
     implicit val timeout = Timeout(5.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler

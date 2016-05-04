@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
+import akka.pattern.AskTimeoutException
 import akka.testkit.{TestKit, TestActorRef}
-import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -12,7 +13,6 @@ import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.joda.time.DateTime
 import org.scalatest.{FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.json._
@@ -156,11 +156,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService(
       testCode: WorkspaceService => Any, 
       withDataOp: (SlickDataSource => Any) => Unit, 
-      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl)): Unit = {
+      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)): Unit = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-        new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl),
+        execService,
         slickDataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -281,6 +281,24 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert( newSubmission.workflows.size == 3 )
 
     checkSubmissionStatus(workspaceService, newSubmission.submissionId)
+  }
+
+  it should "cause the configurable workflow submissions timeout to trigger" in {
+    def wdl = "dummy"
+    def wdlInputs = "dummy"
+    def workflowOptions = Option("two_second_delay")
+
+    def expectedResponse = ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted")
+
+    def execWith1SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(1, TimeUnit.SECONDS))
+    def execWith3SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(3, TimeUnit.SECONDS))
+
+    val execResponse = Await.result(execWith3SecTimeout.submitWorkflow(wdl, wdlInputs, workflowOptions, userInfo), Duration.Inf)
+    assertResult(expectedResponse) { execResponse }
+
+    intercept[AskTimeoutException] {
+      Await.result(execWith1SecTimeout.submitWorkflow(wdl, wdlInputs, workflowOptions, userInfo), Duration.Inf)
+    }
   }
 
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
@@ -581,7 +599,7 @@ class MockExecutionServiceDAO(timeout:Boolean = false) extends ExecutionServiceD
   var submitInput: String = null
   var submitOptions: Option[String] = None
 
-  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo)= {
+  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo) = {
     this.submitInput = inputs
     this.submitWdl = wdl
     this.submitOptions = options

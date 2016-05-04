@@ -1,16 +1,17 @@
 package org.broadinstitute.dsde.rawls.mock
 
-import java.io.File
+import java.util.concurrent.TimeUnit
 
-import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.{AgoraEntity,AgoraEntityType}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
-import org.mockserver.model.Header
+import org.mockserver.model.{Parameter, ParameterBody, Header, Delay}
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
 import spray.http.StatusCodes
 import spray.json._
+
+import scala.concurrent.duration.FiniteDuration
 
 /**
  * Mock server interface for the methods repo and execution service.
@@ -28,6 +29,8 @@ class RemoteServicesMockServer(port:Int) {
 
   val jsonHeader = new Header("Content-Type", "application/json")
   val mockServer = startClientAndServer(port)
+
+  val defaultWorkflowSubmissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
   def startServer = {
 
@@ -193,6 +196,25 @@ class RemoteServicesMockServer(port:Int) {
     )
 
     val submissionPath = "/workflows/v1"
+
+    // delay for two seconds when the test asks for it
+    mockServer.when(
+      request()
+        .withMethod("POST")
+        .withPath(submissionPath)
+        .withBody(new ParameterBody(new Parameter("workflowOptions", "two_second_delay")))
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(
+          """{
+    "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
+    "status": "Submitted"
+}""")
+        .withStatusCode(StatusCodes.Created.intValue)
+        .withDelay(new Delay(TimeUnit.SECONDS, 2))
+    )
+
     mockServer.when(
       request()
         .withMethod("POST")
