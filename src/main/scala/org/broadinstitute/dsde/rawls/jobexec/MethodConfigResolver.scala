@@ -1,5 +1,9 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import org.broadinstitute.dsde.rawls.util.CollectionUtils
+import slick.dbio
+import slick.dbio.{NoStream, DBIOAction}
+import slick.dbio.Effect.Read
 import wdl4s.{FullyQualifiedName, WorkflowInput, NamespaceWithWorkflow}
 import wdl4s.types.{WdlArrayType}
 import org.broadinstitute.dsde.rawls.{model, RawlsException}
@@ -8,10 +12,9 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -38,11 +41,6 @@ object MethodConfigResolver {
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
-  private def evaluateResult(workspaceContext: SlickWorkspaceContext, rootEntity: Entity, expression: String, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): Try[ReadAction[Iterable[AttributeValue]]] = {
-    val evaluator = new SlickExpressionEvaluator(dataAccess)
-    evaluator.evalFinalAttribute(workspaceContext, rootEntity.entityType, rootEntity.name, expression)
-  }
-
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Seq[MethodInput] = {
@@ -63,51 +61,37 @@ object MethodConfigResolver {
     for ( (name,expression) <- methodConfig.inputs.toSeq ) yield MethodInput(agoraInputs.get(name).get,expression.value)
   }
 
-  def resolveInputs(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entity: Entity, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[Seq[SubmissionValidationValue]] = {
+  def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
-    val evaluator = new SlickExpressionEvaluator(dataAccess)
-    DBIO.sequence(inputs.map { input =>
-      evaluator.evalFinalAttribute(workspaceContext,entity.entityType,entity.name,input.expression) match {
-        case Success(attributeSequenceAction) => attributeSequenceAction.map(attributeSequence => unpackResult(attributeSequence.toSeq,input.workflowInput))
-        case Failure(regrets) => DBIO.successful(SubmissionValidationValue(None,Some(regrets.getMessage), input.workflowInput.fqn))
-      }
-    })
-  }
 
-  /**
-   * Try (1) evaluating inputs, and then (2) unpacking them against WDL.
-   *
-   * @return A map from input name to a SubmissionValidationValue containing a resolved value and / or error
-   */
-  def resolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[Map[String, SubmissionValidationValue]] = {
-    import dataAccess.driver.api._
-    
-    val resolutions = NamespaceWithWorkflow.load(wdl).workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: WorkflowInput) =>
-      val result = methodConfig.inputs.get(fqn) match {
-        case Some(AttributeString(expression)) =>
-          evaluateResult(workspaceContext, entity, expression, dataAccess) match {
-            case Success(mcSequence) => mcSequence.map(unpackResult(_, wfInput))
-            case Failure(regret) => DBIO.successful(SubmissionValidationValue(None, Some(regret.getMessage), fqn))
+    if( inputs.isEmpty ) {
+      //no inputs to resolve = just return an empty map back!
+      DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
+    } else {
+      SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+        //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
+        val resultsByInput = inputs.map { input =>
+          evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
+            val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
+              case Failure(regret) =>
+                //The DBIOAction failed - this input expression was unparseable. Make an error for each entity.
+                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)))
+              case Success(attributeMap) =>
+                //The expression was parseable, but that doesn't mean we got results...
+                attributeMap.map {
+                  case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
+                  case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)
+                }.toSeq
+            }
+            validationValuesByEntity
           }
-        case _ =>
-          val errorOption = if (wfInput.optional) None else Some(missingMandatoryValueError) // if an optional value is unspecified in the MC, we don't care
-          DBIO.successful(SubmissionValidationValue(None, errorOption, fqn))
-      }
-      result.map((fqn, _))
-    }
-    
-    DBIO.sequence(resolutions).map(_.toMap)
-  }
+        }
 
-  /**
-   * Try resolving inputs. If there are any failures, ONLY return the error messages.
-   * Otherwise extract the resolved values (excluding empty / None values) and return those.
-   */
-  def resolveInputsOrGatherErrors(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadAction[Either[Seq[String], Map[String, Attribute]]] = {
-    resolveInputs(workspaceContext, methodConfig, entity, wdl, dataAccess) map { resolutions =>
-      val (successes, failures) = resolutions.partition (_._2.error.isEmpty)
-      if (failures.nonEmpty) Left( failures collect { case (key, SubmissionValidationValue(_, Some(error), inputName)) => s"Error resolving ${inputName}: ${error}" } toSeq )
-      else Right( successes collect { case (key, SubmissionValidationValue(Some(attribute), _, inputName)) => (inputName, attribute) } )
+        //Flip the list of DBIO monads into one on the outside that we can map across and then group by entity.
+        DBIO.sequence(resultsByInput) map { results =>
+          CollectionUtils.groupByTuples(results.flatten)
+        }
+      }
     }
   }
 

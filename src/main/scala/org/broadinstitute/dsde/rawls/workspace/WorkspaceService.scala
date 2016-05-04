@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
+import _root_.slick.dbio.Effect.Read
+import _root_.slick.profile.FixedSqlStreamingAction
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
@@ -655,10 +657,25 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        new SlickExpressionEvaluator(dataAccess).evalFinalAttribute(workspaceContext, entityType, entityName, expression) match {
-          case Success(result) => result.map(r => RequestComplete(StatusCodes.OK, r.toSeq))
-          case Failure(regret) => {
-            throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
+        withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
+          SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
+              //parsing failure
+              case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
+              case Success(valuesByEntity) =>
+                if (valuesByEntity.size != 1) {
+                  //wrong number of entities?!
+                  throw new RawlsException(s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead")
+                } else {
+                  assert(valuesByEntity.head._1 == entityName)
+                  valuesByEntity.head match {
+                    case (_, Success(result)) => RequestComplete(StatusCodes.OK, result.toSeq)
+                    case (_, Failure(regret)) =>
+                      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1503,34 +1520,45 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withSubmissionEntities(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityType: String, dataAccess: DataAccess)(op: (Seq[Entity]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  //Finds a single entity record in the db.
+  private def withSingleEntityRec(entityType: String, entityName: String, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    val entityRec = dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result
+    entityRec flatMap { entities =>
+      if (entities.isEmpty) {
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"No entity of type ${entityType} named ${entityName} exists in this workspace.")))
+      } else if (entities.size == 1) {
+        op(entities)
+      } else {
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"More than one entity of type ${entityType} named ${entityName} exists in this workspace?!")))
+      }
+    }
+  }
+
+  def withSubmissionEntityRecs(submissionRequest: SubmissionRequest, workspaceContext: SlickWorkspaceContext, rootEntityType: String, dataAccess: DataAccess)(op: (Seq[EntityRecord]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     //If there's an expression, evaluate it to get the list of entities to run this job on.
     //Otherwise, use the entity given in the submission.
     submissionRequest.expression match {
       case None =>
         if ( submissionRequest.entityType != rootEntityType )
           DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Method configuration expects an entity of type ${rootEntityType}, but you gave us an entity of type ${submissionRequest.entityType}.")))
-        else
-          dataAccess.entityQuery.get(workspaceContext,submissionRequest.entityType,submissionRequest.entityName) flatMap {
-            case None =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"No entity of type ${submissionRequest.entityType} named ${submissionRequest.entityName} exists in this workspace.")))
-            case Some(entity) =>
-              op(Seq(entity))
-          }
+        else {
+          withSingleEntityRec(submissionRequest.entityType, submissionRequest.entityName, workspaceContext, dataAccess)(op)
+        }
       case Some(expression) =>
-        new SlickExpressionEvaluator(dataAccess).evalFinalEntity(workspaceContext, submissionRequest.entityType, submissionRequest.entityName, expression) match {
-          case Failure(regret) =>
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
-          case Success(entitiesAction) => entitiesAction flatMap {
-            case Seq() =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
-            case entities =>
-              val eligibleEntities = entities.filter(_.entityType == rootEntityType).toSeq
-              if (eligibleEntities.isEmpty)
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
-              else
-                op(eligibleEntities)
-            }
+        SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
+          evaluator.evalFinalEntity(workspaceContext, expression).asTry flatMap {
+            case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
+            case Success(entityRecords) =>
+              if (entityRecords.isEmpty) {
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
+              } else {
+                val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
+                if (eligibleEntities.isEmpty)
+                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
+                else
+                  op(eligibleEntities)
+              }
+          }
         }
     }
   }
@@ -1557,13 +1585,18 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
           withMethodInputs(methodConfig) { (wdl,methodInputs) =>
-            withSubmissionEntities(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntities =>
-              val resolvedInputs = DBIO.sequence(jobEntities map { entity => MethodConfigResolver.resolveInputs(workspaceContext, methodInputs, entity, dataAccess).map(SubmissionValidationEntityInputs(entity.name, _)) })
-              val partitionedInputs = resolvedInputs.map { _.partition { entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }}
-              partitionedInputs.flatMap { case (succeeded, failed) =>
-                val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
-                val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
-                op(dataAccess, workspaceContext, wdl, header, succeeded, failed)
+            withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
+
+              //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
+              MethodConfigResolver.resolveInputsForEntities(workspaceContext, methodInputs, jobEntityRecs, dataAccess) flatMap { valuesByEntity =>
+                valuesByEntity
+                  .map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values) })
+                  .partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) }) match {
+                    case(succeeded, failed) =>
+                      val methodConfigInputs = methodInputs.map { methodInput => SubmissionValidationInput(methodInput.workflowInput.fqn, methodInput.expression) }
+                      val header = SubmissionValidationHeader(methodConfig.rootEntityType, methodConfigInputs)
+                      op(dataAccess, workspaceContext, wdl, header, succeeded.toSeq, failed.toSeq)
+                }
               }
             }
           }

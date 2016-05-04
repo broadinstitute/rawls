@@ -1,12 +1,16 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
+import scala.collection.immutable.Map
+import scala.util.{Try, Success, Failure}
 import org.joda.time.DateTime
 import org.scalatest.{WordSpecLike, Matchers}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
+
+import scala.concurrent.ExecutionContext
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
   import driver.api._
@@ -99,16 +103,43 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     withCustomTestDatabaseInternal(configData)(testCode)
   }
 
+  //Test harness to call resolveInputsForEntities without having to go via the WorkspaceService
+  def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)
+                       (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
+    dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name).result flatMap { entityRecs =>
+      Try(MethodConfigResolver.gatherInputs(methodConfig, wdl)) match {
+        case scala.util.Failure(exception) =>
+          DBIO.failed(exception)
+        case scala.util.Success(methodInputs) =>
+          MethodConfigResolver.resolveInputsForEntities(workspaceContext, methodInputs, entityRecs, dataAccess)
+      }
+    }
+  }
+
+
   "MethodConfigResolver" should {
     "resolve method config inputs" in withConfigData {
       val context = new SlickWorkspaceContext(workspace)
-      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleGood, littleWdl, this)) shouldBe Right(Map(intArgName -> AttributeNumber(1)))
-      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe Right(Map(intArgName -> AttributeNumber(1), intOptName -> AttributeNumber(1)))
-      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe Right(Map(intArrayName -> AttributeValueList(Seq(AttributeNumber(1)))))
+      runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName)))
+
+      runAndWait(testResolveInputs(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName), SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptName)))
+
+      runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
+        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayName)))
 
       // failure cases
-      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configGood, sampleMissingValue, littleWdl, this)) should matchPattern { case Left(Seq(_)) => }
-      runAndWait(MethodConfigResolver.resolveInputsOrGatherErrors(context, configMissingExpr, sampleGood, littleWdl, this)) should matchPattern { case Left(Seq(_)) => }
+      assertResult(true, "Missing values should return an error") {
+        runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
+          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgName => true
+        }
+      }
+
+      //MethodConfiguration config_namespace/configMissingExpr is missing definitions for these inputs: w1.t1.int_arg
+      intercept[RawlsException] {
+        runAndWait(testResolveInputs(context, configMissingExpr, sampleGood, littleWdl, this))
+      }
     }
   }
 }

@@ -17,8 +17,9 @@ trait DataAccess
   with SlickExpressionParser {
 
   this: DriverComponent =>
-    
+
   val driver: JdbcProfile
+  val batchSize: Int
   
   import driver.api._
 
