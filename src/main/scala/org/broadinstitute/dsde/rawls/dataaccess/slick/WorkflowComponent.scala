@@ -247,8 +247,10 @@ trait WorkflowComponent {
     }
 
     def loadFailedInputResolutions(failureId: Long): ReadAction[Seq[SubmissionValidationValue]] = {
-      val failedInputResolutionsAttributeJoin = findInputResolutionsByFailureId(failureId) join submissionAttributeQuery on (_.id === _.ownerId)
-      unmarshalInputResolutions(failedInputResolutionsAttributeJoin)
+      val failedInputResolutionsAttributeJoin = findInputResolutionsByFailureId(failureId) joinLeft submissionAttributeQuery on (_.id === _.ownerId)
+      failedInputResolutionsAttributeJoin.result.map { resolutions => resolutions map {
+        case (validation, attr) => unmarshalInputResolution(validation, attr)
+      }}
     }
 
     def loadWorkflowFailureMessages(workflowFailureId: Long): ReadAction[Seq[AttributeString]] = {

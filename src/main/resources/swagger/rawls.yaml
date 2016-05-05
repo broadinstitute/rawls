@@ -2886,12 +2886,8 @@ definitions:
       methodConfigurationName:
         type: string
         description: Method configuration name
-      entityType:
-        type: string
-        description: Entity type
-      entityName:
-        type: string
-        description: Entity name
+      submissionEntity:
+        $ref: '#/definitions/AttributeEntityReference'
       workflows:
         type: array
         description: Status of Workflow(s)
@@ -2955,12 +2951,6 @@ definitions:
   WorkflowFailure:
     description: ''
     properties:
-      workspaceNamespace:
-        type: string
-        description: Workspace namespace
-      workspaceName:
-        type: string
-        description: Workspace name
       entityName:
         type: string
         description: Entity name
@@ -2981,13 +2971,7 @@ definitions:
   Workflow:
     description: ''
     properties:
-      workspaceNamespace:
-        type: string
-        description: Workspace namespace
-      workspaceName:
-        type: string
-        description: Workspace name
-      id:
+      workflowId:
         type: string
         description: Workflow unique identifier
       status:
@@ -2997,17 +2981,18 @@ definitions:
         type: string
         format: date-time
         description: Status last-changed date
-      entityType:
-        type: string
-        description: Entity type
-      entityName:
-        type: string
-        description: Entity name
+      workflowEntity:
+        $ref: '#/definitions/AttributeEntityReference'
       inputResolutions:
         type: array
         items:
           $ref: '#/definitions/SubmissionValidationValue'
         description: The evaluation of each input
+      messages:
+        type: array
+        description: List of messages about this workflow
+        items:
+          type: string
   WorkflowStatus:
     properties:
       done:
@@ -3067,7 +3052,8 @@ definitions:
 
   SubmissionValidationValue:
     description: result of an expression parse for one of the inputs
-    required: []
+    required:
+      - inputName
     properties:
       value:
         type: string
