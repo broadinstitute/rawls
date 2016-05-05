@@ -1,12 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.io.StringReader
-
-import akka.actor.{Actor, ActorRefFactory, Props}
-import com.gettyimages.spray.swagger.SwaggerHttpService
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
-import com.wordnik.swagger.model.ApiInfo
+import akka.actor.{Actor, Props}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -20,14 +14,15 @@ import spray.http.StatusCodes._
 import spray.util.actorSystem
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 
 object RawlsApiServiceActor {
-  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, appVersion: ApplicationVersion, googleClientId: String)(implicit executionContext: ExecutionContext): Props = {
-    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, appVersion, googleClientId))
+  def props(workspaceServiceConstructor: UserInfo => WorkspaceService, userServiceConstructor: UserInfo => UserService, appVersion: ApplicationVersion, googleClientId: String, submissionTimeout: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
+    Props(new RawlsApiServiceActor(workspaceServiceConstructor, userServiceConstructor, appVersion, googleClientId, submissionTimeout))
   }
 }
 
-class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val appVersion: ApplicationVersion, val googleClientId: String)(implicit val executionContext: ExecutionContext) extends Actor
+class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
   with AdminApiService with UserApiService with StandardUserInfoDirectives {
 

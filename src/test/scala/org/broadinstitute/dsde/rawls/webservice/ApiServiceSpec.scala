@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -42,6 +44,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     val gcsDAO: MockGoogleServicesDAO
 
     def actorRefFactory = system
+
+    val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val executionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
 
