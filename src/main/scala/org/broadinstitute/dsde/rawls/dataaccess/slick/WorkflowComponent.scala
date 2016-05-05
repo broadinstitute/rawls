@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.Write
+import slick.dbio.Effect.{Read, Write}
 
 /**
  * Created by mbemis on 2/18/16.
@@ -29,6 +29,9 @@ case class WorkflowFailureRecord(id: Long,
                                 )
 
 case class WorkflowErrorRecord(workflowFailureId: Long, errorText: String)
+
+case class WorkflowId(id: Long)
+case class WorkflowFailureId(id: Long)
 
 trait WorkflowComponent {
   this: DriverComponent
@@ -84,7 +87,6 @@ trait WorkflowComponent {
   }
 
   protected val workflowMessageQuery = TableQuery[WorkflowMessageTable]
-  protected val workflowFailureQuery = TableQuery[WorkflowFailureTable]
   protected val workflowErrorQuery = TableQuery[WorkflowErrorTable]
 
   object workflowQuery extends TableQuery(new WorkflowTable(_)) {
@@ -124,22 +126,22 @@ trait WorkflowComponent {
 
       submissionQuery.loadSubmissionEntityId(workspaceContext.workspaceId, workflow.workflowEntity) flatMap { eId =>
         ( (workflowQuery returning workflowQuery.map(_.id)) += marshalWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
-          saveInputResolutions(workspaceContext, workflow.inputResolutions, workflowId) andThen
+          saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(workflowId))) andThen
           saveMessages(workflow.messages, workflowId)
         }
       }
     } map { _ => workflow }
 
-    private def saveInputResolutions(workspaceContext: SlickWorkspaceContext, values: Seq[SubmissionValidationValue], workflowId: Long) = {
-      DBIO.seq(values.map { case (v) =>
-        v.value match {
-          case None => (submissionValidationQuery += marshalInputResolution(v, Some(workflowId)))
-          case Some(attr) =>
-            ((submissionValidationQuery returning submissionValidationQuery.map(_.id)) += marshalInputResolution(v, Some(workflowId))) flatMap { validationId =>
-              DBIO.sequence(submissionAttributeQuery.insertAttributeRecords(validationId, v.inputName, attr, workspaceContext.workspaceId))
-            }
-        }
-      }: _*)
+    def saveInputResolutions(workspaceContext: SlickWorkspaceContext, values: Seq[SubmissionValidationValue], parentId: Either[WorkflowId, WorkflowFailureId]) = {
+        DBIO.seq(values.map { case (v) =>
+          v.value match {
+            case None => (submissionValidationQuery += marshalInputResolution(v, parentId))
+            case Some(attr) =>
+              ((submissionValidationQuery returning submissionValidationQuery.map(_.id)) += marshalInputResolution(v, parentId)) flatMap { validationId =>
+                DBIO.sequence(submissionAttributeQuery.insertAttributeRecords(validationId, v.inputName, attr, workspaceContext.workspaceId))
+              }
+          }
+        }: _*)
     }
 
     def saveMessages(messages: Seq[AttributeString], workflowId: Long) = {
@@ -151,10 +153,10 @@ trait WorkflowComponent {
         case None => throw new RawlsException(s"workflow does not exist: ${workflow}")
         case Some(rec) =>
           deleteWorkflowAttributes(rec.id) andThen
-            deleteMessagesAndInputs(rec.id) andThen
-            saveInputResolutions(workspaceContext, workflow.inputResolutions, rec.id) andThen
-            saveMessages(workflow.messages, rec.id) andThen
-            findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
+          deleteMessagesAndInputs(rec.id) andThen
+          saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(rec.id))) andThen
+          saveMessages(workflow.messages, rec.id) andThen
+          findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
       }
     } map { _ => workflow }
 
@@ -192,13 +194,13 @@ trait WorkflowComponent {
     }
 
     def deleteWorkflowAttributes(id: Long) = {
-      submissionValidationQuery.filter(_.workflowId === id).result flatMap { validations =>
+      findInputResolutionsByWorkflowId(id).result flatMap { validations =>
         submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
       }
     }
 
     def deleteWorkflowFailureAttributes(id: Long) = {
-      submissionValidationQuery.filter(_.workflowFailureId === id).result flatMap { validations =>
+      findInputResolutionsByFailureId(id).result flatMap { validations =>
         submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
       }
     }
@@ -344,11 +346,11 @@ trait WorkflowComponent {
       )
     }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Option[Long]): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, parentId: Either[WorkflowId, WorkflowFailureId]): SubmissionValidationRecord = {
       SubmissionValidationRecord(
         0,
-        workflowId,
-        None,
+        parentId.left.toOption.map{_.id},
+        parentId.right.toOption.map{_.id},
         value.error,
         value.inputName
       )
@@ -392,5 +394,28 @@ trait WorkflowComponent {
         findWorkflowMessagesById(id).delete andThen
           findInputResolutionsByWorkflowId(id).delete
     }
+
+    def deleteFailureResolutions(workflowFailureId: Long): DBIOAction[Int, NoStream, Read with Write] = {
+      deleteWorkflowFailureAttributes(workflowFailureId) andThen
+        findInputResolutionsByFailureId(workflowFailureId).delete
+    }
   }
+
+  object workflowFailureQuery extends TableQuery(new WorkflowFailureTable(_)) {
+    type WorkflowFailureQueryType = Query[WorkflowFailureTable, WorkflowFailureRecord, Seq]
+
+    def save(workspaceContext: SlickWorkspaceContext, submissionId: UUID, wff: WorkflowFailure): ReadWriteAction[WorkflowFailure] = {
+
+      for {
+        wfEntityId <- uniqueResult[EntityRecord](entityQuery.findEntityByName(workspaceContext.workspaceId, wff.entityType, wff.entityName))
+        failureId <- (workflowFailureQuery returning workflowFailureQuery.map(_.id)) += submissionQuery.marshalWorkflowFailure(wfEntityId.map{_.id}, submissionId)
+        inputResolutions <- workflowQuery.saveInputResolutions(workspaceContext, wff.inputResolutions, Right(WorkflowFailureId(failureId)))
+        messageInserts <- DBIO.sequence(wff.errors.map(message => workflowErrorQuery += WorkflowErrorRecord(failureId, message.value)))
+      } yield failureId
+
+    } map { _ => wff }
+
+
+  }
+
 }

@@ -11,8 +11,13 @@ import org.broadinstitute.dsde.rawls.model._
 class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
-  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
-  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner, Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions))
+  private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
+    Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions),
+    Seq(testData.sample4, testData.sample5, testData.sample6), Map(testData.sample4 -> testData.inputResolutions2, testData.sample5 -> testData.inputResolutions2, testData.sample6 -> testData.inputResolutions2))
+  private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
+    Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions),
+    Seq(testData.sample4, testData.sample5, testData.sample6), Map(testData.sample4 -> testData.inputResolutions2, testData.sample5 -> testData.inputResolutions2, testData.sample6 -> testData.inputResolutions2))
+
 
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
