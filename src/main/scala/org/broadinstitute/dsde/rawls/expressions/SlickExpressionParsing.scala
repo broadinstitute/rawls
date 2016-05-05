@@ -251,11 +251,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
   // final func that handles reserved attributes on an entity
   private def entityReservedAttributeFinalFunc(attributeName: String)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String,Iterable[Attribute]]] = {
-    val baseQuery: Query[(Rep[String], EntityTable), (String, EntityRecord), Seq] = for {
-      (rootEntityName, entity) <- queryPipeline.get
-      joined <- entityQuery if joined.id === entity.id
-    } yield (rootEntityName, joined)
-
     //Given a single entity record, extract either name or entityType from it.
     def extractNameFromRecord( rec: EntityRecord ) = { AttributeString(rec.name) }
     def extractEntityTypeFromRecord( rec: EntityRecord ) = { AttributeString(rec.entityType) }
@@ -269,8 +264,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
     //Might as well call the function now it exists.
     attributeName match {
-      case "name" => returnMapOfRootEntityToReservedAttribute(baseQuery, extractNameFromRecord)
-      case "entityType" => returnMapOfRootEntityToReservedAttribute(baseQuery, extractEntityTypeFromRecord)
+      case "name" => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractNameFromRecord)
+      case "entityType" => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractEntityTypeFromRecord)
     }
   }
 
