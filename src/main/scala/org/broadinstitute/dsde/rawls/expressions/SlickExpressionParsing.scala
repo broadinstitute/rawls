@@ -357,6 +357,9 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
     val createTempTableAction = sql"""create temporary table if not exists EXPREVAL_TEMP (id bigint(20) unsigned NOT NULL, name VARCHAR(254) NOT NULL)""".as[Int]
 
     createTempTableAction andThen
+      parser.exprEvalQuery.size.result map {
+        case numRecords => assert(numRecords == 0, s"EXPREVAL_TEMP has $numRecords existing records! Did you nest two calls to withNewExpressionEvaluator?")
+      } andThen
       DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }
 

@@ -1546,19 +1546,19 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         }
       case Some(expression) =>
         SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
-          evaluator.evalFinalEntity(workspaceContext, expression).asTry flatMap {
-            case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
-            case Success(entityRecords) =>
-              if (entityRecords.isEmpty) {
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
-              } else {
-                val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
-                if (eligibleEntities.isEmpty)
-                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
-                else
-                  op(eligibleEntities)
-              }
-          }
+          evaluator.evalFinalEntity(workspaceContext, expression).asTry
+        } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
+          case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
+          case Success(entityRecords) =>
+            if (entityRecords.isEmpty) {
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))
+            } else {
+              val eligibleEntities = entityRecords.filter(_.entityType == rootEntityType).toSeq
+              if (eligibleEntities.isEmpty)
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type ${rootEntityType}.)")))
+              else
+                op(eligibleEntities)
+            }
         }
     }
   }
