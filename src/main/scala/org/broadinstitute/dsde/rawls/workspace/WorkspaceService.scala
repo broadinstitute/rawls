@@ -102,11 +102,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -963,17 +963,32 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
-        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes map { entityInputs =>
+
+        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes.grouped(execServiceBatchSize).toSeq map { entityInputsBatch =>
           Try {
-            val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-            val execStatusFuture = executionServiceDAO.submitWorkflow(wdl, MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap), workflowOptions, userInfo)
-            execStatusFuture map {
-              execStatus => Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
-            } recover {
+            val workflowInputsBatch = entityInputsBatch.map { entityInputs =>
+              val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
+              MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+            }
+            val execStatusFuture = executionServiceDAO.submitWorkflows(wdl, workflowInputsBatch, workflowOptions, userInfo) recover {
               case t: Exception => {
-                val error = "Unable to submit workflow when creating submission"
+                val error = "Unable to submit workflows when creating submission"
                 logger.error(error, t)
-                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
+                entityInputsBatch.map { _ =>
+                  Right(ExecutionServiceFailure("error", s"error communcating with exec service: ${t.getMessage}", None))
+                }
+              }
+            }
+
+            execStatusFuture map { execStatuses =>
+              val execStatusesWithEntity = entityInputsBatch.zip(execStatuses)
+              execStatusesWithEntity.map {
+                case (entityInputs, Left(execStatus)) =>
+                  Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
+                case (entityInputs, Right(cromwellMessage)) =>
+                  val error = s"Unable to submit workflow when creating submission, cromwell message: $cromwellMessage"
+                  logger.error(error)
+                  WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error)))
               }
             }
           } match {
@@ -981,17 +996,20 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             case Failure(t) => {
               val error = "Unable to process workflow when creating submission"
               logger.error(error, t)
-              Future.successful(WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage))))
+              Future.successful(entityInputsBatch.map { entityInputs =>
+                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
+              })
             }
           }
         }))
 
-        DBIO.from(submittedWorkflowsFuture) flatMap { submittedWorkflows =>
+        DBIO.from(submittedWorkflowsFuture) flatMap { batchedSubmittedWorkflows =>
+          val submittedWorkflows = batchedSubmittedWorkflows.flatten
           val succeededWorkflowSubmissions = submittedWorkflows.collect {
-            case w:Workflow => w
+            case w: Workflow => w
           }
           val failedWorkflowSubmissions = submittedWorkflows.collect {
-            case w:WorkflowFailure => w
+            case w: WorkflowFailure => w
           }
           val failedWorkflows = failures.map { entityInputs =>
             val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
@@ -1013,7 +1031,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
             val workflowReports = succeededWorkflowSubmissions.map { workflow =>
               WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
             }
-  
+
             RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
           }
         }

@@ -97,6 +97,7 @@ object Boot extends App {
         slickDataSource,
         new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server")),
         executionServiceDAO,
+        conf.getInt("executionservice.batchSize"),
         gcsDAO,
         submissionSupervisor,
         bucketDeletionMonitor,
