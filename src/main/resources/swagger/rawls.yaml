@@ -1088,6 +1088,28 @@ paths:
             - openid
             - email
             - profile
+  '/api/submissions/queueStatus':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: object
+            description: Map[String,Int]
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List workflow counts by queueing state
+      tags:
+        - submissions
+      summary: workflow queue status
+      operationId: workflowQueueStatus
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/rename':
     post:
       responses:

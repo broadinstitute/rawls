@@ -90,6 +90,7 @@ object WorkspaceService {
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
+  case object WorkflowQueueStatus extends WorkspaceServiceMessage
 
   case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
@@ -158,6 +159,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     case AbortSubmission(workspaceName, submissionId) => pipe(abortSubmission(workspaceName, submissionId)) to sender
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to sender
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
+    case WorkflowQueueStatus => pipe(workflowQueueStatus()) to sender
 
     case AdminListAllActiveSubmissions => asAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to sender
@@ -1155,6 +1157,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
+    }
+  }
+
+  def workflowQueueStatus() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workflowQuery.countWorkflowsByQueueStatus.map(RequestComplete(StatusCodes.OK, _))
     }
   }
 

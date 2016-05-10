@@ -224,6 +224,11 @@ trait WorkflowComponent {
       findWorkflowsBySubmissionId(submissionId).filter(_.status inSet(statuses.map(_.toString))).result
     }
 
+    def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
+      val groupedSeq = findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
+      groupedSeq.map(_.toMap)
+    }
+
     def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] = {
       findWorkflowsBySubmissionId(submissionId).result
     }
@@ -320,6 +325,10 @@ trait WorkflowComponent {
 
     def findInactiveWorkflows(submissionId: UUID) = {
       (workflowFailureQuery filter (_.submissionId === submissionId))
+    }
+
+    def findQueuedAndRunningWorkflows: WorkflowQueryType = {
+      filter(rec => rec.status inSetBind((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString }))
     }
 
     /*
