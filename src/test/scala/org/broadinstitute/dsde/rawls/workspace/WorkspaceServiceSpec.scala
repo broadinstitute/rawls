@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import java.util.concurrent.TimeUnit
+
 import _root_.slick.dbio.DBIO
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
@@ -20,7 +22,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import spray.http.{StatusCodes, StatusCode, OAuth2BearerToken}
 import spray.testkit.ScalatestRouteTest
 import scala.concurrent.{Await, ExecutionContext}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{FiniteDuration, Duration}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
@@ -42,6 +44,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   case class TestApiService(dataSource: SlickDataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
     def actorRefFactory = system
+    val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 

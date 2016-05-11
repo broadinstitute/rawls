@@ -16,10 +16,10 @@ import scala.util.Try
 /**
  * @author tsharpe
  */
-class HttpExecutionServiceDAO( executionServiceURL: String, workflowSubmissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
+class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
 
   override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
-    implicit val timeout = Timeout(workflowSubmissionTimeout)
+    implicit val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/workflows/v1"
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
