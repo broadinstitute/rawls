@@ -153,9 +153,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
 
       // to minimize database updates do 1 update per status
-      DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
-        dataAccess.workflowQuery.findWorkflowByIds(recs.map(_.id)).map(r => (r.status, r.statusLastChangedDate)).update(status, new Timestamp(System.currentTimeMillis()))
-      }.toSeq: _*) andThen
+      val shit = DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
+        DBIO.sequence(recs.map(_.id).map(id => dataAccess.workflowQuery.updateStatus(id, WorkflowStatuses.withName(status))))
+      }.toSeq :_*)
+
+      shit andThen
         handleOutputs(workflowsWithOutputs, dataAccess) andThen
         checkOverallStatus(dataAccess)
     } map { shouldStop => StatusCheckComplete(shouldStop) }
@@ -268,7 +270,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.filter(_.id === workflowRecord.id).update(workflowRecord.copy(status = WorkflowStatuses.Failed.toString)) andThen
+      //dataAccess.workflowQuery.filter(_.id === workflowRecord.id).update(workflowRecord.copy(status = WorkflowStatuses.Failed.toString)) andThen
+      dataAccess.workflowQuery.updateStatus(workflowRecord.id, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }

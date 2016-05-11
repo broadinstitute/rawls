@@ -6,6 +6,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 
@@ -150,18 +151,9 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def update(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
-      uniqueResult[WorkflowRecord](findWorkflowByEntity(submissionId, workspaceContext.workspaceId, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName)) flatMap {
-        case None => throw new RawlsException(s"workflow does not exist: ${workflow}")
-        case Some(rec) =>
-          deleteWorkflowAttributes(rec.id) andThen
-          deleteMessagesAndInputs(rec.id) andThen
-          saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(rec.id))) andThen
-          saveMessages(workflow.messages, rec.id) andThen
-          findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
-      }
-    } map { _ => workflow }
-
+    def updateStatus(workflowId: Long, workflowStatus: WorkflowStatus): WriteAction[Int] = {
+      findWorkflowById(workflowId).map(u => (u.status, u.statusLastChangedDate)).update(workflowStatus.toString, new Timestamp(System.currentTimeMillis()))
+    }
 
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
@@ -328,7 +320,7 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
+    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
