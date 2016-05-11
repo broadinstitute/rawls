@@ -18,7 +18,8 @@ case class WorkflowRecord(id: Long,
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
-                          workflowEntityId: Option[Long]
+                          workflowEntityId: Option[Long],
+                          recordVersion: Long
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -48,8 +49,9 @@ trait WorkflowComponent {
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
+    def version = column[Long]("record_version")
 
-    def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
@@ -125,7 +127,7 @@ trait WorkflowComponent {
     def save(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
 
       submissionQuery.loadSubmissionEntityId(workspaceContext.workspaceId, workflow.workflowEntity) flatMap { eId =>
-        ( (workflowQuery returning workflowQuery.map(_.id)) += marshalWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
+        ( (workflowQuery returning workflowQuery.map(_.id)) += marshalNewWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
           saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(workflowId))) andThen
           saveMessages(workflow.messages, workflowId)
         }
@@ -333,7 +335,8 @@ trait WorkflowComponent {
         submissionId,
         workflow.status.toString,
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
-        entityId
+        entityId,
+        0
       )
     }
 
