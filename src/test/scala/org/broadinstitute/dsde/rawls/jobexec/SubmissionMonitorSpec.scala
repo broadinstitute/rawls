@@ -40,7 +40,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
 
     assertResult(ignoreStatusLastChangedDate(ExecutionServiceStatusResponse(
-      workflowsRecs.map { workflowRec => scala.util.Success(Option((workflowRec.copy(status = WorkflowStatuses.Succeeded.toString), Some(ExecutionServiceOutputs(workflowRec.externalId, Map("o1" -> AttributeString("foo"))))))) }
+      workflowsRecs.map { workflowRec => scala.util.Success(Option((workflowRec.copy(status = WorkflowStatuses.Succeeded.toString), Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> AttributeString("foo"))))))) }
     ))) {
       ignoreStatusLastChangedDate(await(monitor.queryExecutionServiceForStatus()))
     }
@@ -85,6 +85,23 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  WorkflowStatuses.queuedStatuses.foreach { status =>
+    it should s"checkOverallStatus queued status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+      val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+
+      runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(status.toString))
+
+      val initialStatus = SubmissionStatuses.Submitted
+      runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).map(_.status).update(initialStatus.toString))
+
+      assert(!runAndWait(monitor.checkOverallStatus(this)), "Queued workflows should not result in the submission changing state")
+
+      assertResult(initialStatus.toString) {
+        runAndWait(submissionQuery.findById(UUID.fromString(testData.submission1.submissionId)).result.head).status
+      }
+    }
+  }
+
   WorkflowStatuses.runningStatuses.foreach { status =>
     it should s"checkOverallStatus running status - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
@@ -124,7 +141,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
@@ -140,7 +157,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs only entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
@@ -156,7 +173,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs none" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map.empty
 
@@ -170,7 +187,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs missing expected output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowRecord = WorkflowRecord(1, "foo", UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0)
+    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("missing" -> "this.bar")
@@ -204,11 +221,32 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
     val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
-    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId, Map("o1" -> AttributeString("result"))))), this))
+    runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> AttributeString("result"))))), this))
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+      }
+    }
+  }
+
+  it should "handleStatusResponses with no workflows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val monitor = createSubmissionMonitor(dataSource, testData.submissionNoWorkflows, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString))
+
+    assertResult(StatusCheckComplete(true)) {
+      await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(Seq.empty)))
+    }
+  }
+
+  WorkflowStatuses.queuedStatuses.foreach { status =>
+    it should s"handleStatusResponses from exec svc - queued - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+      runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)) flatMap { workflowRecs =>
+        workflowQuery.batchUpdateStatus(workflowRecs, status)
+      })
+      val monitor = createSubmissionMonitor(dataSource, testData.submissionUpdateEntity, new SubmissionTestExecutionServiceDAO(status.toString))
+
+      assertResult(StatusCheckComplete(false)) {
+        await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(Seq.empty)))
       }
     }
   }
@@ -241,7 +279,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val workflowsRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId)))
 
     assertResult(StatusCheckComplete(true)) {
-      await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), Option(ExecutionServiceOutputs(r.externalId, Map("o1" -> AttributeString("result")))))))))))
+      await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> AttributeString("result")))))))))))
     }
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {

@@ -100,9 +100,9 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.get(workspaceContext, testData.submission2.submissionId))
     }
 
-    // should return {"Submitted" : 3, "Done" : 1, "Aborted" : 1}
+    // should return {"Submitted" : 4, "Done" : 1, "Aborted" : 1}
     assert(3 == runAndWait(submissionQuery.countByStatus(workspaceContext)).size)
-    assert(Option(3) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Submitted.toString))
+    assert(Option(4) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Submitted.toString))
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Done.toString))
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Aborted.toString))
   }
@@ -158,15 +158,34 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-  it should "count workflows by submitter" in withDefaultTestDatabase {
-    assertResult(Seq((testData.userOwner.userSubjectId.value, 12))) {
-      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.runningStatuses))
+  WorkflowStatuses.runningStatuses.foreach { status =>
+    it should s"count $status workflows by submitter" in withDefaultTestDatabase {
+      val workflowRecs = runAndWait(workflowQuery.result)
+      runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
+      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.runningStatuses))
+      }
+      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(workflowRecs.size-1, WorkflowStatuses.runningStatuses))
+      }
+      assertResult(Seq.empty) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(workflowRecs.size, WorkflowStatuses.runningStatuses))
+      }
     }
-    assertResult(Seq.empty) {
-      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(12, WorkflowStatuses.runningStatuses))
+  }
+
+  it should "batch update statuses" in withDefaultTestDatabase {
+    val submittedWorkflowRecs = runAndWait(workflowQuery.filter(_.status === WorkflowStatuses.Submitted.toString).result)
+
+    assertResult(submittedWorkflowRecs.size) {
+      runAndWait(workflowQuery.batchUpdateStatus(WorkflowStatuses.Submitted, WorkflowStatuses.Failed))
     }
-    assertResult(Seq.empty) {
-      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.terminalStatuses))
+
+    val updatedWorkflowRecs = runAndWait(workflowQuery.findWorkflowByIds(submittedWorkflowRecs.map(_.id)).result)
+
+    assert(updatedWorkflowRecs.forall(_.status == WorkflowStatuses.Failed.toString))
+    assertResult(submittedWorkflowRecs.map(r => r.id -> (r.recordVersion+1)).toMap) {
+      updatedWorkflowRecs.map(r => r.id -> r.recordVersion).toMap
     }
   }
 }

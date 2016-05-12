@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.pattern.AskTimeoutException
 import akka.testkit.{TestKit, TestActorRef}
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -71,9 +72,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val refreshToken = UUID.randomUUID.toString
 
-    val existingWorkflowId = "69d1d92f-3895-4a7b-880a-82535e9a096e"
-    val nonExistingWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c9999"
-    val alreadyTerminatedWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c8778"
+    val existingWorkflowId = Option("69d1d92f-3895-4a7b-880a-82535e9a096e")
+    val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
+    val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
     
     
     
@@ -82,7 +83,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
-      Seq(Workflow("malformed_workflow",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
+      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
@@ -105,7 +106,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
+    val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
         "wf.y" -> TaskOutput(
           Some(Seq(
@@ -252,14 +253,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult(StatusCodes.Created) {
       status
     }
-    assertResult(Seq("{\"three_step.cgrep.pattern\":\"sample2\"}")) {
-      mockExecSvc.submitInput
-    }
-
-    import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
-    assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://${testData.workspace.bucketName}/${newSubmissionReport.submissionId}", testData.wsName.namespace, userInfo.userEmail, subTestData.refreshToken, testData.billingProject.cromwellAuthBucketUrl))) {
-      mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
-    }
 
     val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
     assert(monitorActor != None) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
@@ -290,41 +283,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
-    // the mock exec service always returns 2 successes and a failure and there should be 2 batches
-    assert( newSubmissionReport.notstarted.size == 0 ) // this not started count includes only those with bad inputs, not errors
-    assert( newSubmissionReport.workflows.size == 4 )
+    assert( newSubmissionReport.notstarted.size == 0 )
+    assert( newSubmissionReport.workflows.size == 6 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
 
     val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get
-    assert( submission.workflows.size == 4 )
-    assert( submission.notstarted.size == 2 ) // this not starated count includes errors
+    assert( submission.workflows.forall(_.status == WorkflowStatuses.Queued) )
   }
-
-  it should "match workflows to entities they run on in the right order" in withWorkspaceServiceMockExecution { execService => { workspaceService =>
-    val samples = Seq(
-      AttributeEntityReference("Sample", "sample1"),
-      AttributeEntityReference("Sample", "sample2"),
-      AttributeEntityReference("Sample", "sample3"),
-      AttributeEntityReference("Sample", "sample4"),
-      AttributeEntityReference("Sample", "sample5"),
-      AttributeEntityReference("Sample", "sample6"))
-    val sset = Entity("testset6", "SampleSet", Map( "samples" -> AttributeEntityReferenceList( samples)))
-
-    runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
-
-    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", sset.entityType, sset.name, Some("this.samples"))
-    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
-
-    val (status, newSubmissionReport) = rqComplete.response
-    assertResult(StatusCodes.Created) {
-      status
-    }
-
-    assertResult(samples.map(r => r.entityName -> r.entityName).toMap) {
-      newSubmissionReport.workflows.map(r => r.entityName -> r.workflowId).toMap
-    }
-  } }
 
   it should "cause the configurable workflow submissions timeout to trigger" in {
     def wdl = "dummy"
@@ -402,7 +368,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  it should "persist WorkflowFailures for each workflow that timeout when submitting to Cromwell" in withWorkspaceServiceMockTimeoutExecution { mockExecSvc => workspaceService =>
+  it should "fail workflows that evaluate to nonsense and put the rest in Queued" in withWorkspaceServiceMockTimeoutExecution { mockExecSvc => workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"))
     val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
     val (status, newSubmissionReport) = rqComplete.response
@@ -416,19 +382,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       submissionStatus
     }
 
-    // all three workflows should fail to start
-    assert(submissionStatusResponse.notstarted.size == 3)
-    assert(submissionStatusResponse.workflows.size == 0)
+    // Only the workflow with the dodgy expression (sample.tumortype on a normal) should fail
+    assert(submissionStatusResponse.notstarted.size == 1)
+    assert(submissionStatusResponse.workflows.size == 2)
 
-    // the first fails to start for bad expression issues, whereas the other two timed out when trying to submit
-    assert(submissionStatusResponse.notstarted(0).errors(0).value == "Expected single value for workflow input, but evaluated result set was empty")
-    assert(submissionStatusResponse.notstarted(1).errors(0).value.startsWith("Unable to submit workflow when creating submission"))
-    assert(submissionStatusResponse.notstarted(2).errors(0).value.startsWith("Unable to submit workflow when creating submission"))
+    // the first fails to start for bad expression issues
+    assert(submissionStatusResponse.notstarted.head.errors.head.value == "Expected single value for workflow input, but evaluated result set was empty")
 
-    // all of these workflows fail, ensure the submission status is done
-    assertResult(SubmissionStatuses.Done) {
-      submissionStatusResponse.status
-    }
+    // the rest are in queued
+    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Queued) )
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
@@ -605,7 +567,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowOutputs(
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkflowOutputs)]].response
 
     assertResult(StatusCodes.OK) {status}
@@ -616,7 +578,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowOutputs(
       subTestData.wsName,
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
       Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
     }
@@ -628,7 +590,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowMetadata(
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, ExecutionMetadata)]].response
 
     assertResult(StatusCodes.OK) {
@@ -637,53 +599,4 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 }
 
-class MockExecutionServiceDAO(timeout:Boolean = false) extends ExecutionServiceDAO {
-  var submitWdl: String = null
-  var submitInput: Seq[String] = null
-  var submitOptions: Option[String] = None
 
-  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo) = {
-    this.submitInput = Seq(inputs)
-    this.submitWdl = wdl
-    this.submitOptions = options
-    if (timeout) {
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.GatewayTimeout, s"Failed to submit")))
-    }
-    else {
-      Future.successful(ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted"))
-    }
-  }
-
-  override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo)= {
-    this.submitInput = inputs
-    this.submitWdl = wdl
-    this.submitOptions = options
-
-    val inputPattern = """\{"three_step.cgrep.pattern":"(sample[0-9])"\}""".r
-
-    val workflowIds = inputs.map {
-      case inputPattern(sampleName) => sampleName
-      case _ => "69d1d92f-3895-4a7b-880a-82535e9a096e"
-    }
-
-    if (timeout) {
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.GatewayTimeout, s"Failed to submit")))
-    }
-    else {
-      Future.successful(workflowIds.map(id => (Left(ExecutionServiceStatus(id, "Submitted")))))
-    }
-  }
-
-  override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id,
-    Map("x" -> Seq(ExecutionServiceCallLogs(
-      stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
-      stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt")))))
-
-  override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("foo" -> AttributeString("bar"))))
-
-  override def abort(id: String, userInfo: UserInfo) = Future.successful(Success(ExecutionServiceStatus(id, "Aborted")))
-
-  override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
-
-  override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
-}
