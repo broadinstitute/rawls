@@ -328,6 +328,10 @@ trait WorkflowComponent {
       } yield workflow
     }
 
+    def findUnsubmittedWorkflows(): WorkflowQueryType = {
+      filter( _.status === WorkflowStatuses.Created.toString ).sortBy(_.statusLastChangedDate)
+    }
+
     def findWorkflowMessagesById(workflowId: Long) = {
       (workflowMessageQuery filter (_.workflowId === workflowId))
     }
