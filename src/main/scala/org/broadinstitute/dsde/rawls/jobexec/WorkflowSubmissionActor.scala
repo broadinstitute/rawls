@@ -73,6 +73,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
 
   import datasource.dataAccess.driver.api._
 
+  //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
   def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[Option[WorkflowSubmissionMessage]] = {
     val unlaunchedWfOptF = datasource.inTransaction { dataAccess =>
       //grab a bunch of unsubmitted workflows
@@ -82,6 +83,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
           //they should also all have the same submission ID
           val wfsWithASingleSubmission = wfRecs.filter(_.submissionId == wfRecs.head.submissionId)
           //instead: on update, if we don't get the right number back, roll back the txn
+          //TODO: biden has an incoming change here, with optimistic locking
           dataAccess.workflowQuery.batchUpdateStatus(wfsWithASingleSubmission.map(_.id), WorkflowStatuses.Launching)
           wfsWithASingleSubmission
         }
@@ -95,32 +97,37 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
     }
   }
 
+  //futurey utility function to take a bunch of workflow records and turn them into real grownup workflows
   def loadWorkflows(wfRecs: Seq[WorkflowRecord]): Future[Seq[Option[Workflow]]] = {
     datasource.inTransaction { dataAccess =>
       DBIO.sequence( wfRecs.map(dataAccess.workflowQuery.loadWorkflow) )
     }
   }
 
+  //submit the batch of workflows with the given ids
   def submitWorkflowBatch(workflowIds: Seq[Long]): WorkflowSubmissionMessage = {
-
-
+    //pull out the records, but don't reify them into workflows yet as we need their submission ID
     val wfRecsFuture: Future[Seq[WorkflowRecord]] = datasource.inTransaction { dataAccess =>
       dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result
     }
 
+    //this terrifying monster constructs the workflow options and the list of reified workflows
     val submitThingsFuture = for {
-      wfRecs <- wfRecsFuture
-      assert(wfRecs.forall( _.submissionId == wfRecs.head.submissionId))
-      execSvcWfOpts <- buildWorkflowOptions(wfRecs.head.submissionId)
-      unpackedWfs <- loadWorkflows(wfRecs)
-      assert(unpackedWfs.forall(_.isDefined))
-      toSubmit = unpackedWfs.map(_.get)
+      wfRecs <- wfRecsFuture //get the records
+      assert(wfRecs.forall( _.submissionId == wfRecs.head.submissionId)) //sanity check they're all in the same submission
+      execSvcWfOpts <- buildWorkflowOptions(wfRecs.head.submissionId) //build the workflow opts
+      unpackedWfs <- loadWorkflows(wfRecs) //reify to real workflows
+      assert(unpackedWfs.size == wfRecs.size) //there should be the right number of them
+      assert(unpackedWfs.forall(_.isDefined)) //and they should all have been found
+      toSubmit = unpackedWfs.map(_.get) //un-option them too
     } yield {
       (execSvcWfOpts, toSubmit)
     }
 
+    //now we have a future of workflow options and the workflows themselves...
     submitThingsFuture map {
       case (wfOpts: ExecutionServiceWorkflowOptions, unpackedWfs: Seq[Workflow]) =>
+        //make the list of workflow inputs
         val wfInputsBatch = unpackedWfs map { wf =>
           val methodProps = wf.inputResolutions map {
             case svv: SubmissionValidationValue if svv.value.isDefined =>
@@ -140,6 +147,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
   }
 
   //Returns a tuple of some weird things we need later.
+  //these are: the user associated with the submission, the submission's workspace, and its billing project
   def getSomeThings(submissionId: UUID): Future[(Option[RawlsUser], Option[WorkspaceRecord], RawlsBillingProject)] = {
     datasource.inTransaction { dataAccess =>
       for {
@@ -153,7 +161,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
       }
     }
   }
-
+  
   def buildWorkflowOptions(submissionId: UUID): Future[ExecutionServiceWorkflowOptions] = {
     for {
       (userOpt, workspaceOpt, billingProject) <- getSomeThings(submissionId)
@@ -180,5 +188,5 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
     }
     UserInfo("", OAuth2BearerToken(cred.getAccessToken), Option(cred.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
   }
-  
+
 }
