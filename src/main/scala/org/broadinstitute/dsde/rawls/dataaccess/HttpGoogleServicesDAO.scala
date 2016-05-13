@@ -51,7 +51,7 @@ class HttpGoogleServicesDAO(
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
   tokenEncryptionKey: String,
-  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
+  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging with GoogleUtilities {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -352,7 +352,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-
   def createProxyGroup(user: RawlsUser): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
@@ -488,26 +487,6 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  // these really should all be private, but we're opening up a few of these to allow integration testing
-  private def when500( throwable: Throwable ): Boolean = {
-    throwable match {
-      case t: HttpResponseException => t.getStatusCode/100 == 5
-      case _ => false
-    }
-  }
-
-  private def when500orGoogleError( throwable: Throwable ): Boolean = {
-    throwable match {
-      case t: GoogleJsonResponseException => {
-        ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
-          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid")) ||
-          (t.getStatusCode == 404)
-      }
-      case h: HttpResponseException => when500(throwable)
-      case _ => false
-    }
-  }
-
   private def retryWhen500[T]( op: () => T ) = {
     retry(when500)(()=>Future(blocking(op())))
   }
@@ -571,43 +550,4 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  private def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
-    import spray.json._
-    import GoogleRequestJsonSupport._
-
-    if (logger.underlying.isDebugEnabled) {
-      val payload = Option(request.getHttpContent) match {
-        case Some(content: JsonHttpContent) =>
-          Try {
-            val outputStream = new ByteArrayOutputStream()
-            content.writeTo(outputStream)
-            outputStream.toString.parseJson
-          }.toOption
-        case _ => None
-      }
-
-      val start = System.currentTimeMillis()
-      Try {
-        request.executeUnparsed()
-      } match {
-        case Success(response) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(response.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
-          response.parseAs(request.getResponseClass)
-        case Failure(httpRegrets: HttpResponseException) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(httpRegrets.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
-          throw httpRegrets
-        case Failure(regrets) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, None, Option(ErrorReport(regrets))).toJson(GoogleRequestFormat).compactPrint)
-          throw regrets
-      }
-    } else {
-      request.execute()
-    }
-  }
-}
-
-private case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
-private object GoogleRequestJsonSupport extends JsonSupport {
-  import WorkspaceJsonSupport.ErrorReportFormat
-  val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }

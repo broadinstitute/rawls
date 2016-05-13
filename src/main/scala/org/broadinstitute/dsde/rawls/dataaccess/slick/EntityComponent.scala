@@ -294,12 +294,11 @@ trait EntityComponent {
     def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
-      val x = DBIO.sequence(entitiesGrouped map { batch =>
+      DBIO.sequence(entitiesGrouped map { batch =>
         val baseSelect = sql"""select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
         val entityTypeNameTuples = batch.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
         concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
-      }).map{ z => z.flatten }
-      x
+      }).map{ recordLists => recordLists.flatten }
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
