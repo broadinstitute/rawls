@@ -74,6 +74,13 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
         }
+    } ~
+    path("submissions" / "queueStatus") {
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.WorkflowQueueStatus)
+      }
     }
   }
 }

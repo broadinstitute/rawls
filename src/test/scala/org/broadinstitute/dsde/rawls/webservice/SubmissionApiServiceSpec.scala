@@ -168,4 +168,57 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "return 200 when checking the queue status" in withTestDataApiServices { services =>
+
+    val existingSubmittedWorkflowCount = 12
+    val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
+
+    Get("/submissions/queueStatus") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        assertResult(existingWorkflowCounts) {
+          responseAs[Map[String, Int]]
+        }
+      }
+
+    val newWorkflows = Map(
+      WorkflowStatuses.Queued -> 1,
+      WorkflowStatuses.Launching -> 2,
+      WorkflowStatuses.Submitted -> 4,
+      WorkflowStatuses.Running -> 8,
+      WorkflowStatuses.Failed -> 16,
+      WorkflowStatuses.Succeeded -> 32,
+      WorkflowStatuses.Aborting -> 64,
+      WorkflowStatuses.Aborted -> 128,
+      WorkflowStatuses.Unknown -> 256
+    )
+
+    val newWorkflowCounts = Map(
+      "Queued" -> 1,
+      "Launching" -> 2,
+      "Submitted" -> (4 + existingSubmittedWorkflowCount),
+      "Running" -> 8,
+      "Aborting" -> 64
+    )
+
+    withWorkspaceContext(testData.workspace) { context =>
+      newWorkflows foreach { case (status, count) =>
+        for (i <- 1 to count) {
+          val wf = Workflow(s"workflow${i}_of_$count", status, testDate, None, testData.inputResolutions)
+          runAndWait(workflowQuery.save(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), wf))
+        }
+      }
+    }
+
+    Get("/submissions/queueStatus") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        assertResult(newWorkflowCounts) {
+          responseAs[Map[String, Int]]
+        }
+      }
+  }
 }
