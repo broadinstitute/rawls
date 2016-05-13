@@ -151,8 +151,18 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def updateStatus(workflowId: Long, workflowStatus: WorkflowStatus): WriteAction[Int] = {
-      findWorkflowById(workflowId).map(u => (u.status, u.statusLastChangedDate)).update(workflowStatus.toString, new Timestamp(System.currentTimeMillis()))
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Int] = {
+      findWorkflowById(workflow.id).map(u => (u.status, u.statusLastChangedDate)).update(newStatus.toString, new Timestamp(System.currentTimeMillis()))
+//      sql"update WORKFLOW set status= ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())} where (id, record_version) = (${workflow.id}, ${workflow.recordVersion})".as[Int] andThen
+//        optimisticLockUpdate(workflow)
+    }
+
+    //input: old workflow records, and the status that we want to apply to all of them
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Seq[Int]] = {
+      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, where (id, record_version) in ("
+      val workflowTuples = workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int] andThen
+        DBIO.sequence(workflows.map(wf => optimisticLockUpdate(wf)))
     }
 
     def deleteWorkflowAction(id: Long) = {
@@ -196,6 +206,13 @@ trait WorkflowComponent {
     def deleteWorkflowFailureAttributes(id: Long) = {
       findInputResolutionsByFailureId(id).result flatMap { validations =>
         submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
+      }
+    }
+
+    def optimisticLockUpdate(originalRec: WorkflowRecord): ReadWriteAction[Int] = {
+      findWorkflowByIdAndRecordVersion(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
+        case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
+        case success => success
       }
     }
 
@@ -271,6 +288,10 @@ trait WorkflowComponent {
 
     def findWorkflowById(id: Long): WorkflowQueryType = {
       filter(_.id === id)
+    }
+
+    def findWorkflowByIdAndRecordVersion(id: Long, version: Long): WorkflowQueryType = {
+      filter(rec => rec.id === id && rec.version === version)
     }
 
     def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType = {

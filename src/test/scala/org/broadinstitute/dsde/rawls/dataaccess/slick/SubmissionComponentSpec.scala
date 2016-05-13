@@ -119,22 +119,22 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-  "WorkflowComponent" should "update the status of a workflow" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    val workflow = testData.submission1.workflows(0)
-    assertResult(Some(workflow)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowEntity.get.entityType, workflow0.workflowEntity.get.entityName))
-    }
-
-    val x = runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflow.workflowId, UUID.fromString(testData.submission1.submissionId)))
-
-    x
-
-
-
-
-  }
+//  "WorkflowComponent" should "update the status of a workflow" in withDefaultTestDatabase {
+//    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+//
+//    val workflow = testData.submission1.workflows(0)
+//    assertResult(Some(workflow)) {
+//      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowEntity.get.entityType, workflow0.workflowEntity.get.entityName))
+//    }
+//
+//    val x = runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflow.workflowId, UUID.fromString(testData.submission1.submissionId)))
+//
+//    x
+//
+//
+//
+//
+//  }
 
 
 }
