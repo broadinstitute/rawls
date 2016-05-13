@@ -60,6 +60,13 @@ object Boot extends App {
       gcsConfig.getString("tokenSecretsJson")
     )
 
+    val pubSubDAO = new HttpGooglePubSubDAO(
+      clientSecrets,
+      gcsConfig.getString("pathToPem"),
+      gcsConfig.getString("appName"),
+      gcsConfig.getString("serviceProject")
+    )
+
     val ldapConfig = conf.getConfig("userLdap")
     val userDirDAO = new JndiUserDirectoryDAO(
       ldapConfig.getString("providerUrl"),
