@@ -268,7 +268,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      //dataAccess.workflowQuery.filter(_.id === workflowRecord.id).update(workflowRecord.copy(status = WorkflowStatuses.Failed.toString)) andThen
       dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })

@@ -151,18 +151,15 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Int] = {
-      findWorkflowById(workflow.id).map(u => (u.status, u.statusLastChangedDate)).update(newStatus.toString, new Timestamp(System.currentTimeMillis()))
-//      sql"update WORKFLOW set status= ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())} where (id, record_version) = (${workflow.id}, ${workflow.recordVersion})".as[Int] andThen
-//        optimisticLockUpdate(workflow)
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Vector[Int]] = {
+      sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where id = ${workflow.id} and record_version = ${workflow.recordVersion}".as[Int]
     }
 
     //input: old workflow records, and the status that we want to apply to all of them
-    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Seq[Int]] = {
-      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, where (id, record_version) in ("
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Vector[Int]] = {
+      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
       val workflowTuples = workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int] andThen
-        DBIO.sequence(workflows.map(wf => optimisticLockUpdate(wf)))
+      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int]
     }
 
     def deleteWorkflowAction(id: Long) = {
