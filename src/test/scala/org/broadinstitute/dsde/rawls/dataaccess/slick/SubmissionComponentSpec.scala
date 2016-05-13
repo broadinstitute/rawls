@@ -119,22 +119,26 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-//  "WorkflowComponent" should "update the status of a workflow" in withDefaultTestDatabase {
-//    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-//
-//    val workflow = testData.submission1.workflows(0)
-//    assertResult(Some(workflow)) {
-//      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowEntity.get.entityType, workflow0.workflowEntity.get.entityName))
-//    }
-//
-//    val x = runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflow.workflowId, UUID.fromString(testData.submission1.submissionId)))
-//
-//    x
-//
-//
-//
-//
-//  }
+  "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
+    val workflowRecBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).head
 
+    runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Failed))
+
+    val workflowRecAfter = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).filter(_.id == workflowRecBefore.id).head
+
+    assert(workflowRecAfter.status == WorkflowStatuses.Failed.toString)
+    assert(workflowRecAfter.recordVersion == 1)
+  }
+
+  it should "batch update the statuses and record versions of multiple workflows" in withDefaultTestDatabase {
+    val workflowRecsBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+    runAndWait(workflowQuery.batchUpdateStatus(workflowRecsBefore, WorkflowStatuses.Failed))
+
+    val workflowRecsAfter = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+    assert(workflowRecsAfter.forall(_.status == WorkflowStatuses.Failed.toString))
+    assert(workflowRecsAfter.forall(_.recordVersion == 1))
+  }
 
 }

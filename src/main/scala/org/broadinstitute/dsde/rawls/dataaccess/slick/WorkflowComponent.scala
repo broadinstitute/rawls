@@ -151,15 +151,23 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Vector[Int]] = {
-      sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where id = ${workflow.id} and record_version = ${workflow.recordVersion}".as[Int]
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Int] = {
+      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where id = ${workflow.id} and record_version = ${workflow.recordVersion}" map {
+        case 0 => throw new RawlsConcurrentModificationException(s"could not update $workflow because its record version has changed")
+        case success => success
+      }
     }
 
     //input: old workflow records, and the status that we want to apply to all of them
-    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Vector[Int]] = {
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Int] = {
       val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
       val workflowTuples = workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int]
+      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int] flatMap { rows =>
+        if(rows.sum == workflows.size)
+          DBIO.successful(workflows.size)
+        else
+          throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.sum} workflows because their record version has changed")
+      }
     }
 
     def deleteWorkflowAction(id: Long) = {
