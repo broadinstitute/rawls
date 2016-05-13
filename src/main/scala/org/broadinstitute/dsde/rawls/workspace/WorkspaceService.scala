@@ -1037,17 +1037,14 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         }
     }
 
-    val credFuture = gcsDAO.getUserCredentials(RawlsUser(userInfo))
-
-    submissionFuture.zip(credFuture) map {
-      case (RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)), Some(credential)) =>
+    submissionFuture map {
+      case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
         if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), credential)
+          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), gcsDAO.getBucketServiceAccountCredential)
         }
         RequestComplete(StatusCodes.Created, submissionReport)
 
-      case (somethingWrong, Some(_)) => somethingWrong // this is the case where something was not found in withSubmissionParameters
-      case (_, None) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"No refresh token found for ${userInfo.userEmail}"))
+      case somethingWrong => somethingWrong // this is the case where something was not found in withSubmissionParameters
     }
   }
 

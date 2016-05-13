@@ -40,6 +40,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Option(new MockGoogleCredential.Builder().build()))
   }
 
+  override def getBucketServiceAccountCredential: Credential = new MockGoogleCredential.Builder().build()
+
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     Future.successful(Option(token))
   }
@@ -156,4 +158,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
 
   override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
+
+  override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
 }
