@@ -10,4 +10,5 @@
     <include file="changesets/20160429_entity_record_version.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160510_drop_old_attr_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160510_drop_old_id_columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160513_workflow_record_version.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
