@@ -216,13 +216,17 @@ trait WorkflowComponent {
         case None =>
           DBIO.successful(None)
         case Some(rec) =>
-          for {
-            entity <- loadWorkflowEntity(rec.workflowEntityId)
-            inputResolutions <- loadInputResolutions(rec.id)
-            messages <- loadWorkflowMessages(rec.id)
-          } yield {
-            Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
-          }
+          loadWorkflow(rec)
+      }
+    }
+
+    def loadWorkflow(rec: WorkflowRecord): ReadAction[Option[Workflow]] = {
+      for {
+        entity <- loadWorkflowEntity(rec.workflowEntityId)
+        inputResolutions <- loadInputResolutions(rec.id)
+        messages <- loadWorkflowMessages(rec.id)
+      } yield {
+        Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
       }
     }
 
