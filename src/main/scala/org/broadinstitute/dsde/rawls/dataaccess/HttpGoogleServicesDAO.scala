@@ -10,6 +10,7 @@ import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
 import com.google.api.services.oauth2.Oauth2
+import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -42,7 +43,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.StatusCodes
+import spray.http.{OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -575,12 +576,22 @@ class HttpGoogleServicesDAO(
   }
 
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {
-    val creds = getBucketServiceAccountCredential
-    val oauth2 = new Oauth2.Builder(httpTransport, jsonFactory, null).setApplicationName(appName).build()
+    getRawlsUserForCreds(getBucketServiceAccountCredential)
+  }
+
+  def getRawlsUserForCreds(creds: Credential): Future[RawlsUser] = {
+    val oauth2 = new Builder(httpTransport, jsonFactory, null).setApplicationName(appName).build()
     Future {
       creds.refreshToken()
       val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken))
       RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
+    }
+  }
+
+  def getServiceAccountUserInfo(): Future[UserInfo] = {
+    val creds = getBucketServiceAccountCredential
+    getRawlsUserForCreds(creds).map { rawlsUser =>
+      UserInfo(rawlsUser.userEmail.value, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId.value)
     }
   }
 

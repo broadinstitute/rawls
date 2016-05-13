@@ -8,6 +8,7 @@ import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
+import spray.http.OAuth2BearerToken
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -160,4 +161,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
 
   override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
+
+  def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo("foo@bar.com", OAuth2BearerToken("test_token"), 0, "12345678000"))
 }
