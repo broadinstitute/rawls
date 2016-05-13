@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="davidan" id="status_change_log">
 
-        <createTable tableName="STAT_WORKFLOW_STATUS">
+        <createTable tableName="AUDIT_WORKFLOW_STATUS">
             <column autoIncrement="true" name="id" type="BIGINT">
                 <constraints primaryKey="true"/>
             </column>
@@ -18,11 +18,11 @@
             </column>
         </createTable>
 
-        <createIndex indexName="IDX_STAT_WORKFLOW_STATUS_WORKFLOW_ID" tableName="STAT_WORKFLOW_STATUS" unique="false">
+        <createIndex indexName="IDX_AUDIT_WORKFLOW_STATUS_WORKFLOW_ID" tableName="AUDIT_WORKFLOW_STATUS" unique="false">
             <column name="workflow_id"/>
         </createIndex>
 
-        <createTable tableName="STAT_SUBMISSION_STATUS">
+        <createTable tableName="AUDIT_SUBMISSION_STATUS">
             <column autoIncrement="true" name="id" type="BIGINT">
                 <constraints primaryKey="true"/>
             </column>
@@ -37,7 +37,7 @@
             </column>
         </createTable>
 
-        <createIndex indexName="IDX_STAT_SUBMISSION_STATUS_SUBMISSION_ID" tableName="STAT_SUBMISSION_STATUS" unique="false">
+        <createIndex indexName="IDX_AUDIT_SUBMISSION_STATUS_SUBMISSION_ID" tableName="AUDIT_SUBMISSION_STATUS" unique="false">
             <column name="submission_id"/>
         </createIndex>
 
@@ -53,7 +53,7 @@
 
             CREATE TRIGGER after_workflow_insert AFTER INSERT ON WORKFLOW
                 FOR EACH ROW
-                    INSERT INTO STAT_WORKFLOW_STATUS
+                    INSERT INTO AUDIT_WORKFLOW_STATUS
                         (workflow_id, status, timestamp)
                     VALUES
                         (NEW.ID, NEW.STATUS, NEW.STATUS_LAST_CHANGED);
@@ -61,14 +61,14 @@
 
             CREATE TRIGGER after_workflow_update AFTER UPDATE ON WORKFLOW
                 FOR EACH ROW
-                    INSERT INTO STAT_WORKFLOW_STATUS
+                    INSERT INTO AUDIT_WORKFLOW_STATUS
                         (workflow_id, status, timestamp)
                     VALUES
                         (NEW.ID, NEW.STATUS, NEW.STATUS_LAST_CHANGED);
 
             CREATE TRIGGER after_submission_insert AFTER INSERT ON SUBMISSION
                 FOR EACH ROW
-                    INSERT INTO STAT_SUBMISSION_STATUS
+                    INSERT INTO AUDIT_SUBMISSION_STATUS
                         (submission_id, status, timestamp)
                     VALUES
                         (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
@@ -76,7 +76,7 @@
 
             CREATE TRIGGER after_submission_update AFTER UPDATE ON SUBMISSION
                 FOR EACH ROW
-                    INSERT INTO STAT_SUBMISSION_STATUS
+                    INSERT INTO AUDIT_SUBMISSION_STATUS
                         (submission_id, status, timestamp)
                     VALUES
                         (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
