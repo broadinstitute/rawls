@@ -9,12 +9,16 @@ import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
+import com.google.api.services.oauth2.Oauth2
+import com.google.api.services.oauth2.Oauth2.Builder
+import com.google.api.services.plus.PlusScopes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
+import spray.client.pipelining._
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._
@@ -39,7 +43,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.StatusCodes
+import spray.http.{OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -56,7 +60,7 @@ class HttpGoogleServicesDAO(
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
   // modify these if we need more granular access in the future
-  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE)
+  val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
@@ -571,6 +575,26 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  def getServiceAccountRawlsUser(): Future[RawlsUser] = {
+    getRawlsUserForCreds(getBucketServiceAccountCredential)
+  }
+
+  def getRawlsUserForCreds(creds: Credential): Future[RawlsUser] = {
+    val oauth2 = new Builder(httpTransport, jsonFactory, null).setApplicationName(appName).build()
+    Future {
+      creds.refreshToken()
+      val tokenInfo = executeGoogleRequest(oauth2.tokeninfo().setAccessToken(creds.getAccessToken))
+      RawlsUser(RawlsUserSubjectId(tokenInfo.getUserId), RawlsUserEmail(tokenInfo.getEmail))
+    }
+  }
+
+  def getServiceAccountUserInfo(): Future[UserInfo] = {
+    val creds = getBucketServiceAccountCredential
+    getRawlsUserForCreds(creds).map { rawlsUser =>
+      UserInfo(rawlsUser.userEmail.value, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId.value)
+    }
+  }
+
   private def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
     import spray.json._
     import GoogleRequestJsonSupport._
@@ -611,3 +635,4 @@ private object GoogleRequestJsonSupport extends JsonSupport {
   import WorkspaceJsonSupport.ErrorReportFormat
   val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }
+

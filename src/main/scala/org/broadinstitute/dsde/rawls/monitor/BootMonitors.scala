@@ -36,18 +36,9 @@ object BootMonitors extends LazyLogging {
     dataSource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions() map { _.map { activeSub =>
         val wsName = WorkspaceName(activeSub.workspaceNamespace, activeSub.workspaceName)
-        val submitter = activeSub.submission.submitter
         val subId = activeSub.submission.submissionId
 
-        val subStartMessage = gcsDAO.getUserCredentials(submitter) map {
-          case None => throw new RawlsException(s"Cannot start Submission Monitor because credentials were not retrieved for user ${submitter.userSubjectId.value}, submitter of ${subId}")
-          case Some(credential) => SubmissionStarted(wsName, UUID.fromString(subId), credential)
-        }
-
-        subStartMessage onComplete {
-          case Success(message) => submissionSupervisor ! message
-          case Failure(throwable) => logger.error(s"Error restarting submission monitor for submission ${subId}", throwable)
-        }
+        submissionSupervisor ! SubmissionStarted(wsName, UUID.fromString(subId), gcsDAO.getBucketServiceAccountCredential)
       }}
     } onFailure {
       case t: Throwable => logger.error("Error starting submission monitor", t)

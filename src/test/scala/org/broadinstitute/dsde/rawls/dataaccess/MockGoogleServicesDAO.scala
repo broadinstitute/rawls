@@ -8,6 +8,7 @@ import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
+import spray.http.OAuth2BearerToken
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -39,6 +40,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
     Future.successful(Option(new MockGoogleCredential.Builder().build()))
   }
+
+  override def getBucketServiceAccountCredential: Credential = new MockGoogleCredential.Builder().build()
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
     Future.successful(Option(token))
@@ -156,4 +159,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
 
   override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
+
+  override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
+
+  def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo("foo@bar.com", OAuth2BearerToken("test_token"), 0, "12345678000"))
 }

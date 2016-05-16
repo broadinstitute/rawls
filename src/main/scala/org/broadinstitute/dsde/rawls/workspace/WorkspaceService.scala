@@ -966,44 +966,46 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         val submissionId: String = UUID.randomUUID().toString
         val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
 
-        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes.grouped(execServiceBatchSize).toSeq map { entityInputsBatch =>
-          Try {
-            val workflowInputsBatch = entityInputsBatch.map { entityInputs =>
-              val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-              MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-            }
-            val execStatusFuture = executionServiceDAO.submitWorkflows(wdl, workflowInputsBatch, workflowOptions, userInfo) recover {
-              case t: Exception => {
-                val error = "Unable to submit workflows when creating submission"
-                logger.error(error, t)
-                entityInputsBatch.map { _ =>
-                  Right(ExecutionServiceFailure("error", s"error communcating with exec service: ${t.getMessage}", None))
+        val submittedWorkflowsFuture = workflowOptionsFuture.zip(gcsDAO.getServiceAccountUserInfo).flatMap { case ((workflowOptions, svcAcctUserInfo)) =>
+          Future.sequence(successes.grouped(execServiceBatchSize).toSeq map { entityInputsBatch =>
+            Try {
+              val workflowInputsBatch = entityInputsBatch.map { entityInputs =>
+                val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
+                MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
+              }
+              val execStatusFuture = executionServiceDAO.submitWorkflows(wdl, workflowInputsBatch, workflowOptions, svcAcctUserInfo) recover {
+                case t: Exception => {
+                  val error = "Unable to submit workflows when creating submission"
+                  logger.error(error, t)
+                  entityInputsBatch.map { _ =>
+                    Right(ExecutionServiceFailure("error", s"error communcating with exec service: ${t.getMessage}", None))
+                  }
                 }
               }
-            }
 
-            execStatusFuture map { execStatuses =>
-              val execStatusesWithEntity = entityInputsBatch.zip(execStatuses)
-              execStatusesWithEntity.map {
-                case (entityInputs, Left(execStatus)) =>
-                  Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
-                case (entityInputs, Right(cromwellMessage)) =>
-                  val error = s"Unable to submit workflow when creating submission, cromwell message: $cromwellMessage"
-                  logger.error(error)
-                  WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error)))
+              execStatusFuture map { execStatuses =>
+                val execStatusesWithEntity = entityInputsBatch.zip(execStatuses)
+                execStatusesWithEntity.map {
+                  case (entityInputs, Left(execStatus)) =>
+                    Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
+                  case (entityInputs, Right(cromwellMessage)) =>
+                    val error = s"Unable to submit workflow when creating submission, cromwell message: $cromwellMessage"
+                    logger.error(error)
+                    WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error)))
+                }
+              }
+            } match {
+              case Success(result) => result
+              case Failure(t) => {
+                val error = "Unable to process workflow when creating submission"
+                logger.error(error, t)
+                Future.successful(entityInputsBatch.map { entityInputs =>
+                  WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
+                })
               }
             }
-          } match {
-            case Success(result) => result
-            case Failure(t) => {
-              val error = "Unable to process workflow when creating submission"
-              logger.error(error, t)
-              Future.successful(entityInputsBatch.map { entityInputs =>
-                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
-              })
-            }
-          }
-        }))
+          })
+        }
 
         DBIO.from(submittedWorkflowsFuture) flatMap { batchedSubmittedWorkflows =>
           val submittedWorkflows = batchedSubmittedWorkflows.flatten
@@ -1039,17 +1041,14 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         }
     }
 
-    val credFuture = gcsDAO.getUserCredentials(RawlsUser(userInfo))
-
-    submissionFuture.zip(credFuture) map {
-      case (RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)), Some(credential)) =>
+    submissionFuture map {
+      case RequestComplete((StatusCodes.Created, submissionReport: SubmissionReport)) =>
         if (submissionReport.status == SubmissionStatuses.Submitted) {
-          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), credential)
+          submissionSupervisor ! SubmissionStarted(workspaceName, UUID.fromString(submissionReport.submissionId), gcsDAO.getBucketServiceAccountCredential)
         }
         RequestComplete(StatusCodes.Created, submissionReport)
 
-      case (somethingWrong, Some(_)) => somethingWrong // this is the case where something was not found in withSubmissionParameters
-      case (_, None) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"No refresh token found for ${userInfo.userEmail}"))
+      case somethingWrong => somethingWrong // this is the case where something was not found in withSubmissionParameters
     }
   }
 

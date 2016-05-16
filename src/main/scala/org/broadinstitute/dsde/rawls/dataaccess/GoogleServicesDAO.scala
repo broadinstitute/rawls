@@ -68,6 +68,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def toGoogleGroupName(groupName: RawlsGroupName): String
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
+  def getBucketServiceAccountCredential: Credential
+  def getServiceAccountRawlsUser(): Future[RawlsUser]
+  def getServiceAccountUserInfo(): Future[UserInfo]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])
