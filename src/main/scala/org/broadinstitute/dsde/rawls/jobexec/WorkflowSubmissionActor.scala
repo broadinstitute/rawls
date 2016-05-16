@@ -55,10 +55,7 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
   override def receive = {
     case LookForWorkflows =>
-      getUnlaunchedWorkflowBatch() map {
-        case Some(msg) => self ! msg
-        case None => scheduleNextWorkflowQuery
-      }
+      getUnlaunchedWorkflowBatch() pipeTo self
     case SubmitWorkflowBatch(workflowIds) =>
       submitWorkflowBatch(workflowIds) pipeTo self
 
@@ -84,7 +81,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   import dataSource.dataAccess.driver.api._
 
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
-  def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[Option[WorkflowSubmissionMessage]] = {
+  def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
     val unlaunchedWfOptF = dataSource.inTransaction { dataAccess =>
       //grab a bunch of unsubmitted workflows
       dataAccess.workflowQuery.findUnsubmittedWorkflows().take(batchSize).result map { wfRecs =>
@@ -102,8 +99,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     //if we find any, next step is to submit them. otherwise, look again.
     unlaunchedWfOptF.map {
-      case workflowRecs if workflowRecs.nonEmpty => Some(SubmitWorkflowBatch(workflowRecs.map(_.id)))
-      case _ => None
+      case workflowRecs if workflowRecs.nonEmpty => SubmitWorkflowBatch(workflowRecs.map(_.id))
+      case _ => LookForWorkflows
     }
   }
 
