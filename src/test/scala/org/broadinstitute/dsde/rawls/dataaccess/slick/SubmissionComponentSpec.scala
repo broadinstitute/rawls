@@ -119,41 +119,43 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-  "WorkflowComponent" should "let you modify Workflows within a submission" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+  "WorkflowComponent" should "update the status of a workflow and increment record version" in withDefaultTestDatabase {
+    val workflowRecBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).head
 
-    val workflow0 = testData.submission1.workflows(0)
-    assertResult(Some(workflow0)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow0.workflowEntity.get.entityType, workflow0.workflowEntity.get.entityName))
-    }
+    assert(workflowRecBefore.status == WorkflowStatuses.Submitted.toString)
 
-    val workflow1 = testData.submission1.workflows(1)
-    assertResult(Some(workflow1)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow1.workflowEntity.get.entityType, workflow1.workflowEntity.get.entityName))
-    }
+    runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Failed))
 
-    val workflow2 = testData.submission1.workflows(2)
-    assertResult(Some(workflow2)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow2.workflowEntity.get.entityType, workflow2.workflowEntity.get.entityName))
-    }
+    val workflowRecAfter = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).filter(_.id == workflowRecBefore.id).head
 
-    val workflow3 = Workflow(workflow1.workflowId, WorkflowStatuses.Failed, currentTime(), workflow1.workflowEntity, testData.inputResolutions)
-
-    runAndWait(workflowQuery.update(workspaceContext, UUID.fromString(testData.submission1.submissionId), workflow3))
-
-    assertResult(Some(workflow3)) {
-      runAndWait(workflowQuery.get(workspaceContext, testData.submission1.submissionId, workflow3.workflowEntity.get.entityType, workflow3.workflowEntity.get.entityName))
-    }
-
-    val workflowsWithIds = runAndWait(workflowQuery.getWithWorkflowIds(workspaceContext, testData.submission1.submissionId))
-    val workflow3Id = workflowsWithIds.collect { case (id, workflow) if workflow == workflow3 => id }.head
-    assert(runAndWait(workflowQuery.delete(workflow3Id)))
-
-    val submission = testData.submission1.copy(workflows=Seq(workflow0, workflow2))
-    assertResult(Some(submission)) {
-      runAndWait(submissionQuery.get(workspaceContext, submission.submissionId))
-    }
+    assert(workflowRecAfter.status == WorkflowStatuses.Failed.toString)
+    assert(workflowRecAfter.recordVersion == 1)
   }
 
+  it should "batch update the statuses and record versions of multiple workflows" in withDefaultTestDatabase {
+    val workflowRecsBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+    assert(workflowRecsBefore.forall(_.status == WorkflowStatuses.Submitted.toString))
+
+    runAndWait(workflowQuery.batchUpdateStatus(workflowRecsBefore, WorkflowStatuses.Failed))
+
+    val workflowRecsAfter = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+    assert(workflowRecsAfter.forall(_.status == WorkflowStatuses.Failed.toString))
+    assert(workflowRecsAfter.forall(_.recordVersion == 1))
+  }
+
+  /*
+    first, update a workflow status to Succeeded, then using the original (and now stale) workflow record,
+    try to update it to status Failed. It should fail because the record version has changed
+   */
+  it should "throw concurrent modification exception" in withDefaultTestDatabase {
+    val workflowRecBefore = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).head
+
+    runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Succeeded))
+    intercept[RawlsConcurrentModificationException] {
+      runAndWait(workflowQuery.updateStatus(workflowRecBefore, WorkflowStatuses.Failed))
+    }
+  }
 
 }
