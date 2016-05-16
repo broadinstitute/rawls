@@ -8,12 +8,15 @@ import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickWorkspaceContext, ExecutionServiceDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceRecord, DataAccess, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, WorkspaceRecord, DataAccess, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import slick.dbio.DBIOAction
 import spray.http.OAuth2BearerToken
+import spray.json._
+import spray.httpx.SprayJsonSupport._
+
 
 import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration.FiniteDuration
@@ -104,11 +107,67 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
     }
   }
 
+  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject) = {
+    ExecutionServiceWorkflowOptions(
+      s"gs://${workspace.bucketName}/${submissionId}",
+      workspace.namespace,
+      user.userEmail.value,
+      token,
+      billingProject.cromwellAuthBucketUrl
+    )
+  }
+
   //submit the batch of workflows with the given ids
   def submitWorkflowBatch(workflowIds: Seq[Long]): WorkflowSubmissionMessage = {
     //pull out the records, but don't reify them into workflows yet as we need their submission ID
     val wfRecsFuture: Future[Seq[WorkflowRecord]] = datasource.inTransaction { dataAccess =>
       dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result
+    }
+
+    datasource.inTransaction { dataAccess =>
+
+      for {
+        //Load a bunch of things we'll need to reconstruct information:
+        //The list of workflows in this submission
+        wfRecs <- dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result
+        submissionId = wfRecs.head.submissionId
+        assert(wfRecs.forall( _.submissionId == submissionId)) //sanity check they're all in the same submission
+        unpackedWfOpts <- loadWorkflows(wfRecs) //reify to real workflows
+        assert(unpackedWfOpts.size == wfRecs.size) //there should be the right number of them
+        assert(unpackedWfOpts.forall(_.isDefined)) //and they should all have been found
+        unpackedWfs <- for { wfOpt <- unpackedWfOpts; wf <- wfOpt } yield { wf }
+
+        //The submission itself
+        subRecs <- dataAccess.submissionQuery.findById(submissionId).result
+        submissionRec <- subRecs.headOption
+
+        //The workspace
+        wsRecs <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result
+        workspaceRec <- wsRecs.headOption
+
+        //The workspace's billing project
+        bpOpt <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace))
+        billingProject <- bpOpt
+
+        //The person who submitted the submission, and their token
+        submitterOpt <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)))
+        submitter <- submitterOpt
+        tokenOpt <- DBIO.from(googleServicesDAO.getToken(submitter))
+        token <- tokenOpt
+
+        //The method configuration
+        mcOpt <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
+        methodConfig <- mcOpt
+
+        execSvcWorkflowOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, token, billingProject )
+
+
+
+
+      } yield {
+
+      }
+
     }
 
     //this terrifying monster constructs the workflow options and the list of reified workflows
@@ -135,7 +194,6 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
           }
           MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
         }
-        //why is toJson going red? it's right in this import...
         import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
         executionServiceDAO.submitWorkflows("WHERE'S THE WDL?", wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
 
@@ -161,13 +219,20 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging {
       }
     }
   }
-  
-  def buildWorkflowOptions(submissionId: UUID): Future[ExecutionServiceWorkflowOptions] = {
+
+  def buildWorkflowOptions(submissionId: UUID, dataAccess: DataAccess): ReadAction[ExecutionServiceWorkflowOptions] = {
     for {
-      (userOpt, workspaceOpt, billingProject) <- getSomeThings(submissionId)
+      subRec <- dataAccess.submissionQuery.findById(submissionId).result
+      userOpt <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(subRec.head.submitterId)))
+      wsOpt <- dataAccess.workspaceQuery.findByIdQuery(subRec.head.workspaceId).result
+
       user <- userOpt
-      workspace <- workspaceOpt
-      tokenOpt <- googleServicesDAO.getToken(user)
+      workspace <- wsOpt
+
+      bpOpt <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspace.namespace))
+      billingProject <- bpOpt
+
+      tokenOpt <- DBIO.from(googleServicesDAO.getToken(user))
       token <- tokenOpt
     } yield {
       ExecutionServiceWorkflowOptions(

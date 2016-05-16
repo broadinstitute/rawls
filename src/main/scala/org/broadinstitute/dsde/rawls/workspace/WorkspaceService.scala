@@ -1473,7 +1473,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withMethod(methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T]): ReadWriteAction[T] = {
     DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
       case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => op(agoraEntity)
@@ -1481,7 +1481,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }}
   }
 
-  private def withWdl(method: AgoraEntity)(op: (String) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withWdl[T](method: AgoraEntity)(op: (String) => ReadWriteAction[T]): ReadWriteAction[T] = {
     method.payload match {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
       case Some(wdl) => op(wdl)
@@ -1552,20 +1552,26 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    // TODO add Method to model instead of exposing AgoraEntity?
+  private def withWDL[T](methodConfig: MethodConfiguration)(op: String => ReadWriteAction[T]): ReadWriteAction[T] = {
     val methodRepoMethod = methodConfig.methodRepoMethod
     DBIO.from(toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo))) flatMap { _ match {
       case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
       case Success(Some(agoraEntity)) => agoraEntity.payload match {
         case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-        case Some(wdl) => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-          case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
-          case Success(methodInputs) => op(wdl,methodInputs)
-        }
+        case Some(wdl) => op(wdl)
       }
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
     }}
+  }
+
+  private def withMethodInputs[T](methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    // TODO add Method to model instead of exposing AgoraEntity?
+    val methodRepoMethod = methodConfig.methodRepoMethod
+    withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
+      withWdl(method) { wdl => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
+        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
+        case Success(methodInputs) => op(wdl,methodInputs)
+      }}
+    }
   }
 
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
