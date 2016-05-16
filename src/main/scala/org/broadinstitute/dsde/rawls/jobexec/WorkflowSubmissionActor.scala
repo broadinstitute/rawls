@@ -123,7 +123,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   //submit the batch of workflows with the given ids
-  def submitWorkflowBatch(workflowIds: Seq[Long]): Future[WorkflowSubmissionMessage] = {
+  def submitWorkflowBatch(workflowIds: Seq[Long])(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
       for {
@@ -141,25 +141,25 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
         //The submission itself
         subRecs <- dataAccess.submissionQuery.findById(submissionId).result
-        submissionRec <- subRecs.headOption
+        submissionRec = subRecs.head
 
         //The workspace
         wsRecs <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result
-        workspaceRec <- wsRecs.headOption
+        workspaceRec = wsRecs.head
 
         //The workspace's billing project
         bpOpt <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace))
-        billingProject <- bpOpt
+        billingProject = bpOpt.get
 
         //The person who submitted the submission, and their token
         submitterOpt <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)))
-        submitter <- submitterOpt
+        submitter = submitterOpt.get
         tokenOpt <- DBIO.from(googleServicesDAO.getToken(submitter))
-        token <- tokenOpt
+        token = tokenOpt.get
 
         //The wdl
         mcOpt <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
-        methodConfig <- mcOpt
+        methodConfig = mcOpt.get
         wdl <- getWdl(methodConfig)
       } yield {
 
@@ -179,7 +179,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
 
     val cromwellSubmission = for {
-      (wdl: String, workflowRecIds: Seq[Long], wfInputsBatch: Seq[String], wfOpts: Option[String]) <- workflowBatchFuture
+      (wdl: String, workflowRecIds: Seq[Long], wfInputsBatch: Seq[String], wfOpts: ExecutionServiceWorkflowOptions) <- workflowBatchFuture
       workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
       workflowRecIds.zip(workflowSubmitResult)
