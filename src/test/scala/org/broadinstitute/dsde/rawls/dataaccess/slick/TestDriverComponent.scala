@@ -6,6 +6,7 @@ import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
@@ -63,15 +64,17 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef
                            , workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]
-                           , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
-    val workflows = (workflowEntities collect {
-      case ref: Entity => Workflow(UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
-    })
+                           , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
+                           status: WorkflowStatus = WorkflowStatuses.Submitted): Submission = {
 
-    val failedWorkflows = (failedWorkflowEntities collect {
-      case ref: Entity =>
+    val workflows = workflowEntities map { ref =>
+      val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
+      Workflow(uuid, status, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
+    }
+
+    val failedWorkflows = failedWorkflowEntities map { ref =>
         WorkflowFailure(ref.name, ref.entityType, failedInputResolutions(ref), Seq(AttributeString("errorMessage1"), AttributeString("errorMessage2")))
-    })
+    }
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Option(AttributeEntityReference(submissionEntity.entityType, submissionEntity.name)),
       workflows,
@@ -299,6 +302,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
 
+    val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
+      Seq.empty, Map.empty,
+      Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
     val submission1 = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
@@ -314,10 +320,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
 
     val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
-      Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
-        Workflow("workflowB",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
-        Workflow("workflowC",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
-        Workflow("workflowD",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
+        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
+        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save() = {
       DBIO.seq(
@@ -379,6 +385,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
                 submissionQuery.create(context, submissionTerminateTest),
+                submissionQuery.create(context, submissionNoWorkflows),
                 submissionQuery.create(context, submission1),
                 submissionQuery.create(context, submission2),
                 submissionQuery.create(context, submissionUpdateEntity),

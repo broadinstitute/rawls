@@ -117,16 +117,19 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
-    executionServiceDAO.status(workflowRec.externalId, getUserInfo).map(newStatus => {
-      if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
-      else None
-    })
+    workflowRec.externalId match {
+      case Some(externalId) =>     executionServiceDAO.status(externalId, getUserInfo).map(newStatus => {
+        if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+        else None
+      })
+      case None => Future.successful(None)
+    }
   }
 
   private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceDAO.outputs(workflowRec.externalId, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceDAO.outputs(workflowRec.externalId.get, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }
@@ -154,21 +157,21 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
-        dataAccess.workflowQuery.findWorkflowByIds(recs.map(_.id)).map(r => (r.status, r.statusLastChangedDate)).update(status, new Timestamp(System.currentTimeMillis()))
-      }.toSeq: _*) andThen
+        dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
+      }.toSeq :_*) andThen
         handleOutputs(workflowsWithOutputs, dataAccess) andThen
-        checkOverallStatus(dataAccess)
+          checkOverallStatus(dataAccess)
     } map { shouldStop => StatusCheckComplete(shouldStop) }
   }
 
   /**
-   * When there are no workflows with a running status, mark the submission as done or aborted as appropriate.
+   * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
    * @param dataAccess
    * @param executionContext
    * @return true if the submission is done/aborted
    */
   def checkOverallStatus(dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
-    dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses:_*) flatMap { workflowRecs =>
+    dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses):_*) flatMap { workflowRecs =>
       if (workflowRecs.isEmpty) {
         dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.map { status =>
           SubmissionStatuses.withName(status) match {
@@ -267,7 +270,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   def saveErrors(errors: Seq[(WorkflowRecord, Seq[AttributeString])], dataAccess: DataAccess) = {
     DBIO.sequence(errors.map { case (workflowRecord, errorMessages) =>
-      dataAccess.workflowQuery.filter(_.id === workflowRecord.id).update(workflowRecord.copy(status = WorkflowStatuses.Failed.toString)) andThen
+      dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
   }

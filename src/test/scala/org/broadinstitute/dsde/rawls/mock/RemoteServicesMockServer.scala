@@ -163,6 +163,17 @@ class RemoteServicesMockServer(port:Int) {
     mockServer.when(
       request()
         .withMethod("GET")
+        .withPath(methodPath + "/ns-config/meth1/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(goodResult.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
         .withPath(methodPath + "/dsde/three_step/2")
     ).respond(
         response()
