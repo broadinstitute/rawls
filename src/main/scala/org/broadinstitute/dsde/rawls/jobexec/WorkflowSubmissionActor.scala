@@ -131,10 +131,10 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       //The list of workflows in this submission
         wfRecs <- dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result
         submissionId = wfRecs.head.submissionId
-        assert(wfRecs.forall(_.submissionId == submissionId)) //sanity check they're all in the same submission
+        _ = assert(wfRecs.forall(_.submissionId == submissionId)) //sanity check they're all in the same submission
         unpackedWfOpts <- DBIO.sequence(wfRecs.map(dataAccess.workflowQuery.loadWorkflow)) //reify to real workflows
-        assert(unpackedWfOpts.size == wfRecs.size) //there should be the right number of them
-        assert(unpackedWfOpts.forall(_.isDefined)) //and they should all have been found
+        _ = assert(unpackedWfOpts.size == wfRecs.size) //there should be the right number of them
+        _ = assert(unpackedWfOpts.forall(_.isDefined)) //and they should all have been found
         unpackedWfs = for {wfOpt <- unpackedWfOpts; wf <- wfOpt} yield {
           wf
         }
