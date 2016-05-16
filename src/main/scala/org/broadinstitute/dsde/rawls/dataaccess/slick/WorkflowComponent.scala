@@ -6,6 +6,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 
@@ -18,7 +19,8 @@ case class WorkflowRecord(id: Long,
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
-                          workflowEntityId: Option[Long]
+                          workflowEntityId: Option[Long],
+                          recordVersion: Long
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -48,8 +50,9 @@ trait WorkflowComponent {
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
+    def version = column[Long]("record_version")
 
-    def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
@@ -125,7 +128,7 @@ trait WorkflowComponent {
     def save(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
 
       submissionQuery.loadSubmissionEntityId(workspaceContext.workspaceId, workflow.workflowEntity) flatMap { eId =>
-        ( (workflowQuery returning workflowQuery.map(_.id)) += marshalWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
+        ( (workflowQuery returning workflowQuery.map(_.id)) += marshalNewWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
           saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(workflowId))) andThen
           saveMessages(workflow.messages, workflowId)
         }
@@ -148,18 +151,21 @@ trait WorkflowComponent {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
 
-    def update(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
-      uniqueResult[WorkflowRecord](findWorkflowByEntity(submissionId, workspaceContext.workspaceId, workflow.workflowEntity.get.entityType, workflow.workflowEntity.get.entityName)) flatMap {
-        case None => throw new RawlsException(s"workflow does not exist: ${workflow}")
-        case Some(rec) =>
-          deleteWorkflowAttributes(rec.id) andThen
-          deleteMessagesAndInputs(rec.id) andThen
-          saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(rec.id))) andThen
-          saveMessages(workflow.messages, rec.id) andThen
-          findWorkflowById(rec.id).map(u => (u.status, u.statusLastChangedDate)).update((workflow.status.toString, new Timestamp(workflow.statusLastChangedDate.toDate.getTime)))
-      }
-    } map { _ => workflow }
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus): ReadWriteAction[Int] = {
+      batchUpdateStatus(Seq(workflow), newStatus)
+    }
 
+    //input: old workflow records, and the status that we want to apply to all of them
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus): ReadWriteAction[Int] = {
+      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
+      val workflowTuples = workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
+      concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int] flatMap { rows =>
+        if(rows.head == workflows.size)
+          DBIO.successful(workflows.size)
+        else
+          throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+      }
+    }
 
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
@@ -335,14 +341,15 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
+    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
         submissionId,
         workflow.status.toString,
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
-        entityId
+        entityId,
+        0
       )
     }
 
