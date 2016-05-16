@@ -9,12 +9,15 @@ import org.broadinstitute.dsde.rawls.model.{AgoraEntity, UserInfo, ErrorReport, 
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
+import scala.concurrent.ExecutionContext
 import scala.util.{Try, Failure, Success}
 
 //Well, this is a joke.
 trait MethodWiths {
   val methodRepoDAO: MethodRepoDAO
   val dataSource: SlickDataSource
+
+  implicit val executionContext: ExecutionContext
   import dataSource.dataAccess.driver.api._
 
   def withMethodConfig(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {

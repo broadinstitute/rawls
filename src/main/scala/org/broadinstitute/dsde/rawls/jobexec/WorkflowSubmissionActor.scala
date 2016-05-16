@@ -178,6 +178,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
     }
 
+    import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl: String, workflowRecIds: Seq[Long], wfInputsBatch: Seq[String], wfOpts: ExecutionServiceWorkflowOptions) <- workflowBatchFuture
       workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
