@@ -158,4 +158,15 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "count workflows by submitter" in withDefaultTestDatabase {
+    assertResult(Seq((testData.userOwner.userSubjectId.value, 12))) {
+      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.runningStatuses))
+    }
+    assertResult(Seq.empty) {
+      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(12, WorkflowStatuses.runningStatuses))
+    }
+    assertResult(Seq.empty) {
+      runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.terminalStatuses))
+    }
+  }
 }
