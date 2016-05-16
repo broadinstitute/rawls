@@ -66,7 +66,7 @@ class WorkflowSubmissionActor(val datasource: SlickDataSource,
   }
 }
 
-trait WorkflowSubmission extends FutureSupport with LazyLogging {
+trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths {
   val datasource: SlickDataSource
   val googleServicesDAO: GoogleServicesDAO
   val executionServiceDAO: ExecutionServiceDAO

@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
+import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport, AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
@@ -107,7 +107,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -1466,27 +1466,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withMethodConfig(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
-      case Some(methodConfiguration) => op(methodConfiguration)
-    }
-  }
 
-  private def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
-      case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
-    }}
-  }
-
-  private def withWdl[T](method: AgoraEntity)(op: (String) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    method.payload match {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-      case Some(wdl) => op(wdl)
-    }
-  }
 
   private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     Try {
@@ -1552,34 +1532,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withWDL[T](methodConfig: MethodConfiguration)(op: String => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val methodRepoMethod = methodConfig.methodRepoMethod
-    DBIO.from(toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo))) flatMap { _ match {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
-      case Success(Some(agoraEntity)) => agoraEntity.payload match {
-        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-        case Some(wdl) => op(wdl)
-      }
-    }}
-  }
-
-  private def withMethodInputs[T](methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    // TODO add Method to model instead of exposing AgoraEntity?
-    val methodRepoMethod = methodConfig.methodRepoMethod
-    withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
-      withWdl(method) { wdl => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
-        case Success(methodInputs) => op(wdl,methodInputs)
-      }}
-    }
-  }
-
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
    ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig) { (wdl,methodInputs) =>
+          withMethodInputs(methodConfig, userInfo) { (wdl,methodInputs) =>
             withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
 
               //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
