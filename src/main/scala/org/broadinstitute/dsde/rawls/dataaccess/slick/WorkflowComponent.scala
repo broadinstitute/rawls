@@ -167,6 +167,10 @@ trait WorkflowComponent {
       }
     }
 
+    def updateWorkfowRecord(workflowRecord: WorkflowRecord): WriteAction[Int] = {
+      findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion).update(workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()), recordVersion = workflowRecord.recordVersion+1))
+    }
+
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
         deleteMessagesAndInputs(id) andThen
@@ -311,6 +315,10 @@ trait WorkflowComponent {
 
     def findWorkflowById(id: Long): WorkflowQueryType = {
       filter(_.id === id)
+    }
+
+    def findWorkflowByIdAndVersion(id: Long, recordVersion: Long): WorkflowQueryType = {
+      filter(rec => rec.id === id && rec.version === recordVersion)
     }
 
     def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType = {

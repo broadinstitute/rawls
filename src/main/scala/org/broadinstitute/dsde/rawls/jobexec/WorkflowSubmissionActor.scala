@@ -91,7 +91,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           val wfsWithASingleSubmission = wfRecs.filter(_.submissionId == wfRecs.head.submissionId)
           //instead: on update, if we don't get the right number back, roll back the txn
           //TODO: biden has an incoming change here, with optimistic locking
-          dataAccess.workflowQuery.batchUpdateStatus(wfsWithASingleSubmission.map(_.id), WorkflowStatuses.Launching)
+          dataAccess.workflowQuery.batchUpdateStatus(wfsWithASingleSubmission, WorkflowStatuses.Launching)
           wfsWithASingleSubmission
         }
       }
@@ -174,46 +174,46 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
 
         //yield the things we're going to submit to Cromwell
-        (wdl, wfRecs.map(_.id), wfInputsBatch, wfOpts)
+        (wdl, wfRecs, wfInputsBatch, wfOpts)
       }
     }
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl: String, workflowRecIds: Seq[Long], wfInputsBatch: Seq[String], wfOpts: ExecutionServiceWorkflowOptions) <- workflowBatchFuture
+      (wdl: String, workflowRecs: Seq[WorkflowRecord], wfInputsBatch: Seq[String], wfOpts: ExecutionServiceWorkflowOptions) <- workflowBatchFuture
       workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
-      workflowRecIds.zip(workflowSubmitResult)
+      workflowRecs.zip(workflowSubmitResult)
     }
 
     cromwellSubmission flatMap { results =>
       dataSource.inTransaction { dataAccess =>
         //save successes as submitted workflows and hook up their cromwell ids
         val successes = results collect {
-          case (wfRecId, Left(success: ExecutionServiceStatus)) =>
-            //TODO: batchify this update?
-            dataAccess.workflowQuery.findWorkflowById(wfRecId).map(u => u.externalId).update(Option(success.id))
-            wfRecId
+          case (wfRec, Left(success: ExecutionServiceStatus)) =>
+            val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status)
+            dataAccess.workflowQuery.updateWorkfowRecord(updatedWfRec)
         }
-        dataAccess.workflowQuery.batchUpdateStatus(successes, WorkflowStatuses.Submitted)
 
         //save error messages into failures and flip them to Failed
         val failures = results collect {
-          case (wfRecId, Right(failure: ExecutionServiceFailure)) =>
+          case (wfRec, Right(failure: ExecutionServiceFailure)) =>
             //TODO: batchify this saveMessages?
-            dataAccess.workflowQuery.saveMessages(Seq(AttributeString(failure.message)), wfRecId)
-            wfRecId
+            dataAccess.workflowQuery.saveMessages(Seq(AttributeString(failure.message)), wfRec.id) andThen
+            dataAccess.workflowQuery.updateStatus(wfRec, WorkflowStatuses.Failed)
         }
-        dataAccess.workflowQuery.batchUpdateStatus(failures, WorkflowStatuses.Failed)
+
+        DBIO.seq((successes ++ failures):_*)
       } map { _ => LookForWorkflows }
-    } recover {
+    } recoverWith {
       //If any of this fails, set all workflows to failed with whatever message we have.
       case t: Throwable =>
         dataSource.inTransaction { dataAccess =>
-          dataAccess.workflowQuery.batchUpdateStatus(workflowIds, WorkflowStatuses.Failed)
+          dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result flatMap { wfRecs =>
+            dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Failed)
+          } andThen
           DBIO.sequence(workflowIds map { id => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(t.getMessage)), id) })
-        }
-        throw t
+        } map { _ => throw t }
     }
   }
 

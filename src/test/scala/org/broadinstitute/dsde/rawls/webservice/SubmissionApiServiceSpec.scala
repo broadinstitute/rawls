@@ -206,7 +206,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     withWorkspaceContext(testData.workspace) { context =>
       newWorkflows foreach { case (status, count) =>
         for (i <- 1 to count) {
-          val wf = Workflow(s"workflow${i}_of_$count", status, testDate, None, testData.inputResolutions)
+          val wf = Workflow(Option(s"workflow${i}_of_$count"), status, testDate, None, testData.inputResolutions)
           runAndWait(workflowQuery.save(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), wf))
         }
       }
