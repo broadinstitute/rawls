@@ -114,7 +114,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     )
   }
 
-  def getWdl(methodConfig: MethodConfiguration): ReadWriteAction[String] = {
+  def getWdl(methodConfig: MethodConfiguration)(implicit executionContext: ExecutionContext): ReadWriteAction[String] = {
     withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, getUserInfo(credential)) { method =>
       withWdl(method) { wdl =>
         DBIO.successful(wdl)
@@ -192,7 +192,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val successes = results collect {
           case (wfRecId, Left(success: ExecutionServiceStatus)) =>
             //TODO: batchify this update?
-            dataAccess.workflowQuery.findWorkflowById(wfRecId).map(u => u.externalid).update(success.id)
+            dataAccess.workflowQuery.findWorkflowById(wfRecId).map(u => u.externalId).update(Option(success.id))
             wfRecId
         }
         dataAccess.workflowQuery.batchUpdateStatus(successes, WorkflowStatuses.Submitted)
