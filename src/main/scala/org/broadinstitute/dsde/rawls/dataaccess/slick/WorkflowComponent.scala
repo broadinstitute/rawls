@@ -167,7 +167,7 @@ trait WorkflowComponent {
       }
     }
 
-    def updateWorkfowRecord(workflowRecord: WorkflowRecord): WriteAction[Int] = {
+    def updateWorkflowRecord(workflowRecord: WorkflowRecord): WriteAction[Int] = {
       findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion).update(workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()), recordVersion = workflowRecord.recordVersion+1))
     }
 

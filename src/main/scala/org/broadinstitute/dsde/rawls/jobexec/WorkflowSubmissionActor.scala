@@ -6,7 +6,7 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport}
 import _root_.slick.dbio.DBIOAction
 import _root_.slick.dbio.Effect.Read
-import spray.http.OAuth2BearerToken
+import spray.http.{StatusCodes, OAuth2BearerToken}
 import spray.json._
 import spray.httpx.SprayJsonSupport._
 
@@ -36,6 +36,7 @@ object WorkflowSubmissionActor {
   }
 
   sealed trait WorkflowSubmissionMessage
+  case object ScheduleNextWorkflowQuery extends WorkflowSubmissionMessage
   case object LookForWorkflows extends WorkflowSubmissionMessage
   case class SubmitWorkflowBatch(workflowIds: Seq[Long]) extends WorkflowSubmissionMessage
 
@@ -51,11 +52,15 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
 
   import context._
 
-  scheduleNextWorkflowQuery
+  self ! ScheduleNextWorkflowQuery
 
   override def receive = {
+    case ScheduleNextWorkflowQuery =>
+      scheduleNextWorkflowQuery
+
     case LookForWorkflows =>
       getUnlaunchedWorkflowBatch() pipeTo self
+
     case SubmitWorkflowBatch(workflowIds) =>
       submitWorkflowBatch(workflowIds) pipeTo self
 
@@ -122,6 +127,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
+  def getWorkflowRecordBatch(workflowIds: Seq[Long], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
+    dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result map { wfRecs =>
+      val submissionId = wfRecs.head.submissionId
+      if( !wfRecs.forall(_.submissionId == submissionId) ) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Workflow batch has different submissions!"))
+      }
+      wfRecs
+    }
+  }
+
   //submit the batch of workflows with the given ids
   def submitWorkflowBatch(workflowIds: Seq[Long])(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
@@ -129,9 +144,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       for {
       //Load a bunch of things we'll need to reconstruct information:
       //The list of workflows in this submission
-        wfRecs <- dataAccess.workflowQuery.findWorkflowByIds(workflowIds).result
+        wfRecs <- getWorkflowRecordBatch(workflowIds, dataAccess)
         submissionId = wfRecs.head.submissionId
-        _ = assert(wfRecs.forall(_.submissionId == submissionId)) //sanity check they're all in the same submission
+
         unpackedWfOpts <- DBIO.sequence(wfRecs.map(dataAccess.workflowQuery.loadWorkflow)) //reify to real workflows
         _ = assert(unpackedWfOpts.size == wfRecs.size) //there should be the right number of them
         _ = assert(unpackedWfOpts.forall(_.isDefined)) //and they should all have been found
@@ -180,7 +195,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
-      (wdl: String, workflowRecs: Seq[WorkflowRecord], wfInputsBatch: Seq[String], wfOpts: ExecutionServiceWorkflowOptions) <- workflowBatchFuture
+      (wdl, workflowRecs, wfInputsBatch, wfOpts) <- workflowBatchFuture
       workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
       workflowRecs.zip(workflowSubmitResult)
@@ -192,7 +207,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val successes = results collect {
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
             val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status)
-            dataAccess.workflowQuery.updateWorkfowRecord(updatedWfRec)
+            dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
         }
 
         //save error messages into failures and flip them to Failed
@@ -204,7 +219,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         }
 
         DBIO.seq((successes ++ failures):_*)
-      } map { _ => LookForWorkflows }
+      } map { _ => ScheduleNextWorkflowQuery }
     } recoverWith {
       //If any of this fails, set all workflows to failed with whatever message we have.
       case t: Throwable =>
