@@ -331,6 +331,8 @@ object WorkflowStatuses {
 
 
 object SubmissionStatuses {
+  val activeStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting)
+
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
     def isDone = { this == Done }
     override def toString = getClass.getSimpleName.stripSuffix("$")
@@ -339,6 +341,9 @@ object SubmissionStatuses {
 
   def withName(name: String): SubmissionStatus = {
     name match {
+      case "Accepted" => Accepted
+      case "Evaluating" => Evaluating
+      case "Submitting" => Submitting
       case "Submitted" => Submitted
       case "Aborting" => Aborting
       case "Aborted" => Aborted
@@ -347,6 +352,9 @@ object SubmissionStatuses {
     }
   }
 
+  case object Accepted extends SubmissionStatus
+  case object Evaluating extends SubmissionStatus
+  case object Submitting extends SubmissionStatus
   case object Submitted extends SubmissionStatus
   case object Aborting extends SubmissionStatus
   case object Aborted extends SubmissionStatus

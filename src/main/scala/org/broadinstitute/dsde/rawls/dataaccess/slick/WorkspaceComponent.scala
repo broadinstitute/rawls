@@ -266,7 +266,7 @@ trait WorkspaceComponent {
 
       // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
       val runningSubmissionsQuery = (for {
-        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status === SubmissionStatuses.Submitted.toString
+        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status.inSetBind(SubmissionStatuses.activeStatuses.map(_.toString))
       } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
 
       for {

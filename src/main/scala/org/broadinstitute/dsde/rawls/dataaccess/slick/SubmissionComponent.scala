@@ -207,7 +207,7 @@ trait SubmissionComponent {
     }
 
     def findActiveSubmissions: SubmissionQueryType = {
-      filter(rec => rec.status inSetBind(Seq(SubmissionStatuses.Aborting.toString, SubmissionStatuses.Submitted.toString)))
+      filter(rec => rec.status inSetBind(SubmissionStatuses.activeStatuses.map(_.toString)))
     }
 
     /*
