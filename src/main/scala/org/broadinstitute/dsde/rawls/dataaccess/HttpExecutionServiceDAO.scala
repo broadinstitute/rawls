@@ -28,6 +28,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   }
 
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
+    implicit val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/workflows/v1/batch"
     import system.dispatcher
 
