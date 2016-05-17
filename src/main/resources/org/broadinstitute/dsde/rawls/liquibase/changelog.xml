@@ -12,4 +12,5 @@
     <include file="changesets/20160510_drop_old_id_columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160512_status_change_log.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160513_workflow_record_version.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160516_external_workflow_id.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

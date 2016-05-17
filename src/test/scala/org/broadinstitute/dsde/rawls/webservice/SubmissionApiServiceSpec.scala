@@ -102,10 +102,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
-    assertResult(2) {
+    assertResult(3) {
       submission.workflows.size
     }
-    assertResult(1) {
+    assertResult(0) {
       submission.notstarted.size
     }
   }

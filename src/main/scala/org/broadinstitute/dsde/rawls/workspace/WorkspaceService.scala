@@ -230,7 +230,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
         //ExecutionContext run the futures whenever
         dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
-          case wf if !wf.status.isDone => executionServiceDAO.abort(wf.workflowId, userInfo).map {
+          case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceDAO.abort(wf.workflowId.get, userInfo).map {
             case Failure(regrets) =>
               logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
               Failure(regrets)
@@ -964,72 +964,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
         val submissionId: String = UUID.randomUUID().toString
-        val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
 
-        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(
-          workflowOptions => Future.sequence(successes.grouped(execServiceBatchSize).toSeq map { entityInputsBatch =>
-          Try {
-            val workflowInputsBatch = entityInputsBatch.map { entityInputs =>
-              val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-              MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-            }
-            val execStatusFuture = executionServiceDAO.submitWorkflows(wdl, workflowInputsBatch, workflowOptions, userInfo)
+        val workflows = successes map { entityInputs =>
+          Workflow(workflowId = None,
+            status = WorkflowStatuses.Submitted,
+            statusLastChangedDate = DateTime.now,
+            workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)),
+            inputResolutions = entityInputs.inputResolutions)
+        }
+        val workflowFailures = failures.map { entityInputs =>
+          val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
+          WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
+        }
 
+        val submission = Submission(submissionId = submissionId,
+          submissionDate = DateTime.now(),
+          submitter = RawlsUser(userInfo),
+          methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
+          methodConfigurationName = submissionRequest.methodConfigurationName,
+          submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
+          workflows = workflows,
+          notstarted = workflowFailures,
+          status = SubmissionStatuses.Accepted
+        )
 
-            val execStatusesWithEntity = entityInputsBatch
-            execStatusesWithEntity.map {
-              case (entityInputs) =>
-                Workflow(workflowId = "UNSUBMITTED",
-                  status = WorkflowStatuses.Submitted,
-                  statusLastChangedDate = DateTime.now,
-                  workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)),
-                  inputResolutions = entityInputs.inputResolutions)
-
-            }
-
-          } match {
-            case Success(result) => result
-            case Failure(t) => {
-              val error = "Unable to process workflow when creating submission"
-              logger.error(error, t)
-              Future.successful(entityInputsBatch.map { entityInputs =>
-                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
-              })
-            }
-          }
-        }))
-
-        DBIO.from(submittedWorkflowsFuture) flatMap { batchedSubmittedWorkflows =>
-          val submittedWorkflows = batchedSubmittedWorkflows.flatten
-          val succeededWorkflowSubmissions = submittedWorkflows.collect {
-            case w: Workflow => w
-          }
-          val failedWorkflowSubmissions = submittedWorkflows.collect {
-            case w: WorkflowFailure => w
-          }
-          val failedWorkflows = failures.map { entityInputs =>
-            val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
-            WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-          } ++ failedWorkflowSubmissions
-
-          val submission = Submission(submissionId = submissionId,
-            submissionDate = DateTime.now(),
-            submitter = RawlsUser(userInfo),
-            methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
-            methodConfigurationName = submissionRequest.methodConfigurationName,
-            submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
-            workflows = succeededWorkflowSubmissions,
-            notstarted = failedWorkflows,
-            status = if (succeededWorkflowSubmissions.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
-          )
-
-          dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-            val workflowReports = succeededWorkflowSubmissions.map { workflow =>
-              WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
-            }
-
-            RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
-          }
+        dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes, failures))
         }
     }
 
@@ -1076,8 +1036,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) flatMap { _ =>
-        val aborts = DBIO.from(Future.traverse(submission.workflows)(wf =>
-          Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
+        val aborts = DBIO.from(Future.traverse(submission.workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
+          Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, userInfo))
         ))
   
         aborts.map { abortResults =>

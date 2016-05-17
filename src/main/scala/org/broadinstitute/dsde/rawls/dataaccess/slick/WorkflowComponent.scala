@@ -15,7 +15,7 @@ import slick.dbio.Effect.{Read, Write}
  */
 
 case class WorkflowRecord(id: Long,
-                          externalId: String,
+                          externalId: Option[String],
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
@@ -45,14 +45,14 @@ trait WorkflowComponent {
 
   class WorkflowTable(tag: Tag) extends Table[WorkflowRecord](tag, "WORKFLOW") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def externalid = column[String]("EXTERNAL_ID")
+    def externalId = column[Option[String]]("EXTERNAL_ID")
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
     def version = column[Long]("record_version")
 
-    def * = (id, externalid, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
@@ -318,7 +318,7 @@ trait WorkflowComponent {
     }
 
     def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {
-      filter(wf => wf.externalid === externalId && wf.submissionId === submissionId)
+      filter(wf => wf.externalId === externalId && wf.submissionId === submissionId)
     }
 
     def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType = {
@@ -333,7 +333,7 @@ trait WorkflowComponent {
     }
 
     def findUnsubmittedWorkflows(): WorkflowQueryType = {
-      filter( _.status === WorkflowStatuses.Created.toString ).sortBy(_.statusLastChangedDate)
+      filter( _.status === WorkflowStatuses.Queued.toString ).sortBy(_.statusLastChangedDate)
     }
 
     def findWorkflowMessagesById(workflowId: Long) = {

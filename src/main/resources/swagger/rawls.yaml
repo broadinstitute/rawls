@@ -3151,33 +3151,6 @@ definitions:
         $ref: ''
         description: Map[String,String]
 
-  WorkflowReport:
-    description: information on each workflow submitted
-    required:
-      - workflowId
-      - status
-      - statusLastChangedData
-      - entityName
-    properties:
-      workflowId:
-        type: string
-        description: uuid for workflow
-      status:
-        type: string
-        description: workflow status
-      statusLastChangedDate:
-        type: string
-        format: date-time
-        description: data and time of last status change
-      entityName:
-        type: string
-        description: name of entity
-      inputResolutions:
-        type: array
-        description: resolved values of the input expressions for the method
-        items:
-          $ref: '#/definitions/SubmissionValidationEntityInputs'
-
   SubmissionReport:
     description: information on a submission
     required:
@@ -3213,7 +3186,7 @@ definitions:
         type: array
         description: workflows initiated by this submission
         items:
-          $ref: '#/definitions/WorkflowReport'
+          $ref: '#/definitions/SubmissionValidationEntityInputs'
       notstarted:
         type: array
         description: workflows that could not be used to start workflows

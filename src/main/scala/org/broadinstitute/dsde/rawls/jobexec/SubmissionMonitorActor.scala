@@ -117,16 +117,19 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
-    executionServiceDAO.status(workflowRec.externalId, getUserInfo).map(newStatus => {
-      if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
-      else None
-    })
+    workflowRec.externalId match {
+      case Some(externalId) =>     executionServiceDAO.status(externalId, getUserInfo).map(newStatus => {
+        if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
+        else None
+      })
+      case None => Future.successful(None)
+    }
   }
 
   private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceDAO.outputs(workflowRec.externalId, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceDAO.outputs(workflowRec.externalId.get, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }
