@@ -1094,8 +1094,7 @@ paths:
         '200':
           description: Successful Request
           schema:
-            type: object
-            description: Map[String,Int]
+            $ref: '#/definitions/WorkflowQueueStatusResponse'
         '500':
           description: Rawls Internal Error
           schema:
@@ -3231,6 +3230,19 @@ definitions:
       workflowId:
         type: string
         description: The id of this workflow
+
+  WorkflowQueueStatusResponse:
+    description: Information about the status of workflows and the workflow queue
+    required:
+      - estimatedQueueTimeMS
+      - workflowCountsByStatus
+    properties:
+      estimatedQueueTimeMS:
+        type: integer
+        description: estimated milliseconds until the current queue is submitted
+      workflowCountsByStatus:
+        type: object
+        description: Map[String,Int]
 
   WorkspaceName:
     description: ''

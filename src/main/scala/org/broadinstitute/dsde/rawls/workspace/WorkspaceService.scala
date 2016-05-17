@@ -34,7 +34,7 @@ import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, ExecutionServiceValidationFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, ExecutionServiceValidationFormat}
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import scala.concurrent.Await
@@ -1161,7 +1161,20 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
 
   def workflowQueueStatus() = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workflowQuery.countWorkflowsByQueueStatus.map(RequestComplete(StatusCodes.OK, _))
+      dataAccess.workflowQuery.countWorkflowsByQueueStatus.flatMap { statusMap =>
+
+        // determine the current size of the workflow queue
+        val numQueued = statusMap.getOrElse(WorkflowStatuses.Queued.toString, 0)
+
+        val estimateAction = numQueued match {
+          case x if x > 0 => dataAccess.workflowAuditStatusQuery.queueTimeMostRecentSubmittedWorkflow
+          case _ => DBIO.successful(0L)
+        }
+
+        estimateAction map { estimate =>
+          RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(estimate, statusMap))
+        }
+      }
     }
   }
 

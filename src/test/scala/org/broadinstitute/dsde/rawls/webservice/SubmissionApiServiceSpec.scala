@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -171,6 +172,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when checking the queue status" in withTestDataApiServices { services =>
 
+    // insert audit records
+    val expectedEstimateTime = 21000
+    val submittedTime = System.currentTimeMillis()
+    val queuedTime = submittedTime - expectedEstimateTime
+    runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 321, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime)) ) )
+    runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 321, WorkflowStatuses.Submitted.toString, new java.sql.Timestamp(submittedTime)) ) )
+
     val existingSubmittedWorkflowCount = 12
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
@@ -178,8 +186,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
+        val resp = responseAs[WorkflowQueueStatusResponse]
         assertResult(existingWorkflowCounts) {
-          responseAs[Map[String, Int]]
+          resp.workflowCountsByStatus
+        }
+        // with nothing in queue, estimated time should be zero
+        assertResult(0) {
+          resp.estimatedQueueTimeMS
         }
       }
 
@@ -216,8 +229,13 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
+        val resp = responseAs[WorkflowQueueStatusResponse]
         assertResult(newWorkflowCounts) {
-          responseAs[Map[String, Int]]
+          resp.workflowCountsByStatus
+        }
+        // with items in the queue, estimated time should be calculated from the audit table
+        assertResult(expectedEstimateTime) {
+          resp.estimatedQueueTimeMS
         }
       }
   }

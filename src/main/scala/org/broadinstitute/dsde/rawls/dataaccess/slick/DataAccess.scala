@@ -46,5 +46,6 @@ trait DataAccess
       workflowQuery.schema ++
       workflowErrorQuery.schema ++
       workflowFailureQuery.schema ++
-      workflowMessageQuery.schema
+      workflowMessageQuery.schema ++
+      workflowAuditStatusQuery.schema
 }
