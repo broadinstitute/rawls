@@ -53,4 +53,6 @@ object BootMonitors extends LazyLogging {
       case t: Throwable => logger.error("Error starting submission monitor", t)
     }
   }
+
+  //FIXME: Handle the power going out!
 }

@@ -8,6 +8,7 @@ import spray.httpx.SprayJsonSupport._
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 
 /**
  * Created by dvoet on 6/4/15.
@@ -16,6 +17,7 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
   implicit val executionContext: ExecutionContext
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
+  val submissionTimeout: FiniteDuration
 
   val submissionRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "submissions" ) { (workspaceNamespace, workspaceName) =>
@@ -35,7 +37,8 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
         entity(as[SubmissionRequest]) { submission =>
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission))
+            WorkspaceService.CreateSubmission(WorkspaceName(workspaceNamespace, workspaceName), submission),
+            submissionTimeout)
         }
       }
     } ~
@@ -71,6 +74,13 @@ trait SubmissionApiService extends HttpService with PerRequestCreator with UserI
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.GetWorkflowOutputs(WorkspaceName(workspaceNamespace, workspaceName), submissionId, workflowId))
         }
+    } ~
+    path("submissions" / "queueStatus") {
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.WorkflowQueueStatus)
+      }
     }
   }
 }

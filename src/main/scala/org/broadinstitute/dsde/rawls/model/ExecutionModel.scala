@@ -63,7 +63,7 @@ case class ExecutionServiceWorkflowOptions(
 
 // Status of a successfully started workflow
 case class Workflow(
-  workflowId: String,
+  workflowId: Option[String],
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
   workflowEntity: Option[AttributeEntityReference],
@@ -161,14 +161,6 @@ case class SubmissionValidationReport(
   invalidEntities: Seq[SubmissionValidationEntityInputs] // entities for which parsing at least 1 of the inputs failed
 )
 
-case class WorkflowReport(
-  workflowId: String,
-  status: WorkflowStatus,
-  statusLastChangedDate: DateTime,
-  entityName: String,
-  inputResolutions: Seq[SubmissionValidationValue] // size of Seq is nInputs
-)
-
 // the results of creating a submission
 case class SubmissionReport(
   request: SubmissionRequest,
@@ -177,7 +169,7 @@ case class SubmissionReport(
   submitter: String,
   status: SubmissionStatus,
   header: SubmissionValidationHeader,
-  workflows: Seq[WorkflowReport],
+  workflows: Seq[SubmissionValidationEntityInputs],
   notstarted: Seq[SubmissionValidationEntityInputs]
 )
 
@@ -270,8 +262,6 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionFormat = jsonFormat9(Submission)
 
-  implicit val WorkflowReportFormat = jsonFormat5(WorkflowReport)
-
   implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
 
   implicit val SubmissionStatusResponseFormat = jsonFormat9(SubmissionStatusResponse)
@@ -291,8 +281,9 @@ trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>
 }
 
 object WorkflowStatuses {
-  val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
+  val queuedStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching)
   val runningStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running, Aborting)
+  val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
 
   sealed trait WorkflowStatus extends RawlsEnumeration[WorkflowStatus] {
     def isDone = {
@@ -304,6 +295,8 @@ object WorkflowStatuses {
 
   def withName(name: String): WorkflowStatus = {
     name match {
+      case "Queued" => Queued
+      case "Launching" => Launching
       case "Submitted" => Submitted
       case "Running" => Running
       case "Failed" => Failed
@@ -315,6 +308,8 @@ object WorkflowStatuses {
     }
   }
 
+  case object Queued extends WorkflowStatus
+  case object Launching extends WorkflowStatus
   case object Submitted extends WorkflowStatus
   case object Running extends WorkflowStatus
   case object Failed extends WorkflowStatus
@@ -334,6 +329,7 @@ object SubmissionStatuses {
 
   def withName(name: String): SubmissionStatus = {
     name match {
+      case "Accepted" => Accepted
       case "Submitted" => Submitted
       case "Aborting" => Aborting
       case "Aborted" => Aborted
@@ -342,6 +338,7 @@ object SubmissionStatuses {
     }
   }
 
+  case object Accepted extends SubmissionStatus
   case object Submitted extends SubmissionStatus
   case object Aborting extends SubmissionStatus
   case object Aborted extends SubmissionStatus

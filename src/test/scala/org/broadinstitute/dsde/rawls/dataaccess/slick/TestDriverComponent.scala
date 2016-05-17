@@ -65,7 +65,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                            , workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]
                            , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]]) = {
     val workflows = (workflowEntities collect {
-      case ref: Entity => Workflow(UUID.randomUUID.toString, WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
+      case ref: Entity => Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Submitted, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
     })
 
     val failedWorkflows = (failedWorkflowEntities collect {
@@ -314,10 +314,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
 
     val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
-      Seq(Workflow("workflowA",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
-        Workflow("workflowB",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
-        Workflow("workflowC",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
-        Workflow("workflowD",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
+        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
+        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save() = {
       DBIO.seq(

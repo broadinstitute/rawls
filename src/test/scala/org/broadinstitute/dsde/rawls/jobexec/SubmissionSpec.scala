@@ -71,9 +71,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val refreshToken = UUID.randomUUID.toString
 
-    val existingWorkflowId = "69d1d92f-3895-4a7b-880a-82535e9a096e"
-    val nonExistingWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c9999"
-    val alreadyTerminatedWorkflowId = "45def17d-40c2-44cc-89bf-9e77bc2c8778"
+    val existingWorkflowId = Option("69d1d92f-3895-4a7b-880a-82535e9a096e")
+    val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
+    val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
     
     
     
@@ -82,7 +82,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
-      Seq(Workflow("malformed_workflow",WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
+      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",Option(AttributeEntityReference(sample1.entityType, sample1.name)),
@@ -105,7 +105,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), testData.inputResolutions)),
       Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
-    val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId,
+    val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
         "wf.y" -> TaskOutput(
           Some(Seq(
@@ -322,7 +322,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assertResult(samples.map(r => r.entityName -> r.entityName).toMap) {
-      newSubmissionReport.workflows.map(r => r.entityName -> r.workflowId).toMap
+      runAndWait(submissionQuery.loadSubmission(UUID.fromString(newSubmissionReport.submissionId))).get.workflows.map { wf =>
+        wf.workflowEntity.get.entityName -> wf.workflowId.get
+      }
     }
   } }
 
@@ -605,7 +607,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowOutputs(
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, WorkflowOutputs)]].response
 
     assertResult(StatusCodes.OK) {status}
@@ -616,7 +618,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowOutputs(
       subTestData.wsName,
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
       Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
     }
@@ -628,7 +630,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val rqComplete = workspaceService.workflowMetadata(
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
-      subTestData.existingWorkflowId)
+      subTestData.existingWorkflowId.get)
     val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, ExecutionMetadata)]].response
 
     assertResult(StatusCodes.OK) {

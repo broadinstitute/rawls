@@ -84,9 +84,10 @@ object Boot extends App {
     }
 
     val executionServiceConfig = conf.getConfig("executionservice")
+    val submissionTimeout = Duration.fromNanos(executionServiceConfig.getDuration("workflowSubmissionTimeout").toNanos)
     val executionServiceDAO = new HttpExecutionServiceDAO(
       executionServiceConfig.getString("server"),
-      Duration.fromNanos(executionServiceConfig.getDuration("workflowSubmissionTimeout").toNanos)
+      submissionTimeout
     )
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -111,7 +112,8 @@ object Boot extends App {
         userServiceConstructor),
       userServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
-      clientSecrets.getDetails.getClientId
+      clientSecrets.getDetails.getClientId,
+      submissionTimeout
     ),
       "rawls-service")
 

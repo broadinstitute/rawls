@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.{FutureSupport,AdminSupport}
+import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport, AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
@@ -90,6 +90,7 @@ object WorkspaceService {
   case class AbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class GetWorkflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
   case class GetWorkflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) extends WorkspaceServiceMessage
+  case object WorkflowQueueStatus extends WorkspaceServiceMessage
 
   case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceNamespace: String, workspaceName: String, submissionId: String) extends WorkspaceServiceMessage
@@ -106,7 +107,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -158,6 +159,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     case AbortSubmission(workspaceName, submissionId) => pipe(abortSubmission(workspaceName, submissionId)) to sender
     case GetWorkflowOutputs(workspaceName, submissionId, workflowId) => pipe(workflowOutputs(workspaceName, submissionId, workflowId)) to sender
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
+    case WorkflowQueueStatus => pipe(workflowQueueStatus()) to sender
 
     case AdminListAllActiveSubmissions => asAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceNamespace,workspaceName,submissionId) => pipe(adminAbortSubmission(WorkspaceName(workspaceNamespace,workspaceName),submissionId)) to sender
@@ -228,7 +230,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
         //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
         //ExecutionContext run the futures whenever
         dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
-          case wf if !wf.status.isDone => executionServiceDAO.abort(wf.workflowId, userInfo).map {
+          case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceDAO.abort(wf.workflowId.get, userInfo).map {
             case Failure(regrets) =>
               logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
               Failure(regrets)
@@ -962,78 +964,32 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
       (dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext, wdl: String, header: SubmissionValidationHeader, successes: Seq[SubmissionValidationEntityInputs], failures: Seq[SubmissionValidationEntityInputs]) =>
 
         val submissionId: String = UUID.randomUUID().toString
-        val workflowOptionsFuture = buildWorkflowOptions(workspaceContext, submissionId)
 
-        val submittedWorkflowsFuture = workflowOptionsFuture.flatMap(workflowOptions => Future.sequence(successes.grouped(execServiceBatchSize).toSeq map { entityInputsBatch =>
-          Try {
-            val workflowInputsBatch = entityInputsBatch.map { entityInputs =>
-              val methodProps = for ((methodInput, entityValue) <- header.inputExpressions.zip(entityInputs.inputResolutions) if entityValue.value.isDefined) yield (methodInput.wdlName -> entityValue.value.get)
-              MethodConfigResolver.propertiesToWdlInputs(methodProps.toMap)
-            }
-            val execStatusFuture = executionServiceDAO.submitWorkflows(wdl, workflowInputsBatch, workflowOptions, userInfo) recover {
-              case t: Exception => {
-                val error = "Unable to submit workflows when creating submission"
-                logger.error(error, t)
-                entityInputsBatch.map { _ =>
-                  Right(ExecutionServiceFailure("error", s"error communcating with exec service: ${t.getMessage}", None))
-                }
-              }
-            }
+        val workflows = successes map { entityInputs =>
+          Workflow(workflowId = None,
+            status = WorkflowStatuses.Submitted,
+            statusLastChangedDate = DateTime.now,
+            workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)),
+            inputResolutions = entityInputs.inputResolutions)
+        }
+        val workflowFailures = failures.map { entityInputs =>
+          val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
+          WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
+        }
 
-            execStatusFuture map { execStatuses =>
-              val execStatusesWithEntity = entityInputsBatch.zip(execStatuses)
-              execStatusesWithEntity.map {
-                case (entityInputs, Left(execStatus)) =>
-                  Workflow(workflowId = execStatus.id, status = WorkflowStatuses.Submitted, statusLastChangedDate = DateTime.now, workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)), inputResolutions = entityInputs.inputResolutions)
-                case (entityInputs, Right(cromwellMessage)) =>
-                  val error = s"Unable to submit workflow when creating submission, cromwell message: $cromwellMessage"
-                  logger.error(error)
-                  WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error)))
-              }
-            }
-          } match {
-            case Success(result) => result
-            case Failure(t) => {
-              val error = "Unable to process workflow when creating submission"
-              logger.error(error, t)
-              Future.successful(entityInputsBatch.map { entityInputs =>
-                WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, Seq(AttributeString(error), AttributeString(t.getMessage)))
-              })
-            }
-          }
-        }))
+        val submission = Submission(submissionId = submissionId,
+          submissionDate = DateTime.now(),
+          submitter = RawlsUser(userInfo),
+          methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
+          methodConfigurationName = submissionRequest.methodConfigurationName,
+          submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
+          workflows = workflows,
+          notstarted = workflowFailures,
+          status = SubmissionStatuses.Accepted
+        )
 
-        DBIO.from(submittedWorkflowsFuture) flatMap { batchedSubmittedWorkflows =>
-          val submittedWorkflows = batchedSubmittedWorkflows.flatten
-          val succeededWorkflowSubmissions = submittedWorkflows.collect {
-            case w: Workflow => w
-          }
-          val failedWorkflowSubmissions = submittedWorkflows.collect {
-            case w: WorkflowFailure => w
-          }
-          val failedWorkflows = failures.map { entityInputs =>
-            val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
-            WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-          } ++ failedWorkflowSubmissions
-
-          val submission = Submission(submissionId = submissionId,
-            submissionDate = DateTime.now(),
-            submitter = RawlsUser(userInfo),
-            methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
-            methodConfigurationName = submissionRequest.methodConfigurationName,
-            submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
-            workflows = succeededWorkflowSubmissions,
-            notstarted = failedWorkflows,
-            status = if (succeededWorkflowSubmissions.isEmpty) SubmissionStatuses.Done else SubmissionStatuses.Submitted
-          )
-
-          dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-            val workflowReports = succeededWorkflowSubmissions.map { workflow =>
-              WorkflowReport(workflow.workflowId, workflow.status, workflow.statusLastChangedDate, workflow.workflowEntity.map(_.entityName).getOrElse("*deleted*"), workflow.inputResolutions)
-            }
-
-            RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, workflowReports, failures))
-          }
+        dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes, failures))
         }
     }
 
@@ -1080,8 +1036,8 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
       dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) flatMap { _ =>
-        val aborts = DBIO.from(Future.traverse(submission.workflows)(wf =>
-          Future.successful(wf.workflowId).zip(executionServiceDAO.abort(wf.workflowId, userInfo))
+        val aborts = DBIO.from(Future.traverse(submission.workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
+          Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, userInfo))
         ))
   
         aborts.map { abortResults =>
@@ -1155,6 +1111,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
           DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
+    }
+  }
+
+  def workflowQueueStatus() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workflowQuery.countWorkflowsByQueueStatus.map(RequestComplete(StatusCodes.OK, _))
     }
   }
 
@@ -1464,27 +1426,7 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withMethodConfig(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
-      case Some(methodConfiguration) => op(methodConfiguration)
-    }
-  }
 
-  private def withMethod(methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
-      case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
-    }}
-  }
-
-  private def withWdl(method: AgoraEntity)(op: (String) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    method.payload match {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-      case Some(wdl) => op(wdl)
-    }
-  }
 
   private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     Try {
@@ -1504,37 +1446,6 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     dataAccess.workflowQuery.getByExternalId(workflowId, submissionId) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
       case Some(workflow) => op(workflow)
-    }
-  }
-
-  private def buildWorkflowOptions(workspaceContext: SlickWorkspaceContext, submissionId: String): Future[Option[String]] = {
-    val bucketName = workspaceContext.workspace.bucketName
-    val billingProjectName = RawlsBillingProjectName(workspaceContext.workspace.namespace)
-
-    val refreshTokenFuture = gcsDAO.getToken(RawlsUser(userInfo)) map { optToken =>
-      optToken getOrElse {
-        throw new RawlsException(s"Refresh token missing for user ${userInfo.userEmail}")
-      }
-    }
-    
-    val billingProjectFuture = dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map(_.getOrElse(
-        throw new RawlsException(s"Billing Project with name ${billingProjectName.value} not found")))
-    }
-    
-    for {
-      refreshToken <- refreshTokenFuture
-      billingProject <- billingProjectFuture
-    } yield {
-      import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
-
-      Option(ExecutionServiceWorkflowOptions(
-        s"gs://${bucketName}/${submissionId}",
-        workspaceContext.workspace.namespace,
-        userInfo.userEmail,
-        refreshToken,
-        billingProject.cromwellAuthBucketUrl
-      ).toJson.toString)
     }
   }
 
@@ -1581,28 +1492,12 @@ class WorkspaceService(protected val userInfo: UserInfo, dataSource: SlickDataSo
     }
   }
 
-  private def withMethodInputs(methodConfig: MethodConfiguration)(op: (String, Seq[MethodInput]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    // TODO add Method to model instead of exposing AgoraEntity?
-    val methodRepoMethod = methodConfig.methodRepoMethod
-    DBIO.from(toFutureTry(methodRepoDAO.getMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo))) flatMap { _ match {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodRepoMethod.methodNamespace}/${methodRepoMethod.methodName}/${methodRepoMethod.methodVersion} from method repo.")))
-      case Success(Some(agoraEntity)) => agoraEntity.payload match {
-        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, "Can't get method's WDL from Method Repo: payload empty.")))
-        case Some(wdl) => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-          case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
-          case Success(methodInputs) => op(wdl,methodInputs)
-        }
-      }
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.",methodRepoDAO.toErrorReport(throwable))))
-    }}
-  }
-
   private def withSubmissionParameters(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest)
    ( op: (DataAccess, SlickWorkspaceContext, String, SubmissionValidationHeader, Seq[SubmissionValidationEntityInputs], Seq[SubmissionValidationEntityInputs]) => ReadWriteAction[PerRequestMessage]): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName, dataAccess) { methodConfig =>
-          withMethodInputs(methodConfig) { (wdl,methodInputs) =>
+          withMethodInputs(methodConfig, userInfo) { (wdl,methodInputs) =>
             withSubmissionEntityRecs(submissionRequest, workspaceContext, methodConfig.rootEntityType, dataAccess) { jobEntityRecs =>
 
               //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
