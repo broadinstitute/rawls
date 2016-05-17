@@ -137,50 +137,46 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
+  def reifyWorkflowRecords(workflowRecs: Seq[WorkflowRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
+    DBIO.sequence(workflowRecs map { wfRec =>
+      dataAccess.workflowQuery.loadWorkflow(wfRec) map( _.getOrElse(
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Failed to load workflow id ${wfRec.id}"))
+      ))
+    })
+  }
+
   //submit the batch of workflows with the given ids
   def submitWorkflowBatch(workflowIds: Seq[Long])(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
     val workflowBatchFuture = dataSource.inTransaction { dataAccess =>
       for {
-      //Load a bunch of things we'll need to reconstruct information:
-      //The list of workflows in this submission
+        //Load a bunch of things we'll need to reconstruct information:
+        //The list of workflows in this submission
         wfRecs <- getWorkflowRecordBatch(workflowIds, dataAccess)
-        submissionId = wfRecs.head.submissionId
-
-        unpackedWfOpts <- DBIO.sequence(wfRecs.map(dataAccess.workflowQuery.loadWorkflow)) //reify to real workflows
-        _ = assert(unpackedWfOpts.size == wfRecs.size) //there should be the right number of them
-        _ = assert(unpackedWfOpts.forall(_.isDefined)) //and they should all have been found
-        unpackedWfs = for {wfOpt <- unpackedWfOpts; wf <- wfOpt} yield {
-          wf
-        }
+        workflowBatch <- reifyWorkflowRecords(wfRecs, dataAccess)
 
         //The submission itself
-        subRecs <- dataAccess.submissionQuery.findById(submissionId).result
-        submissionRec = subRecs.head
+        submissionId = wfRecs.head.submissionId
+        submissionRec <- dataAccess.submissionQuery.findById(submissionId).result.map(_.head)
 
         //The workspace
-        wsRecs <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result
-        workspaceRec = wsRecs.head
+        workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
 
         //The workspace's billing project
-        bpOpt <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace))
-        billingProject = bpOpt.get
+        billingProject <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRec.namespace)).map(_.get)
 
         //The person who submitted the submission, and their token
-        submitterOpt <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId)))
-        submitter = submitterOpt.get
-        tokenOpt <- DBIO.from(googleServicesDAO.getToken(submitter))
-        token = tokenOpt.get
+        submitter <- dataAccess.rawlsUserQuery.load(RawlsUserRef(RawlsUserSubjectId(submissionRec.submitterId))).map(_.get)
+        token <- DBIO.from(googleServicesDAO.getToken(submitter)).map(_.get)
 
         //The wdl
-        mcOpt <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
-        methodConfig = mcOpt.get
+        methodConfig <- dataAccess.methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId).map(_.get)
         wdl <- getWdl(methodConfig)
       } yield {
 
         val wfOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, token, billingProject)
 
-        val wfInputsBatch = unpackedWfs map { wf =>
+        val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {
             case svv: SubmissionValidationValue if svv.value.isDefined =>
               svv.inputName -> svv.value.get
