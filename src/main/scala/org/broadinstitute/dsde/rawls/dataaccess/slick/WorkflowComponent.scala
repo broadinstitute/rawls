@@ -282,6 +282,25 @@ trait WorkflowComponent {
       } yield(unmarshalInactiveWorkflow(entity.get, inputResolutions, failureMessages))
     }
 
+    /**
+     * Lists the submitter ids that have more workflows in statuses than count
+     * @param count
+     * @param statuses
+     * @return seq of tuples, first element being the submitter id, second the workflow count
+     */
+    def listSubmittersWithMoreWorkflowsThan(count: Int, statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Seq[(String, Int)]] = {
+      val query = for {
+        workflows <- this if workflows.status inSetBind(statuses.map(_.toString))
+        submission <- submissionQuery if workflows.submissionId === submission.id
+      } yield (submission.submitterId, workflows)
+
+      query.
+        groupBy { case (submitter, workflows) => submitter }.
+        map { case (submitter, workflows) => submitter -> workflows.length }.
+        filter { case (submitter, workflowCount) => workflowCount > count }.
+        result
+    }
+
     /*
       the find methods
      */

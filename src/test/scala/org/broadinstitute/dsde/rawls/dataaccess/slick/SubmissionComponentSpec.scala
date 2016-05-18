@@ -158,4 +158,19 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  WorkflowStatuses.runningStatuses.foreach { status =>
+    it should s"count $status workflows by submitter" in withDefaultTestDatabase {
+      val workflowRecs = runAndWait(workflowQuery.result)
+      runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
+      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(0, WorkflowStatuses.runningStatuses))
+      }
+      assertResult(Seq((testData.userOwner.userSubjectId.value, workflowRecs.size))) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(workflowRecs.size-1, WorkflowStatuses.runningStatuses))
+      }
+      assertResult(Seq.empty) {
+        runAndWait(workflowQuery.listSubmittersWithMoreWorkflowsThan(workflowRecs.size, WorkflowStatuses.runningStatuses))
+      }
+    }
+  }
 }
