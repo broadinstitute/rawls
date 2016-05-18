@@ -290,13 +290,13 @@ trait WorkflowComponent {
      */
     def listSubmittersWithMoreWorkflowsThan(count: Int, statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Seq[(String, Int)]] = {
       val query = for {
-        workflow <- this if workflow.status inSetBind(statuses.map(_.toString))
-        submission <- submissionQuery if workflow.submissionId === submission.id
-      } yield (submission.submitterId, workflow)
+        workflows <- this if workflows.status inSetBind(statuses.map(_.toString))
+        submission <- submissionQuery if workflows.submissionId === submission.id
+      } yield (submission.submitterId, workflows)
 
       query.
-        groupBy { case (submitter, workflow) => submitter }.
-        map { case (submitter, workflow) => submitter -> workflow.length }.
+        groupBy { case (submitter, workflows) => submitter }.
+        map { case (submitter, workflows) => submitter -> workflows.length }.
         filter { case (submitter, workflowCount) => workflowCount > count }.
         result
     }
