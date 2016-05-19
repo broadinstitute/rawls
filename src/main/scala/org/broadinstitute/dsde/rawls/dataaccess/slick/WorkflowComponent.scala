@@ -30,6 +30,8 @@ case class WorkflowFailureRecord(id: Long,
 
 case class WorkflowErrorRecord(workflowFailureId: Long, errorText: String)
 
+case class WorkflowAuditStatusRecord(id: Long, workflowId: Long, status: String, timestamp: Timestamp)
+
 case class WorkflowId(id: Long)
 case class WorkflowFailureId(id: Long)
 
@@ -84,6 +86,17 @@ trait WorkflowComponent {
     def * = (workflowFailureId, errorText) <> (WorkflowErrorRecord.tupled, WorkflowErrorRecord.unapply)
 
     def workflowFailure = foreignKey("FK_WF_ERR_FAILURE", workflowFailureId, workflowFailureQuery)(_.id)
+  }
+
+  // this table records the timestamp and status of every workflow, each time a workflow changes status.
+  // it is populated via triggers on the WORKFLOW table. We never write to it from Scala; we only read.
+  class WorkflowAuditStatusTable(tag: Tag) extends Table[WorkflowAuditStatusRecord](tag, "AUDIT_WORKFLOW_STATUS") {
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
+    def workflowId = column[Long]("workflow_id")
+    def status = column[String]("status")
+    def timestamp = column[Timestamp]("timestamp", O.Default(defaultTimeStamp))
+
+    def * = (id, workflowId, status, timestamp) <> (WorkflowAuditStatusRecord.tupled, WorkflowAuditStatusRecord.unapply)
   }
 
   protected val workflowMessageQuery = TableQuery[WorkflowMessageTable]
@@ -428,5 +441,29 @@ trait WorkflowComponent {
 
 
   }
+
+  object workflowAuditStatusQuery extends TableQuery(new WorkflowAuditStatusTable(_)) {
+
+    def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] = {
+      // for the most-recently submitted workflow, find the time it was submitted and the earliest time we have recorded.
+      // we could query specifically for the time this workflow was Queued, but we'll just use the earliest time
+      // for resiliency, in case the workflow somehow skipped Queued status.
+      val timingQuery = for {
+        lastSubmitted <- workflowAuditStatusQuery.filter(_.status === WorkflowStatuses.Submitted.toString).sortBy(_.timestamp.desc).take(1)
+        earliestSeen <- workflowAuditStatusQuery.sortBy(_.timestamp.asc).take(1) if earliestSeen.workflowId === lastSubmitted.workflowId
+      } yield (lastSubmitted.timestamp, earliestSeen.timestamp)
+
+      timingQuery.result.headOption map {
+        case Some((s:Timestamp, e:Timestamp)) => s.getTime - e.getTime
+        case _ => 0L
+      }
+    }
+
+    // this method used only inside unit tests. At runtime, the table is populated only via triggers.
+    def save(wasr: WorkflowAuditStatusRecord): WriteAction[WorkflowAuditStatusRecord] = {
+      (workflowAuditStatusQuery returning workflowAuditStatusQuery.map(_.id)) += wasr
+    } map { newid => wasr.copy(id = newid)}
+  }
+
 
 }
