@@ -58,17 +58,22 @@ trait DriverComponent {
     items.zipWithIndex.groupBy(_._2 % batchSize).values.map(_.map(_._1))
   }
 
-  def concatSqlActions(a: SQLActionBuilder, b: SQLActionBuilder): SQLActionBuilder = {
-    SQLActionBuilder(a.queryParts ++ b.queryParts, new SetParameter[Unit] {
+  def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder = {
+    SQLActionBuilder(builders.flatMap(_.queryParts), new SetParameter[Unit] {
       def apply(p: Unit, pp: PositionedParameters): Unit = {
-        a.unitPConv.apply(p, pp)
-        b.unitPConv.apply(p, pp)
+        builders.foreach(_.unitPConv.apply(p, pp))
       }
     })
   }
 
-  def concatSqlActionsWithDelim(a: SQLActionBuilder, b: SQLActionBuilder, delim: SQLActionBuilder): SQLActionBuilder = {
-    concatSqlActions(concatSqlActions(a, delim), b)
+  // reduce((a, b) => concatSqlActionsWithDelim(a, b, delim)) without recursion
+  // e.g.
+  //    builders = (sql"1", sql"2", sql"3", sql"4")
+  //    delim = sql","
+  //    output = sql"1,2,3,4"
+  def reduceSqlActionsWithDelim(builders: Seq[SQLActionBuilder], delim: SQLActionBuilder = sql","): SQLActionBuilder = {
+    val elementsWithDelimiters = builders.flatMap(Seq(_, delim)).dropRight(1)
+    concatSqlActions(elementsWithDelimiters:_*)
   }
 
 }
