@@ -6,7 +6,6 @@ import _root_.slick.dbio.DBIOAction
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 /**
  * Created by dvoet on 2/12/16.
@@ -14,7 +13,7 @@ import org.joda.time.DateTime
 class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
-  it should "crud entities" in withEmptyTestDatabase {
+  "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, None, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
     runAndWait(workspaceQuery.save(workspace))
@@ -53,9 +52,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     assertResult(false) { runAndWait(entityQuery.delete(workspaceContext, "type", "name")) }
   }
 
-
-
-  "EntityComponent" should "get entity types" in withDefaultTestDatabase {
+  it should "get entity types" in withDefaultTestDatabase {
     
       withWorkspaceContext(testData.workspace) { context =>
         assertResult(Set("PairSet", "Individual", "Sample", "Aliquot", "SampleSet", "Pair")) {
