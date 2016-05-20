@@ -103,10 +103,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
-    assertResult(2) {
+    assertResult(3) {
       submission.workflows.size
     }
-    assertResult(1) {
+    assertResult(0) {
       submission.notstarted.size
     }
   }
@@ -150,6 +150,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {status}
         assertResult(Set(
           new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner),
+          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner),
           new SubmissionListResponse(testData.submission1, testData.userOwner),
           new SubmissionListResponse(testData.submission2, testData.userOwner),
           new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner),
@@ -164,7 +165,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
-        assertResult(Map("Submitted" -> 5)) {
+        assertResult(Map("Submitted" -> 6)) {
           responseAs[Map[String, Int]]
         }
       }
@@ -219,7 +220,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     withWorkspaceContext(testData.workspace) { context =>
       newWorkflows foreach { case (status, count) =>
         for (i <- 1 to count) {
-          val wf = Workflow(s"workflow${i}_of_$count", status, testDate, None, testData.inputResolutions)
+          val wf = Workflow(Option(s"workflow${i}_of_$count"), status, testDate, None, testData.inputResolutions)
           runAndWait(workflowQuery.save(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), wf))
         }
       }

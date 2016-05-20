@@ -38,7 +38,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
 
   override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
-    Future.successful(Option(new MockGoogleCredential.Builder().build()))
+    val credential = new MockGoogleCredential.Builder().build()
+    credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
+    credential.setRefreshToken(token)
+    credential.setExpiresInSeconds(1000000L) // make sure not to refresh this token
+    Future.successful(Option(credential))
   }
 
   override def getBucketServiceAccountCredential: Credential = new MockGoogleCredential.Builder().build()
