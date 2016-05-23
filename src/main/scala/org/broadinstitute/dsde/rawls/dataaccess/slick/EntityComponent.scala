@@ -95,8 +95,8 @@ trait EntityComponent {
       } else {
         // slick can't do a query with '(entityType, entityName) in ((?, ?), (?, ?), ...)' so we need raw sql
         val baseSelect = sql"select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
-        val entityTypeNameTuples = entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-        concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
       }
     }
 
@@ -229,14 +229,14 @@ trait EntityComponent {
 
     def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
       val baseSelect = sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
-      val entityTypeNameTuples = entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-      unmarshalEntities(concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityListResult])
+      val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
+      unmarshalEntities(concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityListResult])
     }
 
     def listByIds(entityIds: Traversable[Long]): ReadAction[Map[Long, Entity]] = {
       val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id  in ("""
-      val entityIdSql = entityIds.map { id => sql"$id" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-      unmarshalEntitiesWithIds(concatSqlActions(concatSqlActions(baseSelect, entityIdSql), sql")").as[EntityListResult])
+      val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
+      unmarshalEntitiesWithIds(concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityListResult])
     }
 
     /**
@@ -296,8 +296,8 @@ trait EntityComponent {
 
       val x = DBIO.sequence(entitiesGrouped map { batch =>
         val baseSelect = sql"""select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id=${workspaceContext.workspaceId} and (entity_type, name) in ("""
-        val entityTypeNameTuples = batch.map { case rec => sql"(${rec.entityType}, ${rec.name})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-        concatSqlActions(concatSqlActions(baseSelect, entityTypeNameTuples), sql")").as[EntityRecord]
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(batch.map { case rec => sql"(${rec.entityType}, ${rec.name})" })
+        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
       }).map{ z => z.flatten }
       x
     }

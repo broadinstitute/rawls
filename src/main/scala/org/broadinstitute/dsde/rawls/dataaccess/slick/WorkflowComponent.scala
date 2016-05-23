@@ -174,8 +174,8 @@ trait WorkflowComponent {
         DBIO.successful(0)
       } else {
         val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
-        val workflowTuples = workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" }.reduce((a, b) => concatSqlActionsWithDelim(a, b, sql","))
-        concatSqlActions(concatSqlActions(baseUpdate, workflowTuples), sql")").as[Int] flatMap { rows =>
+        val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+        concatSqlActions(baseUpdate, workflowTuples, sql")").as[Int] flatMap { rows =>
           if (rows.head == workflows.size)
             DBIO.successful(workflows.size)
           else
