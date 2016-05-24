@@ -218,7 +218,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   }
 
   def listWorkflowEntitiesById(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess): ReadAction[Map[Long, Entity]] = {
-    dataAccess.entityQuery.listByIds(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId.get })
+    dataAccess.entityQuery.listByIds(workflowsWithOutputs.map { case (workflowRec, outputs) => workflowRec.workflowEntityId })
   }
 
   def saveWorkspace(dataAccess: DataAccess, updatedEntitiesAndWorkspace: Seq[Either[(Option[Entity], Option[Workspace]), (WorkflowRecord, scala.Seq[AttributeString])]]) = {
@@ -247,7 +247,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
 
       if (attributes.forall(_.isSuccess)) {
-        Left(updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId.get), workspace, attributes.map(_.get).toMap))
+        Left(updateEntityAndWorkspace(entitiesById(workflowRecord.workflowEntityId), workspace, attributes.map(_.get).toMap))
 
       } else {
         Right((workflowRecord, attributes.collect { case Failure(t) => AttributeString(t.getMessage) }.toSeq))

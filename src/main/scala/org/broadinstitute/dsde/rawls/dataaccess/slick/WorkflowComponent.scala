@@ -19,7 +19,7 @@ case class WorkflowRecord(id: Long,
                           submissionId: UUID,
                           status: String,
                           statusLastChangedDate: Timestamp,
-                          workflowEntityId: Option[Long],
+                          workflowEntityId: Long,
                           recordVersion: Long
                          )
 
@@ -27,7 +27,7 @@ case class WorkflowMessageRecord(workflowId: Long, message: String)
 
 case class WorkflowFailureRecord(id: Long,
                                  submissionId: UUID,
-                                 entityId: Option[Long]
+                                 entityId: Long
                                 )
 
 case class WorkflowErrorRecord(workflowFailureId: Long, errorText: String)
@@ -51,13 +51,13 @@ trait WorkflowComponent {
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
-    def workflowEntityId = column[Option[Long]]("ENTITY_ID")
+    def workflowEntityId = column[Long]("ENTITY_ID")
     def version = column[Long]("record_version")
 
     def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
-    def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
+    def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id)
 
     def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
 }
@@ -74,12 +74,12 @@ trait WorkflowComponent {
   class WorkflowFailureTable(tag: Tag) extends Table[WorkflowFailureRecord](tag, "WORKFLOW_FAILURE") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def submissionId = column[UUID]("SUBMISSION_ID")
-    def entityId = column[Option[Long]]("ENTITY_ID")
+    def entityId = column[Long]("ENTITY_ID")
 
     def * = (id, submissionId, entityId) <> (WorkflowFailureRecord.tupled, WorkflowFailureRecord.unapply)
 
     def submission = foreignKey("FK_WF_FAILURE_SUB", submissionId, submissionQuery)(_.id)
-    def entity = foreignKey("FK_WF_FAILURE_ENTITY", entityId, entityQuery)(_.id.?)
+    def entity = foreignKey("FK_WF_FAILURE_ENTITY", entityId, entityQuery)(_.id)
   }
 
   class WorkflowErrorTable(tag: Tag) extends Table[WorkflowErrorRecord](tag, "WORKFLOW_ERROR") {
@@ -138,15 +138,74 @@ trait WorkflowComponent {
       deleteWorkflowAction(id).map(_ > 0)
     }
 
-    def save(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflow: Workflow): ReadWriteAction[Workflow] = {
+    def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow]): ReadWriteAction[Seq[Workflow]] = {
+      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[AttributeEntityReference, WorkflowRecord]] = {
+        val entityRecsMap = entityRecs.map(e => AttributeEntityReference(e.entityType, e.name) -> e.id).toMap
+        val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, entityRecsMap(workflow.workflowEntity)))
 
-      submissionQuery.loadSubmissionEntityId(workspaceContext.workspaceId, workflow.workflowEntity) flatMap { eId =>
-        ( (workflowQuery returning workflowQuery.map(_.id)) += marshalNewWorkflow(submissionId, workflow, eId)) flatMap { workflowId =>
-          saveInputResolutions(workspaceContext, workflow.inputResolutions, Left(WorkflowId(workflowId))) andThen
-          saveMessages(workflow.messages, workflowId)
-        }
+        val insertedRecQuery = for {
+          workflowRec <- findWorkflowsBySubmissionId(submissionId)
+          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+        } yield (workflowRec, workflowEntityRec)
+
+        DBIO.seq(recsToInsert.grouped(batchSize).map(workflowQuery ++= _).toSeq:_*) andThen
+        insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
+          AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name) -> workflowRec
+        }.toMap)
       }
-    } map { _ => workflow }
+
+      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]): ReadWriteAction[Map[(AttributeEntityReference, String), SubmissionValidationRecord]] = {
+        val inputResolutionRecs = for {
+          workflow <- workflows
+          inputResolution <- workflow.inputResolutions
+        } yield {
+          marshalInputResolution(inputResolution, Left(WorkflowId(workflowRecsByEntity(workflow.workflowEntity).id)))
+        }
+
+        val insertedRecQuery = for {
+          workflowRec <- findWorkflowsBySubmissionId(submissionId)
+          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+          insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
+        } yield (workflowEntityRec, insertedInputResolutionRec)
+
+        DBIO.seq(inputResolutionRecs.grouped(batchSize).map(submissionValidationQuery ++= _).toSeq:_*) andThen
+        insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
+          (AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name), insertedInputResolutionRec.inputName) -> insertedInputResolutionRec
+        }.toMap)
+      }
+
+      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, String), SubmissionValidationRecord]) = {
+        val attributeRecs = for {
+          workflow <- workflows
+          inputResolution <- workflow.inputResolutions
+          attribute <- inputResolution.value
+        } yield submissionAttributeQuery.marshalAttribute(inputResolutionRecs(workflow.workflowEntity, inputResolution.inputName).id, inputResolution.inputName, attribute, Map.empty)
+
+        submissionAttributeQuery.batchInsertAttributes(attributeRecs.flatten)
+      }
+
+      def insertMessages(workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]) = {
+        val messageRecs = for {
+          workflow <- workflows
+          message <- workflow.messages
+        } yield WorkflowMessageRecord(workflowRecsByEntity(workflow.workflowEntity).id, message.value)
+
+        DBIO.seq(messageRecs.grouped(batchSize).map(workflowMessageQuery ++= _).toSeq:_*)
+      }
+
+      val entitiesWithMultipleWorkflows = workflows.groupBy(_.workflowEntity).filter { case (entityRef, workflows) => workflows.size > 1 }.keys
+      if (!entitiesWithMultipleWorkflows.isEmpty) {
+        throw new RawlsException(s"Each workflow in a submission must have a unique entity. Entities [${entitiesWithMultipleWorkflows.mkString(", ")}] have multiple workflows")
+      }
+
+      for {
+        entityRecs <- entityQuery.lookupEntitiesByNames(workspaceContext.workspaceId, workflows.map(_.workflowEntity))
+        workflowRecsByEntity <- insertWorkflowRecs(submissionId, workflows, entityRecs)
+        inputResolutionRecs <- insertInputResolutionRecs(submissionId, workflows, workflowRecsByEntity)
+        _ <- insertInputResolutionAttributes(workflows, inputResolutionRecs)
+        _ <- insertMessages(workflows, workflowRecsByEntity)
+      } yield workflows
+    }
 
     def saveInputResolutions(workspaceContext: SlickWorkspaceContext, values: Seq[SubmissionValidationValue], parentId: Either[WorkflowId, WorkflowFailureId]) = {
         DBIO.seq(values.map { case (v) =>
@@ -268,12 +327,9 @@ trait WorkflowComponent {
       findWorkflowsBySubmissionId(submissionId).result
     }
 
-    private def loadWorkflowEntity(entityId: Option[Long]): ReadAction[Option[AttributeEntityReference]] = {
-      entityId match {
-        case None => DBIO.successful(None)
-        case Some(id) => uniqueResult[EntityRecord](entityQuery.findEntityById(id)).flatMap { rec =>
-          DBIO.successful(unmarshalEntity(rec))
-        }
+    private def loadWorkflowEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
+      uniqueResult[EntityRecord](entityQuery.findEntityById(entityId)).map { rec =>
+        unmarshalEntity(rec.getOrElse(throw new RawlsException(s"entity with id $entityId does not exist")))
       }
     }
 
@@ -308,7 +364,7 @@ trait WorkflowComponent {
         entity <- submissionQuery.loadSubmissionEntity(workflowFailure.entityId)
         inputResolutions <- loadFailedInputResolutions(workflowFailure.id)
         failureMessages <- loadWorkflowFailureMessages(workflowFailure.id)
-      } yield(unmarshalInactiveWorkflow(entity.get, inputResolutions, failureMessages))
+      } yield(unmarshalInactiveWorkflow(entity, inputResolutions, failureMessages))
     }
 
     /**
@@ -410,7 +466,7 @@ trait WorkflowComponent {
       the marshal and unmarshal methods
      */
 
-    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long]): WorkflowRecord = {
+    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Long): WorkflowRecord = {
       WorkflowRecord(
         0,
         workflow.workflowId,
@@ -422,7 +478,7 @@ trait WorkflowComponent {
       )
     }
 
-    private def unmarshalWorkflow(workflowRec: WorkflowRecord, entity: Option[AttributeEntityReference], inputResolutions: Seq[SubmissionValidationValue], messages: Seq[AttributeString]): Workflow = {
+    private def unmarshalWorkflow(workflowRec: WorkflowRecord, entity: AttributeEntityReference, inputResolutions: Seq[SubmissionValidationValue], messages: Seq[AttributeString]): Workflow = {
       Workflow(
         workflowRec.externalId,
         WorkflowStatuses.withName(workflowRec.status),
@@ -466,10 +522,8 @@ trait WorkflowComponent {
       workflowErrorRecs.map(rec => AttributeString(rec.errorText))
     }
 
-    private def unmarshalEntity(entityRec: Option[EntityRecord]): Option[AttributeEntityReference] = {
-      entityRec.map(entity =>
-        AttributeEntityReference(entity.entityType, entity.name)
-      )
+    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = {
+      AttributeEntityReference(entityRec.entityType, entityRec.name)
     }
 
     private def unmarshalInactiveWorkflow(entity: AttributeEntityReference, inputResolutions: Seq[SubmissionValidationValue], errors: Seq[AttributeString]): WorkflowFailure = {
@@ -495,7 +549,7 @@ trait WorkflowComponent {
 
       for {
         wfEntityId <- uniqueResult[EntityRecord](entityQuery.findEntityByName(workspaceContext.workspaceId, wff.entityType, wff.entityName))
-        failureId <- (workflowFailureQuery returning workflowFailureQuery.map(_.id)) += submissionQuery.marshalWorkflowFailure(wfEntityId.map{_.id}, submissionId)
+        failureId <- (workflowFailureQuery returning workflowFailureQuery.map(_.id)) += submissionQuery.marshalWorkflowFailure(wfEntityId.map(_.id).getOrElse(throw new RawlsException(s"entity ${wff.entityType}/${wff.entityName} does not exist")), submissionId)
         inputResolutions <- workflowQuery.saveInputResolutions(workspaceContext, wff.inputResolutions, Right(WorkflowFailureId(failureId)))
         messageInserts <- DBIO.sequence(wff.errors.map(message => workflowErrorQuery += WorkflowErrorRecord(failureId, message.value)))
       } yield failureId

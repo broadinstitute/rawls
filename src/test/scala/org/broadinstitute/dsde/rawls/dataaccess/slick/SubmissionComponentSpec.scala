@@ -12,11 +12,23 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   import driver.api._
 
   private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
-    Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions),
-    Seq(testData.sample4, testData.sample5, testData.sample6), Map(testData.sample4 -> testData.inputResolutions2, testData.sample5 -> testData.inputResolutions2, testData.sample6 -> testData.inputResolutions2))
+    Seq(testData.sample1, testData.sample2, testData.sample3), Map(
+      testData.sample1 -> Seq(SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value1b")), Option("message1b"), "test_input_name2")),
+      testData.sample2 -> Seq(SubmissionValidationValue(Option(AttributeString("value2a")), Option("message2a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value2b")), Option("message2b"), "test_input_name2")),
+      testData.sample3 -> Seq(SubmissionValidationValue(Option(AttributeString("value3a")), Option("message3a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value3b")), Option("message3b"), "test_input_name2"))),
+    Seq(testData.sample4, testData.sample5, testData.sample6), Map(
+      testData.sample4 -> testData.inputResolutions2,
+      testData.sample5 -> testData.inputResolutions2,
+      testData.sample6 -> testData.inputResolutions2))
   private val submission4 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
-    Seq(testData.sample1, testData.sample2, testData.sample3), Map(testData.sample1 -> testData.inputResolutions, testData.sample2 -> testData.inputResolutions, testData.sample3 -> testData.inputResolutions),
-    Seq(testData.sample4, testData.sample5, testData.sample6), Map(testData.sample4 -> testData.inputResolutions2, testData.sample5 -> testData.inputResolutions2, testData.sample6 -> testData.inputResolutions2))
+    Seq(testData.sample1, testData.sample2, testData.sample3), Map(
+      testData.sample1 -> testData.inputResolutions,
+      testData.sample2 -> testData.inputResolutions,
+      testData.sample3 -> testData.inputResolutions),
+    Seq(testData.sample4, testData.sample5, testData.sample6), Map(
+      testData.sample4 -> testData.inputResolutions2,
+      testData.sample5 -> testData.inputResolutions2,
+      testData.sample6 -> testData.inputResolutions2))
 
 
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {

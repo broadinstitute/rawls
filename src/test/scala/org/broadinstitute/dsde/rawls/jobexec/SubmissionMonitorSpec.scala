@@ -141,7 +141,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "workspace.garble")
 
@@ -157,7 +157,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs only entities" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
@@ -173,7 +173,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs none" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0), ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!"), "output2" -> AttributeString("hello world."), "output3" -> AttributeString("hello workspace."), "extra" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map.empty
 
@@ -187,7 +187,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   it should "attachOutputs missing expected output" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Option(entityId), 0)
+    val workflowRecord = WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, entityId, 0)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> AttributeString("hello world!")))))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExprepressions: Map[String, String] = Map("missing" -> "this.bar")
@@ -225,7 +225,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
       }
     }
   }
@@ -284,7 +284,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
-        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.get.entityType, wf.workflowEntity.get.entityName)).get
+        runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
       }
     }
   }

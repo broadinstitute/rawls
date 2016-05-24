@@ -227,7 +227,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       assertResult(samples.map(r => r.entityName -> r.entityName).toMap) {
         runAndWait(submissionQuery.loadSubmission(UUID.fromString(thisSubmission.submissionId))).get.workflows.map { wf =>
-          wf.workflowEntity.get.entityName -> wf.workflowId.get
+          wf.workflowEntity.entityName -> wf.workflowId.get
         }.toMap
       }
     }

@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowAuditStatusRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -219,10 +219,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     withWorkspaceContext(testData.workspace) { context =>
       newWorkflows foreach { case (status, count) =>
-        for (i <- 1 to count) {
-          val wf = Workflow(Option(s"workflow${i}_of_$count"), status, testDate, None, testData.inputResolutions)
-          runAndWait(workflowQuery.save(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), wf))
-        }
+        val entityRecs = for (i <- 1 to count) yield EntityRecord(0, i.toString, status.toString, context.workspaceId, 0)
+        runAndWait(entityQuery.batchInsertEntities(context, entityRecs))
+        val workflows = for (i <- 1 to count) yield Workflow(Option(s"workflow${i}_of_$count"), status, testDate, AttributeEntityReference(status.toString, i.toString), testData.inputResolutions)
+        runAndWait(workflowQuery.createWorkflows(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), workflows))
       }
     }
 

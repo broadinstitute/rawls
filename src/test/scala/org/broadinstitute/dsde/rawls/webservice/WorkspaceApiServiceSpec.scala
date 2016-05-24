@@ -183,6 +183,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             entityQuery.save(ctx, sample1),
             entityQuery.save(ctx, sample2),
             entityQuery.save(ctx, sample3),
+            entityQuery.save(ctx, sample4),
+            entityQuery.save(ctx, sample5),
+            entityQuery.save(ctx, sample6),
             entityQuery.save(ctx, sampleSet),
     
             methodConfigurationQuery.save(ctx, methodConfig),

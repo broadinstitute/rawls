@@ -20,7 +20,7 @@ case class SubmissionRecord(id: UUID,
                             submissionDate: Timestamp,
                             submitterId: String,
                             methodConfigurationId: Long,
-                            submissionEntityId: Option[Long],
+                            submissionEntityId: Long,
                             status: String
                            )
 
@@ -48,7 +48,7 @@ trait SubmissionComponent {
     def submissionDate = column[Timestamp]("DATE_SUBMITTED", O.Default(defaultTimeStamp))
     def submitterId = column[String]("SUBMITTER", O.Length(254))
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
-    def submissionEntityId = column[Option[Long]]("ENTITY_ID")
+    def submissionEntityId = column[Long]("ENTITY_ID")
     def status = column[String]("STATUS")
 
     def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
@@ -56,7 +56,7 @@ trait SubmissionComponent {
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def submitter = foreignKey("FK_SUB_SUBMITTER", submitterId, rawlsUserQuery)(_.userSubjectId)
     def methodConfiguration = foreignKey("FK_SUB_METHOD_CONFIG", methodConfigurationId, methodConfigurationQuery)(_.id)
-    def submissionEntity = foreignKey("FK_SUB_ENTITY", submissionEntityId, entityQuery)(_.id.?)
+    def submissionEntity = foreignKey("FK_SUB_ENTITY", submissionEntityId, entityQuery)(_.id)
   }
 
   class SubmissionValidationTable(tag: Tag) extends Table[SubmissionValidationRecord](tag, "SUBMISSION_VALIDATION") {
@@ -111,7 +111,7 @@ trait SubmissionComponent {
             val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
             val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
             val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
-            val sub = unmarshalSubmission(submissionRec, config, Some(entity), Seq.empty, Seq.empty)
+            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty, Seq.empty)
             new SubmissionListResponse(sub, user)
         }
       }
@@ -129,9 +129,7 @@ trait SubmissionComponent {
     def create(workspaceContext: SlickWorkspaceContext, submission: Submission): ReadWriteAction[Submission] = {
 
       def saveSubmissionWorkflows(workflows: Seq[Workflow]) = {
-        DBIO.seq(workflows.map { case (wf) =>
-          workflowQuery.save(workspaceContext, UUID.fromString(submission.submissionId), wf)
-        }.toSeq: _*)
+        workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
       }
 
       def saveSubmissionWorkflowFailures(workflowFailures: Seq[WorkflowFailure]) = {
@@ -298,7 +296,7 @@ trait SubmissionComponent {
             Workflow(wr.externalId,
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
-              Some(AttributeEntityReference(er.entityType, er.name)),
+              AttributeEntityReference(er.entityType, er.name),
               workflowResolutions,
               messages
             )
@@ -307,21 +305,15 @@ trait SubmissionComponent {
       }
     }
 
-    def loadSubmissionEntity(entityId: Option[Long]): ReadAction[Option[AttributeEntityReference]] = {
-      entityId match {
-        case None => DBIO.successful(None)
-        case Some(id) => uniqueResult[EntityRecord](entityQuery.findEntityById(id)).flatMap { rec =>
-          DBIO.successful(unmarshalEntity(rec))
-        }
+    def loadSubmissionEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
+      uniqueResult[EntityRecord](entityQuery.findEntityById(entityId)).map { rec =>
+        unmarshalEntity(rec.getOrElse(throw new RawlsException(s"entity with id $entityId does not exist")))
       }
     }
 
-    def loadSubmissionEntityId(workspaceId: UUID, entityRef: Option[AttributeEntityReference]): ReadAction[Option[Long]] = {
-      entityRef match {
-        case None => DBIO.successful(None)
-        case Some(ref) =>
-          uniqueResult(entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).map(_.id))
-      }
+    def loadSubmissionEntityId(workspaceId: UUID, entityRef: AttributeEntityReference): ReadAction[Long] = {
+      val idOp: ReadAction[Option[Long]] = uniqueResult(entityQuery.findEntityByName(workspaceId, entityRef.entityType, entityRef.entityName).map(_.id))
+      idOp.map(id => id.getOrElse(throw new RawlsException(s"$entityRef not found")))
     }
 
     def getMethodConfigOutputExpressions(submissionId: UUID): ReadAction[Map[String, String]] = {
@@ -337,7 +329,7 @@ trait SubmissionComponent {
       the marshal/unmarshal methods
      */
 
-    private def marshalSubmission(workspaceId: UUID, submission: Submission, entityId: Option[Long], configId: Long): SubmissionRecord = {
+    private def marshalSubmission(workspaceId: UUID, submission: Submission, entityId: Long, configId: Long): SubmissionRecord = {
       SubmissionRecord(
         UUID.fromString(submission.submissionId),
         workspaceId,
@@ -348,7 +340,7 @@ trait SubmissionComponent {
         submission.status.toString)
     }
 
-    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): Submission = {
+    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): Submission = {
       Submission(
         submissionRec.id.toString,
         new DateTime(submissionRec.submissionDate.getTime),
@@ -356,30 +348,28 @@ trait SubmissionComponent {
         config.namespace,
         config.name,
         entity,
-        workflows.toList.sortBy(wf => wf.workflowEntity.get.entityName),
+        workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
         notStarted.toList,
         SubmissionStatuses.withName(submissionRec.status))
     }
 
-    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: Option[AttributeEntityReference], workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): ActiveSubmission = {
+    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): ActiveSubmission = {
       ActiveSubmission(workspace.namespace, workspace.name,
         unmarshalSubmission(
           submissionRec,
           config,
           entity,
-          workflows.toList.sortBy(wf => wf.workflowEntity.get.entityName),
+          workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
           notStarted)
       )
     }
 
-    def marshalWorkflowFailure(entityId: Option[Long], submissionId: UUID): WorkflowFailureRecord = {
+    def marshalWorkflowFailure(entityId: Long, submissionId: UUID): WorkflowFailureRecord = {
       WorkflowFailureRecord(0, submissionId, entityId)
     }
 
-    private def unmarshalEntity(entityRec: Option[EntityRecord]): Option[AttributeEntityReference] = {
-      entityRec.map(entity =>
-        AttributeEntityReference(entity.entityType, entity.name)
-      )
+    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = {
+      AttributeEntityReference(entityRec.entityType, entityRec.name)
     }
 
   }
