@@ -66,7 +66,7 @@ case class Workflow(
   workflowId: Option[String],
   status: WorkflowStatus,
   statusLastChangedDate: DateTime,
-  workflowEntity: Option[AttributeEntityReference],
+  workflowEntity: AttributeEntityReference,
   inputResolutions: Seq[SubmissionValidationValue],
   messages: Seq[AttributeString] = Seq.empty
 )
@@ -96,7 +96,7 @@ case class Submission(
   submitter: RawlsUserRef,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
+  submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
@@ -108,7 +108,7 @@ case class SubmissionStatusResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
+  submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
   notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
@@ -122,7 +122,7 @@ case class SubmissionListResponse(
   submitter: String,
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
+  submissionEntity: AttributeEntityReference,
   status: SubmissionStatus
 ) {
   def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status)

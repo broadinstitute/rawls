@@ -160,10 +160,7 @@ trait AttributeComponent {
     }
 
     def batchInsertAttributes(attributes: Seq[RECORD]) = {
-      val recordsGrouped = attributes.grouped(batchSize).toSeq
-      DBIO.sequence(recordsGrouped map { batch  =>
-        (this ++= batch)
-      })
+      insertInBatches(this, attributes)
     }
 
     def marshalAttributeEntityReference(ownerId: OWNER_ID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long]): RECORD = {

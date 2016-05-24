@@ -283,12 +283,11 @@ trait EntityComponent {
 
     def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       if(!entities.isEmpty) {
-        val recordsGrouped = entities.grouped(batchSize).toSeq
-        DBIO.sequence(recordsGrouped map { batch  =>
-          (entityQuery ++= batch)
-        })
-      } andThen selectEntityIds(workspaceContext, entities)
-      else DBIO.successful(Seq.empty[EntityRecord])
+        insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities)
+      }
+      else {
+        DBIO.successful(Seq.empty[EntityRecord])
+      }
     }
 
     def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {

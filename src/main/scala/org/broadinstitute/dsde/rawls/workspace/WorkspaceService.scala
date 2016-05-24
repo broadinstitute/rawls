@@ -969,7 +969,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           Workflow(workflowId = None,
             status = WorkflowStatuses.Queued,
             statusLastChangedDate = DateTime.now,
-            workflowEntity = Option(AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName)),
+            workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName),
             inputResolutions = entityInputs.inputResolutions)
         }
         val workflowFailures = failures.map { entityInputs =>
@@ -982,7 +982,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           submitter = RawlsUser(userInfo),
           methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
           methodConfigurationName = submissionRequest.methodConfigurationName,
-          submissionEntity = Option(AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName)),
+          submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows,
           notstarted = workflowFailures,
           status = SubmissionStatuses.Submitted

@@ -69,14 +69,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
-      Workflow(uuid, status, testDate, Option(AttributeEntityReference(ref.entityType, ref.name)), inputResolutions(ref))
+      Workflow(uuid, status, testDate, AttributeEntityReference(ref.entityType, ref.name), inputResolutions(ref))
     }
 
     val failedWorkflows = failedWorkflowEntities map { ref =>
         WorkflowFailure(ref.name, ref.entityType, failedInputResolutions(ref), Seq(AttributeString("errorMessage1"), AttributeString("errorMessage2")))
     }
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, Option(AttributeEntityReference(submissionEntity.entityType, submissionEntity.name)),
+    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, AttributeEntityReference(submissionEntity.entityType, submissionEntity.name),
       workflows,
       failedWorkflows, SubmissionStatuses.Submitted)
   }
@@ -319,11 +319,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(indiv1), Map(indiv1 -> inputResolutions),
       Seq(indiv2), Map(indiv2 -> inputResolutions2))
 
-    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,Option(AttributeEntityReference(indiv1.entityType, indiv1.name)),
-      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample1.entityType, sample1.name)), inputResolutions),
-        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample2.entityType, sample2.name)), inputResolutions),
-        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample3.entityType, sample3.name)), inputResolutions),
-        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,Option(AttributeEntityReference(sample4.entityType, sample4.name)), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+    val submissionTerminateTest = Submission(UUID.randomUUID().toString(),testDate, userOwner,methodConfig.namespace,methodConfig.name,AttributeEntityReference(indiv1.entityType, indiv1.name),
+      Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample1.entityType, sample1.name), inputResolutions),
+        Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample2.entityType, sample2.name), inputResolutions),
+        Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample3.entityType, sample3.name), inputResolutions),
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,AttributeEntityReference(sample4.entityType, sample4.name), inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
 
     override def save() = {
       DBIO.seq(

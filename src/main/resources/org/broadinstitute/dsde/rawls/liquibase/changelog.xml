@@ -13,4 +13,5 @@
     <include file="changesets/20160512_status_change_log.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160513_workflow_record_version.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160516_nullable_external_id.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160523_notnull_workflow_entities.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

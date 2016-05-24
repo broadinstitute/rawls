@@ -76,4 +76,8 @@ trait DriverComponent {
     concatSqlActions(elementsWithDelimiters:_*)
   }
 
+  def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Unit] = {
+    DBIO.seq(records.grouped(batchSize).map(tableQuery ++= _).toSeq:_*)
+  }
+
 }
