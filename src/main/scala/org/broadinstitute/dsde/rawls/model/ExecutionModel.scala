@@ -211,6 +211,7 @@ case class ActiveSubmission
 case class WorkflowQueueStatusResponse
 (
   estimatedQueueTimeMS: Long, // milliseconds to drain queue
+  workflowsBeforeNextUserWorkflow: Int,
   workflowCountsByStatus: Map[String, Int]
 )
 
@@ -280,7 +281,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 
-  implicit val WorkflowQueueStatusResponseFormat = jsonFormat2(WorkflowQueueStatusResponse)
+  implicit val WorkflowQueueStatusResponseFormat = jsonFormat3(WorkflowQueueStatusResponse)
 }
 
 trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>

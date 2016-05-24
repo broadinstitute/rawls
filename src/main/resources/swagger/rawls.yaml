@@ -3208,11 +3208,15 @@ definitions:
     description: Information about the status of workflows and the workflow queue
     required:
       - estimatedQueueTimeMS
+      - workflowsBeforeNextUserWorkflow
       - workflowCountsByStatus
     properties:
       estimatedQueueTimeMS:
         type: integer
         description: estimated milliseconds until the current queue is submitted
+      workflowsBeforeNextUserWorkflow:
+        type: integer
+        description: the number of workflows in the queue ahead of the user's first workflow
       workflowCountsByStatus:
         type: object
         description: Map[String,Int]
