@@ -179,6 +179,8 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val queuedTime = submittedTime - expectedEstimateTime
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 321, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime)) ) )
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 321, WorkflowStatuses.Submitted.toString, new java.sql.Timestamp(submittedTime)) ) )
+    // also insert a dummy audit record with a different workflow id to attempt to confuse the code
+    runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 42, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime-6000)) ) )
 
     val existingSubmittedWorkflowCount = 12
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)

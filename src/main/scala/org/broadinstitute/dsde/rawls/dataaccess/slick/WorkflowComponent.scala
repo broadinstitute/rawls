@@ -563,16 +563,15 @@ trait WorkflowComponent {
 
     def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] = {
       // for the most-recently submitted workflow, find the time it was submitted and the earliest time we have recorded.
-      // we could query specifically for the time this workflow was Queued, but we'll just use the earliest time
-      // for resiliency, in case the workflow somehow skipped Queued status.
-      val timingQuery = for {
-        lastSubmitted <- workflowAuditStatusQuery.filter(_.status === WorkflowStatuses.Submitted.toString).sortBy(_.timestamp.desc).take(1)
-        earliestSeen <- workflowAuditStatusQuery.sortBy(_.timestamp.asc).take(1) if earliestSeen.workflowId === lastSubmitted.workflowId
-      } yield (lastSubmitted.timestamp, earliestSeen.timestamp)
-
-      timingQuery.result.headOption map {
-        case Some((s:Timestamp, e:Timestamp)) => s.getTime - e.getTime
-        case _ => 0L
+      uniqueResult[WorkflowAuditStatusRecord](workflowAuditStatusQuery.filter(_.status === WorkflowStatuses.Submitted.toString).sortBy(_.timestamp.desc).take(1)).flatMap {
+        case Some(mostRecentlySubmitted) =>
+          // we could query specifically for the time this workflow was Queued, but we'll just use the earliest time
+          // for resiliency, in case the workflow somehow skipped Queued status.
+          uniqueResult[WorkflowAuditStatusRecord](workflowAuditStatusQuery.filter(_.workflowId === mostRecentlySubmitted.workflowId).sortBy(_.timestamp.asc).take(1)).map {
+            case Some(earliestForThisWorkflow) => mostRecentlySubmitted.timestamp.getTime - earliestForThisWorkflow.timestamp.getTime
+            case _ => 0L
+          }
+        case _ => DBIO.successful(0L)
       }
     }
 
