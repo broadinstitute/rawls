@@ -148,7 +148,7 @@ trait WorkflowComponent {
           workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
         } yield (workflowRec, workflowEntityRec)
 
-        DBIO.seq(recsToInsert.grouped(batchSize).map(workflowQuery ++= _).toSeq:_*) andThen
+        insertInBatches(workflowQuery, recsToInsert) andThen
         insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
           AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name) -> workflowRec
         }.toMap)
@@ -168,7 +168,7 @@ trait WorkflowComponent {
           insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
         } yield (workflowEntityRec, insertedInputResolutionRec)
 
-        DBIO.seq(inputResolutionRecs.grouped(batchSize).map(submissionValidationQuery ++= _).toSeq:_*) andThen
+        insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
         insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
           (AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name), insertedInputResolutionRec.inputName) -> insertedInputResolutionRec
         }.toMap)
@@ -190,7 +190,7 @@ trait WorkflowComponent {
           message <- workflow.messages
         } yield WorkflowMessageRecord(workflowRecsByEntity(workflow.workflowEntity).id, message.value)
 
-        DBIO.seq(messageRecs.grouped(batchSize).map(workflowMessageQuery ++= _).toSeq:_*)
+        insertInBatches(workflowMessageQuery, messageRecs)
       }
 
       val entitiesWithMultipleWorkflows = workflows.groupBy(_.workflowEntity).filter { case (entityRef, workflows) => workflows.size > 1 }.keys
