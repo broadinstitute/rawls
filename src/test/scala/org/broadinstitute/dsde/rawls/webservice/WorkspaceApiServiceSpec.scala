@@ -127,9 +127,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val sample5 = Entity("sample5", "sample", Map.empty)
     val sample6 = Entity("sample6", "sample", Map.empty)
     val sampleSet = Entity("sampleset", "sample_set", Map("samples" -> AttributeEntityReferenceList(Seq(
-      AttributeEntityReference(sample1.entityType, sample1.name),
-      AttributeEntityReference(sample2.entityType, sample2.name),
-      AttributeEntityReference(sample3.entityType, sample3.name)
+      sample1.toReference,
+      sample2.toReference,
+      sample3.toReference
     ))))
 
     val methodConfig = MethodConfiguration("dsde", "testConfig", "Sample", Map("ready"-> AttributeString("true")), Map("param1"-> AttributeString("foo")), Map("out1" -> AttributeString("bar"), "out2" -> AttributeString("splat")), MethodRepoMethod(workspaceName.namespace, "method-a", 1))
