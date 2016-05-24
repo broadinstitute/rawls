@@ -174,7 +174,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when checking the queue status" in withTestDataApiServices { services =>
 
     // insert audit records
-    val expectedEstimateTime = 21000
+    val expectedEstimateTime = 12345
     val submittedTime = System.currentTimeMillis()
     val queuedTime = submittedTime - expectedEstimateTime
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 321, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime)) ) )

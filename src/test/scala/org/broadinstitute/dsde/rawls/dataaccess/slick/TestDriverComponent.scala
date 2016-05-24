@@ -39,10 +39,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   val testDate = currentTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
 
-  // NOTE: we are setting the millis here to 0 to match the truncation from the database - if we switch to using liquibase for tests, we may need to revert this
-  def currentTime(): DateTime = {
-    new DateTime().withMillisOfSecond(0)
-  }
+  // NOTE: we previously truncated millis here for DB compatibility reasons, but this is is no longer necessary.
+  // now only serves to encapsulate a Java-ism
+  def currentTime() = new DateTime()
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
     Await.result(database.run(action.transactionally), duration)

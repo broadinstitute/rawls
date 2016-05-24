@@ -50,7 +50,7 @@ trait WorkflowComponent {
     def externalId = column[Option[String]]("EXTERNAL_ID")
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS")
-    def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.Default(defaultTimeStamp))
+    def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def workflowEntityId = column[Long]("ENTITY_ID")
     def version = column[Long]("record_version")
 
@@ -97,7 +97,7 @@ trait WorkflowComponent {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def workflowId = column[Long]("workflow_id")
     def status = column[String]("status")
-    def timestamp = column[Timestamp]("timestamp", O.Default(defaultTimeStamp))
+    def timestamp = column[Timestamp]("timestamp", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
 
     def * = (id, workflowId, status, timestamp) <> (WorkflowAuditStatusRecord.tupled, WorkflowAuditStatusRecord.unapply)
   }
