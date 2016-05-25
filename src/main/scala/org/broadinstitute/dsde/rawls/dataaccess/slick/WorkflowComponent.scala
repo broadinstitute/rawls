@@ -106,7 +106,6 @@ trait WorkflowComponent {
   protected val workflowErrorQuery = TableQuery[WorkflowErrorTable]
 
   object workflowQuery extends TableQuery(new WorkflowTable(_)) {
-
     type WorkflowQueryType = Query[WorkflowTable, WorkflowRecord, Seq]
     type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable), (SubmissionValidationRecord, SubmissionAttributeRecord), Seq]
 
@@ -323,6 +322,25 @@ trait WorkflowComponent {
       groupedSeq.map(_.toMap)
     }
 
+    def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] = {
+      getFirstQueuedWorkflow(userInfo.userSubjectId.value) flatMap { optRec =>
+        val query = optRec match {
+          case Some(workflow) => findWorkflowsQueuedBefore(workflow.statusLastChangedDate)
+          case _ => findQueuedWorkflows(Seq.empty)
+        }
+        query.length.result
+      }
+    }
+
+    def getFirstQueuedWorkflow(submitter: String): ReadAction[Option[WorkflowRecord]] = {
+      val query = for {
+        submission <- submissionQuery.filter(_.submitterId === submitter)
+        workflows <- filter(_.status === WorkflowStatuses.Queued.toString).filter(_.submissionId === submission.id)
+      } yield workflows
+
+      uniqueResult(query.sortBy(_.statusLastChangedDate).take(1).result)
+    }
+
     def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] = {
       findWorkflowsBySubmissionId(submissionId).result
     }
@@ -432,6 +450,10 @@ trait WorkflowComponent {
         } yield workflows
       }
       query.sortBy(_.statusLastChangedDate)
+    }
+
+    def findWorkflowsQueuedBefore(lastChangedDate: Timestamp): WorkflowQueryType = {
+      filter(wf => wf.status === WorkflowStatuses.Queued.toString && wf.statusLastChangedDate < lastChangedDate)
     }
 
     def findWorkflowMessagesById(workflowId: Long) = {
@@ -580,6 +602,5 @@ trait WorkflowComponent {
       (workflowAuditStatusQuery returning workflowAuditStatusQuery.map(_.id)) += wasr
     } map { newid => wasr.copy(id = newid)}
   }
-
 
 }

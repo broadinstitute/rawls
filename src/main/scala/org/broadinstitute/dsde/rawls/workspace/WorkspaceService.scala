@@ -1114,17 +1114,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def workflowQueueStatus() = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workflowQuery.countWorkflowsByQueueStatus.flatMap { statusMap =>
-
         // determine the current size of the workflow queue
-        val numQueued = statusMap.getOrElse(WorkflowStatuses.Queued.toString, 0)
-
-        val estimateAction = numQueued match {
-          case x if x > 0 => dataAccess.workflowAuditStatusQuery.queueTimeMostRecentSubmittedWorkflow
-          case _ => DBIO.successful(0L)
-        }
-
-        estimateAction map { estimate =>
-          RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(estimate, statusMap))
+        statusMap.get(WorkflowStatuses.Queued.toString) match {
+          case Some(x) if x > 0 =>
+            for {
+              timeEstimate <- dataAccess.workflowAuditStatusQuery.queueTimeMostRecentSubmittedWorkflow
+              workflowsAhead <- dataAccess.workflowQuery.countWorkflowsAheadOfUserInQueue(userInfo)
+            } yield {
+              RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(timeEstimate, workflowsAhead, statusMap))
+            }
+          case _ => DBIO.successful(RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(0, 0, statusMap)))
         }
       }
     }

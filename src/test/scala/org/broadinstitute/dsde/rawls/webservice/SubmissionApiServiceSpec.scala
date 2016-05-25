@@ -10,6 +10,8 @@ import spray.http._
 import scala.concurrent.ExecutionContext
 import java.util.UUID
 
+import org.joda.time.DateTime
+
 /**
  * Created by dvoet on 4/24/15.
  */
@@ -171,6 +173,31 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // Submissions Queue methods
+
+  def getQueueStatus(route: spray.routing.Route): WorkflowQueueStatusResponse =
+    Get("/submissions/queueStatus") ~>
+      sealRoute(route) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[WorkflowQueueStatusResponse]
+      }
+
+  def addWorkflowsToQueue(user: RawlsUser, count: Int) = {
+    withWorkspaceContext(testData.workspace) { context =>
+      val workflows = Seq.fill(count) {
+        Thread.sleep(10) // ensure some time separation
+
+        val ent = Entity(UUID.randomUUID.toString, UUID.randomUUID.toString, Map.empty)
+        runAndWait(entityQuery.save(context, ent))
+        Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Queued, DateTime.now, ent.toReference, testData.inputResolutions)
+      }
+
+      val sub = createTestSubmission(testData.workspace, testData.methodConfig, testData.indiv1, user, Seq.empty, Map.empty, Seq.empty, Map.empty).copy(workflows = workflows)
+      runAndWait(submissionQuery.create(context, sub))
+    }
+  }
+
   it should "return 200 when checking the queue status" in withTestDataApiServices { services =>
 
     // insert audit records
@@ -185,19 +212,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     val existingSubmittedWorkflowCount = 12
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
-    Get("/submissions/queueStatus") ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {status}
-        val resp = responseAs[WorkflowQueueStatusResponse]
-        assertResult(existingWorkflowCounts) {
-          resp.workflowCountsByStatus
-        }
-        // with nothing in queue, estimated time should be zero
-        assertResult(0) {
-          resp.estimatedQueueTimeMS
-        }
-      }
+    val resp = getQueueStatus(services.submissionRoutes)
+    assertResult(existingWorkflowCounts) {
+      resp.workflowCountsByStatus
+    }
+    // with nothing in queue, estimated time should be zero
+    assertResult(0) {
+      resp.estimatedQueueTimeMS
+    }
 
     val newWorkflows = Map(
       WorkflowStatuses.Queued -> 1,
@@ -228,18 +250,67 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
     }
 
-    Get("/submissions/queueStatus") ~>
-      sealRoute(services.submissionRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {status}
-        val resp = responseAs[WorkflowQueueStatusResponse]
-        assertResult(newWorkflowCounts) {
-          resp.workflowCountsByStatus
-        }
-        // with items in the queue, estimated time should be calculated from the audit table
-        assertResult(expectedEstimateTime) {
-          resp.estimatedQueueTimeMS
-        }
-      }
+    val resp2 = getQueueStatus(services.submissionRoutes)
+    assertResult(newWorkflowCounts) {
+      resp2.workflowCountsByStatus
+    }
+    // with items in the queue, estimated time should be calculated from the audit table
+    assertResult(expectedEstimateTime) {
+      resp2.estimatedQueueTimeMS
+    }
+
+  }
+
+  it should "count zero workflows ahead of the user for an empty queue" in withTestDataApiServices { services =>
+    assertResult(0) {
+      getQueueStatus(services.submissionRoutes).workflowsBeforeNextUserWorkflow
+    }
+  }
+
+  it should "count zero workflows ahead of the user when the user is the only one in the queue" in withTestDataApiServices { services =>
+    addWorkflowsToQueue(RawlsUser(userInfo), 1)
+
+    assertResult(0) {
+      getQueueStatus(services.submissionRoutes).workflowsBeforeNextUserWorkflow
+    }
+  }
+
+  it should "count the whole queue as ahead of the user when the user is not in the queue" in withTestDataApiServices { services =>
+    val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
+    val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
+
+    runAndWait(rawlsUserQuery.save(otherUser1))
+    runAndWait(rawlsUserQuery.save(otherUser2))
+
+    addWorkflowsToQueue(otherUser1, 5)
+    addWorkflowsToQueue(otherUser2, 10)
+
+    val status = getQueueStatus(services.submissionRoutes)
+    assertResult(Some(15)) {
+      status.workflowCountsByStatus.get("Queued")
+    }
+    assertResult(15) {
+      status.workflowsBeforeNextUserWorkflow
+    }
+  }
+
+  it should "count workflows ahead of the user when the user is in the queue" in withTestDataApiServices { services =>
+    val otherUser1 = RawlsUser(RawlsUserSubjectId("subj-id-1"), RawlsUserEmail("new.email1@example.net"))
+    val otherUser2 = RawlsUser(RawlsUserSubjectId("subj-id-2"), RawlsUserEmail("new.email2@example.net"))
+
+    runAndWait(rawlsUserQuery.save(otherUser1))
+    runAndWait(rawlsUserQuery.save(otherUser2))
+
+    addWorkflowsToQueue(otherUser1, 5)
+    addWorkflowsToQueue(RawlsUser(userInfo), 20)
+    addWorkflowsToQueue(otherUser2, 10)
+
+    val status = getQueueStatus(services.submissionRoutes)
+    assertResult(Some(35)) {
+      status.workflowCountsByStatus.get("Queued")
+    }
+    assertResult(5) {
+      status.workflowsBeforeNextUserWorkflow
+    }
   }
 }
