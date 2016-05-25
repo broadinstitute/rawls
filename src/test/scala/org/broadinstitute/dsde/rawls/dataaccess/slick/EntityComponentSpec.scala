@@ -32,15 +32,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     runAndWait(entityQuery.save(workspaceContext, target2))
 
     val updatedEntity = entity.copy(attributes = Map("string" -> AttributeString("foo"),
-      "ref" -> AttributeEntityReference(target1.entityType, target1.name),
-      "refList" -> AttributeEntityReferenceList(Seq(AttributeEntityReference(target1.entityType, target1.name), AttributeEntityReference(target2.entityType, target2.name)))))
+      "ref" -> target1.toReference,
+      "refList" -> AttributeEntityReferenceList(Seq(target1.toReference, target2.toReference))))
 
     assertResult(updatedEntity) { runAndWait(entityQuery.save(workspaceContext, updatedEntity)) }
     assertResult(Some(updatedEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
     val updatedAgainEntity = updatedEntity.copy(attributes = Map("string2" -> AttributeString("foo"),
-      "ref" -> AttributeEntityReference(target2.entityType, target2.name),
-      "refList" -> AttributeEntityReferenceList(Seq(AttributeEntityReference(target2.entityType, target2.name), AttributeEntityReference(target1.entityType, target1.name)))))
+      "ref" -> target2.toReference,
+      "refList" -> AttributeEntityReferenceList(Seq(target2.toReference, target1.toReference))))
     assertResult(updatedAgainEntity) { runAndWait(entityQuery.save(workspaceContext, updatedAgainEntity)) }
     assertResult(Some(updatedAgainEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
