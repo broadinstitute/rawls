@@ -27,8 +27,15 @@ object DbResource {
 
   val config = DatabaseConfig.forConfig[JdbcDriver](testdb)
 
+  private val liquibaseConf = ConfigFactory.load().getConfig("liquibase")
+  private val liquibaseChangeLog = liquibaseConf.getString("changelog")
+  private val useLiquibase = liquibaseConf.getBoolean("useForTests")
+
   val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
-  dataSource.initWithSlick()
+  if (useLiquibase)
+    dataSource.initWithLiquibase(liquibaseChangeLog)
+  else
+    dataSource.initWithSlick()
 }
 
 /**
