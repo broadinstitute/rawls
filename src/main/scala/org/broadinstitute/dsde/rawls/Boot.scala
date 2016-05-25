@@ -134,7 +134,7 @@ object Boot extends App with LazyLogging {
     ),
       "rawls-service")
 
-    implicit val timeout = Timeout(5.seconds)
+    implicit val timeout = Timeout(20.seconds)
     // start a new HTTP server on port 8080 with our service actor as the handler
     (IO(Http) ? Http.Bind(service, interface = "0.0.0.0", port = 8080)).onComplete {
       case Success(Http.CommandFailed(failure)) =>
