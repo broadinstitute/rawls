@@ -92,7 +92,7 @@ trait EntityComponent {
       def actionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]) = {
         val baseSelect = sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
-        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]
+        concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesResult]
       }
 
       def actionForIds(entityIds: Traversable[Long]) = {

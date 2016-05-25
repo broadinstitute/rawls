@@ -387,12 +387,10 @@ trait SubmissionComponent {
 
       implicit val getWorkflowInputResolutionListResult = GetResult { r =>
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
-        val (submissionValidation, attribute) = r.nextLongOption match {
+        val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
-            val submissionValidation = Option(SubmissionValidationRecord(submissionValidationId, Option(workflowRec.id), r.<<, r.<<, r.<<))
-            val attributeId: Option[Long] = r.<<
-            val attribute = attributeId.map(SubmissionAttributeRecord(_, submissionValidationId, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
-            (submissionValidation, attribute)
+            ( Option(SubmissionValidationRecord(submissionValidationId, Option(workflowRec.id), r.<<, r.<<, r.<<)),
+              r.nextLongOption().map(SubmissionAttributeRecord(_, submissionValidationId, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)) )
           case None => (None, None)
         }
         WorkflowInputResolutionListResult(workflowRec, submissionValidation, attribute)
