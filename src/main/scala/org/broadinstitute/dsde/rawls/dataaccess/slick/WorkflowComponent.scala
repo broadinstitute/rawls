@@ -232,7 +232,7 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        UpdateWorkflowStatusRawSql.action(workflows, newStatus) flatMap { rows =>
+        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) flatMap { rows =>
           if (rows.head == workflows.size)
             DBIO.successful(workflows.size)
           else
@@ -246,11 +246,11 @@ trait WorkflowComponent {
     }
 
     def batchUpdateStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
-      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString}"
+      UpdateWorkflowStatusRawSql.actionForCurrentStatus(currentStatus, newStatus)
     }
 
     def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
-      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString} and submission_id = ${submissionId}"
+      UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
     }
 
 
@@ -571,10 +571,20 @@ trait WorkflowComponent {
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
     val driver: JdbcDriver = WorkflowComponent.this.driver
 
-    def action(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
-      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
+    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 "
+
+    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
+      val where = sql"where (id, record_version) in ("
       val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
-      concatSqlActions(baseUpdate, workflowTuples, sql")").as[Int]
+      concatSqlActions(update(newStatus), where, workflowTuples, sql")").as[Int]
+    }
+
+    def actionForCurrentStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+      concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString}").as[Int].map(_.head)
+    }
+
+    def actionForCurrentStatusAndSubmission(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+      concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}").as[Int].map(_.head)
     }
   }
 
