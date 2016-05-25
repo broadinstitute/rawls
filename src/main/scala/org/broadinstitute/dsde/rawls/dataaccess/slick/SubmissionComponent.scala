@@ -45,7 +45,7 @@ trait SubmissionComponent {
   class SubmissionTable(tag: Tag) extends Table[SubmissionRecord](tag, "SUBMISSION") {
     def id = column[UUID]("ID", O.PrimaryKey)
     def workspaceId = column[UUID]("WORKSPACE_ID")
-    def submissionDate = column[Timestamp]("DATE_SUBMITTED", O.Default(defaultTimeStamp))
+    def submissionDate = column[Timestamp]("DATE_SUBMITTED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def submitterId = column[String]("SUBMITTER", O.Length(254))
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
     def submissionEntityId = column[Long]("ENTITY_ID")
