@@ -82,7 +82,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
     runAndWait(workspaceQuery += WorkspaceRecord("testns", "testname1", workspaceId, "bucket", defaultTimeStamp, defaultTimeStamp, "me", false, None, 0))
-    val entityId = runAndWait(entityQuery += EntityRecord(0, "name", "type", workspaceId, 0))
+    val entityId = runAndWait((entityQuery returning entityQuery.map(_.id)) += EntityRecord(0, "name", "type", workspaceId, 0))
     val testAttribute = AttributeEntityReference("type", "name")
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }

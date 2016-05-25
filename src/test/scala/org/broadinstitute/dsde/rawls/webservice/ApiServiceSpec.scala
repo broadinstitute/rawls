@@ -27,14 +27,14 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
   val mockServer = RemoteServicesMockServer()
 
-  override def beforeAll = {
-    super.beforeAll
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     mockServer.startServer
   }
 
-  override def afterAll = {
-    super.afterAll
+  override def afterAll(): Unit = {
     mockServer.stopServer
+    super.afterAll()
   }
 
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())

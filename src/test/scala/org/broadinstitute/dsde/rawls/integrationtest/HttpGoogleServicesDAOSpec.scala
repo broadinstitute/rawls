@@ -6,7 +6,6 @@ import akka.actor.{ActorRef, ActorSystem}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
-
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -14,11 +13,12 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpec}
+import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
-class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with TestDriverComponent {
+class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
+
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
     true, // use service account to manage buckets
@@ -65,9 +65,10 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Future.traverse(googleGroups) { gcsDAO.deleteGoogleGroup } map { _ => bucketDeletionMonitor ! DeleteBucket(googleWorkspaceInfo.bucketName) }
   }
 
-  override def afterAll() = {
+  override def afterAll(): Unit = {
     // one last-gasp attempt at cleaning up
     deleteWorkspaceGroupsAndBucket(testWorkspaceId)
+    super.afterAll()
   }
 
   "HttpGoogleServicesDAO" should "do all of the things" in {

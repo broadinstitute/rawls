@@ -5,13 +5,13 @@ import java.util.UUID
 import akka.actor.{PoisonPill, ActorSystem}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{WorkflowSubmissionMessage, ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
 import spray.json.{JsString, JsObject, JsValue}
 
@@ -58,14 +58,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     override val executionServiceDAO = new MockExecutionServiceDAO(true)
   }
 
-  override def beforeAll() = {
-    super.beforeAll
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Await.result( mockGoogleServicesDAO.storeToken(userInfo, UUID.randomUUID.toString), Duration.Inf )
     mockServer.startServer
   }
 
-  override def afterAll() = {
+  override def afterAll(): Unit = {
     system.shutdown()
+    mockServer.stopServer
+    super.afterAll()
   }
 
   "WorkflowSubmission" should "get a batch of workflows" in withDefaultTestDatabase {

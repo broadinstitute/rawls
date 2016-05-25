@@ -9,12 +9,11 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor.{StatusCheckComplete, ExecutionServiceStatusResponse}
 import org.broadinstitute.dsde.rawls.model._
-import org.scalatest.{Matchers, FlatSpecLike}
+import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration._
 import scala.util.Success
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
-import org.scalatest.BeforeAndAfterAll
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
@@ -27,9 +26,9 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   val testDbName = "SubmissionMonitorSpec"
 
-  override def afterAll: Unit = {
+  override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
-    super.afterAll
+    super.afterAll()
   }
 
   private def await[T](f: Future[T]): T = Await.result(f, 5 minutes)
