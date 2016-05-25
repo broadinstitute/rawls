@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
+import slick.driver.JdbcDriver
 
 /**
  * Created by mbemis on 2/18/16.
@@ -231,9 +232,7 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
-        val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
-        concatSqlActions(baseUpdate, workflowTuples, sql")").as[Int] flatMap { rows =>
+        UpdateWorkflowStatusRawSql.action(workflows, newStatus) flatMap { rows =>
           if (rows.head == workflows.size)
             DBIO.successful(workflows.size)
           else
@@ -566,6 +565,16 @@ trait WorkflowComponent {
     def deleteFailureResolutions(workflowFailureId: Long): DBIOAction[Int, NoStream, Read with Write] = {
       deleteWorkflowFailureAttributes(workflowFailureId) andThen
         findInputResolutionsByFailureId(workflowFailureId).delete
+    }
+  }
+
+  private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
+    val driver: JdbcDriver = WorkflowComponent.this.driver
+
+    def action(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
+      val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      concatSqlActions(baseUpdate, workflowTuples, sql")").as[Int]
     }
   }
 

@@ -5,7 +5,7 @@ import slick.jdbc.GetResult
 /**
  * Created by thibault on 5/19/16.
  */
-class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawSqlQuery {
   import driver.api._
 
   // TODO tests for GAWB-608:
