@@ -1032,32 +1032,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def abortSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess): ReadWriteAction[PerRequestMessage] = {
     withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-      dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) flatMap { _ =>
-        val aborts = DBIO.from(Future.traverse(submission.workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
-          Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, userInfo))
-        ))
-  
-        aborts.map { abortResults =>
-  
-          val failures = abortResults map { case (workflowId: String, result: Try[ExecutionServiceStatus]) =>
-            (workflowId, result.recover {
-              // Forbidden responses means that it is already done which is ok here
-              case ure: UnsuccessfulResponseException if ure.response.status == StatusCodes.Forbidden => Success(ExecutionServiceStatus(workflowId, WorkflowStatuses.Aborted.toString))
-            })
-          } collect {
-            case (workflowId: String, Failure(regret)) => (workflowId -> regret)
-          }
-  
-          if (failures.isEmpty) {
-            RequestComplete(StatusCodes.NoContent)
-          } else {
-            val causes = failures map { case (workflowId, throwable) =>
-              ErrorReport(s"Unable to abort workflow ${workflowId}", executionServiceDAO.toErrorReport(throwable))
-            }
-            //if we fail to abort all workflows, we do not want to roll back the transaction. we've done all we can at this point
-            RequestComplete(ErrorReport(StatusCodes.BadGateway, s"Unable to abort all workflows for submission ${submissionId}.",causes))
-          }
-        }
+      dataAccess.submissionQuery.updateStatus(UUID.fromString(submission.submissionId), SubmissionStatuses.Aborting) map { rows =>
+        if(rows == 1)
+          RequestComplete(StatusCodes.NoContent)
+        else
+          RequestComplete(ErrorReport(StatusCodes.NotFound, s"Unable to abort submission. Submission ${submissionId} could not be found."))
       }
     }
   }
