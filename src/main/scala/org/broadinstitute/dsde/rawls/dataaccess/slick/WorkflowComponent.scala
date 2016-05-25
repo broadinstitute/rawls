@@ -192,6 +192,11 @@ trait WorkflowComponent {
       sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString}"
     }
 
+    def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString} and submission_id = ${submissionId}"
+    }
+
+
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
         deleteMessagesAndInputs(id) andThen

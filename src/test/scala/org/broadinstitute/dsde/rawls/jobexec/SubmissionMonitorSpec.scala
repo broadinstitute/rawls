@@ -72,6 +72,28 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     }
   }
 
+  val abortableStatuses = Seq(WorkflowStatuses.Queued) ++ WorkflowStatuses.runningStatuses
+
+  abortableStatuses.foreach { status =>
+    it should s"abort all ${status.toString} workflows for a submission marked as aborting" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+      val workflowRecs = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId)))
+
+      runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
+      runAndWait(submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId), SubmissionStatuses.Aborting))
+
+      val submission = runAndWait(submissionQuery.loadSubmission(UUID.fromString(testData.submission1.submissionId))).get
+      assert(submission.status == SubmissionStatuses.Aborting)
+
+      assertResult(Seq.fill(workflowRecs.size){status.toString}) {
+        runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
+      }
+
+      val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
+
+      awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
+    }
+  }
+
   it should "queryExecutionServiceForStatus exception" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val exception = new RuntimeException
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(throw exception))
@@ -345,14 +367,22 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 }
 
 class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends ExecutionServiceDAO {
+  val abortedMap: scala.collection.concurrent.TrieMap[String, String] = new scala.collection.concurrent.TrieMap[String, String]()
+
   override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo) = Future.successful(ExecutionServiceStatus("test_id", workflowStatus))
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
   override def outputs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceOutputs(id, Map("o1" -> AttributeString("foo"))))
   override def logs(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceLogs(id, Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar")))))
 
-  override def status(id: String, userInfo: UserInfo) = Future(ExecutionServiceStatus(id, workflowStatus))
-  override def abort(id: String, userInfo: UserInfo) = Future.successful(Success(ExecutionServiceStatus(id, workflowStatus)))
+  override def status(id: String, userInfo: UserInfo) = {
+    if(abortedMap.keySet.contains(id)) Future(ExecutionServiceStatus(id, WorkflowStatuses.Aborted.toString))
+    else Future(ExecutionServiceStatus(id, workflowStatus))
+  }
+  override def abort(id: String, userInfo: UserInfo) = {
+    abortedMap += id -> WorkflowStatuses.Aborting.toString
+    Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
+  }
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
 }
 

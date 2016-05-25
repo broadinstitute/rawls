@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.sql.Timestamp
-
 import akka.actor._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
@@ -103,17 +101,52 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
    * @return
    */
   def queryExecutionServiceForStatus()(implicit executionContext: ExecutionContext): Future[ExecutionServiceStatusResponse] = {
-    datasource.inTransaction { dataAccess =>
-      dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses: _*)
-    } flatMap { externalWorkflowIds =>
-      Future.traverse(externalWorkflowIds) { workflowRec =>
-        // for each workflow query the exec service for status and if has Succeeded query again for outputs
-        toFutureTry(execServiceStatus(workflowRec) flatMap {
-          case Some(updatedWorkflowRec) => execServiceOutputs(updatedWorkflowRec)
-          case None => Future.successful(None)
-        })
+    val activeStatuses = Seq(WorkflowStatuses.Running, WorkflowStatuses.Submitted)
+
+    val submissionFuture = datasource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.loadSubmission(submissionId)
+    }
+
+    def abortQueuedWorkflows(submissionId: UUID) = {
+      datasource.inTransaction { dataAccess =>
+        dataAccess.workflowQuery.batchUpdateWorkflowsOfStatus(submissionId, WorkflowStatuses.Queued, WorkflowStatuses.Aborted)
       }
-    } map (ExecutionServiceStatusResponse)
+    }
+
+    def abortActiveWorkflows(workflows: Seq[Workflow]) = {
+      Future.traverse(workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
+        Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, getUserInfo))
+      )
+    }
+
+    def queryForWorkflowStatuses() = {
+      datasource.inTransaction { dataAccess =>
+        dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, WorkflowStatuses.runningStatuses: _*)
+      } flatMap { externalWorkflowIds =>
+        Future.traverse(externalWorkflowIds) { workflowRec =>
+          // for each workflow query the exec service for status and if has Succeeded query again for outputs
+          toFutureTry(execServiceStatus(workflowRec) flatMap {
+            case Some(updatedWorkflowRec) => execServiceOutputs(updatedWorkflowRec)
+            case None => Future.successful(None)
+          })
+        }
+      } map (ExecutionServiceStatusResponse)
+    }
+
+    submissionFuture flatMap {
+      case Some(submission) =>
+        if(submission.status == SubmissionStatuses.Aborting) {
+          for {
+            abortQueued <- abortQueuedWorkflows(submissionId)
+            abortActive <- abortActiveWorkflows(submission.workflows.filter(wf => activeStatuses.contains(wf.status)))
+            getStatuses <- queryForWorkflowStatuses()
+          } yield getStatuses
+        }
+        else {
+          queryForWorkflowStatuses()
+        }
+      case None => throw new RawlsException(s"Submission ${submissionId} could not be found")
+    }
   }
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
