@@ -51,7 +51,7 @@ trait SubmissionComponent {
     def submitterId = column[String]("SUBMITTER", O.Length(254))
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
     def submissionEntityId = column[Long]("ENTITY_ID")
-    def status = column[String]("STATUS")
+    def status = column[String]("STATUS", O.Length(32))
 
     def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 

@@ -50,7 +50,7 @@ trait WorkflowComponent {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def externalId = column[Option[String]]("EXTERNAL_ID")
     def submissionId = column[UUID]("SUBMISSION_ID")
-    def status = column[String]("STATUS")
+    def status = column[String]("STATUS", O.Length(32))
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def workflowEntityId = column[Long]("ENTITY_ID")
     def version = column[Long]("record_version")
@@ -61,6 +61,7 @@ trait WorkflowComponent {
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id)
 
     def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
+    def statusIndex = index("idx_workflow_status", status)
 }
 
   class WorkflowMessageTable(tag: Tag) extends Table[WorkflowMessageRecord](tag, "WORKFLOW_MESSAGE") {
@@ -97,7 +98,7 @@ trait WorkflowComponent {
   class WorkflowAuditStatusTable(tag: Tag) extends Table[WorkflowAuditStatusRecord](tag, "AUDIT_WORKFLOW_STATUS") {
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def workflowId = column[Long]("workflow_id")
-    def status = column[String]("status")
+    def status = column[String]("status", O.Length(32))
     def timestamp = column[Timestamp]("timestamp", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
 
     def * = (id, workflowId, status, timestamp) <> (WorkflowAuditStatusRecord.tupled, WorkflowAuditStatusRecord.unapply)
