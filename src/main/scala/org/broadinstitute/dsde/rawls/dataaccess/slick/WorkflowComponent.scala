@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
+import slick.driver.JdbcDriver
 
 /**
  * Created by mbemis on 2/18/16.
@@ -231,9 +232,7 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        val baseUpdate = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where (id, record_version) in ("
-        val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
-        concatSqlActions(baseUpdate, workflowTuples, sql")").as[Int] flatMap { rows =>
+        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) flatMap { rows =>
           if (rows.head == workflows.size)
             DBIO.successful(workflows.size)
           else
@@ -247,11 +246,11 @@ trait WorkflowComponent {
     }
 
     def batchUpdateStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
-      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString}"
+      UpdateWorkflowStatusRawSql.actionForCurrentStatus(currentStatus, newStatus)
     }
 
     def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
-      sqlu"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 where status = ${currentStatus.toString} and submission_id = ${submissionId}"
+      UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
     }
 
 
@@ -566,6 +565,26 @@ trait WorkflowComponent {
     def deleteFailureResolutions(workflowFailureId: Long): DBIOAction[Int, NoStream, Read with Write] = {
       deleteWorkflowFailureAttributes(workflowFailureId) andThen
         findInputResolutionsByFailureId(workflowFailureId).delete
+    }
+  }
+
+  private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
+    val driver: JdbcDriver = WorkflowComponent.this.driver
+
+    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 "
+
+    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
+      val where = sql"where (id, record_version) in ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      concatSqlActions(update(newStatus), where, workflowTuples, sql")").as[Int]
+    }
+
+    def actionForCurrentStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+      concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString}").as[Int].map(_.head)
+    }
+
+    def actionForCurrentStatusAndSubmission(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+      concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}").as[Int].map(_.head)
     }
   }
 
