@@ -9,11 +9,12 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{WorkflowSubmissionMessage, ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
 import spray.http.StatusCodes
+import spray.json.{JsString, JsObject, JsValue}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -34,7 +35,8 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
     val pollInterval: FiniteDuration = 1 second,
     val maxActiveWorkflowsTotal: Int = 100,
-    val maxActiveWorkflowsPerUser: Int = 100) extends WorkflowSubmission {
+    val maxActiveWorkflowsPerUser: Int = 100,
+    val runtimeOptions: Option[JsValue] = None) extends WorkflowSubmission {
 
     val credential: Credential = new MockGoogleCredential.Builder().build()
     credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
@@ -73,8 +75,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
 
-    assertResult(SubmitWorkflowBatch(workflowRecs.map(_.id))) {
-      Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
+    val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
+    workflowSubMsg match {
+      case SubmitWorkflowBatch(workflowIds) =>
+        workflowIds should contain theSameElementsAs workflowRecs.map(_.id)
+      case _ => fail("wrong workflow submission message")
     }
 
     assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
@@ -172,7 +177,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
     val mockExecSvc = new MockExecutionServiceDAO()
-    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100) {
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
       override val executionServiceDAO = mockExecSvc
     }
 
@@ -188,7 +193,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       import spray.json._
       import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat // implicit format make convertTo work below
       val token = Await.result(workflowSubmission.googleServicesDAO.getToken(testData.submission1.submitter), Duration.Inf).get
-      assertResult(Some(ExecutionServiceWorkflowOptions(s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}", testData.wsName.namespace, testData.userOwner.userEmail.value, token, testData.billingProject.cromwellAuthBucketUrl))) {
+      assertResult(
+        Some(
+          ExecutionServiceWorkflowOptions(
+            s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}",
+            testData.wsName.namespace,
+            testData.userOwner.userEmail.value,
+            token,
+            testData.billingProject.cromwellAuthBucketUrl,
+            Some(JsObject(Map("zones" -> JsString("us-central-someother"))))
+          ))) {
         mockExecSvc.submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
     }
@@ -266,7 +280,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout),
-      3, credential, 1 milliseconds, 100, 100)
+      3, credential, 1 milliseconds, 100, 100, None)
     )
 
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ != WorkflowStatuses.Queued.toString), 10 seconds)
@@ -288,7 +302,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
       new MockExecutionServiceDAO(true),
-      batchSize, credential, 1 milliseconds, 100, 100)
+      batchSize, credential, 1 milliseconds, 100, 100, None)
     )
 
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)

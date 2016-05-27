@@ -59,7 +59,9 @@ case class ExecutionServiceWorkflowOptions(
   google_project: String,
   account_name: String,
   refresh_token: String,
-  auth_bucket: String)
+  auth_bucket: String,
+  defaultRuntimeOptions: Option[JsValue]
+)
 
 // Status of a successfully started workflow
 case class Workflow(
@@ -247,7 +249,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat5(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat6(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
