@@ -64,6 +64,7 @@ object WorkspaceService {
   case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
   case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
   case class ListEntityTypes(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
@@ -134,6 +135,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
     case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
+    case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
     case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
     case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
     case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
@@ -607,6 +609,70 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataAccess.entityQuery.list(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
       }
     }
+
+  def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+    object AttributeStringifier {
+      def apply(attribute: Attribute): String = {
+        attribute match {
+          case AttributeNull => ""
+          case AttributeString(value) => value
+          case AttributeNumber(value) => value.toString()
+          case AttributeBoolean(value) => value.toString()
+          case AttributeEmptyList => ""
+          case AttributeValueList(list) => list.map(apply).mkString(" ")
+          case AttributeEntityReferenceList(list) => list.map(apply).mkString(" ")
+          case AttributeEntityReference(t, name) => name
+        }
+      }
+    }
+
+    object AttributeOrderingAsc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = {
+        (x, y) match {
+          case (AttributeNumber(value1), AttributeNumber(value2)) => value1.compare(value2)
+          case (_, _) => AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
+        }
+      }
+    }
+
+    object AttributeOrderingDesc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = -1 * AttributeOrderingAsc.compare(x, y)
+    }
+
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntities =>
+          val filteredEntities = query.query match {
+            case None => allEntities
+            case Some(queryString) =>
+              val terms = queryString.split(" ")
+              allEntities.filter { entity =>
+                val attributesString = (entity.attributes.values.map(AttributeStringifier(_)) + entity.name).mkString(" ")
+                terms.forall(attributesString.contains)
+              }
+          }
+
+          val ordering = query.sortDirection match {
+            case Some("desc") => AttributeOrderingDesc
+            case _ => AttributeOrderingAsc
+          }
+
+          val sortedEntities = query.sortField.getOrElse("name") match {
+            case "name" => filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering)
+            case sortFieldName => filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering)
+          }
+
+          val pageSize = query.pageSize.getOrElse(20)
+          val page = sortedEntities.drop((query.page.getOrElse(0) - 1) * pageSize).take(pageSize)
+          val filteredCount = sortedEntities.size
+          val pageCount = Math.ceil(filteredCount.toFloat / pageSize).toInt
+          val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
+
+          RequestComplete(StatusCodes.OK, response)
+        }
+      }
+    }
+  }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>

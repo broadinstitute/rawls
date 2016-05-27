@@ -71,6 +71,12 @@ case class Entity(
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+case class EntityQuery(page: Option[Int], pageSize: Option[Int], sortField: Option[String], sortDirection: Option[String], query: Option[String])
+
+case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, pageCount: Int)
+
+case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
+
 case class MethodConfigurationName(
                    name: String,
                    namespace: String,
@@ -213,6 +219,12 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceFormat = jsonFormat12(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
+
+  implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
+
+  implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
+
+  implicit val EntityQueryResponseFormat = jsonFormat3(EntityQueryResponse)
 
   implicit val WorkspaceStatusFormat = jsonFormat2(WorkspaceStatus)
 
