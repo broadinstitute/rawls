@@ -33,8 +33,9 @@ object WorkflowSubmissionActor {
             credential: Credential,
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
-            maxActiveWorkflowsPerUser: Int): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceDAO, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser))
+            maxActiveWorkflowsPerUser: Int,
+            runtimeOptions: Option[JsValue]): Props = {
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceDAO, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
   }
 
   sealed trait WorkflowSubmissionMessage
@@ -52,7 +53,8 @@ class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val credential: Credential,
                               val pollInterval: FiniteDuration,
                               val maxActiveWorkflowsTotal: Int,
-                              val maxActiveWorkflowsPerUser: Int) extends Actor with WorkflowSubmission with LazyLogging {
+                              val maxActiveWorkflowsPerUser: Int,
+                              val runtimeOptions: Option[JsValue]) extends Actor with WorkflowSubmission with LazyLogging {
 
   import context._
 
@@ -88,6 +90,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val pollInterval: FiniteDuration
   val maxActiveWorkflowsTotal: Int
   val maxActiveWorkflowsPerUser: Int
+  val runtimeOptions: Option[JsValue]
 
   import dataSource.dataAccess.driver.api._
 
@@ -139,7 +142,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       workspace.namespace,
       user.userEmail.value,
       token,
-      billingProject.cromwellAuthBucketUrl
+      billingProject.cromwellAuthBucketUrl,
+      runtimeOptions
     )
   }
 

@@ -12,7 +12,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ConfigRenderOptions, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
@@ -22,9 +22,10 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.can.Http
+import spray.json._
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Try, Failure, Success}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.JavaConversions._
@@ -113,7 +114,8 @@ object Boot extends App with LazyLogging {
         gcsDAO.getBucketServiceAccountCredential,
         toScalaDuration(conf.getDuration("executionservice.pollInterval")),
         conf.getInt("executionservice.maxActiveWorkflowsTotal"),
-        conf.getInt("executionservice.maxActiveWorkflowsPerUser")
+        conf.getInt("executionservice.maxActiveWorkflowsPerUser"),
+        Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption
       ))
     }
 
