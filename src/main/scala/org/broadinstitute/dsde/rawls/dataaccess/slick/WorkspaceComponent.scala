@@ -126,6 +126,23 @@ trait WorkspaceComponent {
       DBIO.seq(insertActions.toSeq:_*)
     }
 
+    private def updateAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+      val workspaceId = UUID.fromString(workspace.workspaceId)
+      workspaceAttributes(findByIdQuery(workspaceId)).result.flatMap { wsIdAndAttributeRecords =>
+        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => attrRec }
+
+        //three categories: remove, add, update
+        //add: new - original
+        //remove: original - new
+        //update: original n new
+
+        //lists are trickier. how do we know a list has changed? guess we have to load the whole contents...
+
+
+
+      }
+    }
+
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
       findByIdAndRecordVersionQuery(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
         case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
