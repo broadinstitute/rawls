@@ -5,7 +5,6 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.pattern.AskTimeoutException
 import akka.testkit.{TestKit, TestActorRef}
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential.Builder
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer

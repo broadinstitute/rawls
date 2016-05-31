@@ -5,7 +5,6 @@ import java.util.UUID
 import akka.actor.{PoisonPill, ActorSystem}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
@@ -36,8 +35,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val maxActiveWorkflowsTotal: Int = 100,
     val maxActiveWorkflowsPerUser: Int = 100) extends WorkflowSubmission {
 
-    val credential: Credential = new MockGoogleCredential.Builder().build()
-    credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
+    val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val googleServicesDAO = mockGoogleServicesDAO
     val executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
@@ -256,8 +254,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   "WorkflowSubmissionActor" should "submit workflows" in withDefaultTestDatabase {
-    val credential: Credential = new MockGoogleCredential.Builder().build()
-    credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
+    val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(3, testData.submission1.submissionId)
 
@@ -274,8 +271,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   it should "continue submitting workflow on exec svc error" in withDefaultTestDatabase {
-    val credential: Credential = new MockGoogleCredential.Builder().build()
-    credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
+    val credential: Credential =  mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val batchSize = 3
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(2*batchSize, testData.submissionTerminateTest.submissionId)
