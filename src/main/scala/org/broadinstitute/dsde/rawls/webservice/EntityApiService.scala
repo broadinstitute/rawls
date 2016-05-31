@@ -4,11 +4,12 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.http.StatusCodes
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
+import scala.util.{Success, Failure, Try}
 
 /**
  * Created by dvoet on 6/4/15.
@@ -25,14 +26,19 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
   val entityRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
-        parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'query.?) { (page, pageSize, sortField, sortDirection, query) =>
-          validate(page.forall(p => Try(p.toInt).isSuccess && p.toInt > 0), "page must be a positive integer") {
-            validate(pageSize.forall(p => Try(p.toInt).isSuccess && p.toInt > 0), "pageSize must be a positive integer") {
+        parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
+          val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k,s) => k -> Try(s.map(_.toInt)) }
+          val errors = toIntTries.collect {
+            case (k, Failure(t)) => s"$k must be a positive integer"
+            case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+          }
 
-              val entityQuery = EntityQuery(page.map(_.toInt), pageSize.map(_.toInt), sortField, sortDirection, query)
-              requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
-            }
+          if (errors.isEmpty) {
+            val entityQuery = EntityQuery(page.map(_.toInt), pageSize.map(_.toInt), sortField, sortDirection, filterTerms)
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
+          } else {
+            complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
           }
         }
       }

@@ -71,9 +71,9 @@ case class Entity(
   def toReference = AttributeEntityReference(entityType, name)
 }
 
-case class EntityQuery(page: Option[Int], pageSize: Option[Int], sortField: Option[String], sortDirection: Option[String], query: Option[String])
+case class EntityQuery(page: Option[Int], pageSize: Option[Int], sortField: Option[String], sortDirection: Option[String], filterTerms: Option[String])
 
-case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, pageCount: Int)
+case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 

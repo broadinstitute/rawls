@@ -610,7 +610,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, entityType: String, requestedQuery: EntityQuery): Future[PerRequestMessage] = {
     object AttributeStringifier {
       def apply(attribute: Attribute): String = {
         attribute match {
@@ -642,12 +642,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntities =>
-          val filteredEntities = query.query match {
+          // apply all default values here
+          val query = EntityQuery(
+            Option(requestedQuery.page.getOrElse(1)),
+            Option(requestedQuery.pageSize.getOrElse(10)),
+            Option(requestedQuery.sortField.getOrElse("name")),
+            Option(requestedQuery.sortDirection.getOrElse("asc")),
+            requestedQuery.filterTerms
+          )
+
+          val filteredEntities = query.filterTerms match {
             case None => allEntities
-            case Some(queryString) =>
-              val terms = queryString.split(" ")
+            case Some(filterTerms) =>
+              val terms = filterTerms.split(" ")
               allEntities.filter { entity =>
-                val attributesString = (entity.attributes.values.map(AttributeStringifier(_)) + entity.name).mkString(" ")
+                // do ++ Seq(entity.name) below instead of + entity.name because the compiler chooses the wrong + in the latter case
+                val attributesString = (entity.attributes.values.map(AttributeStringifier(_)) ++ Seq(entity.name)).mkString(" ")
                 terms.forall(attributesString.contains)
               }
           }
@@ -657,18 +667,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case _ => AttributeOrderingAsc
           }
 
-          val sortedEntities = query.sortField.getOrElse("name") match {
+          val sortedEntities = query.sortField.get match {
             case "name" => filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering)
             case sortFieldName => filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering)
           }
 
-          val pageSize = query.pageSize.getOrElse(20)
-          val page = sortedEntities.drop((query.page.getOrElse(0) - 1) * pageSize).take(pageSize)
+          val pageSize = query.pageSize.get
           val filteredCount = sortedEntities.size
           val pageCount = Math.ceil(filteredCount.toFloat / pageSize).toInt
-          val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
+          if (filteredCount > 0 && query.page.get > pageCount) {
+            RequestComplete(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page.get} is greater than the number of pages $pageCount"))
 
-          RequestComplete(StatusCodes.OK, response)
+          } else {
+            val offset = (query.page.get - 1) * pageSize
+            val page = sortedEntities.slice(offset, offset + pageSize)
+            val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
+
+            RequestComplete(StatusCodes.OK, response)
+          }
         }
       }
     }
