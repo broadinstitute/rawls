@@ -129,7 +129,17 @@ trait WorkspaceComponent {
     private def updateAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
       workspaceAttributes(findByIdQuery(workspaceId)).result.flatMap { wsIdAndAttributeRecords =>
-        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => attrRec }
+        //will need to actually load the entities first
+        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => ((wsId, attrRec), None) }
+
+        val fullRecords = workspaceAttributeQuery.unmarshalAttributes(records)
+
+        fullRecords
+
+
+        val recordsToAdd = records.filter(workspace.attributes.map(_._1))
+        val recordsToRemove = records.filterNot(workspace.attributes.map(_._1))
+        //val recordsToUpdate =
 
         //three categories: remove, add, update
         //add: new - original
