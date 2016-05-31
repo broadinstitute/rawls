@@ -15,15 +15,20 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   val workspace = Workspace("broad-dsde-test", "test-workspace", None, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
   val workspaceId = UUID.fromString(workspace.workspaceId)
 
+  // we don't know the IDs because it autoincrements
+  val (dummyId1, dummyId2) = (12345, 67890)
+  def assertExpectedRecords(expectedRecords: WorkspaceAttributeRecord*): Unit = {
+    val records = runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result) map { _.copy(id = dummyId1) }
+    records should contain theSameElementsAs { expectedRecords map { _.copy(id = dummyId1) }}
+  }
+
   "AttributeComponent" should "insert string attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
     runAndWait(workspaceQuery.save(workspace))
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", Option("test"), None, None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", Option("test"), None, None, None, None))
   }
 
   it should "insert number attribute" in withEmptyTestDatabase {
@@ -32,9 +37,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, Option(3.14159), None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, Option(3.14159), None, None, None))
   }
 
   it should "insert boolean attribute" in withEmptyTestDatabase {
@@ -43,9 +46,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, Option(true), None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, Option(true), None, None))
   }
 
   it should "insert attribute value list" in withEmptyTestDatabase {
@@ -54,14 +55,11 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
-    assertResult(Set(
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(9), None, None, Option(0)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(8), None, None, Option(1)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(7), None, None, Option(2)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, Option(6), None, None, Option(3)))) {
-
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).map(_.copy(id=0)).toSet
-    }
+    assertExpectedRecords(
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, Option(9), None, None, Option(0)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, Option(8), None, None, Option(1)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, Option(7), None, None, Option(2)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, Option(6), None, None, Option(3)))
   }
 
   it should "insert empty list" in withEmptyTestDatabase {
@@ -70,9 +68,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Set(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, None, Option(-1)))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).toSet
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1)))
   }
 
   it should "insert null attribute" in withEmptyTestDatabase {
@@ -81,9 +77,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Set(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, None, None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).toSet
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, None))
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
@@ -93,9 +87,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertResult(Seq(WorkspaceAttributeRecord(1, workspaceId, "test", None, None, None, Option(entityId), None))) {
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result)
-    }
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, Option(entityId), None))
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
@@ -109,14 +101,12 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
-    assertResult(Set(
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId1), Option(0)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId2), Option(1)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId3), Option(2)),
-      WorkspaceAttributeRecord(0, workspaceId, "test", None, None, None, Option(entityId4), Option(3)))) {
+    assertExpectedRecords(
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, Option(entityId1), Option(0)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, Option(entityId2), Option(1)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, Option(entityId3), Option(2)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, Option(entityId4), Option(3)))
 
-      runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).map(_.copy(id=0)).toSet
-    }
   }
 
   it should "throw exception inserting ref to nonexistent entity" in withEmptyTestDatabase {
@@ -144,9 +134,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "delete attribute records" in withEmptyTestDatabase {
     runAndWait(workspaceQuery.save(workspace))
     val inserts = Seq(
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(0, workspaceId, "test1", None, Some(1), None, None, None),
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(0, workspaceId, "test2", None, Some(2), None, None, None),
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(0, workspaceId, "test3", None, Some(3), None, None, None)) map { insert =>
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "test1", None, Some(1), None, None, None),
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "test2", None, Some(2), None, None, None),
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "test3", None, Some(3), None, None, None)) map { insert =>
 
       runAndWait(insert)
     }
@@ -160,18 +150,18 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "unmarshall attribute records" in withEmptyTestDatabase {
     val attributeRecs = Seq(
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "string", Some("value"), None, None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "num", None, Some(1), None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "bool", None, None, Some(true), None, None)), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "ref", None, None, None, Some(1), None)), Some(EntityRecord(0, "name", "type", workspaceId, 0))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "null", None, None, None, None, None)), None),
-      ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(1), None, None, Some(2))), None),
-      ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(2), None, None, Some(1))), None),
-      ((2, WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(3), None, None, Some(0))), None),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(1), Some(2))), Some(EntityRecord(0, "name1", "type", workspaceId, 0))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(2), Some(1))), Some(EntityRecord(0, "name2", "type", workspaceId, 0))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "refList", None, None, None, Some(3), Some(0))), Some(EntityRecord(0, "name3", "type", workspaceId, 0))),
-      ((1, WorkspaceAttributeRecord(0, workspaceId, "emptyList", None, Some(1), None, None, Some(-1))), None)
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "string", Some("value"), None, None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "num", None, Some(1), None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "bool", None, None, Some(true), None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "ref", None, None, None, Some(1), None)), Some(EntityRecord(0, "name", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "null", None, None, None, None, None)), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(1), None, None, Some(2))), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(2), None, None, Some(1))), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(3), None, None, Some(0))), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "refList", None, None, None, Some(1), Some(2))), Some(EntityRecord(0, "name1", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "refList", None, None, None, Some(2), Some(1))), Some(EntityRecord(0, "name2", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "refList", None, None, None, Some(3), Some(0))), Some(EntityRecord(0, "name3", "type", workspaceId, 0))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "emptyList", None, Some(1), None, None, Some(-1))), None)
     )
 
     assertResult(
@@ -192,9 +182,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
     val attributeRecs = Seq(
-      ((1 -> WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(1), None, None, Some(2))), None),
-      ((1 -> WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(2), None, None, None)), None),
-      ((1 -> WorkspaceAttributeRecord(0, workspaceId, "valList", None, Some(3), None, None, Some(0))), None)
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(1), None, None, Some(2))), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(2), None, None, None)), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "valList", None, Some(3), None, None, Some(0))), None)
     )
 
     intercept[RawlsException] {
