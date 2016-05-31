@@ -667,23 +667,34 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case _ => AttributeOrderingAsc
           }
 
-          val sortedEntities = query.sortField.get match {
-            case "name" => filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering)
-            case sortFieldName => filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering)
+          val sortedEntitiesTry = query.sortField.get match {
+            case "name" => Success(filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering))
+            case sortFieldName =>
+              if (filteredEntities.exists(_.attributes.getOrElse(sortFieldName, AttributeNull) != AttributeNull)) {
+                Success(filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering))
+              } else {
+                Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"sort field $sortFieldName does not exist for any $entityType")))
+              }
+
           }
 
-          val pageSize = query.pageSize.get
-          val filteredCount = sortedEntities.size
-          val pageCount = Math.ceil(filteredCount.toFloat / pageSize).toInt
-          if (filteredCount > 0 && query.page.get > pageCount) {
-            RequestComplete(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page.get} is greater than the number of pages $pageCount"))
+          sortedEntitiesTry.flatMap { sortedEntities =>
+            val pageSize = query.pageSize.get
+            val filteredCount = sortedEntities.size
+            val pageCount = Math.ceil(filteredCount.toFloat / pageSize).toInt
+            if (filteredCount > 0 && query.page.get > pageCount) {
+              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page.get} is greater than the number of pages $pageCount")))
 
-          } else {
-            val offset = (query.page.get - 1) * pageSize
-            val page = sortedEntities.slice(offset, offset + pageSize)
-            val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
+            } else {
+              val offset = (query.page.get - 1) * pageSize
+              val page = sortedEntities.slice(offset, offset + pageSize)
+              val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
 
-            RequestComplete(StatusCodes.OK, response)
+              Success(RequestComplete(StatusCodes.OK, response))
+            }
+          } match {
+            case Success(rc) => rc
+            case Failure(regrets) => throw regrets
           }
         }
       }
