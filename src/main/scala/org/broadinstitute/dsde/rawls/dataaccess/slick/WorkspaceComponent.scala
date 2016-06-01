@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -94,9 +95,8 @@ trait WorkspaceComponent {
             insertOrUpdateAccessRecords(workspace) andThen
             insertAttributes(workspace)
         case Some(workspaceRecord) =>
-          insertOrUpdateAccessRecords(workspace) andThen
-            deleteAttributes(workspace) andThen
-            insertAttributes(workspace) andThen
+          upsertAttributes(workspace) andThen
+            insertOrUpdateAccessRecords(workspace) andThen
             optimisticLockUpdate(workspaceRecord)
       } map { _ => workspace }
     }
@@ -126,30 +126,43 @@ trait WorkspaceComponent {
       DBIO.seq(insertActions.toSeq:_*)
     }
 
-    private def updateAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+    private def upsertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
-      workspaceAttributes(findByIdQuery(workspaceId)).result.flatMap { wsIdAndAttributeRecords =>
-        //will need to actually load the entities first
-        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => ((wsId, attrRec), None) }
+      findById(workspace.workspaceId) flatMap { loadedWorkspace =>
+        loadedWorkspace match {
+          case None => throw new RawlsException("Unable to update attributes on workspace")
+          case Some(oldWs) => {
+            val newAttributes = workspace.attributes
+            val oldAttributes = oldWs.attributes
 
-        val fullRecords = workspaceAttributeQuery.unmarshalAttributes(records)
+            val recordsToAdd = newAttributes -- oldAttributes.keySet
+            val recordsToRemove = oldAttributes -- newAttributes.keySet
+            val recordsToUpdate = (newAttributes -- recordsToAdd.keySet -- recordsToRemove.keySet).filterNot(attr => attr._2.equals(oldAttributes(attr._1)))
 
-        fullRecords
+            println("add: " + recordsToAdd)
+            println("rem: " + recordsToRemove)
+            println("upd: " + recordsToUpdate)
 
+            //need all to load all of the entities that are referenced (entityRef -> long)
 
-        val recordsToAdd = records.filter(workspace.attributes.map(_._1))
-        val recordsToRemove = records.filterNot(workspace.attributes.map(_._1))
-        //val recordsToUpdate =
+            //this is kinda gross. avoid doing asInstanceOf?
+            val entityRefs: Seq[AttributeEntityReference] = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
+            val entityRefLists: Seq[AttributeEntityReferenceList]  = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
 
-        //three categories: remove, add, update
-        //add: new - original
-        //remove: original - new
-        //update: original n new
+            val entitiesToLookup = (entityRefs ++ entityRefLists.map(_.list).flatten)
 
-        //lists are trickier. how do we know a list has changed? guess we have to load the whole contents...
+            entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+              val foo = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
 
-
-
+              //do delete first because we also want to delete the records that will be updated
+              val namesToDelete = recordsToRemove.map(_._1) ++ recordsToUpdate.map(_._1)
+              println(namesToDelete)
+              //move this delete into AttributeComponent
+              workspaceAttributeQuery.filter(rec => rec.ownerId === workspaceId && rec.name.inSetBind(namesToDelete)).delete andThen
+                workspaceAttributeQuery.batchInsertAttributes((recordsToAdd++recordsToUpdate).map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, foo)).flatten.toSeq)
+            }
+          }
+        }
       }
     }
 

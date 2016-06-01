@@ -131,6 +131,10 @@ trait EntityComponent {
       filter(_.id === id)
     }
 
+    def findEntitiesByIds(ids: Seq[Long]): EntityQuery = {
+      filter(_.id.inSetBind(ids))
+    }
+
     def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery = {
       filter(rec => rec.id === id && rec.version === version)
     }
@@ -315,10 +319,9 @@ trait EntityComponent {
     def selectEntityIds(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
-      val x = DBIO.sequence(entitiesGrouped map { batch =>
+      DBIO.sequence(entitiesGrouped map { batch =>
         EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map(r => AttributeEntityReference(r.entityType, r.name)))
-      }).map{ z => z.flatten }
-      x
+      }).map{ entityRecords => entityRecords.flatten }
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {

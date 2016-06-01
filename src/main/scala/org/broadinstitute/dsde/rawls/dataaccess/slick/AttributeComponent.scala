@@ -133,6 +133,12 @@ trait AttributeComponent {
       }
     }
 
+//    def updateAttributes(ownerId: OWNER_ID, existingAttributeRecs: Seq[RECORD], newAttributes: Seq[Attribute]): Seq[ReadWriteAction[Int]] = {
+//      def isRecordEqualToAttribute(record: RECORD, attribute: Attribute): Boolean = {
+//        if()
+//      }
+//    }
+
     private def insertAttributeRef(ownerId: OWNER_ID, name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None): ReadWriteAction[Int] = {
       entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
         case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")
@@ -189,6 +195,10 @@ trait AttributeComponent {
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
+
+//    def deleteAttributeRecordsByNameAndOwner(ownerId: OWNER_ID, names: Seq[String]): DBIOAction[Int, NoStream, Write] = {
+//      filter(rec => rec.ownerId === ownerId && rec.name inSetBind names).delete
+//    }
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
