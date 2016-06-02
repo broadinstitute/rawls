@@ -38,7 +38,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
           } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
 
           if (errors.isEmpty) {
-            val entityQuery = EntityQuery(page.map(_.toInt).getOrElse(1), pageSize.map(_.toInt).getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
+            val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
               WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
           } else {

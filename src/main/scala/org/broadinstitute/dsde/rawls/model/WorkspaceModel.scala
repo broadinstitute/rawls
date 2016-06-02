@@ -226,6 +226,21 @@ case class AttributeValueList(val list: Seq[AttributeValue]) extends Attribute
 case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends Attribute
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends Attribute
 
+object AttributeStringifier {
+  def apply(attribute: Attribute): String = {
+    attribute match {
+      case AttributeNull => ""
+      case AttributeString(value) => value
+      case AttributeNumber(value) => value.toString()
+      case AttributeBoolean(value) => value.toString()
+      case AttributeEmptyList => ""
+      case AttributeValueList(list) => list.map(apply).mkString(" ")
+      case AttributeEntityReferenceList(list) => list.map(apply).mkString(" ")
+      case AttributeEntityReference(t, name) => name
+    }
+  }
+}
+
 object WorkspaceJsonSupport extends JsonSupport {
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {

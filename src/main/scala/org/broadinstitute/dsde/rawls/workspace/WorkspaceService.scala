@@ -612,21 +612,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
-    object AttributeStringifier {
-      def apply(attribute: Attribute): String = {
-        attribute match {
-          case AttributeNull => ""
-          case AttributeString(value) => value
-          case AttributeNumber(value) => value.toString()
-          case AttributeBoolean(value) => value.toString()
-          case AttributeEmptyList => ""
-          case AttributeValueList(list) => list.map(apply).mkString(" ")
-          case AttributeEntityReferenceList(list) => list.map(apply).mkString(" ")
-          case AttributeEntityReference(t, name) => name
-        }
-      }
-    }
-
     object AttributeOrderingAsc extends Ordering[Attribute] {
       override def compare(x: Attribute, y: Attribute): Int = AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
     }
