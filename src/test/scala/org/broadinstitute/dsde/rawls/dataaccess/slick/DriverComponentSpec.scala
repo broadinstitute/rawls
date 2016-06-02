@@ -14,9 +14,9 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   //   validateAttributeName
   //   createBatches
 
-  implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
-
   "DriverComponent" should "test concatSqlActions" in withDefaultTestDatabase {
+    implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
+
     val select = sql"SELECT * FROM WORKFLOW "
     val where = sql"WHERE STATUS = 'Submitted' "
     val queryA = sql"SELECT * FROM WORKFLOW WHERE STATUS = 'Submitted' "
@@ -45,6 +45,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "test reduceSqlActionsWithDelim" in withDefaultTestDatabase {
+    implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
 
     val select = sql"SELECT * FROM WORKFLOW "
     val where1 = sql"WHERE STATUS IN ("

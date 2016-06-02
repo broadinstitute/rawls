@@ -13,15 +13,13 @@ import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.scalatest.{FlatSpecLike, Matchers}
+import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.{StatusCode, StatusCodes}
 import spray.json._
 import scala.concurrent.duration._
-import scala.concurrent.{Future, Await}
-import scala.util.{Try, Success}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.scalatest.BeforeAndAfterAll
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
+import scala.concurrent.Await
+import scala.util.Try
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, TestData}
 
 /**
  * Created with IntelliJ IDEA.
@@ -38,15 +36,16 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   val submissionSupervisorActorName = "test-subspec-submission-supervisor"
 
   val mockServer = RemoteServicesMockServer()
-  override def beforeAll() = {
-    super.beforeAll
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     mockServer.startServer
   }
 
-  override def afterAll: Unit = {
+  override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
-    super.afterAll
     mockServer.stopServer
+    super.afterAll()
   }
 
   var subMissingWorkflow = UUID.randomUUID().toString

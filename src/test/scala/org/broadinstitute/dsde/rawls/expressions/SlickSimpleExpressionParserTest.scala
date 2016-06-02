@@ -12,12 +12,9 @@ import org.broadinstitute.dsde.rawls.model._
 
 import org.scalatest.FunSuite
 
-import org.scalatest.TryValues
-import slick.dbio
-
 import scala.collection.immutable.IndexedSeq
 import scala.collection.mutable.Seq
-import scala.util.{Random, Failure => TryFailure, Success => TrySuccess}
+import scala.util.{Random, Success => TrySuccess}
 
 
 /**

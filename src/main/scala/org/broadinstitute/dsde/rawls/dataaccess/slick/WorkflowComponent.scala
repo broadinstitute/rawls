@@ -102,6 +102,8 @@ trait WorkflowComponent {
     def timestamp = column[Timestamp]("timestamp", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
 
     def * = (id, workflowId, status, timestamp) <> (WorkflowAuditStatusRecord.tupled, WorkflowAuditStatusRecord.unapply)
+
+    def statusIndex = index("IDX_AUDIT_WORKFLOW_STATUS_WORKFLOW_ID", workflowId)
   }
 
   protected val workflowMessageQuery = TableQuery[WorkflowMessageTable]

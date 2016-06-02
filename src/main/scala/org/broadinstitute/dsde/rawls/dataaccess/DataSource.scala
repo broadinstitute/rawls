@@ -5,7 +5,7 @@ import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
-import _root_.slick.driver.JdbcProfile
+import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
@@ -96,6 +96,15 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
   def initWithSlick(): Unit = {
     import dataAccess.driver.api._
     import scala.concurrent.duration._
-    Await.result(database.run(DBIO.seq(dataAccess.allSchemas.create)), 1.minute)
+
+    val tablesExist: Boolean = Await.result(database.run(MTable.getTables).map(_.nonEmpty), 1.minute)
+
+    val createOrTruncateAction = if (tablesExist)
+      dataAccess.truncateAll
+    else
+      dataAccess.allSchemas.create
+
+    Await.result(database.run(createOrTruncateAction), 1.minute)
   }
-}
+
+ }

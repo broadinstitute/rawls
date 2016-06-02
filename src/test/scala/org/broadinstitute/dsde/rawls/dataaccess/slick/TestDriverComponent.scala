@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
-import org.scalatest.{FlatSpec, BeforeAndAfterAll, Matchers}
+import org.scalatest.{Suite, FlatSpec, Matchers}
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
 import _root_.slick.driver.H2Driver.api._
@@ -19,22 +19,32 @@ import spray.http.OAuth2BearerToken
 import scala.concurrent.duration._
 import scala.concurrent.{Future, Await}
 
+// initialize database tables and connection pool only once
+object DbResource {
+  // to override, e.g. to run against mysql:
+  // $ sbt -Dtestdb=mysql test
+  private val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
+
+  val config = DatabaseConfig.forConfig[JdbcDriver](testdb)
+
+  val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
+  dataSource.initWithSlick()
+}
+
 /**
  * Created by dvoet on 2/3/16.
  */
 trait TestDriverComponent extends DriverComponent with DataAccess {
+  this: Suite =>
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  // to override, e.g. to run against mysql:
-  // $ sbt -Dtestdb=mysql test
-  val testdb = ConfigFactory.load.getStringOr("testdb", "mysql")
+  val databaseConfig = DbResource.config
+  val slickDataSource = DbResource.dataSource
 
-  val databaseConfig: DatabaseConfig[JdbcDriver] = DatabaseConfig.forConfig[JdbcDriver](testdb)
   override val driver: JdbcDriver = databaseConfig.driver
   override val batchSize: Int = databaseConfig.config.getInt("batchSize")
   val database = databaseConfig.db
-  val slickDataSource = new SlickDataSource(databaseConfig)
 
   val testDate = currentTime()
   val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -426,13 +436,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
     try {
-      runAndWait(allSchemas.create)
       runAndWait(data.save())
       testCode
     } catch {
       case t: Throwable => t.printStackTrace; throw t
     } finally {
-      runAndWait(allSchemas.drop)
+      runAndWait(DBIO.seq(slickDataSource.dataAccess.truncateAll))
     }
   }
 
@@ -445,6 +454,4 @@ trait TestData {
   def save(): ReadWriteAction[Unit]
 }
 
-trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers with BeforeAndAfterAll {
-  override def afterAll() = slickDataSource.databaseConfig.db.shutdown
-}
+trait TestDriverComponentWithFlatSpecAndMatchers extends FlatSpec with TestDriverComponent with Matchers

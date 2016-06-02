@@ -3,8 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 import scala.collection.immutable.Map
-import scala.util.{Try, Success, Failure}
-import org.joda.time.DateTime
+import scala.util.Try
 import org.scalatest.{WordSpecLike, Matchers}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext

@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import _root_.slick.dbio.DBIO
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -17,9 +17,8 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
-import org.joda.time.DateTime
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.{StatusCodes, StatusCode, OAuth2BearerToken}
+import spray.http.{StatusCodes, StatusCode}
 import spray.testkit.ScalatestRouteTest
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.{FiniteDuration, Duration}
