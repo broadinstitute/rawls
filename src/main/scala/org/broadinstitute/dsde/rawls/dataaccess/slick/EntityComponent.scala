@@ -154,15 +154,9 @@ trait EntityComponent {
     }
 
     /** gets the given entity with its id **/
-    def getWithId(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[(Long, Option[Entity])] = {
-      val entityRec = EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName)
-      val t = entityRec flatMap { x =>
-        unmarshalEntities(entityRec).map(_.headOption) map { thing =>
-          //doesn't really do any error handling atm
-          x.head.entityRecord.id -> thing
-        }
-      }
-      t
+    //maybe return Option[Long, Entity]
+    def getWithId(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[(Long, Entity)]] = {
+      unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName)).map(_.headOption)
     }
 
     /**
@@ -212,10 +206,8 @@ trait EntityComponent {
 
       for {
         preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference))
-        //_ <- deleteEntityAttributes(preExistingEntityRecs)
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
-        //_ <- insertAttributes(entities, referencedAndSavingEntityRecs)
         _ <- upsertAttributes(workspaceContext, entities)
         _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
       } yield entities
@@ -240,33 +232,18 @@ trait EntityComponent {
     }
 
     private def upsertAttributes(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]) = {
-
-      //for each entity: load entity (with attributes)
-      //do the upsert comparisons
-      //add attributes to batch
-      //insert batch of attributes
-
-      //make this batch and move to AttributeComponent
-
-      //delete from ENTITY_ATTRIBUTE where (owner_id, name) in set ((1, foo),(1, bar))
-      def deleteAttributesFromEntity(ownerId: Long, namesToDelete: Seq[String]) = {
-        if(namesToDelete.size == 0) {
-          DBIO.successful(0)
-        } else entityAttributeQuery.filter(rec => rec.ownerId === ownerId && rec.name.inSetBind(namesToDelete)).delete
-      }
-
       DBIO.sequence(entities.map { entity =>
-        getWithId(workspaceContext, entity.entityType, entity.name) flatMap { case (entityId, loadedEntity) =>
+        getWithId(workspaceContext, entity.entityType, entity.name) flatMap { case loadedEntity =>
           loadedEntity match {
             case None => throw new RawlsException(s"Unable to update attributes on entity ${entity.entityType}:${entity.name}")
-            case Some(oldEntity) => {
+            case Some((entityId, oldEntity)) => {
               val (newAttributes, oldAttributes) = (entity.attributes, oldEntity.attributes)
 
               val recordsToAdd = newAttributes -- oldAttributes.keySet
               val recordsToRemove = oldAttributes -- newAttributes.keySet
               val recordsToUpdate = (newAttributes -- recordsToAdd.keySet -- recordsToRemove.keySet).filterNot(attr => attr._2.equals(oldAttributes(attr._1)))
 
-              //this is kinda gross. avoid doing asInstanceOf? by default it returns as a Seq of Attribute which is too generic
+              //TODO?: is the asInstanceOf really necessary here?
               val entityRefs = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
               val entityRefLists = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
 
@@ -276,15 +253,15 @@ trait EntityComponent {
                 val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
                 val namesToDelete = recordsToRemove.map(_._1) ++ recordsToUpdate.map(_._1)
 
-                //this result is an absolute abomination. clean it up
+                //this result is an absolute abomination. can this be cleaned up? i match these parts to variable names where possible to ease the pain of having to do this
                 DBIO.successful(entityId -> (namesToDelete.toSeq, (recordsToAdd ++ recordsToUpdate), entityIdsByRef))
               }
             }
           }
         }
       }.toSeq) flatMap { result =>
-        //for-comp?
-        deleteAttributesFromEntity(result.head._1, result.head._2._1) andThen //make this batch delete
+        entityAttributeQuery.batchDeleteAttributeRecordsByNameAndOwner(result.flatMap { case (entityId, (namesToDelete, recordsToDealWith, entityIdsByRef)) =>
+          namesToDelete.map(attributeName => entityId -> attributeName)}.toMap) andThen
           entityAttributeQuery.batchInsertAttributes(result.flatMap { case (entityId, (namesToDelete, recordsToDealWith, entityIdsByRef)) =>
             recordsToDealWith.flatMap { case (name, attribute) =>
               entityAttributeQuery.marshalAttribute(entityId, name, attribute, entityIdsByRef)

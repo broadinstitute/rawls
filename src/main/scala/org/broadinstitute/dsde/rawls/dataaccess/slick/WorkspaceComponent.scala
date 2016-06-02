@@ -131,15 +131,15 @@ trait WorkspaceComponent {
       findById(workspace.workspaceId) flatMap { loadedWorkspace =>
         loadedWorkspace match {
           case None => throw new RawlsException("Unable to update attributes on workspace")
-          case Some(oldWs) => {
-            val (newAttributes, oldAttributes) = (workspace.attributes, oldWs.attributes)
+          case Some(oldWorkspace) => {
+            val (newAttributes, oldAttributes) = (workspace.attributes, oldWorkspace.attributes)
 
             val recordsToAdd = newAttributes -- oldAttributes.keySet
             val recordsToRemove = oldAttributes -- newAttributes.keySet
             val recordsToUpdate = (newAttributes -- recordsToAdd.keySet -- recordsToRemove.keySet).filterNot(attr => attr._2.equals(oldAttributes(attr._1)))
 
-            //this is kinda gross. avoid doing asInstanceOf? by default it returns as a Seq of Attribute which is too generic
-            val entityRefs = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
+            //TODO?: this is kinda gross. can i avoid doing asInstanceOf? by default it returns as a Seq of Attribute which is too generic
+            val entityRefs: Seq[AttributeEntityReference] = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
             val entityRefLists = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
 
             val entitiesToLookup = (entityRefs ++ entityRefLists.map(_.list).flatten)

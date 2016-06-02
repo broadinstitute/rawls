@@ -189,10 +189,6 @@ case class ApplicationVersion(gitHash: String, buildNumber: String, version: Str
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
 
-object Attribute {
-  def isEqual(attr: Attribute) = true
-}
-
 case object AttributeNull extends AttributeValue
 case class AttributeString(val value: String) extends AttributeValue
 case class AttributeNumber(val value: BigDecimal) extends AttributeValue

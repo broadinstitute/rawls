@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.ast.TypedType
 import slick.dbio.Effect.{Read, Write}
+import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import spray.http.StatusCodes
 
@@ -110,6 +111,21 @@ trait AttributeComponent {
 
   protected abstract class AttributeQuery[OWNER_ID, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T) extends TableQuery[T](cons)  {
 
+    private object DeleteAttributesNamesForOwnerIdQuery extends RawSqlQuery {
+      val driver: JdbcDriver = AttributeComponent.this.driver
+
+      //delete from *_ATTRIBUTE where (owner_id, name) in ((1, foo),(2, bar))
+
+      def action(ownerToAttributeName: Map[OWNER_ID, String]) = {
+        val baseSelect = sql"delete from #${baseTableRow.tableName} where (owner_id, name) in ("
+        val attributeOwnerNameTuples = reduceSqlActionsWithDelim(ownerToAttributeName.map {
+          case (ownerId: UUID, attributeName) => sql"(${ownerId}, ${attributeName})"
+          case (ownerId: Long, attributeName) => sql"(${ownerId}, ${attributeName})"
+        }.toSeq)
+        concatSqlActions(baseSelect, attributeOwnerNameTuples, sql")").as[Int]
+      }
+    }
+
     /**
      * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
      * referenced entities.
@@ -190,9 +206,11 @@ trait AttributeComponent {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
-//    def deleteAttributeRecordsByNameAndOwner(ownerId: OWNER_ID, names: Seq[String]): DBIOAction[Int, NoStream, Write] = {
-//      filter(rec => rec.ownerId === ownerId && rec.name inSetBind names).delete
-//    }
+    def batchDeleteAttributeRecordsByNameAndOwner(ownerToAttributeName: Map[OWNER_ID, String]): DBIOAction[Seq[Int], NoStream, Write] = {
+      if(ownerToAttributeName.isEmpty)
+        DBIO.successful(Seq.empty)
+      else DeleteAttributesNamesForOwnerIdQuery.action(ownerToAttributeName)
+    }
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
