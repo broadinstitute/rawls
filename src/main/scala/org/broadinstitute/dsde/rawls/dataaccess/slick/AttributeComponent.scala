@@ -133,12 +133,6 @@ trait AttributeComponent {
       }
     }
 
-//    def updateAttributes(ownerId: OWNER_ID, existingAttributeRecs: Seq[RECORD], newAttributes: Seq[Attribute]): Seq[ReadWriteAction[Int]] = {
-//      def isRecordEqualToAttribute(record: RECORD, attribute: Attribute): Boolean = {
-//        if()
-//      }
-//    }
-
     private def insertAttributeRef(ownerId: OWNER_ID, name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None): ReadWriteAction[Int] = {
       entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
         case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")

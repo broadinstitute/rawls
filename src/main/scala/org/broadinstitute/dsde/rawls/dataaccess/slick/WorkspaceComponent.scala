@@ -132,34 +132,24 @@ trait WorkspaceComponent {
         loadedWorkspace match {
           case None => throw new RawlsException("Unable to update attributes on workspace")
           case Some(oldWs) => {
-            val newAttributes = workspace.attributes
-            val oldAttributes = oldWs.attributes
+            val (newAttributes, oldAttributes) = (workspace.attributes, oldWs.attributes)
 
             val recordsToAdd = newAttributes -- oldAttributes.keySet
             val recordsToRemove = oldAttributes -- newAttributes.keySet
             val recordsToUpdate = (newAttributes -- recordsToAdd.keySet -- recordsToRemove.keySet).filterNot(attr => attr._2.equals(oldAttributes(attr._1)))
 
-            println("add: " + recordsToAdd)
-            println("rem: " + recordsToRemove)
-            println("upd: " + recordsToUpdate)
-
-            //need all to load all of the entities that are referenced (entityRef -> long)
-
-            //this is kinda gross. avoid doing asInstanceOf?
-            val entityRefs: Seq[AttributeEntityReference] = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
-            val entityRefLists: Seq[AttributeEntityReferenceList]  = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
+            //this is kinda gross. avoid doing asInstanceOf? by default it returns as a Seq of Attribute which is too generic
+            val entityRefs = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
+            val entityRefLists = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
 
             val entitiesToLookup = (entityRefs ++ entityRefLists.map(_.list).flatten)
 
             entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
-              val foo = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-
-              //do delete first because we also want to delete the records that will be updated
+              val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
               val namesToDelete = recordsToRemove.map(_._1) ++ recordsToUpdate.map(_._1)
-              println(namesToDelete)
-              //move this delete into AttributeComponent
+
               workspaceAttributeQuery.filter(rec => rec.ownerId === workspaceId && rec.name.inSetBind(namesToDelete)).delete andThen
-                workspaceAttributeQuery.batchInsertAttributes((recordsToAdd++recordsToUpdate).map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, foo)).flatten.toSeq)
+                workspaceAttributeQuery.batchInsertAttributes((recordsToAdd++recordsToUpdate).map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq)
             }
           }
         }
