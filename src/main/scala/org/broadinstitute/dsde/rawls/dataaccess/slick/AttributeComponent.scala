@@ -114,8 +114,6 @@ trait AttributeComponent {
     private object DeleteAttributesNamesForOwnerIdQuery extends RawSqlQuery {
       val driver: JdbcDriver = AttributeComponent.this.driver
 
-      //delete from *_ATTRIBUTE where (owner_id, name) in ((1, foo),(2, bar))
-
       def action(ownerToAttributeName: Map[OWNER_ID, String]) = {
         val baseSelect = sql"delete from #${baseTableRow.tableName} where (owner_id, name) in ("
         val attributeOwnerNameTuples = reduceSqlActionsWithDelim(ownerToAttributeName.map {

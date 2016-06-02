@@ -131,10 +131,6 @@ trait EntityComponent {
       filter(_.id === id)
     }
 
-    def findEntitiesByIds(ids: Seq[Long]): EntityQuery = {
-      filter(_.id.inSetBind(ids))
-    }
-
     def findEntityByIdAndVersion(id: Long, version: Long): EntityQuery = {
       filter(rec => rec.id === id && rec.version === version)
     }
@@ -154,7 +150,6 @@ trait EntityComponent {
     }
 
     /** gets the given entity with its id **/
-    //maybe return Option[Long, Entity]
     def getWithId(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[(Long, Entity)]] = {
       unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName)).map(_.headOption)
     }
