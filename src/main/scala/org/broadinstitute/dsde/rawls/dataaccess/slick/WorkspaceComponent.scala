@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -94,9 +95,8 @@ trait WorkspaceComponent {
             insertOrUpdateAccessRecords(workspace) andThen
             insertAttributes(workspace)
         case Some(workspaceRecord) =>
-          insertOrUpdateAccessRecords(workspace) andThen
-            deleteAttributes(workspace) andThen
-            insertAttributes(workspace) andThen
+          upsertAttributes(workspace) andThen
+            insertOrUpdateAccessRecords(workspace) andThen
             optimisticLockUpdate(workspaceRecord)
       } map { _ => workspace }
     }
@@ -124,6 +124,36 @@ trait WorkspaceComponent {
         workspaceAttributeQuery.insertAttributeRecords(workspaceId, name, attribute, workspaceId)
       }
       DBIO.seq(insertActions.toSeq:_*)
+    }
+
+    private def upsertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+      val workspaceId = UUID.fromString(workspace.workspaceId)
+      findById(workspace.workspaceId) flatMap { loadedWorkspace =>
+        loadedWorkspace match {
+          case None => throw new RawlsException("Unable to update attributes on workspace")
+          case Some(oldWorkspace) => {
+            val (newAttributes, oldAttributes) = (workspace.attributes, oldWorkspace.attributes)
+
+            val recordsToAdd = newAttributes -- oldAttributes.keySet
+            val recordsToRemove = oldAttributes -- newAttributes.keySet
+            val recordsToUpdate = (newAttributes -- recordsToAdd.keySet -- recordsToRemove.keySet).filterNot(attr => attr._2.equals(oldAttributes(attr._1)))
+
+            //TODO?: this is kinda gross. can i avoid doing asInstanceOf? by default it returns as a Seq of Attribute which is too generic
+            val entityRefs: Seq[AttributeEntityReference] = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReference]).map(_._2.asInstanceOf[AttributeEntityReference]).toSeq
+            val entityRefLists = (recordsToAdd ++ recordsToUpdate).filter(_._2.isInstanceOf[AttributeEntityReferenceList]).map(_._2.asInstanceOf[AttributeEntityReferenceList]).toSeq
+
+            val entitiesToLookup = (entityRefs ++ entityRefLists.map(_.list).flatten)
+
+            entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+              val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
+              val namesToDelete = recordsToRemove.map(_._1) ++ recordsToUpdate.map(_._1)
+
+              workspaceAttributeQuery.filter(rec => rec.ownerId === workspaceId && rec.name.inSetBind(namesToDelete)).delete andThen
+                workspaceAttributeQuery.batchInsertAttributes((recordsToAdd++recordsToUpdate).map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq)
+            }
+          }
+        }
+      }
     }
 
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
