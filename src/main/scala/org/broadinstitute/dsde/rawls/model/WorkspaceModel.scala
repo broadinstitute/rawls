@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
 import spray.http.StatusCode
@@ -71,7 +73,27 @@ case class Entity(
   def toReference = AttributeEntityReference(entityType, name)
 }
 
-case class EntityQuery(page: Option[Int], pageSize: Option[Int], sortField: Option[String], sortDirection: Option[String], filterTerms: Option[String])
+object SortDirections {
+  sealed trait SortDirection
+  case object Ascending extends SortDirection
+  case object Descending extends SortDirection
+
+  def fromString(dir: String) = {
+    dir.toLowerCase match {
+      case "asc" => Ascending
+      case "desc" => Descending
+      case _ => throw new RawlsException(s"$dir is not a valid sort direction")
+    }
+  }
+
+  def toString(direction: SortDirection) = {
+    direction match {
+      case Ascending => "asc"
+      case Descending => "desc"
+    }
+  }
+}
+case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
@@ -205,6 +227,15 @@ case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference])
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends Attribute
 
 object WorkspaceJsonSupport extends JsonSupport {
+
+  implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
+    override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
+
+    override def read(json: JsValue): SortDirection = json match {
+      case JsString(dir) => SortDirections.fromString(dir)
+      case _ => throw new DeserializationException("unexpected json type")
+    }
+  }
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 

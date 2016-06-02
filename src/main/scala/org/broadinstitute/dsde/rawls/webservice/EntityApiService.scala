@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
@@ -28,13 +30,15 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
       get {
         parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
           val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k,s) => k -> Try(s.map(_.toInt)) }
+          val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+
           val errors = toIntTries.collect {
             case (k, Failure(t)) => s"$k must be a positive integer"
             case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-          }
+          } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
 
           if (errors.isEmpty) {
-            val entityQuery = EntityQuery(page.map(_.toInt), pageSize.map(_.toInt), sortField, sortDirection, filterTerms)
+            val entityQuery = EntityQuery(page.map(_.toInt).getOrElse(1), pageSize.map(_.toInt).getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
             requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
               WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
           } else {

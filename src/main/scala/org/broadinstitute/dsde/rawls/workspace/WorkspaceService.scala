@@ -8,6 +8,7 @@ import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -610,7 +611,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, entityType: String, requestedQuery: EntityQuery): Future[PerRequestMessage] = {
+  def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
     object AttributeStringifier {
       def apply(attribute: Attribute): String = {
         attribute match {
@@ -627,29 +628,41 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     object AttributeOrderingAsc extends Ordering[Attribute] {
-      override def compare(x: Attribute, y: Attribute): Int = {
-        (x, y) match {
-          case (AttributeNumber(value1), AttributeNumber(value2)) => value1.compare(value2)
-          case (_, _) => AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
-        }
-      }
+      override def compare(x: Attribute, y: Attribute): Int = AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
     }
 
     object AttributeOrderingDesc extends Ordering[Attribute] {
       override def compare(x: Attribute, y: Attribute): Int = -1 * AttributeOrderingAsc.compare(x, y)
     }
 
+    object NumericAttributeOrderingAsc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = {
+        (x, y) match {
+          case (AttributeNumber(a), AttributeNumber(b)) => a.compare(b)
+          case (AttributeNull, AttributeNull) => 0
+          case (AttributeNull, _) => 1
+          case (_, AttributeNull) => -1
+          case (_, _) => throw new RawlsException("non numeric attribute given to numeric ordering")
+        }
+      }
+    }
+
+    object NumericAttributeOrderingDesc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = -1 * NumericAttributeOrderingAsc.compare(x, y)
+    }
+
+    def isNumericForAll(entities: Seq[Entity], attributeName: String): Boolean = {
+      attributeName != "name" && entities.map(_.attributes.getOrElse(attributeName, AttributeNull)).forall {
+        case a: AttributeNumber => true
+        case AttributeNull => true
+        case _ => false
+      }
+    }
+
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntities =>
-          // apply all default values here
-          val query = EntityQuery(
-            Option(requestedQuery.page.getOrElse(1)),
-            Option(requestedQuery.pageSize.getOrElse(10)),
-            Option(requestedQuery.sortField.getOrElse("name")),
-            Option(requestedQuery.sortDirection.getOrElse("asc")),
-            requestedQuery.filterTerms
-          )
+        dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntitiesTO =>
+          val allEntities = allEntitiesTO.toSeq
 
           val filteredEntities = query.filterTerms match {
             case None => allEntities
@@ -662,15 +675,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               }
           }
 
-          val ordering = query.sortDirection match {
-            case Some("desc") => AttributeOrderingDesc
-            case _ => AttributeOrderingAsc
+          val ordering = (query.sortDirection, isNumericForAll(filteredEntities, query.sortField)) match {
+            case (Descending, true) => NumericAttributeOrderingDesc
+            case (Ascending, true) => NumericAttributeOrderingAsc
+            case (Descending, false) => AttributeOrderingDesc
+            case (Ascending, false) => AttributeOrderingAsc
           }
 
-          val sortedEntitiesTry = query.sortField.get match {
+          val sortedEntitiesTry = query.sortField match {
             case "name" => Success(filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering))
             case sortFieldName =>
-              if (filteredEntities.exists(_.attributes.getOrElse(sortFieldName, AttributeNull) != AttributeNull)) {
+              if (filteredEntities.isEmpty || filteredEntities.exists(_.attributes.getOrElse(sortFieldName, AttributeNull) != AttributeNull)) {
                 Success(filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering))
               } else {
                 Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"sort field $sortFieldName does not exist for any $entityType")))
@@ -679,23 +694,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           }
 
           sortedEntitiesTry.flatMap { sortedEntities =>
-            val pageSize = query.pageSize.get
             val filteredCount = sortedEntities.size
-            val pageCount = Math.ceil(filteredCount.toFloat / pageSize).toInt
-            if (filteredCount > 0 && query.page.get > pageCount) {
-              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page.get} is greater than the number of pages $pageCount")))
+            val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+            if (filteredCount > 0 && query.page > pageCount) {
+              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
 
             } else {
-              val offset = (query.page.get - 1) * pageSize
-              val page = sortedEntities.slice(offset, offset + pageSize)
+              val offset = (query.page - 1) * query.pageSize
+              val page = sortedEntities.slice(offset, offset + query.pageSize)
               val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
 
               Success(RequestComplete(StatusCodes.OK, response))
             }
-          } match {
-            case Success(rc) => rc
-            case Failure(regrets) => throw regrets
-          }
+          }.get
         }
       }
     }
