@@ -47,7 +47,8 @@ trait DataAccess
       workflowErrorQuery.schema ++
       workflowFailureQuery.schema ++
       workflowMessageQuery.schema ++
-      workflowAuditStatusQuery.schema
+      workflowAuditStatusQuery.schema ++
+      exprEvalQuery.schema
 
   def truncateAll: WriteAction[Int] = {
     // important to keep the right order for referential integrity !
@@ -75,7 +76,8 @@ trait DataAccess
       TableQuery[RawlsGroupTable].delete andThen
       TableQuery[RawlsUserTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
-      TableQuery[PendingBucketDeletionTable].delete
+      TableQuery[PendingBucketDeletionTable].delete andThen
+      TableQuery[ExprEvalTemp].delete
 
   }
 
