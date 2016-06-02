@@ -10,14 +10,18 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   import driver.api._
 
   "DataAccess" should "test that truncateAll has left the DB in a known empty state" in withEmptyTestDatabase {
-    runAndWait(MTable.getTables).map(_.name.name) foreach { tableName =>
-      val safeTableName = tableName match {
-        case "GROUP" => "`GROUP`"
-        case "USER" => "`USER`"
-        case _ => tableName
-      }
+    val rawTableNames: Seq[String] = runAndWait(MTable.getTables).map(_.name.name)
 
-      val count = sql"SELECT COUNT(*) FROM #$safeTableName "
+    val safeTableNames: Seq[String] = rawTableNames flatMap {
+      case "GROUP" => Option("`GROUP`")
+      case "USER" => Option("`USER`")
+      case "DATABASECHANGELOG" => None        // managed by Liquibase
+      case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
+      case other => Option(other)
+    }
+
+    safeTableNames foreach { tableName =>
+      val count = sql"SELECT COUNT(*) FROM #$tableName "
       assertResult(0, tableName + " not empty") {
         runAndWait(count.as[Int].head)
       }
