@@ -8,6 +8,7 @@ import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -64,6 +65,7 @@ object WorkspaceService {
   case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
   case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
   case class ListEntityTypes(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
@@ -134,6 +136,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
     case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
+    case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
     case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
     case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
     case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
@@ -607,6 +610,92 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         dataAccess.entityQuery.list(workspaceContext, entityType).map(r => RequestComplete(StatusCodes.OK, r.toSeq))
       }
     }
+
+  def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+    object AttributeOrderingAsc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
+    }
+
+    object AttributeOrderingDesc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = -1 * AttributeOrderingAsc.compare(x, y)
+    }
+
+    object NumericAttributeOrderingAsc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = {
+        (x, y) match {
+          case (AttributeNumber(a), AttributeNumber(b)) => a.compare(b)
+          case (AttributeNull, AttributeNull) => 0
+          case (AttributeNull, _) => 1
+          case (_, AttributeNull) => -1
+          case (_, _) => throw new RawlsException("non numeric attribute given to numeric ordering")
+        }
+      }
+    }
+
+    object NumericAttributeOrderingDesc extends Ordering[Attribute] {
+      override def compare(x: Attribute, y: Attribute): Int = -1 * NumericAttributeOrderingAsc.compare(x, y)
+    }
+
+    def isNumericForAll(entities: Seq[Entity], attributeName: String): Boolean = {
+      attributeName != "name" && entities.map(_.attributes.getOrElse(attributeName, AttributeNull)).forall {
+        case a: AttributeNumber => true
+        case AttributeNull => true
+        case _ => false
+      }
+    }
+
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntitiesTO =>
+          val allEntities = allEntitiesTO.toSeq
+
+          val filteredEntities = query.filterTerms match {
+            case None => allEntities
+            case Some(filterTerms) =>
+              val terms = filterTerms.split(" ")
+              allEntities.filter { entity =>
+                // do ++ Seq(entity.name) below instead of + entity.name because the compiler chooses the wrong + in the latter case
+                val attributesString = (entity.attributes.values.map(AttributeStringifier(_)) ++ Seq(entity.name)).mkString(" ")
+                terms.forall(attributesString.contains)
+              }
+          }
+
+          val ordering = (query.sortDirection, isNumericForAll(filteredEntities, query.sortField)) match {
+            case (Descending, true) => NumericAttributeOrderingDesc
+            case (Ascending, true) => NumericAttributeOrderingAsc
+            case (Descending, false) => AttributeOrderingDesc
+            case (Ascending, false) => AttributeOrderingAsc
+          }
+
+          val sortedEntitiesTry = query.sortField match {
+            case "name" => Success(filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering))
+            case sortFieldName =>
+              if (filteredEntities.isEmpty || filteredEntities.exists(_.attributes.getOrElse(sortFieldName, AttributeNull) != AttributeNull)) {
+                Success(filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering))
+              } else {
+                Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"sort field $sortFieldName does not exist for any $entityType")))
+              }
+
+          }
+
+          sortedEntitiesTry.flatMap { sortedEntities =>
+            val filteredCount = sortedEntities.size
+            val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+            if (filteredCount > 0 && query.page > pageCount) {
+              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
+
+            } else {
+              val offset = (query.page - 1) * query.pageSize
+              val page = sortedEntities.slice(offset, offset + query.pageSize)
+              val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
+
+              Success(RequestComplete(StatusCodes.OK, response))
+            }
+          }.get
+        }
+      }
+    }
+  }
 
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>

@@ -101,10 +101,9 @@ trait PerRequest extends Actor {
   private def logResponse(statusCode: StatusCode, response: Any) {
     val logLevel: LogLevel = (statusCode.intValue / 100) match {
       case 5 => Logging.ErrorLevel
-      case 4 => Logging.InfoLevel
       case _ => Logging.DebugLevel
     }
-    system.log.log(logLevel, s"request response: status code $statusCode, response $response")
+    system.log.log(logLevel, s"request ${r.request.uri} response: status code $statusCode, response $response")
   }
 
   override val supervisorStrategy =
@@ -116,12 +115,10 @@ trait PerRequest extends Actor {
     }
 
   def handleException(e: Throwable): Unit = {
-    system.log.error(e, "error processing request: " + r.request.uri)
     import spray.httpx.SprayJsonSupport._
     e match {
-      case e: RawlsExceptionWithErrorReport =>
-        r.complete(e.errorReport.statusCode.get, e.errorReport)
-      case _ => r.complete(InternalServerError, ErrorReport(e,InternalServerError))
+      case e: RawlsExceptionWithErrorReport => complete(e.errorReport)
+      case _ => complete(ErrorReport(e, InternalServerError))
     }
   }
 }

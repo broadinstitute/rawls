@@ -1,13 +1,17 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import spray.http.StatusCodes
 import spray.routing.Directive.pimpApply
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
+import scala.util.{Success, Failure, Try}
 
 /**
  * Created by dvoet on 6/4/15.
@@ -22,6 +26,27 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 
   val entityRoutes = requireUserInfo() { userInfo =>
+    path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+      get {
+        parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
+          val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k,s) => k -> Try(s.map(_.toInt)) }
+          val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+
+          val errors = toIntTries.collect {
+            case (k, Failure(t)) => s"$k must be a positive integer"
+            case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+          } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+
+          if (errors.isEmpty) {
+            val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
+          } else {
+            complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+          }
+        }
+      }
+    } ~
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),

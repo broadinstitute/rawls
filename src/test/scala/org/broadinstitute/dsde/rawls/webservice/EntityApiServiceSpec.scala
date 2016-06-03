@@ -1,13 +1,19 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import java.util.UUID
+
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.SortDirections.{Descending, Ascending}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
 
 import scala.concurrent.ExecutionContext
+import scala.util.Random
 
 /**
  * Created by dvoet on 4/24/15.
@@ -529,6 +535,338 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
+      }
+  }
+
+  class PaginationTestData extends TestData {
+    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set())
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set())
+
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+
+    val numEntities = 100
+    val vocab1Strings = Map(0 -> "foo", 1 -> "bar", 2 -> "baz")
+    val vocab2Strings = Map(0 -> "bim", 1 -> "bam")
+    val entityType = "page_entity"
+    val entities = Random.shuffle(for (i <- 1 to numEntities) yield Entity(s"entity_$i", entityType, Map(
+      "number" -> AttributeNumber(Math.random()),
+      "random" -> AttributeString(UUID.randomUUID().toString),
+      "sparse" -> (if (i % 2 == 0) AttributeNull else AttributeNumber(i.toDouble)),
+      "vocab1" -> AttributeString(vocab1Strings(i % vocab1Strings.size)),
+      "vocab2" -> AttributeString(vocab2Strings(i % vocab2Strings.size)),
+      "mixed" -> (i % 2 match {
+        case 0 => AttributeString(s"$i")
+        case 1 => AttributeNumber(i.toDouble)
+      })
+    )))
+
+    override def save(): ReadWriteAction[Unit] = {
+      import driver.api._
+
+      DBIO.seq(
+        rawlsUserQuery.save(userOwner),
+        rawlsGroupQuery.save(ownerGroup),
+        rawlsGroupQuery.save(writerGroup),
+        rawlsGroupQuery.save(readerGroup),
+        workspaceQuery.save(workspace),
+        entityQuery.save(SlickWorkspaceContext(workspace), entities)
+      )
+    }
+  }
+
+  val paginationTestData = new PaginationTestData()
+
+  def withPaginationTestDataApiServices(testCode: TestApiService => Any): Unit = {
+    withCustomTestDatabase(paginationTestData) { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  val defaultQuery = EntityQuery(1, 10, "name", Ascending, None)
+  def calculateNumPages(count: Int, pageSize: Int) = Math.ceil(count.toDouble / pageSize).toInt
+
+  it should "return 400 bad request on entity query when page is not a number" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?page=asdf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query when page size is not a number" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?pageSize=asdfasdf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query when page is <= 0" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?page=-1") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query when page size is <= 0" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?pageSize=-1") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query when page > page count" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?page=10000000") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query when sort field does not exist for any entity" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 400 bad request on entity query for unknown sort direction" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortDirection=asdfasdfasdf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 not found on entity query for workspace that does not exist" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}xxx/entityQuery/${paginationTestData.entityType}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 200 OK on entity query when no query params are given" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery,
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.name).take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return 200 OK on entity query when there are no entities of given type" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/blarf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery,
+          EntityQueryResultMetadata(0, 0, 0),
+          Seq.empty)) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return 200 OK on entity query when all results are filtered" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?filterTerms=qqq") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(filterTerms = Option("qqq")),
+          EntityQueryResultMetadata(paginationTestData.entities.size, 0, 0),
+          Seq.empty)) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return the right page on entity query" in withPaginationTestDataApiServices { services =>
+    val page = 5
+    val offset = (page - 1) * defaultQuery.pageSize
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?page=$page") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(page = page),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.name).slice(offset, offset + defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return the right page size on entity query" in withPaginationTestDataApiServices { services =>
+    val pageSize = 23
+    val offset = (defaultQuery.page - 1) * pageSize
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(pageSize = pageSize),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, pageSize)),
+          paginationTestData.entities.sortBy(_.name).slice(offset, offset + pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return sorted results on entity query for number field" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=number") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "number"),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.attributes("number").asInstanceOf[AttributeNumber].value).take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return sorted results on entity query for string field" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=random&sordDirection=asc") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "random"),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.attributes("random").asInstanceOf[AttributeString].value).take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return sorted results on entity query for mixed typed field" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=mixed&pageSize=${paginationTestData.numEntities}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "mixed", pageSize = paginationTestData.numEntities),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
+          paginationTestData.entities.sortBy(_.attributes("mixed") match {
+            case AttributeString(value) => value
+            case AttributeNumber(value) => value.toString
+            case _ => throw new RawlsException("make the compiler stop whining")
+          } ))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return sorted results on entity query for sparse field" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=sparse&pageSize=${paginationTestData.numEntities}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        // all the entities without values should be last, drop them then make sure the resulting list is sorted right
+        val resultEntities = responseAs[EntityQueryResponse].results
+        assertResult(paginationTestData.entities.filter(_.attributes.getOrElse("sparse", AttributeNull) != AttributeNull).sortBy(_.attributes("sparse").asInstanceOf[AttributeNumber].value)) {
+          resultEntities.takeWhile(_.attributes.getOrElse("sparse", AttributeNull) != AttributeNull)
+        }
+      }
+  }
+
+  it should "return sorted results on entity query descending" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=random&sortDirection=desc") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "random", sortDirection = Descending),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.attributes("random").asInstanceOf[AttributeString].value).reverse.take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "return filtered results on entity query" in withPaginationTestDataApiServices { services =>
+    val pageSize = paginationTestData.entities.size
+    val vocab1Term = paginationTestData.vocab1Strings(0)
+    val vocab2Term = paginationTestData.vocab2Strings(1)
+    val expectedEntities = paginationTestData.entities.
+      filter(e => e.attributes("vocab1") == AttributeString(vocab1Term) && e.attributes("vocab2") == AttributeString(vocab2Term)).
+      sortBy(_.name)
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&filterTerms=$vocab1Term%20$vocab2Term") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(pageSize = pageSize, filterTerms = Option(s"$vocab1Term $vocab2Term")),
+          EntityQueryResultMetadata(paginationTestData.numEntities, expectedEntities.size, calculateNumPages(expectedEntities.size, pageSize)),
+          expectedEntities)) {
+
+          responseAs[EntityQueryResponse]
+        }
       }
   }
 
