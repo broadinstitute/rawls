@@ -88,8 +88,10 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       }
 
       val monitorRef = createSubmissionMonitorActor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString))
+      watch(monitorRef)
 
       awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Aborted.toString), 10 seconds)
+      expectMsgClass(5 seconds, classOf[Terminated])
     }
   }
 
