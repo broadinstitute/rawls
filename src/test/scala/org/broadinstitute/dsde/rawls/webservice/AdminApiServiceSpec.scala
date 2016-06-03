@@ -683,4 +683,41 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
       }
   }
+
+  it should "delete a workspace" in withTestDataApiServices { services =>
+    Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
+          status
+        }
+      }
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.workspace.toWorkspaceName))
+    }
+  }
+
+  it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
+    val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
+    workspaceGroupRefs foreach { case groupRef =>
+      assertResult(Option(groupRef)) {
+        runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
+      }
+    }
+
+    Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted) {
+          status
+        }
+      }
+
+    workspaceGroupRefs foreach { case groupRef =>
+      assertResult(None) {
+        runAndWait(rawlsGroupQuery.load(groupRef))
+      }
+    }
+
+  }
 }

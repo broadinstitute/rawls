@@ -66,7 +66,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       delete {
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.AdminAbortSubmission(workspaceNamespace, workspaceName, submissionId))
+          WorkspaceService.AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
       }
     } ~
     path("admin" / "groups") { //create group
@@ -171,6 +171,14 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.ListAllWorkspaces)
+      }
+    } ~
+    path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>
+      delete {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.AdminDeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+        )
       }
     }
   }

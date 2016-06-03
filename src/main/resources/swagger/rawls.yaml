@@ -735,6 +735,45 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/workspaces/{workspaceNamespace}/{workspaceName}':
+    delete:
+          responses:
+            '202':
+              description: Delete request accepted. Workspace bucket will be deleted within 24 hours.
+            '403':
+              description: You must be an admin to access this endpoint
+              schema:
+                $ref: '#/definitions/ErrorReport'
+            '404':
+              description: Workspace not found
+              schema:
+                $ref: '#/definitions/ErrorReport'
+            '500':
+              description: Rawls Internal Error
+              schema:
+                $ref: '#/definitions/ErrorReport'
+          description: Delete a workspace
+          tags:
+            - admin
+            - workspaces
+          summary: Admin delete workspace
+          operationId: admin_delete_workspace
+          parameters:
+            - in: path
+              description: Workspace Namespace
+              name: workspaceNamespace
+              required: true
+              type: string
+            - in: path
+              description: Workspace Name
+              name: workspaceName
+              required: true
+              type: string
+          security:
+            - authorization:
+                - openid
+                - email
+                - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:
