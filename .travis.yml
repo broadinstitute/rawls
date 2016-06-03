@@ -18,4 +18,6 @@ before_install:
 script:
   - SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test -Dmysql.host=localhost it:compile
 
-after_success: SBT_OPTS=-Xmx3g sbt coveralls
+after_success:
+  - SBT_OPTS=-Xmx3g sbt coveralls
+  - docker rm -f mysql
