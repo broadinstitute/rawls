@@ -559,9 +559,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       "sparse" -> (if (i % 2 == 0) AttributeNull else AttributeNumber(i.toDouble)),
       "vocab1" -> AttributeString(vocab1Strings(i % vocab1Strings.size)),
       "vocab2" -> AttributeString(vocab2Strings(i % vocab2Strings.size)),
-      "mixed" -> (i % 2 match {
+      "mixed" -> (i % 3 match {
         case 0 => AttributeString(s"$i")
         case 1 => AttributeNumber(i.toDouble)
+        case 2 => AttributeValueList( 1 to i map( AttributeNumber(_) ) reverse )
+      }),
+      "mixedNumeric" -> (i % 2 match {
+        case 0 => AttributeNumber(i.toDouble)
+        case 1 => AttributeValueList( 1 to i map( AttributeNumber(_) ) reverse )
       })
     )))
 
@@ -800,15 +805,54 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
+
+        //this is recursive, which is why it's not inlined.
+        //this test is the case where the column is sorted alphabetically, so in the case
+        //of lists, taking the head is sufficient to define the correct ordering
+        //relative to the other column items.
+        //this saves us lifting the code from AttributeStringifier, which is what we're
+        //supposed to be testing!
+        def attrToString(a: Attribute): String = {
+          a match {
+            case AttributeString(value) => value
+            case AttributeNumber(value) => value.toString
+            case AttributeValueList(list) if list.isEmpty => ""
+            case AttributeValueList(list) => attrToString(list.head)
+            case _ => throw new RawlsException("make the compiler stop whining")
+          }
+        }
+
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "mixed", pageSize = paginationTestData.numEntities),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
-          paginationTestData.entities.sortBy(_.attributes("mixed") match {
-            case AttributeString(value) => value
-            case AttributeNumber(value) => value.toString
-            case _ => throw new RawlsException("make the compiler stop whining")
-          } ))) {
+          paginationTestData.entities.sortBy( e => attrToString(e.attributes("mixed")) ))) {
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
 
+  it should "return sorted results on entity query for mixed numeric-type field including lists" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=mixedNumeric&pageSize=${paginationTestData.numEntities}") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        def attrToNumeric(a: Attribute): BigDecimal = {
+          a match {
+            case AttributeNumber(value) => value
+            // this offset magic with paginationTestData.numEntities*2 guarantees that lists "are bigger than"
+            // numbers without reimplementing NumericAttributeOrderingAsc in the test
+            case AttributeValueList(list) => list.size + (paginationTestData.numEntities*2)
+            case _ => throw new RawlsException("make the compiler stop whining")
+          }
+        }
+
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "mixedNumeric", pageSize = paginationTestData.numEntities),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
+          paginationTestData.entities.sortBy( e => attrToNumeric(e.attributes("mixedNumeric")) ))) {
           responseAs[EntityQueryResponse]
         }
       }
