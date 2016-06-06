@@ -14,12 +14,15 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   //   validateAttributeName
   //   createBatches
 
-  "DriverComponent" should "test concatSqlActions" in withDefaultTestDatabase {
-    implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
+  implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
 
-    val select = sql"SELECT * FROM WORKFLOW "
+  val selectAllFromWorkflow = "SELECT ID, EXTERNAL_ID, SUBMISSION_ID, STATUS, STATUS_LAST_CHANGED, ENTITY_ID, record_version FROM WORKFLOW"
+
+  "DriverComponent" should "test concatSqlActions" in withDefaultTestDatabase {
+
+    val select = sql"#$selectAllFromWorkflow "
     val where = sql"WHERE STATUS = 'Submitted' "
-    val queryA = sql"SELECT * FROM WORKFLOW WHERE STATUS = 'Submitted' "
+    val queryA = sql"#$selectAllFromWorkflow WHERE STATUS = 'Submitted' "
 
     val queryArecords = runAndWait(queryA.as[WorkflowRecord])
 
@@ -32,7 +35,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
     val where1 = sql"WHERE STATUS IN ('Submitted' "
     val where2 = sql"'Done') "
-    val queryB = sql"SELECT * FROM WORKFLOW WHERE STATUS IN ('Submitted','Done') "
+    val queryB = sql"#$selectAllFromWorkflow WHERE STATUS IN ('Submitted','Done') "
 
     val queryBrecords = runAndWait(queryB.as[WorkflowRecord])
 
@@ -45,9 +48,8 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   it should "test reduceSqlActionsWithDelim" in withDefaultTestDatabase {
-    implicit val getWorkflowRecord = GetResult { r => WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<) }
 
-    val select = sql"SELECT * FROM WORKFLOW "
+    val select = sql"#$selectAllFromWorkflow "
     val where1 = sql"WHERE STATUS IN ("
     val where2 = sql") "
     val statuses = Seq(
@@ -62,7 +64,7 @@ class DriverComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       sql"'Unknown'"
     )
 
-    val query = sql"SELECT * FROM WORKFLOW WHERE STATUS IN ('Queued','Launching','Submitted','Running','Failed','Succeeded','Aborting','Aborted','Unknown','Done')"
+    val query = sql"#$selectAllFromWorkflow WHERE STATUS IN ('Queued','Launching','Submitted','Running','Failed','Succeeded','Aborting','Aborted','Unknown','Done')"
 
     val queryRecords = runAndWait(query.as[WorkflowRecord])
 
