@@ -9,9 +9,6 @@ if [ -e "jenkins_env.sh" ]; then
 	source "jenkins_env.sh"
 fi
 
-# catch sbt issues separately
-sbt update && echo "sbt updated successfully."
-
 # Tests are run in jenkins which has a custom mysql instance just for testing
 sbt -J-Xms4g -J-Xmx4g test -Dmysql.host=172.17.42.1 -Dmysql.port=3310
 sbt -J-Xms4g -J-Xmx4g assembly
