@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.user
 
+import _root_.slick.dbio.Effect.{Write, Read}
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WriteAction, ReadAction, ReadWriteAction, DataAccess}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -42,6 +43,7 @@ object UserService {
   case object UserGetUserStatus extends UserServiceMessage
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminRemoveUser(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -77,6 +79,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case UserGetUserStatus => getUserStatus() pipeTo sender
     case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
+    case AdminRemoveUser(userRef) => asAdmin { removeUser(userRef) } pipeTo sender
     case AdminListUsers => asAdmin { listUsers } pipeTo sender
     case AdminImportUsers(rawlsUserInfoList) => asAdmin{ importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
@@ -232,6 +235,61 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         toFutureTry(userDirectoryDAO.disableUser(user))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors disabling user"))
+    }
+  }
+
+  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[PerRequestMessage] = {
+    dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
+      case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot remove a user with submissions")))
+      case _ => DBIO.successful(RequestComplete(StatusCodes.OK))
+    }
+  }
+
+  // can't just delete DB rows; also removes user from Google Groups
+  private def removeUserFromAllGroups(userRef: RawlsUserRef, dataAccess: DataAccess): ReadWriteAction[RawlsUser] = {
+    withUser(userRef, dataAccess) { user =>
+      dataAccess.rawlsGroupQuery.listGroupsForUser(userRef) flatMap { groupRefs =>
+        // Slick complains if it remains a Set
+        val removeActions = groupRefs.toSeq.map { groupRef =>
+          withGroup(groupRef, dataAccess) { group =>
+            updateGroupMembersInternal(group, Set(user), Set.empty, RemoveGroupMembersOp, dataAccess)
+          }
+        }
+
+        DBIO.sequence(removeActions) flatMap { removeResults =>
+          reduceErrorReports(removeResults) match {
+            case Some(errorReport) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport))
+            case None => DBIO.successful(user)
+          }
+        }
+      }
+    }
+  }
+
+  private def deleteUserFromDB(userRef: RawlsUserRef, dataAccess: DataAccess): ReadWriteAction[Int] = {
+    dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete flatMap {
+      case 1 => DBIO.successful(1)
+      case rowsDeleted =>
+        val error = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Expected to delete 1 row from user table, but deleted $rowsDeleted"))
+        DBIO.failed(error)
+    }
+  }
+
+  def removeUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
+    val dbRemoval = dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- verifyNoSubmissions(userRef, dataAccess)
+        user <- removeUserFromAllGroups(userRef, dataAccess)
+        _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
+        _ <- deleteUserFromDB(userRef, dataAccess)
+      } yield user
+    }
+
+    dbRemoval flatMap { user =>
+      handleFutures(Future.sequence(Seq(
+        toFutureTry(userDirectoryDAO.removeUser(user)),
+        toFutureTry(gcsDAO.deleteProxyGroup(user))
+      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors deleting user"))
     }
   }
 

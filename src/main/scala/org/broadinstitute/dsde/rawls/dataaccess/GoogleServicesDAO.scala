@@ -34,6 +34,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def createProxyGroup(user: RawlsUser): Future[Unit]
 
+  def deleteProxyGroup(user: RawlsUser): Future[Unit]
+
   def addUserToProxyGroup(user: RawlsUser): Future[Unit]
 
   def removeUserFromProxyGroup(user: RawlsUser): Future[Unit]

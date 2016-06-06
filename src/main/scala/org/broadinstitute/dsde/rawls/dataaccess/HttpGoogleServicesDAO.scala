@@ -356,7 +356,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-
   def createProxyGroup(user: RawlsUser): Future[Unit] = {
     val directory = getGroupDirectory
     val groups = directory.groups
@@ -365,6 +364,19 @@ class HttpGoogleServicesDAO(
         val inserter = groups.insert(new Group().setEmail(toProxyFromUser(user.userSubjectId)).setName(user.userEmail.value))
         blocking {
           executeGoogleRequest(inserter)
+        }
+      }
+    }
+  }
+
+  def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
+    val directory = getGroupDirectory
+    val groups = directory.groups
+    retry(when500) {
+      () => Future {
+        val deleter = groups.delete(toProxyFromUser(user.userSubjectId))
+        blocking {
+          executeGoogleRequest(deleter)
         }
       }
     }

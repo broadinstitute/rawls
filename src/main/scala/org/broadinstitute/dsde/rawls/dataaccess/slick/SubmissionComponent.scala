@@ -222,6 +222,10 @@ trait SubmissionComponent {
       filter(rec => rec.id === submissionId)
     }
 
+    def findBySubmitter(submitterId: String): SubmissionQueryType = {
+      filter(rec => rec.submitterId === submitterId)
+    }
+
     def findActiveSubmissions: SubmissionQueryType = {
       filter(rec => rec.status inSetBind(SubmissionStatuses.activeStatuses.map(_.toString)))
     }

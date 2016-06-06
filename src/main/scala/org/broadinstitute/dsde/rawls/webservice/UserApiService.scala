@@ -92,6 +92,13 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
       }
+    } ~
+    path("user" / Segment / "remove") { userSubjectId =>
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminRemoveUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
     }
   }
 }

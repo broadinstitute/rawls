@@ -119,6 +119,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Unit)
   }
 
+  override def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
+    mockProxyGroups -= user
+    Future.successful(Unit)
+  }
+
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
 
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> true))
