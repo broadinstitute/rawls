@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
@@ -35,6 +36,7 @@ trait EntityComponent {
 
   object entityQuery extends TableQuery(new EntityTable(_)) {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
+    type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(EntityAttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(EntityAttributeRecord, Option[EntityRecord])]), Seq]
 
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
@@ -111,7 +113,7 @@ trait EntityComponent {
 
     }
 
-    def entityAttributes(entityId: Long) = for {
+    def entityAttributes(entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeQuery if entityAttrRec.ownerId === entityId
     } yield entityAttrRec
 
@@ -290,6 +292,32 @@ trait EntityComponent {
         (entityType, entities.countDistinct)
       }.result map { result =>
         result.toMap
+      }
+    }
+
+    def getAttrNamesAndEntityTypes(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Seq[String]]] = {
+      val typesAndAttrNames = for {
+        entityRec <- filter(_.workspaceId === workspaceContext.workspaceId)
+        attrib <- entityAttributes(entityRec.id)
+      } yield {
+        (entityRec.entityType, attrib.name)
+      }
+
+      typesAndAttrNames.distinct.result map { result =>
+        CollectionUtils.groupByTuples(result)
+      }
+    }
+
+    def getEntityTypeMetadata(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, EntityTypeMetadata]] = {
+      val typesAndCountsQ = getEntityTypesWithCounts(workspaceContext)
+      val typesAndAttrsQ = getAttrNamesAndEntityTypes(workspaceContext)
+
+      typesAndCountsQ flatMap { typesAndCounts =>
+        typesAndAttrsQ map { typesAndAttrs =>
+          (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
+            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), typesAndAttrs.getOrElse(entityType, Seq()) ))
+          } toMap
+        }
       }
     }
 

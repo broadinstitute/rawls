@@ -50,7 +50,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListEntityTypes(WorkspaceName(workspaceNamespace, workspaceName)))
+          WorkspaceService.GetEntityTypeMetadata(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "entities") { (workspaceNamespace, workspaceName) =>

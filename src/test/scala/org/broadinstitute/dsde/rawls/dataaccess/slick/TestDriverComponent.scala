@@ -237,7 +237,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val pair1 = Entity("pair1", "Pair",
       Map( "case" -> AttributeEntityReference("Sample", "sample2"),
-        "control" -> AttributeEntityReference("Sample", "sample1") ) )
+        "control" -> AttributeEntityReference("Sample", "sample1"),
+        "whatsit" -> AttributeString("occurs in sample too! oh no!")) )
     val pair2 = Entity("pair2", "Pair",
       Map( "case" -> AttributeEntityReference("Sample", "sample3"),
         "control" -> AttributeEntityReference("Sample", "sample1") ) )

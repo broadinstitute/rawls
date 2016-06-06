@@ -73,6 +73,11 @@ case class Entity(
   def toReference = AttributeEntityReference(entityType, name)
 }
 
+case class EntityTypeMetadata(
+                             count: Int,
+                             attributeNames: Seq[String]
+                             )
+
 object SortDirections {
   sealed trait SortDirection
   case object Ascending extends SortDirection
@@ -265,6 +270,8 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val WorkspaceFormat = jsonFormat12(Workspace)
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
+
+  implicit val EntityTypeMetadataFormat = jsonFormat2(EntityTypeMetadata)
 
   implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
 
