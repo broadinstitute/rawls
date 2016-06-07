@@ -5,11 +5,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, UserInfo, ErrorReport, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Future, ExecutionContext}
 import scala.util.{Try, Failure, Success}
 
 //Well, this is a joke.
@@ -51,4 +51,39 @@ trait MethodWiths {
       }}
     }
   }
+}
+
+trait UserWiths {
+  val dataSource: SlickDataSource
+
+  import dataSource.dataAccess.driver.api._
+
+  def withUser[T](rawlsUserRef: RawlsUserRef, dataAccess: DataAccess)(op: RawlsUser => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    dataAccess.rawlsUserQuery.load(rawlsUserRef) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId.value}] not found")))
+      case Some(user) => op(user)
+    }
+  }
+
+  def withUser[T](userEmail: RawlsUserEmail, dataAccess: DataAccess)(op: RawlsUser => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    dataAccess.rawlsUserQuery.loadUserByEmail(userEmail) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${userEmail.value}] not found")))
+      case Some(user) => op(user)
+    }
+  }
+
+  def withGroup[T](rawlsGroupRef: RawlsGroupRef, dataAccess: DataAccess)(op: RawlsGroup => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    dataAccess.rawlsGroupQuery.load(rawlsGroupRef) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found")))
+      case Some(group) => op(group)
+    }
+  }
+
+  def withBillingProject[T](projectName: RawlsBillingProjectName, dataAccess: DataAccess)(op: RawlsBillingProject => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")))
+      case Some(project) => op(project)
+    }
+  }
+
 }

@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsExcept
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, AdminSupport}
+import org.broadinstitute.dsde.rawls.util.{UserWiths, FutureSupport, AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestComplete, RequestCompleteWithLocation, PerRequestMessage}
 import spray.http.StatusCodes
 import spray.json._
@@ -65,7 +65,7 @@ object UserService {
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
   import dataSource.dataAccess.driver.api._
 
   override def receive = {
@@ -195,7 +195,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
     getUserStatus(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId)))
   }
 
-  def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = withUser(userRef) { user =>
+  private def loadUser(userRef: RawlsUserRef): Future[RawlsUser] = dataSource.inTransaction { dataAccess => withUser(userRef, dataAccess)(DBIO.successful) }
+
+  def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = loadUser(userRef) flatMap { user =>
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
       toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _)),
@@ -212,7 +214,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already added entries are ok
-    withUser(userRef) { user =>
+    loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.addUserToProxyGroup(user)),
         toFutureTry(userDirectoryDAO.enableUser(user))
@@ -224,7 +226,7 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   def disableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already removed entries are ok
-    withUser(userRef) { user =>
+    loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.removeUserFromProxyGroup(user)),
         toFutureTry(userDirectoryDAO.disableUser(user))
@@ -238,8 +240,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
 
   // when called for the current user, admin access is not required
   def listBillingProjects(userEmail: RawlsUserEmail): Future[PerRequestMessage] =
-    withUser(userEmail) { user =>
-      dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction { dataAccess =>
+      withUser(userEmail, dataAccess) { user =>
         dataAccess.rawlsBillingProjectQuery.listUserProjects(user)
       } map(RequestComplete(_))
     }
@@ -259,8 +261,8 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
-    withBillingProject(projectName) { project =>
-      dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction { dataAccess =>
+      withBillingProject(projectName, dataAccess) { project =>
         dataAccess.rawlsBillingProjectQuery.delete(project) map {
           case true => RequestComplete(StatusCodes.OK)
           case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
@@ -270,9 +272,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
-    withBillingProject(projectName) { project =>
-      withUser(userEmail) { user =>
-        dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction { dataAccess =>
+      withBillingProject(projectName, dataAccess) { project =>
+        withUser(userEmail, dataAccess) { user =>
           dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName) map (_ => RequestComplete(StatusCodes.OK))
         }
       }
@@ -280,9 +282,9 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
-    withBillingProject(projectName) { project =>
-      withUser(userEmail) { user =>
-        dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction { dataAccess =>
+      withBillingProject(projectName, dataAccess) { project =>
+        withUser(userEmail, dataAccess) { user =>
           dataAccess.rawlsBillingProjectQuery.removeUserFromProject(user, project) map(_ => RequestComplete(StatusCodes.OK))
         }
       }
@@ -564,40 +566,6 @@ class UserService(protected val userInfo: UserInfo, dataSource: SlickDataSource,
       case Seq() => None
       case Seq(single) => Option(single)
       case many => Option(ErrorReport("multiple errors", errorReports.toSeq))
-    }
-  }
-
-  private def withUser(rawlsUserRef: RawlsUserRef)(op: RawlsUser => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.load(rawlsUserRef)
-    } flatMap {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${rawlsUserRef.userSubjectId.value}] not found")))
-      case Some(user) => op(user)
-    }
-  }
-
-  private def withUser(userEmail: RawlsUserEmail)(op: RawlsUser => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsUserQuery.loadUserByEmail(userEmail)
-    } flatMap {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"user [${userEmail.value}] not found")))
-      case Some(user) => op(user)
-    }
-  }
-
-  private def withGroup(rawlsGroupRef: RawlsGroupRef, dataAccess: DataAccess)(op: RawlsGroup => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.rawlsGroupQuery.load(rawlsGroupRef) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found")))
-      case Some(group) => op(group)
-    }
-  }
-
-  private def withBillingProject(projectName: RawlsBillingProjectName)(op: RawlsBillingProject => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.load(projectName)
-    } flatMap {
-      case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")))
-      case Some(project) => op(project)
     }
   }
 

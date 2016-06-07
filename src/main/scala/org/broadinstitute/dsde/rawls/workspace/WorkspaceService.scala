@@ -1,25 +1,21 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
-import _root_.slick.dbio.Effect.Read
-import _root_.slick.profile.FixedSqlStreamingAction
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadAction, ReadWriteAction, DataAccess}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport, AdminSupport}
+import org.broadinstitute.dsde.rawls.util.{UserWiths, MethodWiths, FutureSupport, AdminSupport}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
@@ -27,8 +23,6 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http.Uri
 import spray.http.StatusCodes
-import spray.httpx.UnsuccessfulResponseException
-import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spray.json._
@@ -110,7 +104,7 @@ object WorkspaceService {
     new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -387,20 +381,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def withRawlsUser[T](userRef: RawlsUserRef, dataAccess: DataAccess)(op: (RawlsUser) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    dataAccess.rawlsUserQuery.load(userRef) flatMap {
-      case Some(user) => op(user)
-      case None => DBIO.failed(new RawlsException(s"Couldn't find user for userRef $userRef"))
-    }
-  }
-
-  def withRawlsGroup[T](groupRef: RawlsGroupRef, dataAccess: DataAccess)(op: (RawlsGroup) => ReadWriteAction[T]): ReadWriteAction[T] = {
-    dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-      case Some(group) => op(group)
-      case None => DBIO.failed(new RawlsException(s"Couldn't find group for groupRef $groupRef"))
-    }
-  }
-
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
@@ -450,7 +430,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     
                 // go through the access level groups on the workspace and update them
                 val groupUpdateResults = DBIO.sequence(workspaceContext.workspace.accessLevels.map { case (level, groupRef) =>
-                  withRawlsGroup(groupRef, dataAccess) { group =>
+                  withGroup(groupRef, dataAccess) { group =>
                     //remove existing records for users and groups in the acl update list
                     val usersNotChanging = group.users.filter(userRef => !allTheRefs.contains(userRef))
                     val groupsNotChanging = group.subGroups.filter(groupRef => !allTheRefs.contains(groupRef))
@@ -1131,7 +1111,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          withRawlsUser(submission.submitter, dataAccess) { user =>
+          withUser(submission.submitter, dataAccess) { user =>
             DBIO.successful(RequestComplete(StatusCodes.OK, new SubmissionStatusResponse(submission, user)))
           }
         }
