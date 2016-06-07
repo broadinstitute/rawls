@@ -637,6 +637,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     object NumericAttributeOrderingAsc extends Ordering[Attribute] {
       override def compare(x: Attribute, y: Attribute): Int = {
         (x, y) match {
+          //order lists by length
+          case (AttributeValueList(a), AttributeValueList(b)) => a.size.compare(b.size)
+          case (AttributeEntityReferenceList(a), AttributeEntityReferenceList(b)) => a.size.compare(b.size)
+          case (AttributeValueList(a), AttributeEntityReferenceList(b)) => a.size.compare(b.size)
+          case (AttributeEntityReferenceList(a), AttributeValueList(b)) => a.size.compare(b.size)
+
+          //lists are bigger than not-lists
+          case (AttributeValueList(a), _) => 1
+          case (AttributeEntityReferenceList(a), _) => 1
+          case (_, AttributeValueList(b)) => -1
+          case (_, AttributeEntityReferenceList(b)) => -1
+
           case (AttributeNumber(a), AttributeNumber(b)) => a.compare(b)
           case (AttributeNull, AttributeNull) => 0
           case (AttributeNull, _) => 1
@@ -652,6 +664,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     def isNumericForAll(entities: Seq[Entity], attributeName: String): Boolean = {
       attributeName != "name" && entities.map(_.attributes.getOrElse(attributeName, AttributeNull)).forall {
+        case a: AttributeValueList => true
+        case a: AttributeEntityReferenceList => true
         case a: AttributeNumber => true
         case AttributeNull => true
         case _ => false
