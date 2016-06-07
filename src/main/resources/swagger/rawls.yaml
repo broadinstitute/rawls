@@ -1322,7 +1322,7 @@ paths:
           description: Successful Request
           schema:
             type: object
-            description: Map[String,Int]
+            description: Map[String,EntityTypeMetadata]
         '404':
           description: Workspace not found
           schema:
@@ -1331,11 +1331,11 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: List all entity types in a workspace, plus the number of entities of each type
+      description: Get entity type metadata: for each type, the number of entities of that type and all attribute names used
       tags:
         - entities
-      summary: list all entity types in a workspace
-      operationId: list_entity_types
+      summary: Entity type metadata
+      operationId: entity_type_metadata
       parameters:
         - in: path
           description: Workspace Namespace
@@ -3399,6 +3399,22 @@ definitions:
       entityName:
         type: string
         description: The name of the entity
+
+  EntityTypeMetadata:
+    description: ''
+    required:
+      - count
+      - attributeNames
+    properties:
+      count:
+        type: int
+        description: The number of entities of this type
+      attributeNames:
+        type: array
+        description: A list of all attribute names used
+        items:
+          type: string
+
 
   AttributeUpdateOperation:
     description: ''

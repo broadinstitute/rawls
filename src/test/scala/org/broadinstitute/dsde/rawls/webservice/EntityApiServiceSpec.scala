@@ -228,9 +228,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val entityTypes = runAndWait(entityQuery.getEntityTypesWithCounts(SlickWorkspaceContext(testData.workspace)))
+        val entityTypes = runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(testData.workspace)))
         assertResult(entityTypes) {
-          responseAs[Map[String, Int]]
+          responseAs[Map[String, EntityTypeMetadata]]
         }
       }
   }

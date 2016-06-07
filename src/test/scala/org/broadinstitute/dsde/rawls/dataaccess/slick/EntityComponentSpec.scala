@@ -81,6 +81,58 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
+  it should "list all entity types with their attribute names" in withDefaultTestDatabase {
+
+    withWorkspaceContext(testData.workspace) { context =>
+
+      val desiredTypesAndAttrNames = Map(
+        "Sample" -> Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle"),
+        //"Aliquot" -> Seq(), NOTE: this is commented out because the db query doesn't return types that have no attributes.
+        "Pair" -> Seq("case", "control", "whatsit"),
+        "SampleSet" -> Seq("samples", "hasSamples"),
+        "PairSet" -> Seq("pairs"),
+        "Individual" -> Seq("sset")
+      )
+
+      //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
+      //so we test the existence of all keys correctly here...
+      val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context))
+      testTypesAndAttrNames.keys should contain theSameElementsAs desiredTypesAndAttrNames.keys
+
+      desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
+        //...and handle that the values are all correct here.
+        testTypesAndAttrNames(eType) should contain theSameElementsAs attrNames
+      }
+    }
+  }
+
+  it should "list all entity type metadata" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+
+      val desiredTypeMetadata = Map[String, EntityTypeMetadata](
+        "Sample"     -> EntityTypeMetadata( 8, Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle") ),
+        "Aliquot"    -> EntityTypeMetadata( 2, Seq() ),
+        "Pair"       -> EntityTypeMetadata( 2, Seq("case", "control", "whatsit") ),
+        "SampleSet"  -> EntityTypeMetadata( 5, Seq("samples", "hasSamples") ),
+        "PairSet"    -> EntityTypeMetadata( 1, Seq("pairs") ),
+        "Individual" -> EntityTypeMetadata( 2, Seq("sset") )
+      )
+
+      //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
+      //so we test the existence of all keys correctly here...
+      val testTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
+      testTypeMetadata.keys should contain theSameElementsAs desiredTypeMetadata.keys
+
+      testTypeMetadata foreach { case (eType, testMetadata) =>
+        val desiredMetadata = desiredTypeMetadata(eType)
+
+        //...and test that count and the list of attribute names are correct here.
+        assert(testMetadata.count == desiredMetadata.count)
+        testMetadata.attributeNames should contain theSameElementsAs desiredMetadata.attributeNames
+      }
+    }
+  }
+
   class BugTestData extends TestData {
     val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
     val workspace = new Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)

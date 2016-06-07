@@ -64,7 +64,7 @@ object WorkspaceService {
   case class DeleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
   case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
-  case class ListEntityTypes(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class GetEntityTypeMetadata(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
@@ -135,7 +135,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case DeleteEntity(workspaceName, entityType, entityName) => pipe(deleteEntity(workspaceName, entityType, entityName)) to sender
     case RenameEntity(workspaceName, entityType, entityName, newName) => pipe(renameEntity(workspaceName, entityType, entityName, newName)) to sender
     case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
-    case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
+    case GetEntityTypeMetadata(workspaceName) => pipe(entityTypeMetadata(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
     case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
     case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
@@ -611,10 +611,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listEntityTypes(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+  def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
+        dataAccess.entityQuery.getEntityTypeMetadata(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r))
       }
     }
 
