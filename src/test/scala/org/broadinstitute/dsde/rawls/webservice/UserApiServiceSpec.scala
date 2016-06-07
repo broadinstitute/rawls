@@ -52,7 +52,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "create a DB user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives

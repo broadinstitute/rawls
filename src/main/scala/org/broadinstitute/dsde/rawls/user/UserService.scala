@@ -520,11 +520,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
       val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
       dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
-        val exceptions = tries.collect { case Failure(t) => t }
+        val exceptions = tries.collect { case Failure(t) => ErrorReport(t) }
         if (exceptions.isEmpty) {
           None
         } else {
-          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
+          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.toSeq))
         }
       }
     } flatMap { errorReport =>
