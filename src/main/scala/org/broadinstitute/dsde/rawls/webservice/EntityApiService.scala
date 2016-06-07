@@ -28,7 +28,7 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
   val entityRoutes = requireUserInfo() { userInfo =>
     path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
       get {
-        parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
+        parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'rich1.?) { (page, pageSize, sortField, sortDirection, filterTerms, rich1) =>
           val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k,s) => k -> Try(s.map(_.toInt)) }
           val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
 
@@ -39,8 +39,13 @@ trait EntityApiService extends HttpService with PerRequestCreator with UserInfoD
 
           if (errors.isEmpty) {
             val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10), sortField.getOrElse("name"), sortDirectionTry.get, filterTerms)
-            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery))
+            requestContext =>
+              val message = rich1 match {
+                case None => WorkspaceService.QueryEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery)
+                case Some(_) => WorkspaceService.QueryEntitiesRich1(WorkspaceName(workspaceNamespace, workspaceName), entityType, entityQuery)
+              }
+
+              perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), message)
           } else {
             complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
           }

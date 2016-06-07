@@ -25,8 +25,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.Uri
-import spray.http.StatusCodes
+import spray.http.{StatusCodes, Uri}
 import spray.httpx.UnsuccessfulResponseException
 import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
@@ -66,6 +65,7 @@ object WorkspaceService {
   case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
   case class ListEntityTypes(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
+  case class QueryEntitiesRich1(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
@@ -138,6 +138,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case ListEntityTypes(workspaceName) => pipe(listEntityTypes(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
     case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
+    case QueryEntitiesRich1(workspaceName, entityType, query) => pipe(queryEntitiesRich1(workspaceName, entityType, query)) to sender
     case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
     case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
     case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
@@ -625,6 +626,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+  def queryEntitiesRich1(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
+          createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq).get
+        }
+      }
+    }
+  }
+
   def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
     object AttributeOrderingAsc extends Ordering[Attribute] {
       override def compare(x: Attribute, y: Attribute): Int = AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
@@ -639,8 +650,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         (x, y) match {
           case (AttributeNumber(a), AttributeNumber(b)) => a.compare(b)
           case (AttributeNull, AttributeNull) => 0
-          case (AttributeNull, _) => 1
-          case (_, AttributeNull) => -1
+          case (AttributeNull, _) => -1
+          case (_, AttributeNull) => 1
           case (_, _) => throw new RawlsException("non numeric attribute given to numeric ordering")
         }
       }
@@ -693,21 +704,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           }
 
           sortedEntitiesTry.flatMap { sortedEntities =>
-            val filteredCount = sortedEntities.size
-            val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-            if (filteredCount > 0 && query.page > pageCount) {
-              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
-
-            } else {
-              val offset = (query.page - 1) * query.pageSize
-              val page = sortedEntities.slice(offset, offset + query.pageSize)
-              val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
-
-              Success(RequestComplete(StatusCodes.OK, response))
-            }
+            val offset = (query.page - 1) * query.pageSize
+            val page = sortedEntities.slice(offset, offset + query.pageSize)
+            createEntityQueryResponse(query, allEntities.size, sortedEntities.size, page)
           }.get
         }
       }
+    }
+  }
+
+  def createEntityQueryResponse(query: EntityQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[Entity]): Try[RequestComplete[(StatusCodes.Success, EntityQueryResponse)]] = {
+    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+    if (filteredCount > 0 && query.page > pageCount) {
+      Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
+
+    } else {
+      val response = EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
+
+      Success(RequestComplete(StatusCodes.OK, response))
     }
   }
 

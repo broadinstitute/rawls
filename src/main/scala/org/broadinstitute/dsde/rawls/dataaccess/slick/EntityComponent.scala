@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
-import slick.profile.SqlStreamingAction
 import spray.http.StatusCodes
+
+import scala.collection.mutable
 
 /**
  * Created by dvoet on 2/4/16.
@@ -46,6 +47,13 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
       }
+    }
+
+    private object PaginatedEntityRawSqlQuery extends RawSqlQuery {
+      val driver: JdbcDriver = EntityComponent.this.driver
+
+
+
     }
 
     private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
@@ -109,6 +117,90 @@ trait EntityComponent {
         sql"""#$baseEntityAndAttributeSql where e.id = ${id}""".as[EntityAndAttributesResult]
       }
 
+      private def createPaginationTempTable(workspaceId: UUID, entityType: String, sortFieldName: String) = {
+
+        val (sortColumn, sortJoin, sortConstraint, sortOrder) = sortFieldName match {
+          case "name" => ("e.name as sort_field, ", "", "", "")
+          case _ => (
+            """case
+              when sort_a.value_string is not null then sort_a.value_string
+              when sort_a.value_number is not null then sort_a.value_number
+              when sort_a.value_boolean is not null then sort_a.value_boolean
+              when e_ref.name is not null then e_ref.name
+              else null
+              end as sort_field, """,
+            """left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id
+              left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """,
+            s"and sort_a.name = '$sortFieldName'",
+            ", sort_field"
+            )
+        }
+
+        sqlu"""create TEMPORARY table ENTITY_PAGINATION as
+        select e.id,
+        e.name,
+        #$sortColumn
+        group_concat(concat(ifnull(a.value_string, ''), ifnull(a.value_number, ''), ifnull(a.value_boolean, ''), ifnull(e_ref.name, '')) separator ' ') as filter_text
+
+        from ENTITY e
+        left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
+        left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
+        #$sortJoin
+
+        where
+          e.entity_type = $entityType and
+          e.workspace_id = $workspaceId
+          #$sortConstraint
+
+        group by e.id, e.name #$sortOrder"""
+      }
+
+      def actionForPagination(workspaceContext: SlickWorkspaceContext, entityType: String, entityQuery: model.EntityQuery) = {
+        val baseSql = s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version,
+          a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index,
+          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, p.name
+          from ENTITY e
+          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
+          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
+
+        val filtersOption = entityQuery.filterTerms.map { _.split(" ").toSeq.map { term =>
+          sql"concat(pagination.name, ' ', pagination.filter_text) like ${'%' + term + '%'}"
+        }}
+
+        val filterSql = filtersOption match {
+          case None => sql""
+          case Some(filters) =>
+            concatSqlActions(sql"where ", reduceSqlActionsWithDelim(filters, sql" and "))
+        }
+
+        def order(alias: String) = sql" order by #$alias.sort_field #${SortDirections.toSql(entityQuery.sortDirection)} "
+
+        val paginationJoin = concatSqlActions(
+          sql""" join (select pagination.id, pagination.name, pagination.sort_field from ENTITY_PAGINATION pagination """,
+          filterSql,
+          order("pagination"),
+          sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page-1) * entityQuery.pageSize} ) p on p.id = e.id "
+        )
+
+        for {
+          _ <- createPaginationTempTable(workspaceContext.workspaceId, entityType, entityQuery.sortField)
+          filteredCount <- concatSqlActions(sql"select count(1) from ENTITY_PAGINATION pagination ", filterSql).as[Int]
+          unfilteredCount <- sql"select count(1) from ENTITY_PAGINATION".as[Int]
+          page <- concatSqlActions(sql"#$baseSql", paginationJoin, order("p")).as[EntityAndAttributesResult]
+        } yield (unfilteredCount.head, filteredCount.head, page)
+      }
+
+      def dropPaginationTempTable() = {
+        sql"""drop table ENTITY_PAGINATION""".as[Int]
+      }
+    }
+
+    def loadEntityPage(workspaceContext: SlickWorkspaceContext, entityType: String, entityQuery: model.EntityQuery): ReadAction[(Int, Int, Iterable[Entity])] = {
+      EntityAndAttributesRawSqlQuery.actionForPagination(workspaceContext, entityType, entityQuery) map { case (unfilteredCount, filteredCount, pagination) =>
+        (unfilteredCount, filteredCount, unmarshalEntitiesWithIds(pagination).map { case (id, entity) => entity})
+      } cleanUp { _ =>
+        EntityAndAttributesRawSqlQuery.dropPaginationTempTable()
+      }
     }
 
     def entityAttributes(entityId: Long) = for {
@@ -169,21 +261,24 @@ trait EntityComponent {
       unmarshalEntitiesWithIds(entityAttributeAction).map(_.map { case (id, entity) => entity })
     }
 
-    def unmarshalEntitiesWithIds(entityAttributeAction: ReadAction[Seq[EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]]): ReadAction[Map[Long, Entity]] = {
-      entityAttributeAction.map { entityAttributeRecords =>
-        val allEntityRecords = entityAttributeRecords.map(_.entityRecord).toSet
+    def unmarshalEntitiesWithIds(entityAttributeAction: ReadAction[Seq[EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]]): ReadAction[mutable.LinkedHashMap[Long, Entity]] = {
+      entityAttributeAction.map(unmarshalEntitiesWithIds)
+    }
 
-        // note that not all entities have attributes, thus the collect below
-        val entitiesWithAttributes = entityAttributeRecords.collect {
-          case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
-        }
+    def unmarshalEntitiesWithIds(entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]): mutable.LinkedHashMap[Long, Entity] = {
+      val allEntityRecords = new mutable.LinkedHashSet() ++ entityAttributeRecords.map(_.entityRecord)
 
-        val attributesByEntityId = entityAttributeQuery.unmarshalAttributes[Long](entitiesWithAttributes)
-
-        allEntityRecords.map { entityRec =>
-          entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
-        }.toMap
+      // note that not all entities have attributes, thus the collect below
+      val entitiesWithAttributes = entityAttributeRecords.collect {
+        case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
+
+      val attributesByEntityId = entityAttributeQuery.unmarshalAttributes[Long](entitiesWithAttributes)
+      val result = new mutable.LinkedHashMap[Long, Entity]()
+      allEntityRecords.foreach { entityRec =>
+        result += entityRec.id -> unmarshalEntity(entityRec, attributesByEntityId.getOrElse(entityRec.id, Map.empty))
+      }
+      result
     }
 
     /** creates or replaces an entity */
@@ -273,7 +368,7 @@ trait EntityComponent {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(workspaceContext, entityRefs))
     }
 
-    def listByIds(entityIds: Traversable[Long]): ReadAction[Map[Long, Entity]] = {
+    def listByIds(entityIds: Traversable[Long]): ReadAction[scala.collection.Map[Long, Entity]] = {
       unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForIds(entityIds))
     }
 

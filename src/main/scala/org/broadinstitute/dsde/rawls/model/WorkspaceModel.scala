@@ -92,6 +92,8 @@ object SortDirections {
       case Descending => "desc"
     }
   }
+
+  def toSql(direction: SortDirection) = toString(direction)
 }
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
 
