@@ -19,6 +19,7 @@ import scala.util.Random
  * Created by dvoet on 4/24/15.
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
+
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
@@ -47,7 +48,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 on create entity" in withTestDataApiServices { services =>
-    val wsName = WorkspaceName(testData.workspace.namespace,testData.workspace.name)
+    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")))
 
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(newSample)) ~>
@@ -534,7 +535,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(dotSample)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest) { status }
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
       }
   }
 
@@ -562,11 +565,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       "mixed" -> (i % 3 match {
         case 0 => AttributeString(s"$i")
         case 1 => AttributeNumber(i.toDouble)
-        case 2 => AttributeValueList( 1 to i map( AttributeNumber(_) ) reverse )
+        case 2 => AttributeValueList(1 to i map (AttributeNumber(_)) reverse)
       }),
       "mixedNumeric" -> (i % 2 match {
         case 0 => AttributeNumber(i.toDouble)
-        case 1 => AttributeValueList( 1 to i map( AttributeNumber(_) ) reverse )
+        case 1 => AttributeValueList(1 to i map (AttributeNumber(_)) reverse)
       })
     )))
 
@@ -593,6 +596,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   val defaultQuery = EntityQuery(1, 10, "name", Ascending, None)
+
   def calculateNumPages(count: Int, pageSize: Int) = Math.ceil(count.toDouble / pageSize).toInt
 
   it should "return 400 bad request on entity query when page is not a number" in withPaginationTestDataApiServices { services =>
@@ -645,8 +649,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 bad request on entity query when sort field does not exist for any entity" in withPaginationTestDataApiServices { services =>
-    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf") ~>
+  it should "return 400 bad request on entity query for unknown sort direction" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortDirection=asdfasdfasdf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -655,12 +659,19 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 bad request on entity query for unknown sort direction" in withPaginationTestDataApiServices { services =>
-    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortDirection=asdfasdfasdf") ~>
+  it should "return 200 OK on entity query for unknown sort field" in withPaginationTestDataApiServices { services =>
+    Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=asdfasdfasdf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery.copy(sortField = "asdfasdfasdf"),
+          EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
+          paginationTestData.entities.sortBy(_.name).take(defaultQuery.pageSize))) {
+
+          responseAs[EntityQueryResponse]
         }
       }
   }
@@ -679,7 +690,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -696,7 +707,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/blarf") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -713,7 +724,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?filterTerms=qqq") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -732,7 +743,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?page=$page") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -751,7 +762,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -768,7 +779,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=number") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -785,7 +796,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=random&sordDirection=asc") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assertResult(EntityQueryResponse(
@@ -798,6 +809,28 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  private def entityLessThan(attributeName: String)(e1: Entity, e2: Entity): Boolean = {
+    (e1.attributes(attributeName), e2.attributes(attributeName)) match {
+      case (AttributeNumber(v1), AttributeNumber(v2)) if v1 == v2 => e1.name < e2.name
+      case (AttributeNumber(v1), AttributeNumber(v2)) => v1 < v2
+      case (AttributeNumber(v), _) => true
+      case (_, AttributeNumber(v)) => false
+
+      case (AttributeString(v1), AttributeString(v2)) if v1 == v2 => e1.name < e2.name
+      case (AttributeString(v1), AttributeString(v2)) => v1 < v2
+      case (AttributeString(v), _) => true
+      case (_, AttributeString(v)) => false
+
+      case (l1: AttributeList[_], l2: AttributeList[_]) if l1.list.length == l2.list.length => e1.name < e2.name
+      case (l1: AttributeList[_], l2: AttributeList[_]) => l1.list.length < l2.list.length
+      case (l1: AttributeList[_], _) => true
+      case (_, l2: AttributeList[_]) => false
+
+      case (_, _) => throw new RawlsException("case not covered")
+
+    }
+  }
+
   it should "return sorted results on entity query for mixed typed field" in withPaginationTestDataApiServices { services =>
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=mixed&pageSize=${paginationTestData.numEntities}") ~>
       sealRoute(services.entityRoutes) ~>
@@ -806,28 +839,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        //this is recursive, which is why it's not inlined.
-        //this test is the case where the column is sorted alphabetically, so in the case
-        //of lists, taking the head is sufficient to define the correct ordering
-        //relative to the other column items.
-        //this saves us lifting the code from AttributeStringifier, which is what we're
-        //supposed to be testing!
-        def attrToString(a: Attribute): String = {
-          a match {
-            case AttributeString(value) => value
-            case AttributeNumber(value) => value.toString
-            case AttributeValueList(list) if list.isEmpty => ""
-            case AttributeValueList(list) => attrToString(list.head)
-            case _ => throw new RawlsException("make the compiler stop whining")
-          }
-        }
-
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "mixed", pageSize = paginationTestData.numEntities),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
-          paginationTestData.entities.sortBy( e => attrToString(e.attributes("mixed")) ))) {
-          responseAs[EntityQueryResponse]
-        }
+          paginationTestData.entities.sortWith(entityLessThan("mixed")))) {
+            responseAs[EntityQueryResponse]
+          }
       }
   }
 
@@ -839,20 +856,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        def attrToNumeric(a: Attribute): BigDecimal = {
-          a match {
-            case AttributeNumber(value) => value
-            // this offset magic with paginationTestData.numEntities*2 guarantees that lists "are bigger than"
-            // numbers without reimplementing NumericAttributeOrderingAsc in the test
-            case AttributeValueList(list) => list.size + (paginationTestData.numEntities*2)
-            case _ => throw new RawlsException("make the compiler stop whining")
-          }
-        }
-
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "mixedNumeric", pageSize = paginationTestData.numEntities),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
-          paginationTestData.entities.sortBy( e => attrToNumeric(e.attributes("mixedNumeric")) ))) {
+          paginationTestData.entities.sortWith(entityLessThan("mixedNumeric")))) {
           responseAs[EntityQueryResponse]
         }
       }
@@ -862,14 +869,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${paginationTestData.workspace.namespace}/${paginationTestData.workspace.name}/entityQuery/${paginationTestData.entityType}?sortField=sparse&pageSize=${paginationTestData.numEntities}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
 
         // all the entities without values should be last, drop them then make sure the resulting list is sorted right
         val resultEntities = responseAs[EntityQueryResponse].results
         assertResult(paginationTestData.entities.filter(_.attributes.getOrElse("sparse", AttributeNull) != AttributeNull).sortBy(_.attributes("sparse").asInstanceOf[AttributeNumber].value)) {
-          resultEntities.takeWhile(_.attributes.getOrElse("sparse", AttributeNull) != AttributeNull)
+          resultEntities.dropWhile(_.attributes.getOrElse("sparse", AttributeNull) == AttributeNull)
         }
       }
   }
@@ -913,5 +920,4 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
-
 }

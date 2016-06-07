@@ -15,4 +15,5 @@
     <include file="changesets/20160516_nullable_external_id.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160523_notnull_workflow_entities.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160526_analysis_status_refactor.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160609_all_attributes_column.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

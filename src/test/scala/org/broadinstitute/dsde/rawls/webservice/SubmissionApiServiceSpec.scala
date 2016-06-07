@@ -243,7 +243,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     withWorkspaceContext(testData.workspace) { context =>
       newWorkflows foreach { case (status, count) =>
-        val entityRecs = for (i <- 1 to count) yield EntityRecord(0, i.toString, status.toString, context.workspaceId, 0)
+        val entityRecs = for (i <- 1 to count) yield EntityRecord(0, i.toString, status.toString, context.workspaceId, 0, None)
         runAndWait(entityQuery.batchInsertEntities(context, entityRecs))
         val workflows = for (i <- 1 to count) yield Workflow(Option(s"workflow${i}_of_$count"), status, testDate, AttributeEntityReference(status.toString, i.toString), testData.inputResolutions)
         runAndWait(workflowQuery.createWorkflows(context, UUID.fromString(testData.submissionUpdateEntity.submissionId), workflows))

@@ -23,6 +23,9 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http.Uri
 import spray.http.StatusCodes
+import spray.http.{StatusCodes, Uri}
+import spray.httpx.UnsuccessfulResponseException
+import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spray.json._
@@ -606,102 +609,24 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def queryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery): Future[PerRequestMessage] = {
-    object AttributeOrderingAsc extends Ordering[Attribute] {
-      override def compare(x: Attribute, y: Attribute): Int = AttributeStringifier(x).compareToIgnoreCase(AttributeStringifier(y))
-    }
-
-    object AttributeOrderingDesc extends Ordering[Attribute] {
-      override def compare(x: Attribute, y: Attribute): Int = -1 * AttributeOrderingAsc.compare(x, y)
-    }
-
-    object NumericAttributeOrderingAsc extends Ordering[Attribute] {
-      override def compare(x: Attribute, y: Attribute): Int = {
-        (x, y) match {
-          //order lists by length
-          case (AttributeValueList(a), AttributeValueList(b)) => a.size.compare(b.size)
-          case (AttributeEntityReferenceList(a), AttributeEntityReferenceList(b)) => a.size.compare(b.size)
-          case (AttributeValueList(a), AttributeEntityReferenceList(b)) => a.size.compare(b.size)
-          case (AttributeEntityReferenceList(a), AttributeValueList(b)) => a.size.compare(b.size)
-
-          //lists are bigger than not-lists
-          case (AttributeValueList(a), _) => 1
-          case (AttributeEntityReferenceList(a), _) => 1
-          case (_, AttributeValueList(b)) => -1
-          case (_, AttributeEntityReferenceList(b)) => -1
-
-          case (AttributeNumber(a), AttributeNumber(b)) => a.compare(b)
-          case (AttributeNull, AttributeNull) => 0
-          case (AttributeNull, _) => 1
-          case (_, AttributeNull) => -1
-          case (_, _) => throw new RawlsException("non numeric attribute given to numeric ordering")
-        }
-      }
-    }
-
-    object NumericAttributeOrderingDesc extends Ordering[Attribute] {
-      override def compare(x: Attribute, y: Attribute): Int = -1 * NumericAttributeOrderingAsc.compare(x, y)
-    }
-
-    def isNumericForAll(entities: Seq[Entity], attributeName: String): Boolean = {
-      attributeName != "name" && entities.map(_.attributes.getOrElse(attributeName, AttributeNull)).forall {
-        case a: AttributeValueList => true
-        case a: AttributeEntityReferenceList => true
-        case a: AttributeNumber => true
-        case AttributeNull => true
-        case _ => false
-      }
-    }
-
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.list(workspaceContext, entityType).map { allEntitiesTO =>
-          val allEntities = allEntitiesTO.toSeq
-
-          val filteredEntities = query.filterTerms match {
-            case None => allEntities
-            case Some(filterTerms) =>
-              val terms = filterTerms.split(" ")
-              allEntities.filter { entity =>
-                // do ++ Seq(entity.name) below instead of + entity.name because the compiler chooses the wrong + in the latter case
-                val attributesString = (entity.attributes.values.map(AttributeStringifier(_)) ++ Seq(entity.name)).mkString(" ")
-                terms.forall(attributesString.contains)
-              }
-          }
-
-          val ordering = (query.sortDirection, isNumericForAll(filteredEntities, query.sortField)) match {
-            case (Descending, true) => NumericAttributeOrderingDesc
-            case (Ascending, true) => NumericAttributeOrderingAsc
-            case (Descending, false) => AttributeOrderingDesc
-            case (Ascending, false) => AttributeOrderingAsc
-          }
-
-          val sortedEntitiesTry = query.sortField match {
-            case "name" => Success(filteredEntities.toSeq.sortBy(e => AttributeString(e.name): Attribute)(ordering))
-            case sortFieldName =>
-              if (filteredEntities.isEmpty || filteredEntities.exists(_.attributes.getOrElse(sortFieldName, AttributeNull) != AttributeNull)) {
-                Success(filteredEntities.toSeq.sortBy(_.attributes.getOrElse(sortFieldName, AttributeNull))(ordering))
-              } else {
-                Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"sort field $sortFieldName does not exist for any $entityType")))
-              }
-
-          }
-
-          sortedEntitiesTry.flatMap { sortedEntities =>
-            val filteredCount = sortedEntities.size
-            val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
-            if (filteredCount > 0 && query.page > pageCount) {
-              Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
-
-            } else {
-              val offset = (query.page - 1) * query.pageSize
-              val page = sortedEntities.slice(offset, offset + query.pageSize)
-              val response = EntityQueryResponse(query, EntityQueryResultMetadata(allEntities.size, filteredCount, pageCount), page)
-
-              Success(RequestComplete(StatusCodes.OK, response))
-            }
-          }.get
+        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query) map { case (unfilteredCount, filteredCount, entities) =>
+          createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq).get
         }
       }
+    }
+  }
+
+  def createEntityQueryResponse(query: EntityQuery, unfilteredCount: Int, filteredCount: Int, page: Seq[Entity]): Try[RequestComplete[(StatusCodes.Success, EntityQueryResponse)]] = {
+    val pageCount = Math.ceil(filteredCount.toFloat / query.pageSize).toInt
+    if (filteredCount > 0 && query.page > pageCount) {
+      Failure(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"requested page ${query.page} is greater than the number of pages $pageCount")))
+
+    } else {
+      val response = EntityQueryResponse(query, EntityQueryResultMetadata(unfilteredCount, filteredCount, pageCount), page)
+
+      Success(RequestComplete(StatusCodes.OK, response))
     }
   }
 

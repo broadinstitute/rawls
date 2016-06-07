@@ -24,6 +24,7 @@ trait AttributeRecord {
   val valueBoolean: Option[Boolean]
   val valueEntityRef: Option[Long]
   val listIndex: Option[Int]
+  val listLength: Option[Int]
 }
 
 case class EntityAttributeRecord(id: Long,
@@ -33,7 +34,8 @@ case class EntityAttributeRecord(id: Long,
                                  valueNumber: Option[Double],
                                  valueBoolean: Option[Boolean],
                                  valueEntityRef: Option[Long],
-                                 listIndex: Option[Int]) extends AttributeRecord
+                                 listIndex: Option[Int],
+                                 listLength: Option[Int]) extends AttributeRecord
 
 case class WorkspaceAttributeRecord(id: Long,
                                     workspaceId: UUID,
@@ -42,7 +44,8 @@ case class WorkspaceAttributeRecord(id: Long,
                                     valueNumber: Option[Double],
                                     valueBoolean: Option[Boolean],
                                     valueEntityRef: Option[Long],
-                                    listIndex: Option[Int]) extends AttributeRecord
+                                    listIndex: Option[Int],
+                                    listLength: Option[Int]) extends AttributeRecord
 
 case class SubmissionAttributeRecord(id: Long,
                                      validationId: Long,
@@ -51,7 +54,8 @@ case class SubmissionAttributeRecord(id: Long,
                                      valueNumber: Option[Double],
                                      valueBoolean: Option[Boolean],
                                      valueEntityRef: Option[Long],
-                                     listIndex: Option[Int]) extends AttributeRecord
+                                     listIndex: Option[Int],
+                                     listLength: Option[Int]) extends AttributeRecord
 
 trait AttributeComponent {
   this: DriverComponent
@@ -72,63 +76,54 @@ trait AttributeComponent {
     def valueBoolean = column[Option[Boolean]]("value_boolean")
     def valueEntityRef = column[Option[Long]]("value_entity_ref")
     def listIndex = column[Option[Int]]("list_index")
+    def listLength = column[Option[Int]]("list_length")
   }
 
   class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_WS_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def workspace = foreignKey("FK_ATTRIBUTE_PARENT_WORKSPACE", ownerId, workspaceQuery)(_.id)
   }
 
   class SubmissionAttributeTable(tag: Tag) extends AttributeTable[Long, SubmissionAttributeRecord](tag, "SUBMISSION_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_SUB_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
   class EntityAttributeTempTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
   }
 
   class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
   }
 
-  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_)) {
-    override protected def createRecord(id: Long, entityId: Long, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
-      EntityAttributeRecord(id, entityId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
-  }
+  protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
 
-  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_)) {
-    override protected def createRecord(id: Long, workspaceId: UUID, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
-      WorkspaceAttributeRecord(id, workspaceId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
-  }
+  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
 
-  protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_)) {
-    override protected def createRecord(id: Long, validationId: Long, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
-      SubmissionAttributeRecord(id, validationId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
-  }
+  protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
-  protected object entityAttributeTempQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_)) {
-    override protected def createRecord(id: Long, entityId: Long, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
-      EntityAttributeRecord(id, entityId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
-  }
+  protected object entityAttributeTempQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeRecord)
 
-  protected object workspaceAttributeTempQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_)) {
-    override protected def createRecord(id: Long, workspaceId: UUID, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
-      WorkspaceAttributeRecord(id, workspaceId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
-  }
+  protected object workspaceAttributeTempQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeRecord)
 
-  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T) extends TableQuery[T](cons)  {
+  /**
+   * @param createRecord function to create a RECORD object, parameters: id, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength
+   * @tparam OWNER_ID the type of the ownerId field
+   * @tparam RECORD the record class
+   */
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
 
     /**
      * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
@@ -143,39 +138,39 @@ trait AttributeComponent {
       attribute match {
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index))}
+          refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index), Option(refs.length))}
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
-          values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index))}
+          values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(insertAttributeValue(ownerId, name, value))
         case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, name, workspaceId, ref))
-        case AttributeEmptyList => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1))) // storing empty list as an element with index -1
+        case AttributeEmptyList => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
       }
     }
 
-    private def insertAttributeRef(ownerId: OWNER_ID, name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None): ReadWriteAction[Int] = {
+    private def insertAttributeRef(ownerId: OWNER_ID, name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
       entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
         case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")
         case Seq(entityRecord) =>
-          (this += marshalAttributeEntityReference(ownerId, name, listIndex, ref, Map(ref -> entityRecord.id)))
+          (this += marshalAttributeEntityReference(ownerId, name, listIndex, ref, Map(ref -> entityRecord.id), listLength))
       }
     }
 
-    private def insertAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndex: Option[Int] = None): ReadWriteAction[Int] = {
-      (this += marshalAttributeValue(ownerId, name, value, listIndex))
+    private def insertAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
+      (this += marshalAttributeValue(ownerId, name, value, listIndex, listLength))
     }
 
     def marshalAttribute(ownerId: OWNER_ID, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
       attribute match {
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, name, Option(index), ref, entityIdsByRef)}
+          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, name, Option(index), ref, entityIdsByRef, Option(refs.length))}
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
-          values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, name, value, Option(index))}
-        case value: AttributeValue => Seq(marshalAttributeValue(ownerId, name, value, None))
-        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, name, None, ref, entityIdsByRef))
-        case AttributeEmptyList => Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1))) // storing empty list as an element with index -1
+          values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
+        case value: AttributeValue => Seq(marshalAttributeValue(ownerId, name, value, None, None))
+        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, name, None, ref, entityIdsByRef, None))
+        case AttributeEmptyList => Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
       }
     }
 
@@ -183,27 +178,26 @@ trait AttributeComponent {
       insertInBatches(this, attributes)
     }
 
-    def marshalAttributeEntityReference(ownerId: OWNER_ID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long]): RECORD = {
+    def marshalAttributeEntityReference(ownerId: OWNER_ID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
       val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
-      createRecord(0, ownerId, name, None, None, None, Option(entityId), listIndex)
+      createRecord(0, ownerId, name, None, None, None, Option(entityId), listIndex, listLength)
     }
 
-    def marshalAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndexx: Option[Int]): RECORD = {
-      createRecord(0, ownerId, name, listIndex = listIndexx,
-        valueBoolean = value match {
-          case AttributeBoolean(b) => Option(b)
-          case _ => None
-        },
-        valueNumber = value match {
-          case AttributeNumber(b) => Option(b.toDouble)
-          case _ => None
-        },
-        valueString = value match {
-          case AttributeString(b) => Option(b)
-          case _ => None
-        },
-        valueEntityRef = None
-      )
+    def marshalAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
+      val valueBoolean = value match {
+        case AttributeBoolean(b) => Option(b)
+        case _ => None
+      }
+      val valueNumber = value match {
+        case AttributeNumber(b) => Option(b.toDouble)
+        case _ => None
+      }
+      val valueString = value match {
+        case AttributeString(b) => Option(b)
+        case _ => None
+      }
+
+      createRecord(0, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength)
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
@@ -246,10 +240,10 @@ trait AttributeComponent {
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_TEMP ta
                 on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
-                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref""".as[Int]
+                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
       def insertIntoMasterAction(ownerIds: Seq[OWNER_ID]) =
-        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id)
-                select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id
+        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
+                select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
                 from #${baseTableRow.tableName}_TEMP ta
                 left join #${baseTableRow.tableName} a
                 on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
@@ -263,7 +257,8 @@ trait AttributeComponent {
               value_number double DEFAULT NULL,
               value_boolean bit(1) DEFAULT NULL,
               value_entity_ref bigint(20) unsigned DEFAULT NULL,
-              list_index int(11) DEFAULT NULL, """
+              list_index int(11) DEFAULT NULL,
+              list_length int(11) DEFAULT NULL, """
 
         val suffix = if(typeOf[OWNER_ID] =:= typeOf[Long]) {
           sql"""owner_id bigint(20) unsigned NOT NULL)"""
@@ -353,7 +348,5 @@ trait AttributeComponent {
     private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = {
       AttributeEntityReference(entityType = referredEntity.entityType, entityName = referredEntity.name)
     }
-
-    protected def createRecord(id: Long, ownerId: OWNER_ID, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]): RECORD
   }
 }
