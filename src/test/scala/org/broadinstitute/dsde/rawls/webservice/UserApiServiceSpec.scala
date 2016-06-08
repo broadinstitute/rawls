@@ -53,7 +53,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    fail("fail 1")
+    assert(false, "assert(false) 1")
+    assertResult(false, "assertResult(false) 1") { true }
     withApiServices(dataSource) { services =>
+      fail("fail 2")
+      assert(false, "assert(false) 2")
+      assertResult(false, "assertResult(false) 2") { true }
+
+      println("is it even really running this test?")
 
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
@@ -61,6 +69,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
       assert {
         loadUser(user).isEmpty
       }
+
+      // look I'm going to assert the opposite now
+      assert {
+        loadUser(user).nonEmpty
+      }
+
+
+
       assert {
         runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef)).isEmpty
       }
@@ -95,6 +111,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
         services.directoryDAO.exists(user)
       }
     }
+
+    fail("fail 3")
+    assert(false, "assert(false) 3")
+    assertResult(false, "assertResult(false) 3") { true }
   }
 
   it should "enable/disable user" in withEmptyTestDatabase { dataSource: SlickDataSource =>
