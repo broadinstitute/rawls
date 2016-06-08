@@ -373,17 +373,21 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
   }
 
-  val testData = new DefaultTestData()
+  val emptyData = new TestData() {
+    override def save() = {
+      DBIO.successful(Unit)
+    }
+  }
 
   def withEmptyTestDatabase[T](testCode: => T): T = {
-    val emptyData = new TestData() {
-      override def save() = {
-        DBIO.successful(Unit)
-      }
-    }
-
     withCustomTestDatabaseInternal(emptyData)(testCode)
   }
+
+  def withEmptyTestDatabase[T](testCode: SlickDataSource => T): T = {
+    withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
+  }
+
+  val testData = new DefaultTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -398,11 +402,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   }
 
   def withCustomTestDatabaseInternal[T](data: TestData)(testCode: => T): T = {
-    println("withCustomTestDatabaseInternal")
     try {
       runAndWait(allSchemas.create)
       runAndWait(data.save())
-      println("going to run testCode now")
       testCode
     } catch {
       case t: Throwable => t.printStackTrace; throw t
