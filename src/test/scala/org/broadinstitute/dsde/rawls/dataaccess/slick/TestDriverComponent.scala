@@ -398,9 +398,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   }
 
   def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
+    println("withCustomTestDatabaseInternal")
     try {
       runAndWait(allSchemas.create)
       runAndWait(data.save())
+      println("going to run testCode now")
       testCode
     } catch {
       case t: Throwable => t.printStackTrace; throw t
