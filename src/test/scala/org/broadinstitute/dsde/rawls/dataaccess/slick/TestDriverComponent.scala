@@ -418,31 +418,35 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
   }
 
-  val testData = new DefaultTestData()
-
-  def withEmptyTestDatabase(testCode: => Any):Unit = {
-    val emptyData = new TestData() {
-      override def save() = {
-        DBIO.successful(Unit)
-      }
+  val emptyData = new TestData() {
+    override def save() = {
+      DBIO.successful(Unit)
     }
+  }
 
+  def withEmptyTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(emptyData)(testCode)
   }
 
-  def withDefaultTestDatabase(testCode: => Any):Unit = {
+  def withEmptyTestDatabase[T](testCode: SlickDataSource => T): T = {
+    withCustomTestDatabaseInternal(emptyData)(testCode(slickDataSource))
+  }
+
+  val testData = new DefaultTestData()
+
+  def withDefaultTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode)
   }
 
-  def withDefaultTestDatabase(testCode:SlickDataSource => Any):Unit = {
+  def withDefaultTestDatabase[T](testCode: SlickDataSource => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
   }
 
-  def withCustomTestDatabase(data:TestData)(testCode:SlickDataSource => Any):Unit = {
+  def withCustomTestDatabase[T](data: TestData)(testCode: SlickDataSource => T): T = {
     withCustomTestDatabaseInternal(data)(testCode(slickDataSource))
   }
 
-  def withCustomTestDatabaseInternal(data:TestData)(testCode: => Any):Unit = {
+  def withCustomTestDatabaseInternal[T](data: TestData)(testCode: => T): T = {
     try {
       runAndWait(data.save())
       testCode

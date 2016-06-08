@@ -152,10 +152,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  def withDataAndService(
-      testCode: WorkspaceService => Any, 
-      withDataOp: (SlickDataSource => Any) => Unit, 
-      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)): Unit = {
+  def withDataAndService[T](
+      testCode: WorkspaceService => T,
+      withDataOp: (SlickDataSource => T) => T,
+      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)): T = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -195,21 +195,21 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
   }
 
-  def withWorkspaceService(testCode: WorkspaceService => Any): Unit = {
-    withDataAndService(testCode, withDefaultTestDatabase)
+  def withWorkspaceService[T](testCode: WorkspaceService => T): T = {
+    withDataAndService(testCode, withDefaultTestDatabase[T])
   }
 
-  def withWorkspaceServiceMockExecution(testCode: (MockExecutionServiceDAO) => (WorkspaceService) => Any): Unit = {
+  def withWorkspaceServiceMockExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
     val execSvc = new MockExecutionServiceDAO()
-    withDataAndService(testCode(execSvc), withDefaultTestDatabase, execSvc)
+    withDataAndService(testCode(execSvc), withDefaultTestDatabase[T], execSvc)
   }
-  def withWorkspaceServiceMockTimeoutExecution(testCode: (MockExecutionServiceDAO) => (WorkspaceService) => Any): Unit = {
+  def withWorkspaceServiceMockTimeoutExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
     val execSvc = new MockExecutionServiceDAO(true)
-    withDataAndService(testCode(execSvc), withDefaultTestDatabase, execSvc)
+    withDataAndService(testCode(execSvc), withDefaultTestDatabase[T], execSvc)
   }
 
-  def withSubmissionTestWorkspaceService(testCode: WorkspaceService => Any): Unit = {
-    withDataAndService(testCode, withCustomTestDatabase(new SubmissionTestData))
+  def withSubmissionTestWorkspaceService[T](testCode: WorkspaceService => T): T = {
+    withDataAndService(testCode, withCustomTestDatabase[T](new SubmissionTestData))
   }
 
   private def checkSubmissionStatus(workspaceService:WorkspaceService, submissionId:String) = {

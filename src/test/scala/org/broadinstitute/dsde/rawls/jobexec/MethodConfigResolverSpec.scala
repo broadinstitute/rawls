@@ -98,7 +98,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   }
   val configData = new ConfigData()
 
-  def withConfigData(testCode: => Any): Unit = {
+  def withConfigData[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(configData)(testCode)
   }
 
