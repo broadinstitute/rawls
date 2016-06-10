@@ -80,7 +80,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  def withTestDataServices(testCode: TestApiService => Any): Unit = {
+  def withTestDataServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource)
       try {

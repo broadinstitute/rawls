@@ -23,7 +23,7 @@ import scala.util.{Random, Success => TrySuccess}
 class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent {
   import driver.api._
 
-  def withTestWorkspace(testCode: (SlickWorkspaceContext) => Any): Unit = {
+  def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
     withDefaultTestDatabase {
       withWorkspaceContext(testData.workspace) { workspaceContext =>
         testCode(workspaceContext)

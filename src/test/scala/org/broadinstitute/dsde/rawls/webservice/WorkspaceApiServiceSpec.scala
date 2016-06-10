@@ -38,7 +38,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices(dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => Any): Unit = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -47,25 +47,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
+  def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
-  def withTestDataApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
+  def withTestDataApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
-  def withEmptyWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
+  def withEmptyWorkspaceApiServices[T](user: String)(testCode: TestApiService => T): T = {
     withCustomTestDatabase(new EmptyWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
   }
 
-  def withLockedWorkspaceApiServices(user: String)(testCode: TestApiService => Any): Unit = {
+  def withLockedWorkspaceApiServices[T](user: String)(testCode: TestApiService => T): T = {
     withCustomTestDatabase(new LockedWorkspace) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }
@@ -202,13 +202,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   val testWorkspaces = new TestWorkspaces
 
-  def withTestWorkspacesApiServices(testCode: TestApiService => Any): Unit = {
+  def withTestWorkspacesApiServices[T](testCode: TestApiService => T): T = {
     withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
   }
 
-  def withTestWorkspacesApiServicesAndUser(user: String)(testCode: TestApiService => Any): Unit = {
+  def withTestWorkspacesApiServicesAndUser[T](user: String)(testCode: TestApiService => T): T = {
     withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource, user)(testCode)
     }

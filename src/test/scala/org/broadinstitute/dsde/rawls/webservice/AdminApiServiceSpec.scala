@@ -21,7 +21,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices(dataSource: SlickDataSource)(testCode: TestApiService => Any): Unit = {
+  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -30,7 +30,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
+  def withTestDataApiServices[T](testCode: TestApiService =>  T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }

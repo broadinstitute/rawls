@@ -15,7 +15,7 @@ import scala.concurrent.ExecutionContext
 class UserApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices(dataSource: SlickDataSource, user: String = "test_token")(testCode: TestApiService => Any): Unit = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = "test_token")(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -24,7 +24,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  def withTestDataApiServices(testCode: TestApiService => Any): Unit = {
+  def withTestDataApiServices[T](testCode: TestApiService => T): T = {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
