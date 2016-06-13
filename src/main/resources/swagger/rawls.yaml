@@ -1331,7 +1331,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Get entity type metadata: for each type, the number of entities of that type and all attribute names used
+      description: 'Get entity type metadata: for each type, the number of entities of that type and all attribute names used'
       tags:
         - entities
       summary: Entity type metadata
