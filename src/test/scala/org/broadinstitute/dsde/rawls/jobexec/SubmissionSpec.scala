@@ -155,7 +155,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
-      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)): T = {
+      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), mockServer.defaultWorkflowSubmissionTimeout)): T = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -297,8 +297,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     def expectedResponse = ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted")
 
-    def execWith1SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(1, TimeUnit.SECONDS))
-    def execWith3SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(3, TimeUnit.SECONDS))
+    def execWith1SecTimeout = new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), FiniteDuration(1, TimeUnit.SECONDS))
+    def execWith3SecTimeout = new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), FiniteDuration(3, TimeUnit.SECONDS))
 
     val execResponse = Await.result(execWith3SecTimeout.submitWorkflow(wdl, wdlInputs, workflowOptions, userInfo), Duration.Inf)
     assertResult(expectedResponse) { execResponse }

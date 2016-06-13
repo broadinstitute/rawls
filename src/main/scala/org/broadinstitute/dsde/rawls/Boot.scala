@@ -87,7 +87,7 @@ object Boot extends App with LazyLogging {
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
     val executionServiceDAO = new HttpExecutionServiceDAO(
-      executionServiceConfig.getString("server"),
+      executionServiceConfig.getStringList("servers"),
       submissionTimeout
     )
 
