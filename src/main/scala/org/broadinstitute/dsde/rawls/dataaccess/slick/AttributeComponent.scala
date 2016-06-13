@@ -8,8 +8,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.ast.TypedType
 import slick.dbio.Effect.{Read, Write}
+import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import spray.http.StatusCodes
+import reflect.runtime.universe._
 
 /**
  * Created by dvoet on 2/4/16.
@@ -93,6 +95,14 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
+  class EntityAttributeTempTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+  }
+
+  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+  }
+
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_)) {
     override protected def createRecord(id: Long, entityId: Long, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
       EntityAttributeRecord(id, entityId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
@@ -108,7 +118,17 @@ trait AttributeComponent {
       SubmissionAttributeRecord(id, validationId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
   }
 
-  protected abstract class AttributeQuery[OWNER_ID, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T) extends TableQuery[T](cons)  {
+  protected object entityAttributeTempQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_)) {
+    override protected def createRecord(id: Long, entityId: Long, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
+      EntityAttributeRecord(id, entityId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
+  }
+
+  protected object workspaceAttributeTempQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_)) {
+    override protected def createRecord(id: Long, workspaceId: UUID, name: String, valueString: Option[String], valueNumber: Option[Double], valueBoolean: Option[Boolean], valueEntityRef: Option[Long], listIndex: Option[Int]) =
+      WorkspaceAttributeRecord(id, workspaceId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex)
+  }
+
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T) extends TableQuery[T](cons)  {
 
     /**
      * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
@@ -190,6 +210,82 @@ trait AttributeComponent {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
+    object AlterAttributesUsingTempTableQueries extends RawSqlQuery {
+      val driver: JdbcDriver = AttributeComponent.this.driver
+      /*!CAUTION! - do not drop the ownerIds clause at the end or it will delete every attribute in the table!
+
+        deleteMasterFromAction: deletes any row in *_ATTRIBUTE that doesn't
+          exist in *_ATTRIBUTE_TEMP but exists in *_ATTRIBUTE (bound by ownerIds)
+        updateInMasterAction: updates any row in *_ATTRIBUTE that also
+          exists in *_ATTRIBUTE_TEMP (bound by ownerIds)
+        insertIntoMasterAction: inserts any row into *_ATTRIBUTE that doesn't
+          exist in *_ATTRIBUTE but exists in *_ATTRIBUTE_TEMP (bound by ownerIds)
+
+        These left joins give us the rows related to the attributes that are in the temp table.
+        We filter on ta.owner_id == null if we want to see that the row does NOT exist in the temp table
+        We filter on a.owner_id == null if we want to see that the row does NOT exist in the real table
+        We filter on ta.owner_id != null if we want to see that the row exists in both of the tables
+       */
+
+      def ownerIdTail(ownerIds: Seq[OWNER_ID]) = {
+        concatSqlActions(sql"(", reduceSqlActionsWithDelim(ownerIds.map {
+          case(ownerId: UUID) => sql"$ownerId"
+          case(ownerId: Long) => sql"$ownerId"
+        }), sql")")
+      }
+
+      def deleteFromMasterAction(ownerIds: Seq[OWNER_ID]) =
+        concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
+                left join #${baseTableRow.tableName}_TEMP ta
+                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index)
+                where ta.owner_id is null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
+      def updateInMasterAction(ownerIds: Seq[OWNER_ID]) =
+        concatSqlActions(sql"""update #${baseTableRow.tableName} a
+                left join #${baseTableRow.tableName}_TEMP ta
+                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index)
+                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref
+                where ta.owner_id is not null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
+      def insertIntoMasterAction(ownerIds: Seq[OWNER_ID]) =
+        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id)
+                select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id
+                from #${baseTableRow.tableName}_TEMP ta
+                left join #${baseTableRow.tableName} a
+                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index)
+                where a.owner_id is null and ta.owner_id in """, ownerIdTail(ownerIds)).as[Int]
+
+      def createAttributeTempTableAction() = {
+        val prefix = sql"""create temporary table #${baseTableRow.tableName}_TEMP (
+              id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
+              name text NOT NULL,
+              value_string text,
+              value_number double DEFAULT NULL,
+              value_boolean bit(1) DEFAULT NULL,
+              value_entity_ref bigint(20) unsigned DEFAULT NULL,
+              list_index int(11) DEFAULT NULL, """
+
+        val suffix = if(typeOf[OWNER_ID] =:= typeOf[Long]) {
+          sql"""owner_id bigint(20) unsigned NOT NULL)"""
+        } else if(typeOf[OWNER_ID] =:= typeOf[UUID]) {
+          sql"""owner_id binary(16) NOT NULL)"""
+        } else throw new RawlsException("Owner ID was of an unexpected type")
+
+        concatSqlActions(prefix, suffix).as[Int]
+      }
+
+      def dropAttributeTempTableAction() = {
+        sql"""drop table #${baseTableRow.tableName}_TEMP""".as[Int]
+      }
+
+      def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: () => ReadWriteAction[Unit]) = {
+        createAttributeTempTableAction() andThen
+          insertFunction() andThen
+          deleteFromMasterAction(ownerIds) andThen
+          updateInMasterAction(ownerIds) andThen
+          insertIntoMasterAction(ownerIds) andFinally
+          dropAttributeTempTableAction()
+      }
+    }
+
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
         id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.map { case (name, attributeRecsWithRefForNameWithDupes) =>
@@ -222,16 +318,20 @@ trait AttributeComponent {
     }
 
     private def assertConsistentValueListMembers(attributes: Seq[AttributeValue]): Unit = {
-      val headAttribute = attributes.head
-      if (!attributes.forall(_.getClass == headAttribute.getClass)) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent attributes for list: $attributes"))
+      if(!attributes.isEmpty) {
+        val headAttribute = attributes.head
+        if (!attributes.forall(_.getClass == headAttribute.getClass)) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent attributes for list: $attributes"))
+        }
       }
     }
 
     private def assertConsistentReferenceListMembers(attributes: Seq[AttributeEntityReference]): Unit = {
-      val headAttribute = attributes.head
-      if (!attributes.forall(_.entityType == headAttribute.entityType)) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent entity types for list: $attributes"))
+      if(!attributes.isEmpty) {
+        val headAttribute = attributes.head
+        if (!attributes.forall(_.entityType == headAttribute.entityType)) {
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"inconsistent entity types for list: $attributes"))
+        }
       }
     }
 
