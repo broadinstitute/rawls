@@ -143,5 +143,17 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
+    assertResult(true) {
+      runAndWait(rawlsBillingProjectQuery.removeUserFromAllProjects(userRef1))
+    }
+
+    assertResult(false) {
+      runAndWait(rawlsBillingProjectQuery.removeUserFromAllProjects(userRef1))
+    }
+
+    assertResult(Seq()) {
+      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
+    }
+
   }
 }
