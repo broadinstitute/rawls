@@ -236,8 +236,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     assert(Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
     Await.result(gcsDAO.removeUserFromProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
-
-    gcsDAO.getGroupDirectory.groups().delete(gcsDAO.toProxyFromUser(user.userSubjectId)).execute()
+    Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
+    assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
   }
 
   private def when500( throwable: Throwable ): Boolean = {

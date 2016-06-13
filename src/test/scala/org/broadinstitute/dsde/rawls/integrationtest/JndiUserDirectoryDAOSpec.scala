@@ -28,5 +28,6 @@ class JndiUserDirectoryDAOSpec extends FlatSpec with Matchers with IntegrationTe
     Await.result(dao.disableUser(user), Duration.Inf)
     assert(!Await.result(dao.isEnabled(user), Duration.Inf))
     Await.result(dao.removeUser(user), Duration.Inf)
+    assert(!Await.result(dao.isEnabled(user), Duration.Inf))
   }
 }
