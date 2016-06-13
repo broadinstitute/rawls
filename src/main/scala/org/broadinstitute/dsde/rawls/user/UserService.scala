@@ -289,7 +289,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       handleFutures(Future.sequence(Seq(
         toFutureTry(userDirectoryDAO.removeUser(user)),
         toFutureTry(gcsDAO.deleteProxyGroup(user))
-      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors deleting user"))
+      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors removing user"))
     }
   }
 
