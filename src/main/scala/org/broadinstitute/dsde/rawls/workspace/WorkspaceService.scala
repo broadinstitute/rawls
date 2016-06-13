@@ -1409,7 +1409,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def withEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext}")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}")))
       case Some(entity) => op(entity)
     }
   }
@@ -1424,7 +1424,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission id ${submissionId} is not a valid submission id")))
       case _ =>
         dataAccess.submissionQuery.get(workspaceContext, submissionId) flatMap {
-          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext}")))
+          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Submission with id ${submissionId} not found in workspace ${workspaceContext.workspace.toWorkspaceName}")))
           case Some(submission) => op(submission)
         }
     }
@@ -1432,7 +1432,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def withWorkflow(workspaceName: WorkspaceName, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (Workflow) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     dataAccess.workflowQuery.getByExternalId(workflowId, submissionId) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName.namespace}/${workspaceName.name}")))
+      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}")))
       case Some(workflow) => op(workflow)
     }
   }

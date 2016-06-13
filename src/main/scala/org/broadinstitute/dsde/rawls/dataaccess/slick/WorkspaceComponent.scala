@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
+import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 
@@ -92,11 +93,10 @@ trait WorkspaceComponent {
         case None =>
           (workspaceQuery += marshalNewWorkspace(workspace)) andThen
             insertOrUpdateAccessRecords(workspace) andThen
-            insertAttributes(workspace)
+            upsertAttributes(workspace)
         case Some(workspaceRecord) =>
           insertOrUpdateAccessRecords(workspace) andThen
-            deleteAttributes(workspace) andThen
-            insertAttributes(workspace) andThen
+            upsertAttributes(workspace) andThen
             optimisticLockUpdate(workspaceRecord)
       } map { _ => workspace }
     }
@@ -108,22 +108,23 @@ trait WorkspaceComponent {
       DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
     }
 
-    private def deleteAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
+    private def upsertAttributes(workspace: Workspace) = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
-      workspaceAttributes(findByIdQuery(workspaceId)).result.flatMap { wsIdAndAttributeRecords =>
-        val records = wsIdAndAttributeRecords.map { case (wsId, attrRec) => attrRec }
-        // clear existing attributes, any concurrency locking should be handled at the workspace level
-        val deleteActions = deleteWorkspaceAttributes(records)
-        DBIO.seq(deleteActions)
-      }
-    }
 
-    private def insertAttributes(workspace: Workspace): ReadWriteAction[Unit] = {
-      val workspaceId = UUID.fromString(workspace.workspaceId)
-      val insertActions = workspace.attributes.flatMap { case (name, attribute) =>
-        workspaceAttributeQuery.insertAttributeRecords(workspaceId, name, attribute, workspaceId)
+      def insertTempAttributes(): ReadWriteAction[Unit] = {
+        val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
+        val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
+        val entitiesToLookup = (entityRefs ++ entityRefListMembers)
+
+        entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+          val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
+          workspaceAttributeTempQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeTempQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq)
+        }
       }
-      DBIO.seq(insertActions.toSeq:_*)
+
+      //this is really only ever going to be one id but in order to be generic we pretend it's a list
+      workspaceAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(Seq(workspaceId), insertTempAttributes)
+
     }
 
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
