@@ -279,6 +279,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+      // OK to enable already-enabled user
+      Post(s"/user/${user.userSubjectId.value}/enable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
       Get(s"/user/${user.userSubjectId.value}") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -289,6 +297,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
             responseAs[UserStatus]
           }
         }
+      Post(s"/user/${user.userSubjectId.value}/disable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      // OK to disable already-disabled user
       Post(s"/user/${user.userSubjectId.value}/disable") ~>
         sealRoute(services.userRoutes) ~>
         check {
