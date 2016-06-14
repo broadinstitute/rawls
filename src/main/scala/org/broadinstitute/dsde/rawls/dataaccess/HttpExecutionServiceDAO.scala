@@ -16,7 +16,10 @@ import scala.util.Try
 /**
  * @author tsharpe
  */
-class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
+class HttpExecutionServiceDAO( executionServiceURLs: Seq[String], submissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
+  def executionServiceURL: String = {
+    executionServiceURLs.head
+  }
 
   override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
     implicit val timeout = Timeout(submissionTimeout)

@@ -40,7 +40,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val googleServicesDAO = mockGoogleServicesDAO
-    val executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
+    val executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), mockServer.defaultWorkflowSubmissionTimeout)
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl)
   }
 
@@ -278,7 +278,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
-      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout),
+      new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), mockServer.defaultWorkflowSubmissionTimeout),
       3, credential, 1 milliseconds, 100, 100, None)
     )
 

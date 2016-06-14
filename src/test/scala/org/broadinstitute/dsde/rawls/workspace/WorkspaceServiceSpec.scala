@@ -48,7 +48,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val mockServer = RemoteServicesMockServer()
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-    val executionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
+    val executionServiceDAO = new HttpExecutionServiceDAO(Seq(mockServer.mockServerBaseUrl), mockServer.defaultWorkflowSubmissionTimeout)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceDAO,
       slickDataSource
