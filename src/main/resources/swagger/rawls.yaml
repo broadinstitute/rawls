@@ -2762,7 +2762,7 @@ paths:
              description: Rawls Internal Error
              schema:
                $ref: '#/definitions/ErrorReport'
-         description: "deletes a user from the Rawls system"
+         description: "Deletes a user in the Rawls system.  This endpoint should only be used with test users who will never have submissions."
          tags:
            - admin
            - users
