@@ -106,7 +106,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "remove a DB user, user proxy group, ldap entry, and remove them from all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "delete a DB user, user proxy group, ldap entry, and remove them from all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -122,7 +122,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       assertUserExists(services, user)
 
-      Post(s"/user/${user.userSubjectId.value}/remove") ~>
+      Delete(s"/user/${user.userSubjectId.value}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.NoContent) {
@@ -144,7 +144,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(action)
   }
 
-  it should "remove a DB user from groups and billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "delete a DB user and remove them from groups and billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -177,7 +177,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))
       }
 
-      Post(s"/user/${testUser.userSubjectId.value}/remove") ~>
+      Delete(s"/user/${testUser.userSubjectId.value}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.NoContent) {
@@ -198,7 +198,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   val testWorkspace = new EmptyWorkspace
-  it should "not remove a DB user when they have a submission" in withCustomTestDatabase(testWorkspace) { dataSource: SlickDataSource =>
+  it should "not delete a DB user when they have a submission" in withCustomTestDatabase(testWorkspace) { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // save groups to Mock Google so it doesn't complain about deleting them later
@@ -232,8 +232,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         runAndWait(submissionQuery.create(context, sub))
       }
 
-      // this should fail when attempting to remove user from submission
-      Post(s"/user/${testData.userOwner.userSubjectId.value}/remove") ~>
+      Delete(s"/user/${testData.userOwner.userSubjectId.value}") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.BadRequest) {
@@ -242,7 +241,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assert {
             import spray.http._
             import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-            responseAs[ErrorReport].message.contains("Cannot remove a user with submissions")
+            responseAs[ErrorReport].message.contains("Cannot delete a user with submissions")
           }
 
         }

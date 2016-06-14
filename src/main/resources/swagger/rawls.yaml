@@ -2749,25 +2749,25 @@ paths:
             - openid
             - email
             - profile
-  '/api/user/{userSubjectId}/remove':
-       post:
+  '/api/user/{userSubjectId}':
+       delete:
          responses:
            '204':
              description: Successful Request
            '400':
              description: Cannot delete user with submissions
            '403':
-             description: Only administrators can remove users
+             description: Only administrators can delete users
            '500':
              description: Rawls Internal Error
              schema:
                $ref: '#/definitions/ErrorReport'
-         description: "removes a user from the Rawls system"
+         description: "deletes a user from the Rawls system"
          tags:
            - admin
            - users
-         summary: Remove user
-         operationId: remove
+         summary: Delete user
+         operationId: delete
          parameters:
           - in: path
             description: subject id of user

@@ -43,7 +43,7 @@ object UserService {
   case object UserGetUserStatus extends UserServiceMessage
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
-  case class AdminRemoveUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -79,7 +79,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case UserGetUserStatus => getUserStatus() pipeTo sender
     case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
-    case AdminRemoveUser(userRef) => asAdmin { removeUser(userRef) } pipeTo sender
+    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
     case AdminListUsers => asAdmin { listUsers } pipeTo sender
     case AdminImportUsers(rawlsUserInfoList) => asAdmin{ importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
@@ -240,7 +240,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[PerRequestMessage] = {
     dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
-      case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot remove a user with submissions")))
+      case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
       case _ => DBIO.successful(RequestComplete(StatusCodes.OK))
     }
   }
@@ -275,7 +275,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def removeUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
+  def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     val dbRemoval = dataSource.inTransaction { dataAccess =>
       for {
         _ <- verifyNoSubmissions(userRef, dataAccess)
@@ -289,7 +289,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       handleFutures(Future.sequence(Seq(
         toFutureTry(userDirectoryDAO.removeUser(user)),
         toFutureTry(gcsDAO.deleteProxyGroup(user))
-      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors removing user"))
+      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors deleting user"))
     }
   }
 
