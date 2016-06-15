@@ -24,10 +24,10 @@ object SubmissionMonitorActor {
   def props(workspaceName: WorkspaceName,
             submissionId: UUID,
             datasource: SlickDataSource,
-            executionServiceDAO: ExecutionServiceDAO,
+            executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             submissionPollInterval: FiniteDuration): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceDAO, credential, submissionPollInterval))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -57,7 +57,7 @@ object SubmissionMonitorActor {
 class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val submissionId: UUID,
                              val datasource: SlickDataSource,
-                             val executionServiceDAO: ExecutionServiceDAO,
+                             val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val submissionPollInterval: FiniteDuration) extends Actor with SubmissionMonitor with LazyLogging {
 
@@ -90,7 +90,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: SlickDataSource
-  val executionServiceDAO: ExecutionServiceDAO
+  val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
 
@@ -98,6 +98,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   /**
    * This function starts a monitoring pass
+ *
    * @param executionContext
    * @return
    */
@@ -115,8 +116,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     }
 
     def abortActiveWorkflows(workflows: Seq[Workflow]) = {
-      Future.traverse(workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
-        Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, getUserInfo))
+      Future.traverse(workflows.collect { case wf if wf.workflowId.isDefined => wf })(wf =>
+        Future.successful(wf.workflowId).zip(executionServiceCluster.getMember(wf).abort(wf.workflowId.get, getUserInfo))
       )
     }
 
@@ -152,7 +153,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
-      case Some(externalId) =>     executionServiceDAO.status(externalId, getUserInfo).map(newStatus => {
+      case Some(externalId) =>     executionServiceCluster.getMember(workflowRec).status(externalId, getUserInfo).map(newStatus => {
         if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
         else None
       })
@@ -163,7 +164,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceDAO.outputs(workflowRec.externalId.get, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceCluster.getMember(workflowRec).outputs(workflowRec.externalId.get, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }
@@ -171,6 +172,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   /**
    * once all the execution service queries have completed this function is called to handle the responses
+ *
    * @param response
    * @param executionContext
    * @return
@@ -200,6 +202,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   /**
    * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
+ *
    * @param dataAccess
    * @param executionContext
    * @return true if the submission is done/aborted

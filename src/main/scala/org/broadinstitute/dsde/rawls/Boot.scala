@@ -86,6 +86,8 @@ object Boot extends App with LazyLogging {
 
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
+
+// HEAD
     val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
     val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
     // use the default as the only server until we actually deploy multiple
@@ -98,8 +100,20 @@ object Boot extends App with LazyLogging {
       submissionTimeout
     )
 
+// SHARDING
+
+    // TODO: this is temporary, mocking out having multiple cromwell instances in config
+    val executionServiceInstances = List.fill(3)(executionServiceConfig.getString("server"))
+    val executionServiceDAOMap:Map[Int,ExecutionServiceDAO] = (executionServiceInstances.zipWithIndex map {
+      case (value, index) => (index->new HttpExecutionServiceDAO(value, submissionTimeout))
+    }).toMap
+    // END TODO
+
+    val executionServiceCluster = new ExecutionServiceCluster( executionServiceDAOMap )
+// END CONFLICT
+
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceDAO,
+      executionServiceCluster,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -116,7 +130,7 @@ object Boot extends App with LazyLogging {
         slickDataSource,
         methodRepoDAO,
         gcsDAO,
-        executionServiceDAO,
+        executionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
         toScalaDuration(conf.getDuration("executionservice.pollInterval")),
@@ -130,7 +144,7 @@ object Boot extends App with LazyLogging {
       WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
-        executionServiceDAO,
+        executionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         submissionSupervisor,

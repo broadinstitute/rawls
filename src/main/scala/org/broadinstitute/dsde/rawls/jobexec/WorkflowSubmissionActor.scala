@@ -28,14 +28,14 @@ object WorkflowSubmissionActor {
   def props(dataSource: SlickDataSource,
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
-            executionServiceDAO: ExecutionServiceDAO,
+            executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue]): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceDAO, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
   }
 
   sealed trait WorkflowSubmissionMessage
@@ -48,7 +48,7 @@ object WorkflowSubmissionActor {
 class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
-                              val executionServiceDAO: ExecutionServiceDAO,
+                              val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
                               val pollInterval: FiniteDuration,
@@ -84,7 +84,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val dataSource: SlickDataSource
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
-  val executionServiceDAO: ExecutionServiceDAO
+  val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
   val pollInterval: FiniteDuration
@@ -217,10 +217,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
     }
 
+    // TODO: DA update for executionServiceCluster usage!!
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts) <- workflowBatchFuture
-      workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
+      workflowSubmitResult <- executionServiceCluster.nextAvailableMember(workflowRecs).submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
       workflowRecs.zip(workflowSubmitResult)
     }

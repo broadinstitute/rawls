@@ -19,10 +19,10 @@ object SubmissionSupervisor {
 
   case class SubmissionStarted(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential)
 
-  def props(executionServiceDAO: ExecutionServiceDAO,
+  def props(executionServiceCluster: ExecutionServiceCluster,
             datasource: SlickDataSource,
             submissionPollInterval: FiniteDuration = 1 minutes): Props = {
-    Props(new SubmissionSupervisor(executionServiceDAO, datasource, submissionPollInterval))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, submissionPollInterval))
   }
 }
 
@@ -30,11 +30,11 @@ object SubmissionSupervisor {
  * Supervisor actor that should run for the life of the app. SubmissionStarted messages will start a monitor
  * for the given submission. Errors are logged if that monitor fails.
  * 
- * @param executionServiceDAO
+ * @param executionServiceCluster
  * @param datasource
  * @param submissionPollInterval
  */
-class SubmissionSupervisor(executionServiceDAO: ExecutionServiceDAO,
+class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: SlickDataSource,
                            submissionPollInterval: FiniteDuration) extends Actor {
   import context._
@@ -44,7 +44,7 @@ class SubmissionSupervisor(executionServiceDAO: ExecutionServiceDAO,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): Unit = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceDAO, credential, submissionPollInterval), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval), submissionId.toString)
   }
 
   override val supervisorStrategy =

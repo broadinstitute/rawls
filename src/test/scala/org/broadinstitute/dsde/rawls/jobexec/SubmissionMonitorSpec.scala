@@ -342,7 +342,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       testData.wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
-      execSvcDAO,
+      new ExecutionServiceCluster( Map(0->execSvcDAO)),
       new Builder().build(),
       1 millisecond
     ))
@@ -353,7 +353,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       testData.wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
-      execSvcDAO,
+      new ExecutionServiceCluster( Map(0->execSvcDAO)),
       new Builder().build(),
       1 minutes
     )
@@ -390,6 +390,6 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
 class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val submissionId: UUID,
                             val datasource: SlickDataSource,
-                            val executionServiceDAO: ExecutionServiceDAO,
+                            val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val submissionPollInterval: Duration) extends SubmissionMonitor
