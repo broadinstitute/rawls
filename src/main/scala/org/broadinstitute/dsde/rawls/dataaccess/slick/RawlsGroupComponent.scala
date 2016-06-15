@@ -104,6 +104,10 @@ trait RawlsGroupComponent {
       }
     }
 
+    def removeUserFromAllGroups(userRef: RawlsUserRef): ReadWriteAction[Boolean] = {
+      findGroupsByUser(userRef).delete map { count => count > 0 }
+    }
+
     def loadFromEmail(email: String): ReadAction[Option[Either[RawlsUser, RawlsGroup]]] = {
       val user: ReadAction[Option[RawlsUser]] = rawlsUserQuery.loadUserByEmail(RawlsUserEmail(email))
       val group: ReadAction[Option[RawlsGroup]] = loadGroupByEmail(RawlsGroupEmail(email))
@@ -265,6 +269,10 @@ trait RawlsGroupComponent {
 
     private def findSubgroupsByGroupName(groupName: String): GroupSubgroupsQuery = {
       groupSubgroupsQuery.filter(_.parentGroupName === groupName)
+    }
+
+    private def findGroupsByUser(rawlsUserRef: RawlsUserRef): GroupUsersQuery = {
+      groupUsersQuery.filter(_.userSubjectId === rawlsUserRef.userSubjectId.value)
     }
   }
 }

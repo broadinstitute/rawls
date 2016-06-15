@@ -238,31 +238,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[PerRequestMessage] = {
-    dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
-      case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
-      case _ => DBIO.successful(RequestComplete(StatusCodes.OK))
-    }
-  }
+  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[RawlsUser] = {
+    val exists = dataAccess.rawlsUserQuery.load(userRef)
+    val hasSubmissions = dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result
 
-  // can't just delete DB rows; also removes user from Google Groups
-  private def removeUserFromAllGroups(userRef: RawlsUserRef, dataAccess: DataAccess): ReadWriteAction[RawlsUser] = {
-    withUser(userRef, dataAccess) { user =>
-      dataAccess.rawlsGroupQuery.listGroupsForUser(userRef) flatMap { groupRefs =>
-        // Slick complains if it remains a Set
-        val removeActions = groupRefs.toSeq.map { groupRef =>
-          withGroup(groupRef, dataAccess) { group =>
-            updateGroupMembersInternal(group, Set(user), Set.empty, RemoveGroupMembersOp, dataAccess)
-          }
-        }
-
-        DBIO.sequence(removeActions) flatMap { removeResults =>
-          reduceErrorReports(removeResults) match {
-            case Some(errorReport) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport))
-            case None => DBIO.successful(user)
-          }
-        }
-      }
+    exists zip hasSubmissions flatMap {
+      case (Some(user), false) => DBIO.successful(user)
+      case (None, _) => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"User ${userRef.userSubjectId.value} was not found in DB")))
+      case _ => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
     }
   }
 
@@ -278,8 +261,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
     val dbRemoval = dataSource.inTransaction { dataAccess =>
       for {
-        _ <- verifyNoSubmissions(userRef, dataAccess)
-        user <- removeUserFromAllGroups(userRef, dataAccess)
+        user <- verifyNoSubmissions(userRef, dataAccess)
+        _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
         _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
         _ <- deleteUserFromDB(userRef, dataAccess)
       } yield user
