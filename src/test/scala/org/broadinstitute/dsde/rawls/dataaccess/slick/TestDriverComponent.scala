@@ -406,7 +406,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 submissionQuery.create(context, submission1),
                 submissionQuery.create(context, submission2),
                 submissionQuery.create(context, submissionUpdateEntity),
-                submissionQuery.create(context, submissionUpdateWorkspace)
+                submissionQuery.create(context, submissionUpdateWorkspace),
+
+                // update exec key for all test data workflows that have been started.
+                updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
         withWorkspaceContext(workspaceWithRealm)({ context =>
@@ -460,6 +463,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def withWorkspaceContext[T](workspace: Workspace)(testCode: (SlickWorkspaceContext) => T): T = {
     testCode(SlickWorkspaceContext(workspace))
   }
+
+  def updateWorkflowExecutionServiceKey(execKey: String) = {
+    // when unit tests seed the test data with workflows, those workflows may land in the database as already-started.
+    // however, the runtime create() methods we use to seed the data do not set EXEC_SERVICE_KEY, since that should
+    // only be set when a workflow is submitted. Therefore, we have this test-only raw sql to update those
+    // workflows to an appropriate EXEC_SERVICE_KEY.
+    sql"update WORKFLOW set EXEC_SERVICE_KEY = ${execKey} where EXEC_SERVICE_KEY is null and EXTERNAL_ID is not null;".as[Int]
+  }
+
 }
 
 trait TestData {

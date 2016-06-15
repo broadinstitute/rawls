@@ -48,9 +48,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val mockServer = RemoteServicesMockServer()
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-    val executionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)
+    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceDAO,
+      executionServiceCluster,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "test-ws-submission-supervisor")
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -67,7 +67,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-      executionServiceDAO,
+      executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
       submissionSupervisor,

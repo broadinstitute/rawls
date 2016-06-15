@@ -145,7 +145,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
             submissionQuery.create(context, submissionTestAbortGoodWorkflow),
             submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
             submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
-            submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows)
+            submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows),
+            // update exec key for all test data workflows that have been started.
+            updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }
       )
@@ -155,11 +157,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
-      execService: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)): T = {
+      executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout) ): T = {
+
     withDataOp { dataSource =>
+      val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
+
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-        execService,
+        execServiceCluster,
         slickDataSource
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
       val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
@@ -177,7 +182,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
-        execService,
+        execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
         submissionSupervisor,
@@ -200,12 +205,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   def withWorkspaceServiceMockExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvc = new MockExecutionServiceDAO()
-    withDataAndService(testCode(execSvc), withDefaultTestDatabase[T], execSvc)
+    val execSvcDAO = new MockExecutionServiceDAO()
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
   def withWorkspaceServiceMockTimeoutExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvc = new MockExecutionServiceDAO(true)
-    withDataAndService(testCode(execSvc), withDefaultTestDatabase[T], execSvc)
+    val execSvcDAO = new MockExecutionServiceDAO(true)
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
 
   def withSubmissionTestWorkspaceService[T](testCode: WorkspaceService => T): T = {

@@ -4,7 +4,7 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.RawlsException
@@ -104,11 +104,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceDAO, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceDAO: ExecutionServiceDAO, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -246,14 +246,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
-      case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceDAO.abort(wf.workflowId.get, userInfo).map {
+    dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.map {
+      case wf if !WorkflowStatuses.withName(wf.status).isDone && wf.externalId.isDefined => executionServiceCluster.abort(wf, userInfo).map {
         case Failure(regrets) =>
-          logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
+          logger.info(s"failure aborting workflow ${wf.externalId} while deleting workspace ${workspaceName}", regrets)
           Failure(regrets)
         case success => success
       }
-    }) andThen {
+    }} andThen {
       DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
     } andThen {
       val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
@@ -1085,19 +1085,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          val outputFTs = toFutureTry(executionServiceDAO.outputs(workflowId, userInfo))
-          val logFTs = toFutureTry(executionServiceDAO.logs(workflowId, userInfo))
+        withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
+          val outputFTs = toFutureTry(executionServiceCluster.outputs(wr, userInfo))
+          val logFTs = toFutureTry(executionServiceCluster.logs(wr, userInfo))
           DBIO.from(outputFTs zip logFTs map {
             case (Success(outputs), Success(logs)) =>
               mergeWorkflowOutputs(outputs, logs, workflowId)
             case (Failure(outputsFailure), Success(logs)) =>
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceDAO.toErrorReport(outputsFailure)))
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceCluster.toErrorReport(outputsFailure)))
             case (Success(outputs), Failure(logsFailure)) =>
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceDAO.toErrorReport(logsFailure)))
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceCluster.toErrorReport(logsFailure)))
             case (Failure(outputsFailure), Failure(logsFailure)) =>
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs and unable to get logs for ${submissionId}.",
-                Seq(executionServiceDAO.toErrorReport(outputsFailure),executionServiceDAO.toErrorReport(logsFailure))))
+                Seq(executionServiceCluster.toErrorReport(outputsFailure),executionServiceCluster.toErrorReport(logsFailure))))
           })
         }
       }
@@ -1107,8 +1107,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          DBIO.from(executionServiceDAO.callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
+        withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
+          DBIO.from(executionServiceCluster.callLevelMetadata(wr, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
     }
@@ -1469,6 +1469,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataAccess.workflowQuery.getByExternalId(workflowId, submissionId) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Workflow with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}")))
       case Some(workflow) => op(workflow)
+    }
+  }
+
+  private def withWorkflowRecord(workspaceName: WorkspaceName, submissionId: String, workflowId: String, dataAccess: DataAccess)(op: (WorkflowRecord) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+    dataAccess.workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(submissionId)).result flatMap {
+      case Seq() => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"WorkflowRecord with id ${workflowId} not found in submission ${submissionId} in workspace ${workspaceName}")))
+      case Seq(one) => op(one)
+      case tooMany => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"found multiple WorkflowRecords with id ${workflowId} in submission ${submissionId} in workspace ${workspaceName}")))
     }
   }
 

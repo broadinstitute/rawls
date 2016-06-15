@@ -24,10 +24,10 @@ object SubmissionMonitorActor {
   def props(workspaceName: WorkspaceName,
             submissionId: UUID,
             datasource: SlickDataSource,
-            executionServiceDAO: ExecutionServiceDAO,
+            executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             submissionPollInterval: FiniteDuration): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceDAO, credential, submissionPollInterval))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, executionServiceCluster, credential, submissionPollInterval))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -57,7 +57,7 @@ object SubmissionMonitorActor {
 class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val submissionId: UUID,
                              val datasource: SlickDataSource,
-                             val executionServiceDAO: ExecutionServiceDAO,
+                             val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val submissionPollInterval: FiniteDuration) extends Actor with SubmissionMonitor with LazyLogging {
 
@@ -90,7 +90,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: SlickDataSource
-  val executionServiceDAO: ExecutionServiceDAO
+  val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val submissionPollInterval: Duration
 
@@ -98,6 +98,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   /**
    * This function starts a monitoring pass
+   *
    * @param executionContext
    * @return
    */
@@ -114,10 +115,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
     }
 
-    def abortActiveWorkflows(workflows: Seq[Workflow]) = {
-      Future.traverse(workflows.map(_.workflowId).collect { case Some(workflowId) => workflowId })(workflowId =>
-        Future.successful(workflowId).zip(executionServiceDAO.abort(workflowId, getUserInfo))
-      )
+    def abortActiveWorkflows(submissionId: UUID, workflows: Seq[Workflow]) = {
+      datasource.inTransaction { dataAccess =>
+        // look up abortable WorkflowRecs for this submission
+        val wrquery = dataAccess.workflowQuery.findWorkflowsForAbort(submissionId)
+        wrquery.result map { _.map{ wr =>
+          Future.successful(wr.externalId).zip(executionServiceCluster.abort(wr, getUserInfo))
+        }}
+      }
     }
 
     def queryForWorkflowStatuses() = {
@@ -139,7 +144,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
         if(submission.status == SubmissionStatuses.Aborting) {
           for {
             abortQueued <- abortQueuedWorkflows(submissionId)
-            abortActive <- abortActiveWorkflows(submission.workflows.filter(wf => activeStatuses.contains(wf.status)))
+            abortActive <- abortActiveWorkflows(submissionId, submission.workflows.filter(wf => activeStatuses.contains(wf.status)))
             getStatuses <- queryForWorkflowStatuses()
           } yield getStatuses
         }
@@ -152,7 +157,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
-      case Some(externalId) =>     executionServiceDAO.status(externalId, getUserInfo).map(newStatus => {
+      case Some(externalId) =>     executionServiceCluster.status(workflowRec, getUserInfo).map(newStatus => {
         if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
         else None
       })
@@ -163,7 +168,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceDAO.outputs(workflowRec.externalId.get, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceCluster.outputs(workflowRec, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }
