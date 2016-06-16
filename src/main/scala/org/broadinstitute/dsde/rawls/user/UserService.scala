@@ -68,6 +68,7 @@ object UserService {
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
+
   import dataSource.dataAccess.driver.api._
 
   override def receive = {
@@ -75,35 +76,63 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => asAdmin { getUserStatus(userRef) } pipeTo sender
+    case AdminGetUserStatus(userRef) => asAdmin {
+      getUserStatus(userRef)
+    } pipeTo sender
     case UserGetUserStatus => getUserStatus() pipeTo sender
-    case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
-    case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
-    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
-    case AdminListUsers => asAdmin { listUsers } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asAdmin{ importUsers(rawlsUserInfoList) } pipeTo sender
+    case AdminEnableUser(userRef) => asAdmin {
+      enableUser(userRef)
+    } pipeTo sender
+    case AdminDisableUser(userRef) => asAdmin {
+      disableUser(userRef)
+    } pipeTo sender
+    case AdminDeleteUser(userRef) => asAdmin {
+      deleteUser(userRef)
+    } pipeTo sender
+    case AdminListUsers => asAdmin {
+      listUsers
+    } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asAdmin {
+      importUsers(rawlsUserInfoList)
+    } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     // ListBillingProjects is for the current user, not as admin
     // ListBillingProjectsForUser is for any user, as admin
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case ListBillingProjectsForUser(userEmail) => asAdmin {
+      listBillingProjects(userEmail)
+    } pipeTo sender
     case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
     case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
     case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
 
-    case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
-    case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
-    case AdminDeleteGroup(groupName) => asAdmin { deleteGroup(groupName) } pipeTo sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+    case AdminCreateGroup(groupRef) => asAdmin {
+      createGroup(groupRef)
+    } pipeTo sender
+    case AdminListGroupMembers(groupName) => asAdmin {
+      listGroupMembers(groupName)
+    } pipeTo sender
+    case AdminDeleteGroup(groupName) => asAdmin {
+      deleteGroup(groupName)
+    } pipeTo sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin {
+      overwriteGroupMembers(groupName, memberList)
+    } to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
+    case AdminAddGroupMembers(groupName, memberList) => asAdmin {
+      updateGroupMembers(groupName, memberList, AddGroupMembersOp)
+    } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin {
+      updateGroupMembers(groupName, memberList, RemoveGroupMembersOp)
+    } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
+    case AdminSynchronizeGroupMembers(groupRef) => asAdmin {
+      synchronizeGroupMembers(groupRef)
+    } pipeTo sender
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -111,7 +140,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getRefreshTokenDate(): Future[PerRequestMessage] = {
-    gcsDAO.getTokenDate(userInfo).map( _ match {
+    gcsDAO.getTokenDate(userInfo).map(_ match {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     })
@@ -154,12 +183,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.seq(u.billingProjects.map(projectName =>
               dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName)
-            ):_*) map (_=> user)
+            ): _*) map (_ => user)
           }
         }
       ) flatMap { users =>
         addUsersToAllUsersGroup(users.toSet, dataAccess)
-      } map(_ match {
+      } map (_ match {
         case None => RequestComplete(StatusCodes.Created)
         case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
       })
@@ -238,42 +267,52 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[RawlsUser] = {
-    val exists = dataAccess.rawlsUserQuery.load(userRef)
-    val hasSubmissions = dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result
-
-    exists zip hasSubmissions flatMap {
-      case (Some(user), false) => DBIO.successful(user)
-      case (None, _) => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"User ${userRef.userSubjectId.value} was not found in DB")))
+  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[Unit] = {
+    dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
+      case false => DBIO.successful(Unit)
       case _ => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
     }
   }
 
-  private def deleteUserFromDB(userRef: RawlsUserRef, dataAccess: DataAccess): ReadWriteAction[Int] = {
-    dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete flatMap {
-      case 1 => DBIO.successful(1)
+  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Int] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete
+    } flatMap {
+      case 1 => Future.successful(1)
       case rowsDeleted =>
         val error = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Expected to delete 1 row from user table, but deleted $rowsDeleted"))
-        DBIO.failed(error)
+        Future.failed(error)
     }
   }
 
   def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
-    val dbRemoval = dataSource.inTransaction { dataAccess =>
+
+    // 1. load user from DB
+    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group
+    // 3. only remove user from DB if/when all of #2 succeed, because failures mean we need to keep the DB user around for subsequent attempts
+
+    val userF = loadUser(userRef)
+
+    val dbTablesRemoval = dataSource.inTransaction { dataAccess =>
       for {
-        user <- verifyNoSubmissions(userRef, dataAccess)
+        _ <- verifyNoSubmissions(userRef, dataAccess)
         _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
         _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
-        _ <- deleteUserFromDB(userRef, dataAccess)
-      } yield user
+      } yield ()
     }
 
-    dbRemoval flatMap { user =>
-      handleFutures(Future.sequence(Seq(
-        toFutureTry(userDirectoryDAO.disableUser(user) flatMap { _ => userDirectoryDAO.removeUser(user) }),
-        toFutureTry(gcsDAO.deleteProxyGroup(user))
-      )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors deleting user"))
-    }
+    val userDirectoryRemoval = for {
+      user <- userF
+      _ <- userDirectoryDAO.disableUser(user)   // may not be strictly necessary, but does not hurt
+      _ <- userDirectoryDAO.removeUser(user)
+    } yield ()
+
+    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
+
+    for {
+      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion))
+      _ <- deleteUserFromDB(userRef)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   import spray.json.DefaultJsonProtocol._
