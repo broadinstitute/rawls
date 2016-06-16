@@ -223,7 +223,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     assertResult(Some("testtoken2")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
 
-    Await.result(gcsDAO.deleteToken(userInfo), Duration.Inf)
+    Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
     assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
