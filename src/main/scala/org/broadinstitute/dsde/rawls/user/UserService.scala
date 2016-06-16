@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.user
 
-import _root_.slick.dbio.Effect.{Write, Read}
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WriteAction, ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -76,63 +75,35 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => asAdmin {
-      getUserStatus(userRef)
-    } pipeTo sender
+    case AdminGetUserStatus(userRef) => asAdmin { getUserStatus(userRef) } pipeTo sender
     case UserGetUserStatus => getUserStatus() pipeTo sender
-    case AdminEnableUser(userRef) => asAdmin {
-      enableUser(userRef)
-    } pipeTo sender
-    case AdminDisableUser(userRef) => asAdmin {
-      disableUser(userRef)
-    } pipeTo sender
-    case AdminDeleteUser(userRef) => asAdmin {
-      deleteUser(userRef)
-    } pipeTo sender
-    case AdminListUsers => asAdmin {
-      listUsers
-    } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asAdmin {
-      importUsers(rawlsUserInfoList)
-    } pipeTo sender
+    case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
+    case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
+    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminListUsers => asAdmin { listUsers() } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     // ListBillingProjects is for the current user, not as admin
     // ListBillingProjectsForUser is for any user, as admin
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case ListBillingProjectsForUser(userEmail) => asAdmin {
-      listBillingProjects(userEmail)
-    } pipeTo sender
+    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
     case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
     case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
     case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
 
-    case AdminCreateGroup(groupRef) => asAdmin {
-      createGroup(groupRef)
-    } pipeTo sender
-    case AdminListGroupMembers(groupName) => asAdmin {
-      listGroupMembers(groupName)
-    } pipeTo sender
-    case AdminDeleteGroup(groupName) => asAdmin {
-      deleteGroup(groupName)
-    } pipeTo sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin {
-      overwriteGroupMembers(groupName, memberList)
-    } to sender
+    case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
+    case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
+    case AdminDeleteGroup(groupName) => asAdmin { deleteGroup(groupName) } pipeTo sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin { overwriteGroupMembers(groupName, memberList) } to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asAdmin {
-      updateGroupMembers(groupName, memberList, AddGroupMembersOp)
-    } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin {
-      updateGroupMembers(groupName, memberList, RemoveGroupMembersOp)
-    } to sender
+    case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asAdmin {
-      synchronizeGroupMembers(groupRef)
-    } pipeTo sender
+    case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
