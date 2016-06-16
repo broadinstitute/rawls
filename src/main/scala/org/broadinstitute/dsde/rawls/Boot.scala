@@ -109,11 +109,12 @@ object Boot extends App with LazyLogging {
     }).toMap
     // END TODO
 
-    val executionServiceCluster = new ExecutionServiceCluster( executionServiceDAOMap )
+    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster( executionServiceDAOMap )
+
 // END CONFLICT
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceCluster,
+      shardedExecutionServiceCluster,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -130,7 +131,7 @@ object Boot extends App with LazyLogging {
         slickDataSource,
         methodRepoDAO,
         gcsDAO,
-        executionServiceCluster,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
         toScalaDuration(conf.getDuration("executionservice.pollInterval")),
@@ -144,7 +145,7 @@ object Boot extends App with LazyLogging {
       WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
-        executionServiceCluster,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         submissionSupervisor,

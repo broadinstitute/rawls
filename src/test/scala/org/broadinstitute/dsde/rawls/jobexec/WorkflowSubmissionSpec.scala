@@ -40,7 +40,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val credential: Credential = mockGoogleServicesDAO.getPreparedMockGoogleCredential()
 
     val googleServicesDAO = mockGoogleServicesDAO
-    val executionServiceCluster: ExecutionServiceCluster = new ExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)))
+    val executionServiceCluster: ExecutionServiceCluster = new MockShardedExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)))
     val methodRepoDAO = new HttpMethodRepoDAO(mockServer.mockServerBaseUrl)
   }
 
@@ -48,14 +48,14 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
      dataSource: SlickDataSource,
      batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
      pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, pollInterval) {
-    override val executionServiceCluster = new ExecutionServiceCluster( Map(0->new MockExecutionServiceDAO()))
+    override val executionServiceCluster = new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO()))
   }
 
   class TestWorkflowSubmissionWithTimeoutyExecSvc(
                                                dataSource: SlickDataSource,
                                                batchSize: Int = 3, // the mock remote server always returns 3, 2 success and an error
                                                pollInterval: FiniteDuration = 1 second) extends TestWorkflowSubmission(dataSource, batchSize, pollInterval) {
-    override val executionServiceCluster = new ExecutionServiceCluster( Map(0->new MockExecutionServiceDAO(true)))
+    override val executionServiceCluster = new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO(true)))
   }
 
   override def beforeAll(): Unit = {
@@ -176,7 +176,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   it should "submit a workflow with the right parameters and options" in withDefaultTestDatabase {
-    val mockExecCluster = new ExecutionServiceCluster( Map(0->new MockExecutionServiceDAO()))
+    val mockExecCluster = new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO()))
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource, 100, runtimeOptions = Some(JsObject(Map("zones" -> JsString("us-central-someother"))))) {
       override val executionServiceCluster = mockExecCluster
     }
@@ -278,7 +278,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
-      new ExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout))),
+      new MockShardedExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout))),
       3, credential, 1 milliseconds, 100, 100, None)
     )
 
@@ -299,7 +299,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       slickDataSource,
       new HttpMethodRepoDAO(mockServer.mockServerBaseUrl),
       mockGoogleServicesDAO,
-      new ExecutionServiceCluster( Map(0->new MockExecutionServiceDAO(true))),
+      new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO(true))),
       batchSize, credential, 1 milliseconds, 100, 100, None)
     )
 

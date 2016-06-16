@@ -342,7 +342,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       testData.wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
-      new ExecutionServiceCluster( Map(0->execSvcDAO)),
+      new MockShardedExecutionServiceCluster( Map(0->execSvcDAO)),
       new Builder().build(),
       1 millisecond
     ))
@@ -353,7 +353,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       testData.wsName,
       UUID.fromString(submission.submissionId),
       dataSource,
-      new ExecutionServiceCluster( Map(0->execSvcDAO)),
+      new MockShardedExecutionServiceCluster( Map(0->execSvcDAO)),
       new Builder().build(),
       1 minutes
     )

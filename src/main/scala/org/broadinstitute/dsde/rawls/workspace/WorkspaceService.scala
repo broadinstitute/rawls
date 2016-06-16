@@ -248,7 +248,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
     dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
-      case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceCluster.getMember(wf).abort(wf.workflowId.get, userInfo).map {
+      case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceCluster.abort(wf.workflowId.get, userInfo)(wf).map {
         case Failure(regrets) =>
           logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
           Failure(regrets)
@@ -1087,18 +1087,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          val outputFTs = toFutureTry(executionServiceCluster.getMember(workflow).outputs(workflowId, userInfo))
-          val logFTs = toFutureTry(executionServiceCluster.getMember(workflow).logs(workflowId, userInfo))
+          val outputFTs = toFutureTry(executionServiceCluster.outputs(workflowId, userInfo)(workflow))
+          val logFTs = toFutureTry(executionServiceCluster.logs(workflowId, userInfo)(workflow))
           DBIO.from(outputFTs zip logFTs map {
             case (Success(outputs), Success(logs)) =>
               mergeWorkflowOutputs(outputs, logs, workflowId)
             case (Failure(outputsFailure), Success(logs)) =>
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceCluster.getMember(workflow).toErrorReport(outputsFailure)))
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs for ${submissionId}.", executionServiceCluster.toErrorReport(outputsFailure)))
             case (Success(outputs), Failure(logsFailure)) =>
-              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceCluster.getMember(workflow).toErrorReport(logsFailure)))
+              throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get logs for ${submissionId}.", executionServiceCluster.toErrorReport(logsFailure)))
             case (Failure(outputsFailure), Failure(logsFailure)) =>
               throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to get outputs and unable to get logs for ${submissionId}.",
-                Seq(executionServiceCluster.getMember(workflow).toErrorReport(outputsFailure),executionServiceCluster.getMember(workflow).toErrorReport(logsFailure))))
+                Seq(executionServiceCluster.toErrorReport(outputsFailure),executionServiceCluster.toErrorReport(logsFailure))))
           })
         }
       }
@@ -1109,7 +1109,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          DBIO.from(executionServiceCluster.getMember(workflow).callLevelMetadata(workflowId, userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
+          DBIO.from(executionServiceCluster.callLevelMetadata(workflowId, userInfo)(workflow).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
     }
