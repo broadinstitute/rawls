@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import java.io.{InputStream, ByteArrayOutputStream, ByteArrayInputStream, StringReader}
+import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
@@ -18,6 +19,7 @@ import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKe
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
+import spray.can.Http
 import spray.client.pipelining._
 import spray.json.JsValue
 
@@ -43,7 +45,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.{OAuth2BearerToken, StatusCodes}
+import spray.http.{HttpResponse, OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -498,9 +500,20 @@ class HttpGoogleServicesDAO(
     } )
   }
 
-  override def deleteToken(userInfo: UserInfo): Future[Unit] = {
+  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
+    getToken(rawlsUserRef) map {
+      case Some(token) =>
+        val url = s"https://accounts.google.com/o/oauth2/revoke?token=$token"
+        val pipeline = sendReceive
+        pipeline(Get(url))
+
+      case None => Future.successful(Unit)
+    }
+  }
+
+  override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
     retryWhen500(() => {
-      executeGoogleRequest(getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, userInfo.userSubjectId))
+      executeGoogleRequest(getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, rawlsUserRef.userSubjectId.value))
     } )
   }
 
