@@ -134,6 +134,48 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "safely delete a user twice" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, user)
+
+      Delete(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, user)
+
+      // scenario: re-trying a deletion after something failed.  The DB user remains but not necessarily anything else
+
+      runAndWait(rawlsUserQuery.save(user))
+
+      Delete(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, user)
+    }
+  }
+
   def saveGroupToDbAndGoogle(services: TestApiService, group: RawlsGroup) = {
     import driver.api._
 
