@@ -140,6 +140,32 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
+    path("admin" / "user" / Segment) { userSubjectId =>
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      } ~
+        delete {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.AdminDeleteUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+        }
+    } ~
+    path("admin"/ "user" / Segment / "enable") { userSubjectId =>
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminEnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
+    path("admin"/ "user" / Segment / "disable") { userSubjectId =>
+      post {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminDisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
     path("admin" / "allUserReadAccess" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       get {
         requestContext => perRequest(requestContext,
