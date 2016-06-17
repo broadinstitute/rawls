@@ -92,7 +92,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   // NOTE: we no longer support deleting entities that are tied to an existing submission - this will cause a
   // Referential integrity constraint violation - if we change that behavior we need to fix this test
-  /*
   ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
       sealRoute(services.entityRoutes) ~>
@@ -119,7 +118,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest)))
       }
   }
-  */
 
   it should "return 204 when aborting an active submission" in withTestDataApiServices { services =>
     Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}") ~>
