@@ -71,27 +71,6 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.props(userServiceConstructor, userInfo),
           UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
       }
-    } ~
-    path("user" / Segment) { userSubjectId =>
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
-    path("user" / Segment / "enable") { userSubjectId =>
-      post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminEnableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
-    } ~
-    path("user" / Segment / "disable") { userSubjectId =>
-      post {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminDisableUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-      }
     }
   }
 }

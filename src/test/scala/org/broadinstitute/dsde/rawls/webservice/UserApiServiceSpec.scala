@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -52,25 +52,47 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
+    assert {
+      loadUser(user).isEmpty
+    }
+    assert {
+      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
+      group.isEmpty || ! group.get.users.contains(user)
+    }
+
+    assert {
+      !services.gcsDAO.containsProxyGroup(user)
+    }
+    assert {
+      !services.directoryDAO.exists(user)
+    }
+  }
+
+  def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
+    assert {
+      loadUser(user).nonEmpty
+    }
+    assert {
+      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
+      group.isDefined && group.get.users.contains(user)
+    }
+
+    assert {
+      services.gcsDAO.containsProxyGroup(user)
+    }
+    assert {
+      services.directoryDAO.exists(user)
+    }
+  }
+
+  it should "create a DB user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
-      assert {
-        loadUser(user).isEmpty
-      }
-      assert {
-        runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef)).isEmpty
-      }
-
-      assert {
-        ! services.gcsDAO.containsProxyGroup(user)
-      }
-      assert {
-        ! services.directoryDAO.exists(user)
-      }
+      assertUserMissing(services, user)
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -80,82 +102,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      assert {
-        loadUser(user).nonEmpty
-      }
-      assert {
-        val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-        group.isDefined && group.get.users.contains(user)
-      }
-
-      assert {
-        services.gcsDAO.containsProxyGroup(user)
-      }
-      assert {
-        services.directoryDAO.exists(user)
-      }
+      assertUserExists(services, user)
     }
   }
 
-  it should "enable/disable user" in withEmptyTestDatabase { dataSource: SlickDataSource =>
-    withApiServices(dataSource) { services =>
 
-      // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
-
-      Post("/user") ~>
-        sealRoute(services.createUserRoute) ~>
-        check {
-          assertResult(StatusCodes.Created) {
-            status
-          }
-        }
-      Get(s"/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
-            responseAs[UserStatus]
-          }
-        }
-      Post(s"/user/${user.userSubjectId.value}/enable") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.NoContent) {
-            status
-          }
-        }
-      Get(s"/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
-            responseAs[UserStatus]
-          }
-        }
-      Post(s"/user/${user.userSubjectId.value}/disable") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.NoContent) {
-            status
-          }
-        }
-      Get(s"/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.userRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
-            responseAs[UserStatus]
-          }
-        }
-    }
-  }
 
   it should "get a users own status" in withTestDataApiServices { services =>
 

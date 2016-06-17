@@ -119,6 +119,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Unit)
   }
 
+  override def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
+    mockProxyGroups -= user
+    Future.successful(Unit)
+  }
+
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
 
   override def addUserToProxyGroup(user: RawlsUser): Future[Unit] = Future.successful(mockProxyGroups += (user -> true))
@@ -144,14 +149,14 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
     groups.get(group) match {
       case Some(members) => groups.update(group, members + member)
-      case None => throw new RuntimeException(s"group $group does not exists")
+      case None => throw new RuntimeException(s"group $group does not exist")
     }
   }
 
   override def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
     groups.get(group) match {
       case Some(members) => groups.update(group, members - member)
-      case None => throw new RuntimeException(s"group $group does not exists")
+      case None => throw new RuntimeException(s"group $group does not exist")
     }
   }
 
