@@ -273,11 +273,12 @@ trait AttributeComponent {
       }
 
       def dropAttributeTempTableAction() = {
-        sql"""drop table #${baseTableRow.tableName}_TEMP""".as[Int]
+        sql"""drop temporary table if exists #${baseTableRow.tableName}_TEMP""".as[Int]
       }
 
       def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: () => ReadWriteAction[Unit]) = {
-        createAttributeTempTableAction() andThen
+        dropAttributeTempTableAction() andThen
+          createAttributeTempTableAction() andThen
           insertFunction() andThen
           deleteFromMasterAction(ownerIds) andThen
           updateInMasterAction(ownerIds) andThen
