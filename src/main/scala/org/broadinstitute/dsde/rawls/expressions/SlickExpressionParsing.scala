@@ -319,9 +319,10 @@ object SlickExpressionEvaluator {
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
     val evaluator = new SlickExpressionEvaluator(parser, rootEntities)
 
-    evaluator.populateExprEvalTempTable()
-      .andThen({ op(evaluator) })
-      .cleanUp({ _ => evaluator.deleteAllExprEvalTempTable() })
+    evaluator.dropExprEvalTempTable() andThen
+      evaluator.populateExprEvalTempTable()
+        .andThen({ op(evaluator) })
+        .andFinally(evaluator.dropExprEvalTempTable())
   }
 
   def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
@@ -349,17 +350,14 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
   def populateExprEvalTempTable() = {
     val exprEvalBatches = rootEntities.map( e => parser.ExprEvalRecord(e.id, e.name) ).grouped(parser.batchSize)
 
-    val createTempTableAction = sql"""create temporary table if not exists EXPREVAL_TEMP (id bigint(20) unsigned NOT NULL, name VARCHAR(254) NOT NULL)""".as[Int]
+    val createTempTableAction = sql"""create temporary table EXPREVAL_TEMP (id bigint(20) unsigned NOT NULL, name VARCHAR(254) NOT NULL)""".as[Int]
 
     createTempTableAction andThen
-      parser.exprEvalQuery.size.result map {
-        case numRecords => assert(numRecords == 0, s"EXPREVAL_TEMP has $numRecords existing records! Did you nest two calls to withNewExpressionEvaluator?")
-      } andThen
       DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }
 
-  def deleteAllExprEvalTempTable() = {
-    sql"""delete from EXPREVAL_TEMP""".as[Int]
+  def dropExprEvalTempTable() = {
+    sql"""drop temporary table if exists EXPREVAL_TEMP""".as[Int]
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {

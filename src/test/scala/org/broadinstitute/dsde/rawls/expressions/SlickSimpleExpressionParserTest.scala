@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException
 
 import org.broadinstitute.dsde.rawls.model._
 
@@ -66,20 +67,11 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     }
   }
 
-  test("clears root entity table") {
+  test("ensure root entity temp table was dropped") {
     withTestWorkspace { workspaceContext =>
-      //on success
-      assertResult(Seq.empty[ExprEvalRecord]) {
+      intercept[MySQLSyntaxErrorException] {
         runAndWait({
           evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type")
-          exprEvalQuery.result
-        })
-      }
-
-      //on failure (parsing error throws an exception)
-      assertResult(Seq.empty[ExprEvalRecord]) {
-        runAndWait({
-          evalFinalAttribute(workspaceContext, "Sample", "sample1", "nonsense")
           exprEvalQuery.result
         })
       }
