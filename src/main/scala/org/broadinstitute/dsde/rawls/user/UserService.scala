@@ -42,6 +42,7 @@ object UserService {
   case object UserGetUserStatus extends UserServiceMessage
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -66,6 +67,7 @@ object UserService {
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
+
   import dataSource.dataAccess.driver.api._
 
   override def receive = {
@@ -77,8 +79,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case UserGetUserStatus => getUserStatus() pipeTo sender
     case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
-    case AdminListUsers => asAdmin { listUsers } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asAdmin{ importUsers(rawlsUserInfoList) } pipeTo sender
+    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminListUsers => asAdmin { listUsers() } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     // ListBillingProjects is for the current user, not as admin
@@ -108,7 +111,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getRefreshTokenDate(): Future[PerRequestMessage] = {
-    gcsDAO.getTokenDate(userInfo).map( _ match {
+    gcsDAO.getTokenDate(userInfo).map(_ match {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     })
@@ -151,12 +154,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.seq(u.billingProjects.map(projectName =>
               dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName)
-            ):_*) map (_=> user)
+            ): _*) map (_ => user)
           }
         }
       ) flatMap { users =>
         addUsersToAllUsersGroup(users.toSet, dataAccess)
-      } map(_ match {
+      } map (_ match {
         case None => RequestComplete(StatusCodes.Created)
         case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
       })
@@ -233,6 +236,54 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors disabling user"))
     }
+  }
+
+  private def verifyNoSubmissions(userRef: RawlsUserRef, dataAccess: DataAccess): ReadAction[Unit] = {
+    dataAccess.submissionQuery.findBySubmitter(userRef.userSubjectId.value).exists.result flatMap {
+      case false => DBIO.successful(Unit)
+      case _ => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete a user with submissions")))
+    }
+  }
+
+  private def deleteUserFromDB(userRef: RawlsUserRef): Future[Int] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsUserQuery.findUserBySubjectId(userRef.userSubjectId.value).delete
+    } flatMap {
+      case 1 => Future.successful(1)
+      case rowsDeleted =>
+        val error = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Expected to delete 1 row from user table, but deleted $rowsDeleted"))
+        Future.failed(error)
+    }
+  }
+
+  def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
+
+    // 1. load user from DB
+    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group
+    // 3. only remove user from DB if/when all of #2 succeed, because failures mean we need to keep the DB user around for subsequent attempts
+
+    val userF = loadUser(userRef)
+
+    val dbTablesRemoval = dataSource.inTransaction { dataAccess =>
+      for {
+        _ <- verifyNoSubmissions(userRef, dataAccess)
+        _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
+        _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
+      } yield ()
+    }
+
+    val userDirectoryRemoval = for {
+      user <- userF
+      _ <- userDirectoryDAO.disableUser(user)   // may not be strictly necessary, but does not hurt
+      _ <- userDirectoryDAO.removeUser(user)
+    } yield ()
+
+    val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
+
+    for {
+      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion))
+      _ <- deleteUserFromDB(userRef)
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
   import spray.json.DefaultJsonProtocol._
@@ -520,11 +571,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
       val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
       dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
-        val exceptions = tries.collect { case Failure(t) => t }
+        val exceptions = tries.collect { case Failure(t) => ErrorReport(t) }
         if (exceptions.isEmpty) {
           None
         } else {
-          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.map(ErrorReport(_)).toSeq))
+          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.toSeq))
         }
       }
     } flatMap { errorReport =>

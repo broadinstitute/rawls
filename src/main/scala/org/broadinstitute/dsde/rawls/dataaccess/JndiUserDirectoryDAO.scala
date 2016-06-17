@@ -20,6 +20,10 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     ctx.bind(p.name, p)
   }
 
+  override def removeUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
+    ctx.unbind(new Person(user).name)
+  }
+
   override def disableUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
     ctx.modifyAttributes(groupDn, DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(memberAttribute, new Person(user).name))
   }
@@ -35,10 +39,6 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     ) yield attrE.asInstanceOf[String]
 
     members.contains(new Person(user).name)
-  }
-
-  def removeUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
-    ctx.unbind(new Person(user).name)
   }
 
   private def getContext(): InitialDirContext = {

@@ -9,6 +9,7 @@ import scala.concurrent.Future
  */
 trait UserDirectoryDAO {
   def createUser(user: RawlsUser): Future[Unit]
+  def removeUser(user: RawlsUser): Future[Unit]
   def enableUser(user: RawlsUser): Future[Unit]
   def disableUser(user: RawlsUser): Future[Unit]
   def isEnabled(user: RawlsUser): Future[Boolean]

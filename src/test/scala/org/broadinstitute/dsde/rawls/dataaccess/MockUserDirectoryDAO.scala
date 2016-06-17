@@ -13,6 +13,8 @@ class MockUserDirectoryDAO extends UserDirectoryDAO{
 
   override def createUser(user: RawlsUser): Future[Unit] = Future.successful(users += (user -> false))
 
+  override def removeUser(user: RawlsUser): Future[Unit] = Future.successful(users -= user)
+
   override def isEnabled(user: RawlsUser): Future[Boolean] = Future.successful(users.getOrElse(user, false))
 
   override def disableUser(user: RawlsUser): Future[Unit] = Future.successful(users += (user -> false))

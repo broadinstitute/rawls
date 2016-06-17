@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -52,25 +52,47 @@ class UserApiServiceSpec extends ApiServiceSpec {
       check { assertResult(StatusCodes.NotFound) {status} }
   }
 
-  it should "create a graph user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
+    assert {
+      loadUser(user).isEmpty
+    }
+    assert {
+      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
+      group.isEmpty || ! group.get.users.contains(user)
+    }
+
+    assert {
+      !services.gcsDAO.containsProxyGroup(user)
+    }
+    assert {
+      !services.directoryDAO.exists(user)
+    }
+  }
+
+  def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
+    assert {
+      loadUser(user).nonEmpty
+    }
+    assert {
+      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
+      group.isDefined && group.get.users.contains(user)
+    }
+
+    assert {
+      services.gcsDAO.containsProxyGroup(user)
+    }
+    assert {
+      services.directoryDAO.exists(user)
+    }
+  }
+
+  it should "create a DB user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
       val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
 
-      assert {
-        loadUser(user).isEmpty
-      }
-      assert {
-        runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef)).isEmpty
-      }
-
-      assert {
-        ! services.gcsDAO.containsProxyGroup(user)
-      }
-      assert {
-        ! services.directoryDAO.exists(user)
-      }
+      assertUserMissing(services, user)
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -80,20 +102,192 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      assert {
-        loadUser(user).nonEmpty
-      }
-      assert {
-        val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-        group.isDefined && group.get.users.contains(user)
+      assertUserExists(services, user)
+    }
+  }
+
+  it should "delete a DB user, user proxy group, ldap entry, and remove them from all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, user)
+
+      Delete(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, user)
+    }
+  }
+
+  it should "safely delete a user twice" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, user)
+
+      Delete(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, user)
+
+      // scenario: re-trying a deletion after something failed.  The DB user remains but not necessarily anything else
+
+      runAndWait(rawlsUserQuery.save(user))
+
+      Delete(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, user)
+    }
+  }
+
+  def saveGroupToDbAndGoogle(services: TestApiService, group: RawlsGroup) = {
+    import driver.api._
+
+    val action = rawlsGroupQuery.save(group) flatMap { grp =>
+      DBIO.from(services.gcsDAO.createGoogleGroup(grp))
+    }
+
+    runAndWait(action)
+  }
+
+  it should "delete a DB user and remove them from groups and billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // values from MockUserInfoDirectives
+      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, testUser)
+
+      val user2 = RawlsUser(RawlsUserSubjectId("some_other_subject"), RawlsUserEmail("some_other_email"))
+      runAndWait(rawlsUserQuery.save(user2))
+
+      val group = RawlsGroup(RawlsGroupName("groupName"), RawlsGroupEmail("groupEmail"), Set(testUser, user2), Set.empty)
+      saveGroupToDbAndGoogle(services, group)
+
+      assertResult(Some(group)) {
+        runAndWait(rawlsGroupQuery.load(group))
       }
 
-      assert {
-        services.gcsDAO.containsProxyGroup(user)
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set(testUser, user2), "mock cromwell URL")
+      runAndWait(rawlsBillingProjectQuery.save(project))
+
+      assertResult(Some(project)) {
+        runAndWait(rawlsBillingProjectQuery.load(project.projectName))
       }
-      assert {
-        services.directoryDAO.exists(user)
+
+      Delete(s"/user/${testUser.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      assertUserMissing(services, testUser)
+
+      assertResult(Some(project.copy(users = Set(user2)))) {
+        runAndWait(rawlsBillingProjectQuery.load(project.projectName))
       }
+
+      assertResult(Some(group.copy(users = Set(user2)))) {
+        runAndWait(rawlsGroupQuery.load(group))
+      }
+    }
+  }
+
+  val testWorkspace = new EmptyWorkspace
+  it should "not delete a DB user when they have a submission" in withCustomTestDatabase(testWorkspace) { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // save groups to Mock Google so it doesn't complain about deleting them later
+
+      import scala.concurrent.duration._
+      Await.result(services.gcsDAO.createGoogleGroup(testWorkspace.ownerGroup), 10.seconds)
+      Await.result(services.gcsDAO.createGoogleGroup(testWorkspace.writerGroup), 10.seconds)
+      Await.result(services.gcsDAO.createGoogleGroup(testWorkspace.readerGroup), 10.seconds)
+
+      // values from MockUserInfoDirectives
+      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, testUser)
+
+      val sub = createTestSubmission(testWorkspace.workspace, testData.methodConfig, testData.indiv2, testUser, Seq.empty, Map.empty, Seq.empty, Map.empty)
+
+      withWorkspaceContext(testWorkspace.workspace) { context =>
+        // these are from DefaultTestData, but we're using EmptyWorkspace to init the DB, so save them now
+        runAndWait(methodConfigurationQuery.save(context, testData.methodConfig))
+        runAndWait(entityQuery.save(context, testData.sample2))
+        runAndWait(entityQuery.save(context, testData.sset2))
+        runAndWait(entityQuery.save(context, testData.indiv2))
+        runAndWait(submissionQuery.create(context, sub))
+      }
+
+      Delete(s"/user/${testData.userOwner.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+          assert {
+            import spray.http._
+            import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+            responseAs[ErrorReport].message.contains("Cannot delete a user with submissions")
+          }
+
+        }
+
     }
   }
 
@@ -127,6 +321,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+      // OK to enable already-enabled user
+      Post(s"/user/${user.userSubjectId.value}/enable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
       Get(s"/user/${user.userSubjectId.value}") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -137,6 +339,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
             responseAs[UserStatus]
           }
         }
+      Post(s"/user/${user.userSubjectId.value}/disable") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      // OK to disable already-disabled user
       Post(s"/user/${user.userSubjectId.value}/disable") ~>
         sealRoute(services.userRoutes) ~>
         check {

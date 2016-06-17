@@ -76,6 +76,10 @@ trait RawlsBillingProjectComponent {
       query.delete.map { count => count > 0 }
     }
 
+    def removeUserFromAllProjects(userRef: RawlsUserRef): WriteAction[Boolean] = {
+      findProjectsByUserSubjectId(userRef.userSubjectId.value).delete.map { count => count > 0 }
+    }
+
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectName]] = {
       findProjectsByUserSubjectId(rawlsUser.userSubjectId.value).result.map { projects =>
         projects.map { rec => RawlsBillingProjectName(rec.projectName) }
