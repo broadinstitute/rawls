@@ -2809,27 +2809,27 @@ paths:
             - openid
             - email
             - profile
-    '/api/user':
-       get:
-         responses:
-           '200':
-             description: Successful Request
-             schema:
-               $ref: '#/definitions/UserStatus'
-           '500':
-             description: Rawls Internal Error
-             schema:
-               $ref: '#/definitions/ErrorReport'
-         description: "gets the status of a user"
-         tags:
-           - users
-         summary: Get status of the current user
-         operationId: userStatus
-         security:
-           - authorization:
-              - openid
-              - email
-              - profile
+  '/api/user':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+           schema:
+             $ref: '#/definitions/UserStatus'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the status of a user"
+       tags:
+         - users
+       summary: Get status of the current user
+       operationId: userStatus
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/refreshToken':
     put:
       responses:
