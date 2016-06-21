@@ -155,7 +155,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
-      execServiceCluster: ExecutionServiceCluster = new MockShardedExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)) )): T = {
+      execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout) )): T = {
     withDataOp { dataSource =>
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -200,11 +200,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   def withWorkspaceServiceMockExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvcCluster = new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO()))
+    val execSvcCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO())
     withDataAndService(testCode(execSvcCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO]), withDefaultTestDatabase[T], execSvcCluster)
   }
   def withWorkspaceServiceMockTimeoutExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvcCluster = new MockShardedExecutionServiceCluster( Map(0->new MockExecutionServiceDAO(true)))
+    val execSvcCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true))
     withDataAndService(testCode(execSvcCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO]), withDefaultTestDatabase[T], execSvcCluster)
   }
 

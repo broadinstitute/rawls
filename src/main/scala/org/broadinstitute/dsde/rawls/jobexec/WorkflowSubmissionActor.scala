@@ -217,21 +217,24 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
     }
 
-    // TODO: DA update for executionServiceCluster usage!!
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts) <- workflowBatchFuture
-      workflowSubmitResult <- executionServiceCluster.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))(workflowRecs)
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
-      workflowRecs.zip(workflowSubmitResult)
+      // call to submitWorkflows returns a tuple:
+      val executionServiceKey = workflowSubmitResult._1
+      val executionServiceResults = workflowSubmitResult._2
+
+      (executionServiceKey, workflowRecs.zip(executionServiceResults))
     }
 
-    cromwellSubmission flatMap { results =>
+    cromwellSubmission flatMap { case (executionServiceKey, results) =>
       dataSource.inTransaction { dataAccess =>
         //save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect {
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
-            val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status)
+            val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status, executionServiceKey = Some(executionServiceKey.toString))
             dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
         }
 
@@ -240,7 +243,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
         val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(failure.message)), wfRec.id) }
-        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatus(failures.map(_._1), WorkflowStatuses.Failed)
+        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
       } map { _ => ScheduleNextWorkflowQuery }

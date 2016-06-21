@@ -241,14 +241,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  // TODO: DA update for executionServiceCluster usage!!
   private def deleteWorkspace(workspaceName: WorkspaceName, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[PerRequestMessage] = {
     //Attempt to abort any running workflows so they don't write any more to the bucket.
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
     dataAccess.submissionQuery.list(workspaceContext).map(_.flatMap(_.workflows).toList collect {
-      case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceCluster.abort(wf.workflowId.get, userInfo)(wf).map {
+      case wf if !wf.status.isDone && wf.workflowId.isDefined => executionServiceCluster.abort(WorkflowExecution(wf), userInfo).map {
         case Failure(regrets) =>
           logger.info(s"failure aborting workflow ${wf.workflowId} while deleting workspace ${workspaceName}", regrets)
           Failure(regrets)
@@ -1087,8 +1086,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          val outputFTs = toFutureTry(executionServiceCluster.outputs(workflowId, userInfo)(workflow))
-          val logFTs = toFutureTry(executionServiceCluster.logs(workflowId, userInfo)(workflow))
+          val outputFTs = toFutureTry(executionServiceCluster.outputs(WorkflowExecution(workflow), userInfo))
+          val logFTs = toFutureTry(executionServiceCluster.logs(WorkflowExecution(workflow), userInfo))
           DBIO.from(outputFTs zip logFTs map {
             case (Success(outputs), Success(logs)) =>
               mergeWorkflowOutputs(outputs, logs, workflowId)
@@ -1109,7 +1108,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withWorkflow(workspaceName, submissionId, workflowId, dataAccess) { workflow =>
-          DBIO.from(executionServiceCluster.callLevelMetadata(workflowId, userInfo)(workflow).map(em => RequestComplete(StatusCodes.OK, em)))
+          DBIO.from(executionServiceCluster.callLevelMetadata(WorkflowExecution(workflow), userInfo).map(em => RequestComplete(StatusCodes.OK, em)))
         }
       }
     }

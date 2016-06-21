@@ -47,7 +47,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
-    val executionServiceCluster = new MockShardedExecutionServiceCluster( Map(0->new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout)))
+    val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout))
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,

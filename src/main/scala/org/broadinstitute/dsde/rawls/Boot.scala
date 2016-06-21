@@ -102,10 +102,11 @@ object Boot extends App with LazyLogging {
 
 // SHARDING
 
-    // TODO: this is temporary, mocking out having multiple cromwell instances in config
+    // TODO: DA this is temporary, mocking out having multiple cromwell instances in config
+
     val executionServiceInstances = List.fill(3)(executionServiceConfig.getString("server"))
-    val executionServiceDAOMap:Map[Int,ExecutionServiceDAO] = (executionServiceInstances.zipWithIndex map {
-      case (value, index) => (index->new HttpExecutionServiceDAO(value, submissionTimeout))
+    val executionServiceDAOMap:Map[ExecutionServiceId,ExecutionServiceDAO] = (executionServiceInstances.zipWithIndex map {
+      case (value, index) => (ExecutionServiceId(index.toString)->new HttpExecutionServiceDAO(value, submissionTimeout))
     }).toMap
     // END TODO
 
