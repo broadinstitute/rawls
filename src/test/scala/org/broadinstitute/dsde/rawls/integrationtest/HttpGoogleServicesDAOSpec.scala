@@ -219,10 +219,14 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
     Thread.sleep(100)
 
-    Await.result(gcsDAO.storeToken(userInfo, "testtoken2"), Duration.Inf)
-    assertResult(Some("testtoken2")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
+    val credential = gcsDAO.getBucketServiceAccountCredential
+    credential.refreshToken()
+    val testToken = credential.getAccessToken
+    Await.result(gcsDAO.storeToken(userInfo, testToken), Duration.Inf)
+    assertResult(Some(testToken)) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
 
+    Await.result(gcsDAO.revokeToken(RawlsUser(userInfo)), Duration.Inf)
     Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
     assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }

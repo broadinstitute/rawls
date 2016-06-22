@@ -265,7 +265,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
 
     // 1. load user from DB
-    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group
+    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group, revoke & delete refresh token
     // 3. only remove user from DB if/when all of #2 succeed, because failures mean we need to keep the DB user around for subsequent attempts
 
     val userF = loadUser(userRef)
@@ -286,8 +286,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
 
+    val tokenRemoval = toFutureTry(gcsDAO.revokeToken(userRef) flatMap { _ => gcsDAO.deleteToken(userRef) })
+
     for {
       _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion))
+      _ <- tokenRemoval
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
   }
