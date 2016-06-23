@@ -335,6 +335,77 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "delete all entities when deleting a workspace" in withTestDataApiServices { services =>
+    // check that length of result is > 0:
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).length.result) > 0
+      }
+    }
+    // delete the workspace
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
+          status
+        }
+      }
+    // now you should have no entities listed
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).length.result) == 0
+      }
+    }
+  }
+
+  it should "delete all method configs when deleting a workspace" in withTestDataApiServices { services =>
+    // check that length of result is > 0:
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
+          testData.methodConfig.name).length.result) > 0
+      }
+    }
+    // delete the workspace
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
+          status
+        }
+      }
+    // now you should have no method configs listed
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
+          testData.methodConfig.name).length.result) == 0
+      }
+    }
+  }
+
+  it should "delete all submissions when deleting a workspace" in withTestDataApiServices { services =>
+    // check that length of result is > 0:
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceId).length.result) > 0
+      }
+    }
+    // delete the workspace
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, response.entity.asString) {
+          status
+        }
+      }
+    // now you should have no submissions listed
+    withWorkspaceContext(testData.workspace) { workspaceContext =>
+      assert {
+        runAndWait(submissionQuery.findByWorkspaceId(workspaceContext.workspaceId).length.result) == 0
+      }
+    }
+  }
+
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
     val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
     workspaceGroupRefs foreach { case groupRef =>
@@ -1467,5 +1538,5 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) { status }
       }
   }
-
 }
+

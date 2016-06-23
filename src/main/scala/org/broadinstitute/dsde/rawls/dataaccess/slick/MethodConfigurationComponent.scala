@@ -5,6 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, MethodRepoMethod, AttributeString, MethodConfiguration}
+import slick.driver.JdbcDriver
 
 case class MethodConfigurationRecord(id: Long,
                                      namespace: String,
@@ -139,6 +140,21 @@ trait MethodConfigurationComponent {
         }
       }
     }
+
+    object DeleteMethodConfigurationQuery extends RawSqlQuery {
+      val driver: JdbcDriver = MethodConfigurationComponent.this.driver
+
+      def deleteAction(workspaceId: UUID) = {
+        val tables: Seq[String] = Seq("METHOD_CONFIG_INPUT", "METHOD_CONFIG_OUTPUT", "METHOD_CONFIG_PREREQ")
+
+        DBIO.sequence(tables map { table =>
+          sqlu"""delete t from #$table as t
+                inner join METHOD_CONFIG as mc on mc.id=t.method_config_id
+                where mc.workspace_id=$workspaceId"""
+        })
+      }
+    }
+
 
     def list(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
       findByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))

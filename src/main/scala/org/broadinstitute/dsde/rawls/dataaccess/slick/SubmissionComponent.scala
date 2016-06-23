@@ -424,5 +424,47 @@ trait SubmissionComponent {
         where w.submission_id = ${submissionId}""".as[WorkflowInputResolutionListResult]
       }
     }
+
+    object DeleteSubmissionQuery extends RawSqlQuery {
+      val driver: JdbcDriver = SubmissionComponent.this.driver
+
+      def deleteAction(workspaceId: UUID) = {
+
+        def deleteSubmissionAttributes(workflowTable: String, columnId: String) = {
+          sqlu""" delete t from SUBMISSION_ATTRIBUTE t
+                 inner join SUBMISSION_VALIDATION sv on sv.id=t.owner_id
+                 inner join #$workflowTable w on w.id=sv.#$columnId
+                 inner join SUBMISSION s on s.id=w.submission_id
+                 where s.workspace_id=$workspaceId
+            """
+        }
+
+        def deleteFromTable(tableFrom: String, workflowTable: String, columnId: String) = {
+          sqlu"""delete t from #$tableFrom t
+                 inner join #$workflowTable w on w.id=t.#$columnId
+                 inner join SUBMISSION s on w.submission_id=s.id
+                 where s.workspace_id=$workspaceId
+              """
+        }
+
+        DBIO.seq(
+          deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
+          deleteSubmissionAttributes("WORKFLOW_FAILURE", "workflow_failure_id"),
+          deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
+          deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW_FAILURE", "workflow_id"),
+          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id"),
+          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW_FAILURE", "workflow_failure_id"),
+          deleteFromTable("WORKFLOW_ERROR", "WORKFLOW_FAILURE", "workflow_failure_id")
+        ) andThen {
+          DBIO.sequence(Seq("WORKFLOW", "WORKFLOW_FAILURE") map { workflow_table =>
+            // delete workflows and workflow failure
+            sqlu"""delete w from #$workflow_table w
+                   inner join SUBMISSION s on w.submission_id=s.id
+                   where s.workspace_id=$workspaceId
+            """
+          })
+        }
+      }
+    }
   }
 }

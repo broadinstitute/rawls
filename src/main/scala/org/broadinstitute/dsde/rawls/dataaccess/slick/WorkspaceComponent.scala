@@ -193,25 +193,21 @@ trait WorkspaceComponent {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
     }
 
-    def deleteWorkspaceEntityAttributes(workspaceId: UUID) = {
-      entityQuery.filter(_.workspaceId === workspaceId).result flatMap { recs =>
-        entityQuery.deleteEntityAttributes(recs)
+    def deleteWorkspaceEntitiesAndAttributes(workspaceId: UUID) = {
+      entityQuery.DeleteEntityAttributesQuery.deleteAction(workspaceId) andThen {
+        entityQuery.filter(_.workspaceId === workspaceId).delete
       }
     }
 
-    def deleteWorkspaceEntities(workspaceId: UUID) = {
-      entityQuery.filter(_.workspaceId === workspaceId).delete
-    }
-
     def deleteWorkspaceSubmissions(workspaceId: UUID) = {
-      submissionQuery.filter(_.workspaceId === workspaceId).result flatMap { result =>
-        DBIO.seq(result.map(sub => submissionQuery.deleteSubmissionAction(sub.id)).toSeq:_*)
+      submissionQuery.DeleteSubmissionQuery.deleteAction(workspaceId) andThen {
+        submissionQuery.filter(_.workspaceId === workspaceId).delete
       }
     }
 
     def deleteWorkspaceMethodConfigs(workspaceId: UUID) = {
-      methodConfigurationQuery.filter(_.workspaceId === workspaceId).result flatMap { result =>
-        DBIO.seq(result.map(mc => methodConfigurationQuery.deleteMethodConfigurationAction(mc.id)).toSeq:_*)
+      methodConfigurationQuery.DeleteMethodConfigurationQuery.deleteAction(workspaceId) andThen {
+        methodConfigurationQuery.filter(_.workspaceId === workspaceId).delete
       }
     }
 

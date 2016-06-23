@@ -268,9 +268,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } andThen {
       DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
     } andThen {
-      DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceEntityAttributes(workspaceContext.workspaceId))
-    } andThen {
-      DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceEntities(workspaceContext.workspaceId))
+      dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
     } andThen {
       DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
         dataAccess.rawlsGroupQuery.delete(group)

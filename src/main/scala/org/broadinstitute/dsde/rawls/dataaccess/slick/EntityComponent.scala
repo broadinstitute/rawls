@@ -350,6 +350,18 @@ trait EntityComponent {
       }
     }
 
+    object DeleteEntityAttributesQuery extends RawSqlQuery {
+      val driver: JdbcDriver = EntityComponent.this.driver
+
+      def deleteAction(workspaceId: UUID) =
+        sqlu"""delete ea from ENTITY_ATTRIBUTE ea
+               inner join ENTITY e
+               on ea.owner_id = e.id
+               where e.workspace_id=${workspaceId}
+          """
+    }
+
+
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForType(workspaceContext, entityType))
