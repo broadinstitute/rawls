@@ -86,7 +86,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "create a DB user, user proxy group, ldap entry, and add them to all users group" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "create a DB user, user proxy group, ldap entry, and add them to all users group, and enable them" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
@@ -103,6 +103,17 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
 
       assertUserExists(services, user)
+
+      Get(s"/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
+            responseAs[UserStatus]
+          }
+        }
     }
   }
 
