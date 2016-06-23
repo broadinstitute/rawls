@@ -432,6 +432,13 @@ trait WorkflowComponent {
       filter(_.status inSetBind(statuses.map(_.toString))).length.result
     }
 
+    def getExecutionServiceKey(externalId: String): ReadAction[Option[String]] = {
+      uniqueResult[WorkflowRecord](findWorkflowByExternalId(externalId)).map { rec =>
+        val bar = rec.getOrElse(throw new RawlsException(s"workflow with externalId $externalId does not exist"))
+        bar.executionServiceKey
+      }
+    }
+
     /*
       the find methods
      */
@@ -446,6 +453,10 @@ trait WorkflowComponent {
 
     def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType = {
       filter(_.id inSetBind(ids))
+    }
+
+    def findWorkflowByExternalId(externalId: String): WorkflowQueryType = {
+      filter(wf => wf.externalId === externalId)
     }
 
     def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {

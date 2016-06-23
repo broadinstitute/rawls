@@ -1,18 +1,24 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import _root_.slick.dbio.Effect.{Write, Read}
+import _root_.slick.dbio._
+import _root_.slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent._
+import scala.concurrent.Future._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
-class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO]) extends ExecutionServiceCluster {
+
+class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
 
   // make a copy of the members map as an array for easy reads
   private val memberArray:Array[ClusterMember] = (members map {case (id, dao) => ClusterMember(id, dao)}).toArray
+
 
 
 
@@ -38,26 +44,38 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // therefore, we want to use the cromwell instance that has been persisted
   // onto that workflow.
   def status(wfe: WorkflowExecution, userInfo: UserInfo): Future[ExecutionServiceStatus] =
-    getMember(wfe).status(wfe.id, userInfo)
+    getMember(wfe).flatMap {memb => memb.status(wfe.id, userInfo)}
 
   def callLevelMetadata(wfe: WorkflowExecution, userInfo: UserInfo): Future[ExecutionMetadata] =
-    getMember(wfe).callLevelMetadata(wfe.id, userInfo)
+    getMember(wfe).flatMap {memb => memb.callLevelMetadata(wfe.id, userInfo)}
 
   def outputs(wfe: WorkflowExecution, userInfo: UserInfo): Future[ExecutionServiceOutputs] =
-    getMember(wfe).outputs(wfe.id, userInfo)
+    getMember(wfe).flatMap {memb => memb.outputs(wfe.id, userInfo)}
 
   def logs(wfe: WorkflowExecution, userInfo: UserInfo): Future[ExecutionServiceLogs] =
-    getMember(wfe).logs(wfe.id, userInfo)
+    getMember(wfe).flatMap {memb => memb.logs(wfe.id, userInfo)}
 
   def abort(wfe: WorkflowExecution, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] =
-    getMember(wfe).abort(wfe.id, userInfo)
+    getMember(wfe).flatMap {memb => memb.abort(wfe.id, userInfo)}
 
 
   // ====================
   // facade-to-cluster entry points
   // ====================
   // for an already-submitted workflow, get the instance to which it was submitted
-  private def getMember(wfe: WorkflowExecution):ExecutionServiceDAO = getMember(wfe.executionServiceId)
+  private def getMember(wfe: WorkflowExecution):Future[ExecutionServiceDAO] = wfe.executionServiceId match {
+    case Some(execId) => Future(getMember(execId))
+    case None => {
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workflowQuery.getExecutionServiceKey(wfe.id) map {execIdOption =>
+          execIdOption match {
+            case Some(execId) => getMember(execId)
+            case None => throw new RawlsException("can only process Workflow objects with an execution service key")
+          }
+        }
+      }
+    }
+  }
 
   // for unsubmitted workflows, get the best instance to which we should submit
   // we expect that all workflowRecs passed to this method will be a single batch;
@@ -87,4 +105,6 @@ case class ClusterMember(
   key: ExecutionServiceId,
   dao: ExecutionServiceDAO
 )
+
+
 

@@ -34,17 +34,18 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
 case class WorkflowExecution(
   id: String,
-  executionServiceId: String
+  executionServiceId: Option[String]
 )
 
+// we need the external id in order to query cromwell, and the execution service id in order to route to the right instance
 object WorkflowExecution {
   def apply(wf: Workflow) = wf.workflowId match {
-    case Some(id) => new WorkflowExecution(id, "0")
-    case None => throw new RawlsException("can only process Workflow objects with an id")
+    case Some(id) => new WorkflowExecution(id, None)
+    case None => throw new RawlsException("can only process Workflow objects with a workflow id")
   }
-  def apply(wr: WorkflowRecord) = wr.externalId match {
-    case Some(id) => new WorkflowExecution(id, "0")
-    case None => throw new RawlsException("can only process WorkflowRecord objects with an id")
+  def apply(wr: WorkflowRecord) = (wr.externalId, wr.executionServiceKey) match {
+    case (Some(id), Some(execKey)) => new WorkflowExecution(id, Some(execKey))
+    case _ => throw new RawlsException("can only process WorkflowRecord objects with an external id and execution service key")
   }
 }
 

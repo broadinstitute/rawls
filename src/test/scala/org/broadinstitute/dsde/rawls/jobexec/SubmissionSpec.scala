@@ -155,8 +155,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   def withDataAndService[T](
       testCode: WorkspaceService => T,
       withDataOp: (SlickDataSource => T) => T,
-      execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout) )): T = {
+      executionServiceDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout) ): T = {
+
     withDataOp { dataSource =>
+      val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
+
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
@@ -200,12 +203,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   }
 
   def withWorkspaceServiceMockExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvcCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO())
-    withDataAndService(testCode(execSvcCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO]), withDefaultTestDatabase[T], execSvcCluster)
+    val execSvcDAO = new MockExecutionServiceDAO()
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
   def withWorkspaceServiceMockTimeoutExecution[T](testCode: (MockExecutionServiceDAO) => (WorkspaceService) => T): T = {
-    val execSvcCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true))
-    withDataAndService(testCode(execSvcCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO]), withDefaultTestDatabase[T], execSvcCluster)
+    val execSvcDAO = new MockExecutionServiceDAO(true)
+    withDataAndService(testCode(execSvcDAO), withDefaultTestDatabase[T], execSvcDAO)
   }
 
   def withSubmissionTestWorkspaceService[T](testCode: WorkspaceService => T): T = {
