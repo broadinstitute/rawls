@@ -286,11 +286,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
 
+
     val tokenRemoval = toFutureTry(gcsDAO.revokeToken(userRef) flatMap { _ => gcsDAO.deleteToken(userRef) })
 
     for {
-      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion))
-      _ <- tokenRemoval
+      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, tokenRemoval))
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
   }
