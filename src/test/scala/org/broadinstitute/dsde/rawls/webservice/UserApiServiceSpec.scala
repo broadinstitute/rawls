@@ -104,8 +104,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       assertUserExists(services, user)
 
-      Get(s"/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.userRoutes) ~>
+      Get(s"/admin/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.adminRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
