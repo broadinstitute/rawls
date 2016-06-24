@@ -63,7 +63,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
-  def deleteToken(userInfo: UserInfo): Future[Unit]
+  def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
+  def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String

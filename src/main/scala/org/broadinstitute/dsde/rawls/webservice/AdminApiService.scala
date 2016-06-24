@@ -206,6 +206,22 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           WorkspaceService.AdminDeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
         )
       }
+    } ~
+    path("admin" / "refreshToken" / Segment ) { userSubjectId =>
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminDeleteRefreshToken(RawlsUserRef(RawlsUserSubjectId(userSubjectId)))
+        )
+      }
+    } ~
+    path("admin" / "allRefreshTokens" ) {
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminDeleteAllRefreshTokens
+        )
+      }
     }
   }
 }

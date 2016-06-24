@@ -47,6 +47,9 @@ object UserService {
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
+  case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
+  case object AdminDeleteAllRefreshTokens extends UserServiceMessage
+
   case object ListBillingProjects extends UserServiceMessage
   case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class CreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
@@ -104,6 +107,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
     case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
+
+    case AdminDeleteRefreshToken(userRef) => asAdmin { deleteRefreshToken(userRef) } pipeTo sender
+    case AdminDeleteAllRefreshTokens => asAdmin { deleteAllRefreshTokens() } pipeTo sender
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -259,7 +265,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def deleteUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
 
     // 1. load user from DB
-    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group
+    // 2. in Futures, can be parallel: remove user from aux DB tables, User Directory, and Proxy Group, revoke & delete refresh token
     // 3. only remove user from DB if/when all of #2 succeed, because failures mean we need to keep the DB user around for subsequent attempts
 
     val userF = loadUser(userRef)
@@ -281,7 +287,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
 
     for {
-      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion))
+      _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
   }
@@ -606,6 +612,34 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     DBIO.sequence(actions).map(reduceErrorReports)
+  }
+
+  def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
+    deleteRefreshTokenInternal(rawlsUserRef).map(_ => RequestComplete(StatusCodes.OK))
+
+  }
+
+  def deleteAllRefreshTokens(): Future[PerRequestMessage] = {
+    for {
+      users <- dataSource.inTransaction { _.rawlsUserQuery.loadAllUsers() }
+      tries <- Future.traverse(users) { user => toFutureTry(deleteRefreshTokenInternal(user)) }
+    } yield {
+      val errors = tries.collect {
+        case Failure(t) => ErrorReport(t)
+      }
+      if (errors.isEmpty) {
+        RequestComplete(StatusCodes.OK)
+      } else {
+        RequestComplete(ErrorReport("exceptions revoking/deleting some tokens", errors))
+      }
+    }
+  }
+
+  private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
+    for {
+      _ <- gcsDAO.revokeToken(rawlsUserRef)
+      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => Unit }
+    } yield { Unit }
   }
 
   private def reduceErrorReports(errorReportOptions: Iterable[Option[ErrorReport]]): Option[ErrorReport] = {

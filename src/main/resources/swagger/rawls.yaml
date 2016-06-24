@@ -890,6 +890,50 @@ paths:
                 - openid
                 - email
                 - profile
+  '/api/admin/refreshToken/{userSubjectId}':
+    delete:
+      responses:
+        '200':
+          description: "user's refresh token revoked and removed"
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: "revoke and remove a user's refresh token"
+      tags:
+        - admin
+      summary: "Admin revoke and remove a user's refresh token"
+      operationId: admin_delete_refresh_token
+      parameters:
+        - in: path
+          description: "user's subject id"
+          name: userSubjectId
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/allRefreshTokens':
+    delete:
+      responses:
+        '200':
+          description: all users' refresh tokens revoked and removed
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: revoke and remove all users' refresh token
+      tags:
+        - admin
+      summary: Admin revoke and remove all users' refresh token
+      operationId: admin_delete_all_refresh_tokens
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:

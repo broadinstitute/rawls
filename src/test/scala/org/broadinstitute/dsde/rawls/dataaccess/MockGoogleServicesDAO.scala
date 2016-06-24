@@ -31,7 +31,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Option(tokenDate))
   }
 
-  override def deleteToken(userInfo: UserInfo): Future[Unit] = {
+  override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
     token = null
     tokenDate = null
     Future.successful(Unit)
@@ -176,4 +176,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo("foo@bar.com", OAuth2BearerToken("test_token"), 0, "12345678000"))
+
+  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(Unit)
 }
