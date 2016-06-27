@@ -7,6 +7,7 @@
 - [ ] **Submitter**: Review code comments; remove done TODOs, create stories for remaining TODOs
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
 - [ ] **Submitter**: Add description or comments on the PR explaining the hows/whys (if not obvious)
+- [ ] **Submitter**: If PR includes new or changed db queries, include the explain plans in the description
 - [ ] Tell ![](http://i.imgur.com/9dLzbPd.png) that the PR exists if he wants to look at it **(apply requires_doge label)**
 - [ ] Anoint a lead reviewer (LR). **Assign PR to LR**
 - [ ] **LR**: Initial review by LR and others.
