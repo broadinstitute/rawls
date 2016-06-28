@@ -70,7 +70,7 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
         dataAccess.workflowQuery.getExecutionServiceKey(wfe.id) map {execIdOption =>
           execIdOption match {
             case Some(execId) => getMember(execId)
-            case None => throw new RawlsException("can only process Workflow objects with an execution service key")
+            case None => getDefaultMember //throw new RawlsException("can only process Workflow objects with an execution service key")
           }
         }
       }
@@ -96,6 +96,8 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   private def getMember(strKey: String): ExecutionServiceDAO = getMember(ExecutionServiceId(strKey))
   private def getMember(key: ExecutionServiceId): ExecutionServiceDAO = members.get(key).orElse(throw new RawlsException(s"member with key $key does not exist")).get
+
+  private def getDefaultMember: ExecutionServiceDAO = members.values.head
 
   def targetIndex(seed: Long, numTargets: Int):Int = Math.ceil( (seed % 100) / (100 / numTargets) ).toInt
 
