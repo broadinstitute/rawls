@@ -250,8 +250,8 @@ trait AttributeComponent {
                 select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id
                 from #${baseTableRow.tableName}_TEMP ta
                 left join #${baseTableRow.tableName} a
-                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index)
-                where a.owner_id is null and ta.owner_id in """, ownerIdTail(ownerIds)).as[Int]
+                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
+                sql"""where a.owner_id is null""").as[Int]
 
       def createAttributeTempTableAction() = {
         val prefix = sql"""create temporary table #${baseTableRow.tableName}_TEMP (
