@@ -2388,6 +2388,48 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucket':
+    get:
+      responses:
+        '204':
+          description: Successful Request
+        '403':
+          description: Insufficient permissions to lock workspace (must be owner)
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Workspace Not Found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Workspace cannot be locked due to running submissions
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Read a workspace bucket
+      tags:
+        - workspaces
+      summary: Read workspace bucket
+      operationId: readBucket
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/lock':
     put:
       responses:
