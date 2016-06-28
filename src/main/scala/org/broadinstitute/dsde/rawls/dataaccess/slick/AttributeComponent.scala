@@ -246,11 +246,11 @@ trait AttributeComponent {
                 set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref
                 where ta.owner_id is not null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
       def insertIntoMasterAction(ownerIds: Seq[OWNER_ID]) =
-        concatSqlActions(concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id)
+        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id)
                 select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id
                 from #${baseTableRow.tableName}_TEMP ta
                 left join #${baseTableRow.tableName} a
-                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds)),
+                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
                 sql"""where a.owner_id is null""").as[Int]
 
       def createAttributeTempTableAction() = {
