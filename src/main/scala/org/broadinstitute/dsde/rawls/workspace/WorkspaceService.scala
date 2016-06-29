@@ -1210,11 +1210,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def hasBucketReadAccess(workspaceName: WorkspaceName) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        println(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)))
-        DBIO.from(gcsDAO.diagnosticBucketRead(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)), workspaceContext.workspace.bucketName).flatMap {
-          case Some(x) => RequestComplete(x.statusCode.get)
-          case None => RequestComplete(StatusCodes.OK)
-        })
+        DBIO.from(gcsDAO.diagnosticBucketRead(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)), workspaceContext.workspace.bucketName)).flatMap {
+          case Some(report) => DBIO.successful(RequestComplete(report.statusCode.getOrElse(StatusCodes.NotFound)))
+          case None => DBIO.successful(RequestComplete(StatusCodes.OK))
+        }
       }
     }
   }

@@ -45,7 +45,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.{HttpResponse, OAuth2BearerToken, StatusCodes}
+import spray.http.{StatusCode, HttpResponse, OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -465,14 +465,14 @@ class HttpGoogleServicesDAO(
   def diagnosticBucketRead(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
     getUserCredentials(user) map { credentialOpt =>
       credentialOpt match {
-        case None => Some(ErrorReport(new RawlsException("Unable to load credentials for user")))
+        case None => Some(ErrorReport(StatusCodes.InternalServerError, "Unable to load credentials for user"))
         case Some(credential) => {
           val getter = getStorage(credential).objects().list(bucketName)
           try {
             executeGoogleRequest(getter)
             None
           } catch {
-            case t: HttpResponseException => Some(ErrorReport(new RawlsException(t.getMessage)))
+            case t: HttpResponseException => Some(ErrorReport(StatusCode.int2StatusCode(t.getStatusCode), t.getMessage))
           }
         }
       }
