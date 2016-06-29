@@ -463,23 +463,20 @@ class HttpGoogleServicesDAO(
   }
 
   def diagnosticBucketRead(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
-//    val result = getUserCredentials(user) map { credentialOpt =>
-//      credentialOpt match {
-//        case None => Some(ErrorReport(new RawlsException("Unable to load credentials for user")))
-//        case Some(credential) => {
-//          println(credential)
-//          val getter = getStorage(credential).objects().list(bucketName)
-//          try {
-//            executeGoogleRequest(getter)
-//            None
-//          } catch {
-//            case t: HttpResponseException => Some(ErrorReport(new RawlsException(t.getMessage)))
-//          }
-//        }
-//      }
-//    }
-//    result
-    diagnosticBucketWrite(user, bucketName)
+    getUserCredentials(user) map { credentialOpt =>
+      credentialOpt match {
+        case None => Some(ErrorReport(new RawlsException("Unable to load credentials for user")))
+        case Some(credential) => {
+          val getter = getStorage(credential).objects().list(bucketName)
+          try {
+            executeGoogleRequest(getter)
+            None
+          } catch {
+            case t: HttpResponseException => Some(ErrorReport(new RawlsException(t.getMessage)))
+          }
+        }
+      }
+    }
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {

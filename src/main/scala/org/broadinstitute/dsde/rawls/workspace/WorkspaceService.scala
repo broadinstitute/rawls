@@ -1211,7 +1211,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         println(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)))
-        DBIO.from(gcsDAO.diagnosticBucketRead(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)), workspaceContext.workspace.bucketName).map(foo => RequestComplete(foo)))
+        DBIO.from(gcsDAO.diagnosticBucketRead(RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail)), workspaceContext.workspace.bucketName).flatMap {
+          case Some(x) => RequestComplete(x.statusCode.get)
+          case None => RequestComplete(StatusCodes.OK)
+        })
       }
     }
   }
