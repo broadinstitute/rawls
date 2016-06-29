@@ -234,6 +234,9 @@ trait AttributeComponent {
         }), sql")")
       }
 
+      //MySQL seems to handle null safe operators inefficiently. the solution to this
+      //is to use ifnull and default to -2 if the list_index is null. list_index of -2
+      //is never used otherwise
       def deleteFromMasterAction(ownerIds: Seq[OWNER_ID]) =
         concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
                 left join #${baseTableRow.tableName}_TEMP ta
