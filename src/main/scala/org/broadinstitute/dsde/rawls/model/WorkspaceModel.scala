@@ -97,6 +97,8 @@ object SortDirections {
       case Descending => "desc"
     }
   }
+
+  def toSql(direction: SortDirection) = toString(direction)
 }
 case class EntityQuery(page: Int, pageSize: Int, sortField: String, sortDirection: SortDirections.SortDirection, filterTerms: Option[String])
 
@@ -221,14 +223,14 @@ case class ApplicationVersion(gitHash: String, buildNumber: String, version: Str
 
 sealed trait Attribute
 sealed trait AttributeValue extends Attribute
-
+sealed trait AttributeList[T <: Attribute] extends Attribute { val list: Seq[T] }
 case object AttributeNull extends AttributeValue
 case class AttributeString(val value: String) extends AttributeValue
 case class AttributeNumber(val value: BigDecimal) extends AttributeValue
 case class AttributeBoolean(val value: Boolean) extends AttributeValue
-case object AttributeEmptyList extends Attribute
-case class AttributeValueList(val list: Seq[AttributeValue]) extends Attribute
-case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends Attribute
+case object AttributeEmptyList extends AttributeList[Attribute] { val list = Seq.empty }
+case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
+case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends AttributeList[AttributeEntityReference]
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends Attribute
 
 object AttributeStringifier {
@@ -238,10 +240,8 @@ object AttributeStringifier {
       case AttributeString(value) => value
       case AttributeNumber(value) => value.toString()
       case AttributeBoolean(value) => value.toString()
-      case AttributeEmptyList => ""
-      case AttributeValueList(list) => list.map(apply).mkString(" ")
-      case AttributeEntityReferenceList(list) => list.map(apply).mkString(" ")
       case AttributeEntityReference(t, name) => name
+      case al: AttributeList[_] => al.list.map(apply).mkString(" ")
     }
   }
 }
