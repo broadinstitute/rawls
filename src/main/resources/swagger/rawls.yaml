@@ -2394,15 +2394,11 @@ paths:
         '204':
           description: Successful Request
         '403':
-          description: Insufficient permissions to lock workspace (must be owner)
+          description: Insufficient permissions to access workspace bucket
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace Not Found
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '409':
-          description: Workspace cannot be locked due to running submissions
           schema:
             $ref: '#/definitions/ErrorReport'
         '500':
