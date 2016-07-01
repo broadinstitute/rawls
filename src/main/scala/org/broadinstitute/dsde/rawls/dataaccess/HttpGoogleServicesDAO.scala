@@ -467,7 +467,7 @@ class HttpGoogleServicesDAO(
       credentialOpt match {
         case None => Some(ErrorReport(StatusCodes.InternalServerError, "Unable to load credentials for user"))
         case Some(credential) => {
-          val getter = getStorage(credential).objects().list(bucketName)
+          val getter = getStorage(credential).buckets().get(bucketName)
           try {
             executeGoogleRequest(getter)
             None
