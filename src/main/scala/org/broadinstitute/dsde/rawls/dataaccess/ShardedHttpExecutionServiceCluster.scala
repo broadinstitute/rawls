@@ -28,7 +28,7 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
 
   // only used in tests??? TODO: DA update tests to use the same thing runtime does, or remove this.
   def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] =
-    members.values.head.submitWorkflow(wdl, inputs, options, userInfo)
+    getDefaultMember.submitWorkflow(wdl, inputs, options, userInfo)
 
   // by nature, this is only called for workflows that have not yet been submitted.
   // therefore, we want to send the workflows to the cromwell instance chosen
