@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.io.File
+import org.broadinstitute.dsde.rawls.RawlsException
+
 import scala.collection.JavaConversions._
 
 import com.typesafe.config.ConfigFactory
@@ -13,8 +15,14 @@ trait IntegrationTestConfig {
 
   val methodRepoConfig = jenkinsConf.withFallback(etcConf).getConfig("methodrepo")
   val methodRepoServer = methodRepoConfig.getString("server")
+
   val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
-  val executionServiceServer = executionServiceConfig.getString("server")
+  val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
+  val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
+  // use the default as the only server until we actually deploy multiple
+  // we will always need to check that the default server exists in the map
+  val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
+    throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
 
   val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
 
