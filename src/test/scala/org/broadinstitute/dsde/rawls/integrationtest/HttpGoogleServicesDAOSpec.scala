@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
 import java.io.StringReader
 import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem}
+import com.google.api.client.http.HttpResponseException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
@@ -16,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import scala.collection.JavaConversions._
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
 
@@ -246,7 +248,12 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
-      case gjre: GoogleJsonResponseException => gjre.getStatusCode/100 == 5
+      case t: GoogleJsonResponseException => {
+        ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
+          (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid")) ||
+          (t.getStatusCode == 404)
+      }
+      case t: HttpResponseException => t.getStatusCode/100 == 5
       case _ => false
     }
   }
