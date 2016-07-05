@@ -64,12 +64,12 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   // for an already-submitted workflow, get the instance to which it was submitted
   private def getMember(wfe: WorkflowExecution):Future[ExecutionServiceDAO] = wfe.executionServiceId match {
-    case Some(execId) => Future(getMember(execId))
+    case Some(execId) => Future.successful(getMember(ExecutionServiceId(execId)))
     case None => {
       dataSource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.getExecutionServiceKey(wfe.id) map {execIdOption =>
           execIdOption match {
-            case Some(execId) => getMember(execId)
+            case Some(execId) => getMember(ExecutionServiceId(execId))
             case None => getDefaultMember //throw new RawlsException("can only process Workflow objects with an execution service key")
           }
         }
@@ -94,7 +94,6 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   // clustering methods
   // ====================
-  private def getMember(strKey: String): ExecutionServiceDAO = getMember(ExecutionServiceId(strKey))
   private def getMember(key: ExecutionServiceId): ExecutionServiceDAO = members.get(key).orElse(throw new RawlsException(s"member with key $key does not exist")).get
 
   private def getDefaultMember: ExecutionServiceDAO = members.values.head

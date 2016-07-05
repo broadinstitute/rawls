@@ -238,9 +238,9 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) flatMap { rows =>
+        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
           if (rows.head == workflows.size)
-            DBIO.successful(workflows.size)
+            workflows.size
           else
             throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
         }
@@ -251,9 +251,9 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        UpdateWorkflowStatuAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) flatMap { rows =>
+        UpdateWorkflowStatuAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
           if (rows.head == workflows.size)
-            DBIO.successful(workflows.size)
+            workflows.size
           else
             throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
         }
