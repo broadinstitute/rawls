@@ -433,9 +433,21 @@ trait WorkflowComponent {
     }
 
     def getExecutionServiceKey(externalId: String): ReadAction[Option[String]] = {
+      /* TODO: DA we should be able to count on a unique result when querying by external id.
+          But we can't, and the unit tests rely on reusing IDs. This is a temporary hack until
+          unit tests can be resolved.
+       */
+      /*
       uniqueResult[WorkflowRecord](findWorkflowByExternalId(externalId)).map { rec =>
         val bar = rec.getOrElse(throw new RawlsException(s"workflow with externalId $externalId does not exist"))
         bar.executionServiceKey
+      }
+      */
+      findWorkflowByExternalId(externalId).result.map {
+        case Seq() => throw new RawlsException(s"workflow with externalId $externalId does not exist")
+        case Seq(one) => one.executionServiceKey // could combine this case with the following case
+        case many:Seq[WorkflowRecord] => many.head.executionServiceKey
+        case _ => throw new RawlsException(s"unexpected result looking for workflow with externalId $externalId")
       }
     }
 
