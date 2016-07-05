@@ -629,7 +629,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
+          assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
             responseAs[UserStatus]
           }
         }
@@ -641,6 +641,31 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           }
         }
       // OK to enable already-enabled user
+      Post(s"/admin/user/${user.userSubjectId.value}/disable") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      Get(s"/admin/user/${user.userSubjectId.value}") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
+            responseAs[UserStatus]
+          }
+        }
+      Post(s"/admin/user/${user.userSubjectId.value}/disable") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+      // OK to disable already-disabled user
       Post(s"/admin/user/${user.userSubjectId.value}/enable") ~>
         sealRoute(services.adminRoutes) ~>
         check {
@@ -655,31 +680,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(UserStatus(user, Map("google" -> true, "ldap" -> true, "allUsersGroup" -> true))) {
-            responseAs[UserStatus]
-          }
-        }
-      Post(s"/admin/user/${user.userSubjectId.value}/disable") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.NoContent) {
-            status
-          }
-        }
-      // OK to disable already-disabled user
-      Post(s"/admin/user/${user.userSubjectId.value}/disable") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.NoContent) {
-            status
-          }
-        }
-      Get(s"/admin/user/${user.userSubjectId.value}") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-          assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> true))) {
             responseAs[UserStatus]
           }
         }

@@ -129,9 +129,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
     handleFutures(Future.sequence(Seq(
-      toFutureTry(gcsDAO.createProxyGroup(user)),
+      toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
       toFutureTry(dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user).flatMap(user => addUsersToAllUsersGroup(Set(user), dataAccess)) }),
-      toFutureTry(userDirectoryDAO.createUser(user))
+      toFutureTry(userDirectoryDAO.createUser(user) flatMap( _ => userDirectoryDAO.enableUser(user)))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
