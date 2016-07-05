@@ -45,6 +45,7 @@ object WorkflowExecution {
   }
   def apply(wr: WorkflowRecord) = (wr.externalId, wr.executionServiceKey) match {
     case (Some(id), Some(execKey)) => new WorkflowExecution(id, Some(execKey))
+    case (Some(id), None) => new WorkflowExecution(id, None) // support for legacy workflows. Remove at some point?
     case _ => throw new RawlsException("can only process WorkflowRecord objects with an external id and execution service key")
   }
 }
