@@ -1452,4 +1452,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return 200 when a user can read a workspace bucket" in withEmptyWorkspaceApiServices("reader-access") { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/checkBucketReadAccess") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 404 when a user can't read the bucket because they dont have workspace access" in withEmptyWorkspaceApiServices("no-access") { services =>
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/checkBucketReadAccess") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
 }

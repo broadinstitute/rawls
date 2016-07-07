@@ -53,6 +53,7 @@ object WorkspaceService {
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UnlockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class CheckBucketReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GetWorkspaceStatus(workspaceName: WorkspaceName, userSubjectId: Option[String]) extends WorkspaceServiceMessage
 
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
@@ -124,6 +125,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
     case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
+    case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
     case GetWorkspaceStatus(workspaceName, userSubjectId) => pipe(getWorkspaceStatus(workspaceName, userSubjectId)) to sender
 
     case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
@@ -1125,6 +1127,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(timeEstimate, workflowsAhead, statusMap))
             }
           case _ => DBIO.successful(RequestComplete(StatusCodes.OK, WorkflowQueueStatusResponse(0, 0, statusMap)))
+        }
+      }
+    }
+  }
+
+  def checkBucketReadAccess(workspaceName: WorkspaceName) = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        DBIO.from(gcsDAO.diagnosticBucketRead(userInfo, workspaceContext.workspace.bucketName)).map {
+          case Some(report) => RequestComplete(report)
+          case None => RequestComplete(StatusCodes.OK)
         }
       }
     }

@@ -45,7 +45,7 @@ import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAcces
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 
-import spray.http.{HttpResponse, OAuth2BearerToken, StatusCodes}
+import spray.http.{StatusCode, HttpResponse, OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -432,6 +432,20 @@ class HttpGoogleServicesDAO(
       }
     }
     result
+  }
+
+  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
+    Future {
+      val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
+      try {
+        blocking {
+          executeGoogleRequest(getter)
+        }
+        None
+      } catch {
+        case t: HttpResponseException => Some(ErrorReport(StatusCode.int2StatusCode(t.getStatusCode), t.getMessage))
+      }
+    }
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
