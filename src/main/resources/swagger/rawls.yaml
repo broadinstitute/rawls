@@ -2388,10 +2388,10 @@ paths:
             - openid
             - email
             - profile
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucket':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/checkBucketReadAccess':
     get:
       responses:
-        '204':
+        '200':
           description: Successful Request
         '403':
           description: Insufficient permissions to access workspace bucket

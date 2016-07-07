@@ -110,7 +110,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def diagnosticBucketWrite(user: RawlsUser, bucketName: String) = Future.successful(None)
 
-  override def diagnosticBucketRead(user: RawlsUser, bucketName: String) = Future.successful(None)
+  override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("test_token")
 

@@ -462,19 +462,16 @@ class HttpGoogleServicesDAO(
     result
   }
 
-  def diagnosticBucketRead(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
-    getUserCredentials(user) map { credentialOpt =>
-      credentialOpt match {
-        case None => Some(ErrorReport(StatusCodes.InternalServerError, "Unable to load credentials for user"))
-        case Some(credential) => {
-          val getter = getStorage(credential).buckets().get(bucketName)
-          try {
-            executeGoogleRequest(getter)
-            None
-          } catch {
-            case t: HttpResponseException => Some(ErrorReport(StatusCode.int2StatusCode(t.getStatusCode), t.getMessage))
-          }
+  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
+    Future {
+      val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
+      try {
+        blocking {
+          executeGoogleRequest(getter)
         }
+        None
+      } catch {
+        case t: HttpResponseException => Some(ErrorReport(StatusCode.int2StatusCode(t.getStatusCode), t.getMessage))
       }
     }
   }

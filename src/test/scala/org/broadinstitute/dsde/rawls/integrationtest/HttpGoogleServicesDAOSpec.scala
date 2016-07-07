@@ -14,7 +14,7 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import spray.http.OAuth2BearerToken
+import spray.http.{StatusCodes, OAuth2BearerToken}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
@@ -207,6 +207,18 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     groups.foreach { group =>
       intercept[GoogleJsonResponseException] { directory.groups.get(group.groupEmail.value).execute() }
     }
+  }
+
+  it should "handle failures getting workspace bucket" in {
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, testProject, testWorkspaceId, testWorkspace, None), Duration.Inf)
+
+    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testCreator.userSubjectId))
+
+    Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
+    assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf)) //quickest way to remove access to a workspace bucket
+
+    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo, s"fc-${testWorkspaceId}"), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
+    Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
   }
 
   it should "crud tokens" in {
