@@ -86,8 +86,15 @@ object Boot extends App with LazyLogging {
 
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
+    val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
+    val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
+    // use the default as the only server until we actually deploy multiple
+    // we will always need to check that the default server exists in the map
+    val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
+      throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
+
     val executionServiceDAO = new HttpExecutionServiceDAO(
-      executionServiceConfig.getString("server"),
+      executionServiceServer,
       submissionTimeout
     )
 
