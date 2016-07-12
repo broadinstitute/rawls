@@ -230,10 +230,10 @@ class HttpGoogleServicesDAO(
   override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
-    retryWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(deleter)
       monitorRef ! BucketDeleted(bucketName)
-    }) recover {
+    }) {
       //Google returns 409 Conflict if the bucket isn't empty.
       case t: HttpResponseException if t.getStatusCode == 409 =>
         //Google doesn't let you delete buckets that are full.
