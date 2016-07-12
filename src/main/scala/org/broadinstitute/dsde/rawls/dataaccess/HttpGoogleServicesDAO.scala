@@ -230,10 +230,10 @@ class HttpGoogleServicesDAO(
   override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
-    retryWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(deleter)
       monitorRef ! BucketDeleted(bucketName)
-    }) recover {
+    }) {
       //Google returns 409 Conflict if the bucket isn't empty.
       case t: HttpResponseException if t.getStatusCode == 409 =>
         //Google doesn't let you delete buckets that are full.
@@ -259,11 +259,11 @@ class HttpGoogleServicesDAO(
 
   override def isAdmin(userId: String): Future[Boolean] = {
     val query = getGroupDirectory.members.get(adminGroupName,userId)
-    retryWhen500orGoogleError(() => {
+    retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(query)
       true
-    }) recover {
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => false
+    }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => false
     }
   }
 
@@ -376,9 +376,8 @@ class HttpGoogleServicesDAO(
       case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
     }
     val inserter = getGroupDirectory.members.insert(group.groupEmail.value, memberEmail)
-    val insertFuture: Future[Unit] = retryWhen500orGoogleError(() => { executeGoogleRequest(inserter) })
-    insertFuture recover {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => Unit // it is ok of the email is already there
+    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(inserter) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => () // it is ok of the email is already there
     }
   }
 
@@ -388,9 +387,8 @@ class HttpGoogleServicesDAO(
       case Right(member) => member.groupEmail.value
     }
     val deleter = getGroupDirectory.members.delete(group.groupEmail.value, memberEmail)
-    val deleteFuture: Future[Unit] = retryWhen500orGoogleError(() => { executeGoogleRequest(deleter) })
-    deleteFuture recover {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // it is ok of the email is already missing
+    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
     }
   }
 
@@ -398,9 +396,8 @@ class HttpGoogleServicesDAO(
     val directory = getGroupDirectory
     val groups = directory.groups
     val deleter = groups.delete(group.groupEmail.value)
-    val deleteFuture: Future[Unit] = retryWhen500orGoogleError(() => { executeGoogleRequest(deleter) })
-    deleteFuture recover {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => Unit // if the group is already gone, don't fail
+    retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // if the group is already gone, don't fail
     }
   }
 
