@@ -28,14 +28,14 @@ object WorkflowSubmissionActor {
   def props(dataSource: SlickDataSource,
             methodRepoDAO: MethodRepoDAO,
             googleServicesDAO: GoogleServicesDAO,
-            executionServiceDAO: ExecutionServiceDAO,
+            executionServiceCluster: ExecutionServiceCluster,
             batchSize: Int,
             credential: Credential,
             pollInterval: FiniteDuration,
             maxActiveWorkflowsTotal: Int,
             maxActiveWorkflowsPerUser: Int,
             runtimeOptions: Option[JsValue]): Props = {
-    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceDAO, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
+    Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
   }
 
   sealed trait WorkflowSubmissionMessage
@@ -48,7 +48,7 @@ object WorkflowSubmissionActor {
 class WorkflowSubmissionActor(val dataSource: SlickDataSource,
                               val methodRepoDAO: MethodRepoDAO,
                               val googleServicesDAO: GoogleServicesDAO,
-                              val executionServiceDAO: ExecutionServiceDAO,
+                              val executionServiceCluster: ExecutionServiceCluster,
                               val batchSize: Int,
                               val credential: Credential,
                               val pollInterval: FiniteDuration,
@@ -84,7 +84,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   val dataSource: SlickDataSource
   val methodRepoDAO: MethodRepoDAO
   val googleServicesDAO: GoogleServicesDAO
-  val executionServiceDAO: ExecutionServiceDAO
+  val executionServiceCluster: ExecutionServiceCluster
   val batchSize: Int
   val credential: Credential
   val pollInterval: FiniteDuration
@@ -220,17 +220,21 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts) <- workflowBatchFuture
-      workflowSubmitResult <- executionServiceDAO.submitWorkflows(wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
     } yield {
-      workflowRecs.zip(workflowSubmitResult)
+      // call to submitWorkflows returns a tuple:
+      val executionServiceKey = workflowSubmitResult._1
+      val executionServiceResults = workflowSubmitResult._2
+
+      (executionServiceKey, workflowRecs.zip(executionServiceResults))
     }
 
-    cromwellSubmission flatMap { results =>
+    cromwellSubmission flatMap { case (executionServiceKey, results) =>
       dataSource.inTransaction { dataAccess =>
         //save successes as submitted workflows and hook up their cromwell ids
         val successUpdates = results collect {
           case (wfRec, Left(success: ExecutionServiceStatus)) =>
-            val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status)
+            val updatedWfRec = wfRec.copy(externalId = Option(success.id), status = success.status, executionServiceKey = Some(executionServiceKey.toString))
             dataAccess.workflowQuery.updateWorkflowRecord(updatedWfRec)
         }
 
@@ -239,7 +243,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
         val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(failure.message)), wfRec.id) }
-        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatus(failures.map(_._1), WorkflowStatuses.Failed)
+        val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
       } map { _ => ScheduleNextWorkflowQuery }

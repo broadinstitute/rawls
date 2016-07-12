@@ -86,20 +86,17 @@ object Boot extends App with LazyLogging {
 
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
-    val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
-    val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
-    // use the default as the only server until we actually deploy multiple
-    // we will always need to check that the default server exists in the map
-    val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
-      throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
 
-    val executionServiceDAO = new HttpExecutionServiceDAO(
-      executionServiceServer,
-      submissionTimeout
-    )
+    val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("servers").map {
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout))
+      }.toMap
+    val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
+
+    val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers,
+      ExecutionServiceId(defaultExecutionServiceServerName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceDAO,
+      shardedExecutionServiceCluster,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -116,7 +113,7 @@ object Boot extends App with LazyLogging {
         slickDataSource,
         methodRepoDAO,
         gcsDAO,
-        executionServiceDAO,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
         toScalaDuration(conf.getDuration("executionservice.pollInterval")),
@@ -130,7 +127,7 @@ object Boot extends App with LazyLogging {
       WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
-        executionServiceDAO,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         submissionSupervisor,
