@@ -187,7 +187,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
       assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
-        mockExecCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO].submitInput
+        mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
       import spray.json._
@@ -203,7 +203,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             testData.billingProject.cromwellAuthBucketUrl,
             Some(JsObject(Map("zones" -> JsString("us-central-someother"))))
           ))) {
-        mockExecCluster.defaultInstance.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
+        mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
     }
   }

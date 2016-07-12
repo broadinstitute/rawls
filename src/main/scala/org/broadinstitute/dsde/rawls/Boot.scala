@@ -110,7 +110,7 @@ object Boot extends App with LazyLogging {
     }).toMap
     // END TODO
 
-    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceDAOMap, slickDataSource)
+    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceDAOMap, ExecutionServiceId("0"), slickDataSource)
 
 // END CONFLICT
 

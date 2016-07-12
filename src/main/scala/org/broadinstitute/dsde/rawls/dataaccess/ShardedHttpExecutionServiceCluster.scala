@@ -14,12 +14,15 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 
-class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
+class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], default: ExecutionServiceId, dataSource: SlickDataSource) extends ExecutionServiceCluster {
 
   // make a copy of the members map as an array for easy reads
   private val memberArray:Array[ClusterMember] = (members map {case (id, dao) => ClusterMember(id, dao)}).toArray
 
-
+  // find the default instance
+  private val defaultEntry:(ExecutionServiceId, ExecutionServiceDAO) =
+    members.find{case (esid, dao) => esid.id.equals(default.id)}
+      .getOrElse(throw new RawlsException(s"cannot initialize ShardedHttpExecutionServiceCluster: member with default key $default does not exist"))
 
 
   // ====================
@@ -64,12 +67,12 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   // for an already-submitted workflow, get the instance to which it was submitted
   private def getMember(wfe: WorkflowExecution):Future[ExecutionServiceDAO] = wfe.executionServiceId match {
-    case Some(execId) => Future.successful(getMember(ExecutionServiceId(execId)))
+    case Some(execId) => Future.successful(getMemberById(ExecutionServiceId(execId)))
     case None => {
       dataSource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.getExecutionServiceKey(wfe.id) map {execIdOption =>
           execIdOption match {
-            case Some(execId) => getMember(ExecutionServiceId(execId))
+            case Some(execId) => getMemberById(ExecutionServiceId(execId))
             case None => getDefaultMember //throw new RawlsException("can only process Workflow objects with an execution service key")
           }
         }
@@ -94,9 +97,10 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   // clustering methods
   // ====================
-  private def getMember(key: ExecutionServiceId): ExecutionServiceDAO = members.get(key).orElse(throw new RawlsException(s"member with key $key does not exist")).get
+  private def getMemberById(key: ExecutionServiceId): ExecutionServiceDAO = members.get(key).orElse(throw new RawlsException(s"member with key $key does not exist")).get
 
-  private def getDefaultMember: ExecutionServiceDAO = members.values.head
+  private def getDefaultEntry:(ExecutionServiceId, ExecutionServiceDAO) = defaultEntry
+  def getDefaultMember: ExecutionServiceDAO = getDefaultEntry._2
 
   def targetIndex(seed: Long, numTargets: Int):Int = Math.ceil( (seed % 100) / (100 / numTargets) ).toInt
 
