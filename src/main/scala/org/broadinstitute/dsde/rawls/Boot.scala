@@ -88,11 +88,11 @@ object Boot extends App with LazyLogging {
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
     val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("servers").map {
-        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout)
-      }
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout))
+      }.toMap
     val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
 
-    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers,
+    val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers,
       ExecutionServiceId(defaultExecutionServiceServerName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
