@@ -87,32 +87,13 @@ object Boot extends App with LazyLogging {
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
 
-// HEAD
-    val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
+    val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("servers").map {
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout)
+      }
     val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
-    // use the default as the only server until we actually deploy multiple
-    // we will always need to check that the default server exists in the map
-    val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
-      throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
 
-    val executionServiceDAO = new HttpExecutionServiceDAO(
-      executionServiceServer,
-      submissionTimeout
-    )
-
-// SHARDING
-
-    // TODO: DA this is temporary, mocking out having multiple cromwell instances in config
-
-    val executionServiceInstances = List.fill(3)(executionServiceConfig.getString("server"))
-    val executionServiceDAOMap:Map[ExecutionServiceId,ExecutionServiceDAO] = (executionServiceInstances.zipWithIndex map {
-      case (value, index) => (ExecutionServiceId(index.toString)->new HttpExecutionServiceDAO(value, submissionTimeout))
-    }).toMap
-    // END TODO
-
-    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceDAOMap, ExecutionServiceId("0"), slickDataSource)
-
-// END CONFLICT
+    val shardedExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers,
+      ExecutionServiceId(defaultExecutionServiceServerName), slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       shardedExecutionServiceCluster,
