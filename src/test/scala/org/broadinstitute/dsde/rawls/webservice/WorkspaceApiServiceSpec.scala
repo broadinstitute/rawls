@@ -1538,5 +1538,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) { status }
       }
   }
+
 }
 
