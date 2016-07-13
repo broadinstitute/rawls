@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
@@ -62,6 +63,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     val directoryDAO = new MockUserDirectoryDAO
 
     val userServiceConstructor = UserService.constructor(
+      slickDataSource,
+      gcsDAO,
+      directoryDAO
+    )_
+
+    val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
       gcsDAO,
       directoryDAO

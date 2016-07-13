@@ -10,6 +10,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
+import com.google.api.services.genomics.{GenomicsScopes, Genomics}
 import com.google.api.services.oauth2.Oauth2
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
@@ -21,7 +22,7 @@ import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
 import spray.can.Http
 import spray.client.pipelining._
-import spray.json.JsValue
+import spray.json.{JsValue, JsObject}
 
 import scala.collection.JavaConversions._
 
@@ -64,6 +65,7 @@ class HttpGoogleServicesDAO(
   // modify these if we need more granular access in the future
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
+  val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -500,6 +502,24 @@ class HttpGoogleServicesDAO(
     } )
   }
 
+  override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = {
+
+    import spray.json._
+
+    val opId = s"operations/$jobId"
+
+    val genomicsApi = new Genomics.Builder(httpTransport, jsonFactory, getGenomicsServiceAccountCredential).setApplicationName(appName).build()
+    val operationRequest = genomicsApi.operations().get(opId)
+
+    retryWithRecoverWhen500orGoogleError[Option[JsObject]](() => {
+      // Google library returns a Map[String,AnyRef], but we don't care about understanding the response
+      // So, use Google's functionality to get the json string, then parse it back into a generic json object
+      Some(executeGoogleRequest(operationRequest).toPrettyString.parseJson.asJsObject)
+    }) {
+      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
+    }
+  }
+
   private def when500orGoogleError( throwable: Throwable ): Boolean = {
     throwable match {
       case t: GoogleJsonResponseException => {
@@ -554,6 +574,16 @@ class HttpGoogleServicesDAO(
       .setJsonFactory(jsonFactory)
       .setServiceAccountId(serviceAccountClientId)
       .setServiceAccountScopes(storageScopes) // grant bucket-creation powers
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
+      .build()
+  }
+
+  def getGenomicsServiceAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountScopes(genomicsScopes)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
