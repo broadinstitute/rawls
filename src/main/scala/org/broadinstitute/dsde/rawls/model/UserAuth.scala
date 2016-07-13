@@ -11,6 +11,7 @@ case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
+case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
@@ -35,6 +36,7 @@ object RawlsGroup {
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
+case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
@@ -52,13 +54,11 @@ object UserAuthJsonSupport extends JsonSupport {
   }
 
   implicit val RawlsUserEmailFormat = UserAuthJsonFormatter(RawlsUserEmail)
-
   implicit val RawlsUserSubjectIdFormat = UserAuthJsonFormatter(RawlsUserSubjectId)
 
   implicit val RawlsGroupNameFormat = UserAuthJsonFormatter(RawlsGroupName)
-
   implicit val RawlsGroupEmailFormat = UserAuthJsonFormatter(RawlsGroupEmail)
-
+  implicit val RawlsBillingAccountNameFormat = UserAuthJsonFormatter(RawlsBillingAccountName)
   implicit val RawlsBillingProjectNameFormat = UserAuthJsonFormatter(RawlsBillingProjectName)
 
   // need "apply" here so it doesn't choose the companion class
@@ -67,6 +67,8 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
   implicit val RawlsBillingProjectFormat = jsonFormat3(RawlsBillingProject)
+
+  implicit val RawlsBillingAccountFormat = jsonFormat2(RawlsBillingAccount)
 
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
 

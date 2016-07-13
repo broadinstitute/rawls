@@ -65,6 +65,13 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.ListBillingProjects)
       }
     } ~
+    path("user" / "billingAccounts") {
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.ListBillingAccounts)
+      }
+    } ~
     path("user" / "group" / Segment) { groupName =>
       get {
         requestContext => perRequest(requestContext,

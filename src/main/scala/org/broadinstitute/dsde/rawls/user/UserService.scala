@@ -56,6 +56,7 @@ object UserService {
   case class DeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case object ListBillingAccounts extends UserServiceMessage
 
   case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminListGroupMembers(groupName: String) extends UserServiceMessage
@@ -96,6 +97,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
     case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
+    case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
     case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
@@ -294,6 +296,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   import spray.json.DefaultJsonProtocol._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
+
+  def listBillingAccounts(): Future[PerRequestMessage] =
+    gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
 
   // when called for the current user, admin access is not required
   def listBillingProjects(userEmail: RawlsUserEmail): Future[PerRequestMessage] =
@@ -656,6 +661,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   /**
    * handles a Future [ Seq [ Try [ T ] ] ], calling success with the successful result of the tries or failure with any exceptions
+   *
    * @param futures
    * @param success
    * @param failure

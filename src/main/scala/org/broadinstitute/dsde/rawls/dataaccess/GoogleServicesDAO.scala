@@ -63,6 +63,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def deleteGoogleGroup(group: RawlsGroup): Future[Unit]
 
+  def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
+
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
