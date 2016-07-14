@@ -364,10 +364,23 @@ class HttpGoogleServicesDAO(
     val newGroup = RawlsGroup(groupRef.groupName, RawlsGroupEmail(toGoogleGroupName(groupRef.groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
     val directory = getGroupDirectory
     val groups = directory.groups
-    retryWhen500orGoogleError (() => {
-      val inserter = groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))) // group names have a 60 char limit
-      executeGoogleRequest(inserter)
-    }) map { _ => newGroup}
+
+    for {
+      googleGroup <- retryWhen500orGoogleError (() => {
+        // group names have a 60 char limit
+        executeGoogleRequest(groups.insert(new Group().setEmail(newGroup.groupEmail.value).setName(newGroup.groupName.value.take(60))))
+      })
+
+      // GAWB-853 verify that the group exists by retrying to get group until success or too many tries
+      _ <- retryWhen500orGoogleError (() => {
+        executeGoogleRequest(groups.get(googleGroup.getEmail))
+      }) recover {
+        case t: Throwable =>
+        // log but ignore any error in the getter, downstream code will fail or not as appropriate
+        logger.debug(s"could not verify that google group $googleGroup exists", t)
+      }
+
+    } yield newGroup
   }
 
   override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
