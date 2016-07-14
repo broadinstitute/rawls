@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import spray.http.StatusCodes
+import spray.json.JsObject
 import scala.concurrent.Future
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
@@ -67,6 +68,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
+
+  def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String

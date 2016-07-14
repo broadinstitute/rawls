@@ -15,6 +15,7 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import com.typesafe.config.{ConfigRenderOptions, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor.{BootMonitors, BucketDeletionMonitor}
@@ -109,6 +110,7 @@ object Boot extends App with LazyLogging {
 
 
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
+    val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
 
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
@@ -137,6 +139,7 @@ object Boot extends App with LazyLogging {
         bucketDeletionMonitor,
         userServiceConstructor),
       userServiceConstructor,
+      genomicsServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
       clientSecrets.getDetails.getClientId,
       submissionTimeout

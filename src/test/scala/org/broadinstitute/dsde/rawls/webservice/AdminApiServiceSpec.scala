@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http.StatusCodes
+import spray.json.JsObject
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
@@ -1017,4 +1018,18 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
 
   }
+
+  it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
+    import spray.json._
+    Get("/admin/genomics/operations/dummy-job-id") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult("""{"foo":"bar"}""".parseJson.asJsObject) {
+          responseAs[JsObject]
+        }
+      }
+  }}
 }

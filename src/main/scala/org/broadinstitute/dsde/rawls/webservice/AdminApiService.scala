@@ -6,6 +6,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.net.URLDecoder
 
+import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -22,6 +23,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
+  val genomicsServiceConstructor: UserInfo => GenomicsService
 
   val adminRoutes = requireUserInfo() { userInfo =>
     path("admin" / "billing" / "list" / Segment) { (userEmail) =>
@@ -220,6 +222,14 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDeleteAllRefreshTokens
+        )
+      }
+    } ~
+    path("admin" / "genomics" / "operations" / Segment ) { jobId =>
+      get {
+        requestContext => perRequest(requestContext,
+          GenomicsService.props(genomicsServiceConstructor, userInfo),
+          GenomicsService.GetOperation(jobId)
         )
       }
     }
