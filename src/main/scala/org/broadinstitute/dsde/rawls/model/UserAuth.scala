@@ -41,45 +41,25 @@ case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: 
 case class SyncReport(items: Seq[SyncReportItem])
 
 object UserAuthJsonSupport extends JsonSupport {
-  trait UserAuthJsonFormatter[T <: UserAuthType] extends RootJsonFormat[T] {
-    // TODO: a generic read.  May require reflection.
-    override def write(obj: T): JsValue = JsString(obj.value)
-  }
 
-  implicit object RawlsUserEmailFormat extends UserAuthJsonFormatter[RawlsUserEmail] {
-    override def read(json: JsValue): RawlsUserEmail = json match {
-      case JsString(value) => RawlsUserEmail(value)
+  case class UserAuthJsonFormatter[T <: UserAuthType](create: String => T) extends RootJsonFormat[T] {
+    def read(obj: JsValue): T = obj match {
+      case JsString(value) => create(value)
       case _ => throw new DeserializationException("could not deserialize user object")
     }
+
+    def write(obj: T): JsValue = JsString(obj.value)
   }
 
-  implicit object RawlsUserSubjectIdFormat extends UserAuthJsonFormatter[RawlsUserSubjectId] {
-    override def read(json: JsValue): RawlsUserSubjectId = json match {
-      case JsString(value) => RawlsUserSubjectId(value)
-      case _ => throw new DeserializationException("could not deserialize user object")
-    }
-  }
+  implicit val RawlsUserEmailFormat = UserAuthJsonFormatter(RawlsUserEmail)
 
-  implicit object RawlsGroupNameFormat extends UserAuthJsonFormatter[RawlsGroupName] {
-    override def read(json: JsValue): RawlsGroupName = json match {
-      case JsString(value) => RawlsGroupName(value)
-      case _ => throw new DeserializationException("could not deserialize user object")
-    }
-  }
+  implicit val RawlsUserSubjectIdFormat = UserAuthJsonFormatter(RawlsUserSubjectId)
 
-  implicit object RawlsGroupEmailFormat extends UserAuthJsonFormatter[RawlsGroupEmail] {
-    override def read(json: JsValue): RawlsGroupEmail = json match {
-      case JsString(value) => RawlsGroupEmail(value)
-      case _ => throw new DeserializationException("could not deserialize user object")
-    }
-  }
+  implicit val RawlsGroupNameFormat = UserAuthJsonFormatter(RawlsGroupName)
 
-  implicit object RawlsBillingProjectNameFormat extends UserAuthJsonFormatter[RawlsBillingProjectName] {
-    override def read(json: JsValue): RawlsBillingProjectName = json match {
-      case JsString(value) => RawlsBillingProjectName(value)
-      case _ => throw new DeserializationException("could not deserialize user object")
-    }
-  }
+  implicit val RawlsGroupEmailFormat = UserAuthJsonFormatter(RawlsGroupEmail)
+
+  implicit val RawlsBillingProjectNameFormat = UserAuthJsonFormatter(RawlsBillingProjectName)
 
   // need "apply" here so it doesn't choose the companion class
   implicit val RawlsUserFormat = jsonFormat2(RawlsUser.apply)
