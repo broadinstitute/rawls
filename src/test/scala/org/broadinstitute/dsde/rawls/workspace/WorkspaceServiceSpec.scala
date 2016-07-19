@@ -60,7 +60,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO
+      directoryDAO,
+      ProjectTemplate(Map.empty, Seq.empty)
     )_
 
     val execServiceBatchSize = 3

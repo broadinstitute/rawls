@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.routing.Directive.pimpApply
@@ -70,6 +71,15 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.ListBillingAccounts)
+      }
+    } ~
+    path("user" / "billing") {
+      post {
+        entity(as[CreateRawlsBillingProjectFullRequest]) { createRequest =>
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.CreateBillingProjectFull(createRequest.projectName, createRequest.billingAccount))
+        }
       }
     } ~
     path("user" / "group" / Segment) { groupName =>

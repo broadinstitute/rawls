@@ -5,6 +5,10 @@ import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
+import com.google.api.client.http.HttpResponseException
+import com.google.api.services.cloudbilling.Cloudbilling
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
@@ -21,6 +25,7 @@ import spray.http.{OAuth2BearerToken, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 import scala.collection.JavaConversions._
+import scala.util.Try
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
 
@@ -302,7 +307,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "extract error messages from Google HttpResponseExceptions" in {
     val exc = new HttpResponseException.Builder(403, "PERMISSION_DENIED", new HttpHeaders())
-        .setContent("""{
+      .setContent(
+        """{
                       |      "code" : 403,
                       |      "errors" : [ {
                       |        "domain" : "global",
@@ -314,8 +320,31 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
                       |    }""")
       .build()
     assertResult("Request had insufficient authentication scopes.") {
-      gcsDAO.getGoogleErrorMessage(exc)
+      gcsDAO.
+        getGoogleErrorMessage(exc)
     }
+  }
+
+  it should "create a project" in {
+    val projectName = RawlsBillingProjectName("dsde-test-" + UUID.randomUUID().toString.take(8))
+    try {
+      val billingAccount = RawlsBillingAccountName("billingAccounts/0089F0-98A321-679BA7")
+
+      val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
+      val projectServices = gcsConfig.getStringList("projectTemplate.services")
+
+      Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices)), Duration.Inf)
+    } finally {
+      deleteProject(projectName)
+    }
+  }
+
+  def deleteProject(projectName: RawlsBillingProjectName): Unit = {
+    val resMgr = gcsDAO.getCloudResourceManager(gcsDAO.getBillingServiceAccountCredential)
+    val billingManager = gcsDAO.getCloudBillingManager(gcsDAO.getBillingServiceAccountCredential)
+    val projectNameString = projectName.value
+    println(s"disabling billing for project $projectNameString: ${Try(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)).execute())}")
+    println(s"deleting project $projectNameString: ${Try(resMgr.projects().delete(projectNameString).execute())}")
   }
 
   private def when500( throwable: Throwable ): Boolean = {
