@@ -992,12 +992,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             status = WorkflowStatuses.Queued,
             statusLastChangedDate = DateTime.now,
             workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName),
-            inputResolutions = entityInputs.inputResolutions)
+            inputResolutions = entityInputs.inputResolutions
+          )
         }
+
+        val workflowFailures = failures map { entityInputs =>
+          Workflow(workflowId = None,
+            status = WorkflowStatuses.Failed,
+            statusLastChangedDate = DateTime.now,
+            workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName),
+            inputResolutions = entityInputs.inputResolutions,
+            messages = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.inputName + " - " + entityValue.error.get))
+           )
+        }
+
+        /**
         val workflowFailures = failures.map { entityInputs =>
           val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
           WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-        }
+        }*/
 
         val submission = Submission(submissionId = submissionId,
           submissionDate = DateTime.now(),
@@ -1005,8 +1018,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
-          workflows = workflows,
-          notstarted = workflowFailures,
+          workflows = workflows ++ workflowFailures,
+          notstarted = Nil,
           status = SubmissionStatuses.Submitted
         )
 
