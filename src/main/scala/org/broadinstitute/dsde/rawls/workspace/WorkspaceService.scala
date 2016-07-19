@@ -1006,12 +1006,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
            )
         }
 
-        /**
-        val workflowFailures = failures.map { entityInputs =>
-          val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
-          WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
-        }*/
-
         val submission = Submission(submissionId = submissionId,
           submissionDate = DateTime.now(),
           submitter = RawlsUser(userInfo),
