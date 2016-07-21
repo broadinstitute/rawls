@@ -14,13 +14,14 @@
 - [ ] **Submitter**: If you're adding new libraries, sign us up to security updates for them
 - [ ] Tell ![](http://i.imgur.com/9dLzbPd.png) that the PR exists if he wants to look at it **(apply requires_doge label)**
 - [ ] Anoint a lead reviewer (LR). **Assign PR to LR**
-- [ ] **LR**: Initial review by LR and others.
-- [ ] Review / update cycle:
+* Review cycle:
+  * LR reviews
   * Rest of team may comment on PR at will
   * **LR assigns to submitter** for feedback fixes
-  * Submitter updates documentation as needed
   * Submitter rebases to develop again if necessary
-  * Submitter makes further commits. DO NOT SQUASH. **Reassign to LR** for further feedback
+  * Submitter makes further commits. DO NOT SQUASH
+  * Submitter updates documentation as needed
+  * Submitter **reassigns to LR** for further feedback
 - [ ] ![](http://i.imgur.com/9dLzbPd.png) sign off
 - [ ] **LR** sign off
 - [ ] **Assign to submitter** to finalize
