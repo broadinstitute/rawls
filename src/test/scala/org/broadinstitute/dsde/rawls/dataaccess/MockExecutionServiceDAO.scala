@@ -7,7 +7,7 @@ import spray.http.StatusCodes
 import scala.concurrent.Future
 import scala.util.Success
 
-class MockExecutionServiceDAO(timeout:Boolean = false) extends ExecutionServiceDAO {
+class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "") extends ExecutionServiceDAO {
   var submitWdl: String = null
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None

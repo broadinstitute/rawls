@@ -4,7 +4,7 @@ import java.sql.Timestamp
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, ExecutionServiceId, SlickWorkspaceContext}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
@@ -21,7 +21,8 @@ case class WorkflowRecord(id: Long,
                           status: String,
                           statusLastChangedDate: Timestamp,
                           workflowEntityId: Long,
-                          recordVersion: Long
+                          recordVersion: Long,
+                          executionServiceKey: Option[String]
                          )
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
@@ -54,14 +55,16 @@ trait WorkflowComponent {
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def workflowEntityId = column[Long]("ENTITY_ID")
     def version = column[Long]("record_version")
+    def executionServiceKey = column[Option[String]]("EXEC_SERVICE_KEY")
 
-    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id)
 
     def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
     def statusIndex = index("idx_workflow_status", status)
+    def executionServiceKeyIndex = index("idx_workflow_exec_service_key", executionServiceKey)
 }
 
   class WorkflowMessageTable(tag: Tag) extends Table[WorkflowMessageRecord](tag, "WORKFLOW_MESSAGE") {
@@ -235,9 +238,22 @@ trait WorkflowComponent {
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) flatMap { rows =>
+        UpdateWorkflowStatusRawSql.actionForWorkflowRecs(workflows, newStatus) map { rows =>
           if (rows.head == workflows.size)
-            DBIO.successful(workflows.size)
+            workflows.size
+          else
+            throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+        }
+      }
+    }
+
+    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId): ReadWriteAction[Int] = {
+      if (workflows.isEmpty) {
+        DBIO.successful(0)
+      } else {
+        UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
+          if (rows.head == workflows.size)
+            workflows.size
           else
             throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
         }
@@ -394,6 +410,7 @@ trait WorkflowComponent {
 
     /**
      * Lists the submitter ids that have more workflows in statuses than count
+     *
      * @param count
      * @param statuses
      * @return seq of tuples, first element being the submitter id, second the workflow count
@@ -433,6 +450,11 @@ trait WorkflowComponent {
 
     def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {
       filter(wf => wf.externalId === externalId && wf.submissionId === submissionId)
+    }
+
+    def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
+      val statuses: Traversable[String] = WorkflowStatuses.runningStatuses map(_.toString)
+      filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses) )
     }
 
     def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType = {
@@ -479,6 +501,13 @@ trait WorkflowComponent {
       filter(rec => rec.submissionId === submissionId)
     }
 
+    def findWorkflowsByWorkspace(workspaceContext: SlickWorkspaceContext): WorkflowQueryType = {
+      for {
+        sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceId)
+        wf <- filter(w => w.submissionId === sub.id)
+      } yield wf
+    }
+
     def findWorkflowErrorsByWorkflowFailureId(workflowFailureId: Long) = {
       (workflowErrorQuery filter(_.workflowFailureId === workflowFailureId))
     }
@@ -503,7 +532,8 @@ trait WorkflowComponent {
         workflow.status.toString,
         new Timestamp(workflow.statusLastChangedDate.toDate.getTime),
         entityId,
-        0
+        0,
+        None
       )
     }
 
@@ -589,6 +619,19 @@ trait WorkflowComponent {
     def actionForCurrentStatusAndSubmission(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
       concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}").as[Int].map(_.head)
     }
+  }
+
+  private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
+    val driver: JdbcDriver = WorkflowComponent.this.driver
+
+    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1 "
+
+    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = {
+      val where = sql"where (id, record_version) in ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      concatSqlActions(update(newStatus, executionServiceId), where, workflowTuples, sql")").as[Int]
+    }
+
   }
 
   object workflowFailureQuery extends TableQuery(new WorkflowFailureTable(_)) {

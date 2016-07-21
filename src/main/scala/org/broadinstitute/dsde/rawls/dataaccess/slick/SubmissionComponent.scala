@@ -384,7 +384,7 @@ trait SubmissionComponent {
       case class WorkflowMessagesListResult(workflowRecord: WorkflowRecord, entityRecord: EntityRecord, messageRecord: Option[WorkflowMessageRecord])
 
       implicit val getWorkflowMessagesListResult = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val entityRec = EntityRecord(workflowRec.workflowEntityId, r.<<, r.<<, r.<<, r.<<, None)
 
         val messageOption: Option[String] = r.<<
@@ -393,7 +393,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, e.name, e.entity_type, e.workspace_id, e.record_version, m.MESSAGE
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, e.name, e.entity_type, e.workspace_id, e.record_version, m.MESSAGE
         from WORKFLOW w
         join ENTITY e on w.ENTITY_ID = e.id
         left outer join WORKFLOW_MESSAGE m on m.workflow_id = w.id
@@ -406,7 +406,7 @@ trait SubmissionComponent {
       case class WorkflowInputResolutionListResult(workflowRecord: WorkflowRecord, submissionValidationRec: Option[SubmissionValidationRecord], submissionAttributeRec: Option[SubmissionAttributeRecord])
 
       implicit val getWorkflowInputResolutionListResult = GetResult { r =>
-        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+        val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
             ( Option(SubmissionValidationRecord(submissionValidationId, Option(workflowRec.id), r.<<, r.<<, r.<<)),
@@ -417,7 +417,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, sv.id, sv.WORKFLOW_FAILURE_ID, sv.ERROR_TEXT, sv.INPUT_NAME, sa.id, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, sv.id, sv.WORKFLOW_FAILURE_ID, sv.ERROR_TEXT, sv.INPUT_NAME, sa.id, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
         from WORKFLOW w
         left outer join SUBMISSION_VALIDATION sv on sv.workflow_id = w.id
         left outer join SUBMISSION_ATTRIBUTE sa on sa.owner_id = sv.id

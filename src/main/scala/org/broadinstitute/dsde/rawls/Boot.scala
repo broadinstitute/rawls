@@ -87,20 +87,15 @@ object Boot extends App with LazyLogging {
 
     val executionServiceConfig = conf.getConfig("executionservice")
     val submissionTimeout = toScalaDuration(executionServiceConfig.getDuration("workflowSubmissionTimeout"))
-    val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
-    val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
-    // use the default as the only server until we actually deploy multiple
-    // we will always need to check that the default server exists in the map
-    val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
-      throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
 
-    val executionServiceDAO = new HttpExecutionServiceDAO(
-      executionServiceServer,
-      submissionTimeout
-    )
+    val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = executionServiceConfig.getObject("servers").map {
+        case (strName, strHostname) => (ExecutionServiceId(strName)->new HttpExecutionServiceDAO(strHostname.unwrapped.toString, submissionTimeout))
+      }.toMap
+
+    val shardedExecutionServiceCluster:ExecutionServiceCluster = new ShardedHttpExecutionServiceCluster(executionServiceServers, slickDataSource)
 
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceDAO,
+      shardedExecutionServiceCluster,
       slickDataSource
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
@@ -113,17 +108,19 @@ object Boot extends App with LazyLogging {
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))
 
+    val maxActiveWorkflowsTotal = conf.getInt("executionservice.maxActiveWorkflowsPerServer") * executionServiceServers.size
+    val maxActiveWorkflowsPerUser = maxActiveWorkflowsTotal / conf.getInt("executionservice.activeWorkflowHogFactor")
     for(i <- 0 until conf.getInt("executionservice.parallelSubmitters")) {
       system.actorOf(WorkflowSubmissionActor.props(
         slickDataSource,
         methodRepoDAO,
         gcsDAO,
-        executionServiceDAO,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO.getBucketServiceAccountCredential,
         toScalaDuration(conf.getDuration("executionservice.pollInterval")),
-        conf.getInt("executionservice.maxActiveWorkflowsTotal"),
-        conf.getInt("executionservice.maxActiveWorkflowsPerUser"),
+        maxActiveWorkflowsTotal,
+        maxActiveWorkflowsPerUser,
         Try(conf.getObject("executionservice.defaultRuntimeOptions").render(ConfigRenderOptions.concise()).parseJson).toOption
       ))
     }
@@ -132,7 +129,7 @@ object Boot extends App with LazyLogging {
       WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
-        executionServiceDAO,
+        shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
         submissionSupervisor,

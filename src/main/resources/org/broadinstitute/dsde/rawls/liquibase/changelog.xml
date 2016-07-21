@@ -16,4 +16,6 @@
     <include file="changesets/20160523_notnull_workflow_entities.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160526_analysis_status_refactor.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160609_all_attributes_column.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160613_workflow_execution_url.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160715_execution_key_default.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
