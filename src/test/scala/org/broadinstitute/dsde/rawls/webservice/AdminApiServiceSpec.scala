@@ -1032,4 +1032,15 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
   }}
+
+  it should "return statistics on firecloud" in withTestDataApiServices { services =>
+    import spray.json._
+    Get("/admin/statistics?startDate=2010-10-10&endDate=2011-10-10") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
 }
