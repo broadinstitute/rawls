@@ -212,14 +212,16 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "handle failures getting workspace bucket" in {
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, testProject, testWorkspaceId, testWorkspace, None), Duration.Inf)
+    val random = scala.util.Random
+    val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, testProject, testWorkspaceId, testWorkspace, None), Duration.Inf)
 
-    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testCreator.userSubjectId))
+    val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testUser.userSubjectId))
 
     Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf)) //quickest way to remove access to a workspace bucket
 
-    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo, s"fc-${testWorkspaceId}"), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
+    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), s"fc-${testWorkspaceId}"), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
   }
 
