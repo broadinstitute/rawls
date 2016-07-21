@@ -466,5 +466,36 @@ trait SubmissionComponent {
         }
       }
     }
+
+    object SubmissionStatisticsQueries extends RawSqlQuery {
+      val driver: JdbcDriver = SubmissionComponent.this.driver
+
+      def countSubmissionsPerUserQuery(startDate: String, endDate: String) = {
+        sql"""select min(count), max(count), avg(count), stddev(count)
+               from (select count(1) as count from SUBMISSION
+               where DATE_SUBMITTED>=$startDate and DATE_SUBMITTED<=$endDate
+               group by SUBMITTER) as counts""".as[SummaryStatistics]
+      }
+
+      def submissionRunTimeQuery(startDate: String, endDate: String) = {
+        sql"""select min(seconds), max(seconds), avg(seconds), stddev(seconds)
+              from (select TIMESTAMPDIFF(SECOND, MIN(timestamp), MAX(timestamp)) as seconds,
+                    MIN(timestamp) as start
+                    from AUDIT_SUBMISSION_STATUS
+                    group by submission_id
+                    having start between $startDate and $endDate
+              ) as runtimes""".as[SummaryStatistics]
+      }
+
+      def countSubmissionsInWindow(startDate: String, endDate: String) = {
+        sql"""select count(1) from SUBMISSION
+              where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+      }
+
+      def countUsersWhoSubmittedInWindow(startDate: String, endDate: String) = {
+        sql"""select count(distinct SUBMITTER) from SUBMISSION
+              where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+      }
+    }
   }
 }

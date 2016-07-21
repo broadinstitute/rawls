@@ -961,6 +961,38 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/statistics':
+    get:
+      responses:
+        '200':
+          description: FireCloud statistics
+        '403':
+          description: You must be an admin
+        '500':
+          description: Rawls Internal Error
+      description: retrieve statistics for a window on FireCloud
+      tags:
+        - admin
+      summary: retrieve statistics on FireCloud
+      operationId: admin_statistics_get
+      parameters:
+        - in: query
+          description: start date (YYYY-MM-DD)
+          name: startDate
+          required: true
+          type: string
+          format: date
+        - in: query
+          description: end date (YYYY-MM-DD)
+          name: endDate
+          required: true
+          type: string
+          format: date
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/workspaces/{workspaceNamespace}/{workspaceName}/submissions':
     get:
       responses:

@@ -34,6 +34,10 @@ trait RawlsUserComponent {
       rawlsUserQuery.result map { _ map unmarshalRawlsUser }
     }
 
+    def countUsers(): ReadAction[Int] = {
+      rawlsUserQuery.countDistinct.result
+    }
+
     def loadUserByEmail(userEmail: RawlsUserEmail): ReadAction[Option[RawlsUser]] = {
       loadCommon(findUserByEmail(userEmail.value))
     }

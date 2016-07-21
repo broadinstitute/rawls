@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.joda.time.DateTime
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
+import slick.jdbc.GetResult
 
 /**
  * Created by mbemis on 2/18/16.
@@ -568,6 +569,43 @@ trait WorkflowComponent {
     def deleteFailureResolutions(workflowFailureId: Long): DBIOAction[Int, NoStream, Read with Write] = {
       deleteWorkflowFailureAttributes(workflowFailureId) andThen
         findInputResolutionsByFailureId(workflowFailureId).delete
+    }
+
+
+    object WorkflowStatisticsQueries extends RawSqlQuery {
+      val driver: JdbcDriver = WorkflowComponent.this.driver
+
+      def countWorkflowsPerUserQuery(startDate: String, endDate: String) = {
+        sql"""select min(count), max(count), avg(count), stddev(count)
+              from (select count(1) as count from WORKFLOW w
+              join SUBMISSION s on s.ID=w.SUBMISSION_ID
+              where s.DATE_SUBMITTED>=$startDate and s.DATE_SUBMITTED<=$endDate
+              group by s.SUBMITTER) as counts""".as[SummaryStatistics]
+      }
+
+      def countWorkflowsPerSubmission(startDate: String, endDate: String) = {
+        sql"""select min(count), max(count), avg(count), stddev(count)
+              from (select count(1) as count from WORKFLOW w
+              join SUBMISSION s on s.ID=w.SUBMISSION_ID
+              where s.DATE_SUBMITTED>=$startDate and s.DATE_SUBMITTED<=$endDate
+              group by w.SUBMISSION_ID) as counts""".as[SummaryStatistics]
+      }
+
+      def workflowRunTimeQuery(startDate: String, endDate: String) = {
+        sql"""select min(seconds), max(seconds), avg(seconds), stddev(seconds)
+              from (select TIMESTAMPDIFF(SECOND, MIN(timestamp), MAX(timestamp)) as seconds,
+                    MIN(timestamp) as start
+                    from AUDIT_WORKFLOW_STATUS
+                    group by workflow_id
+                    having start between $startDate and $endDate
+              ) as runtimes""".as[SummaryStatistics]
+      }
+
+      def countWorkflowsInWindow(startDate: String, endDate: String) = {
+        sql"""select count(1) from WORKFLOW w
+              join SUBMISSION s on s.ID=w.SUBMISSION_ID
+              where s.DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+      }
     }
   }
 
