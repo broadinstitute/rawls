@@ -18,11 +18,8 @@ trait IntegrationTestConfig {
 
   val executionServiceConfig = jenkinsConf.withFallback(etcConf).getConfig("executionservice")
   val executionServiceServers = executionServiceConfig.getObject("servers").mapValues(_.unwrapped.toString)
-  val defaultExecutionServiceServerName = executionServiceConfig.getString("defaultServerName")
-  // use the default as the only server until we actually deploy multiple
-  // we will always need to check that the default server exists in the map
-  val executionServiceServer = executionServiceServers.getOrElse(defaultExecutionServiceServerName,
-    throw new RawlsException(s"Default server $defaultExecutionServiceServerName missing from the map of available execution service servers"))
+  // use the first cromwell in the cluster as our integration test server
+  val executionServiceServer = executionServiceServers.values.head
 
   val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
 
