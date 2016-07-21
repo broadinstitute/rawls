@@ -40,7 +40,7 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
 
   def getStatistics(startDate: String, endDate: String): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      if(DateTime.parse(startDate).isAfter(DateTime.parse(endDate)))
+      if(DateTime.parse(startDate).getMillis >= DateTime.parse(endDate).getMillis)
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Invalid date range"))
       for {
         currentTotalUsers <- dataAccess.rawlsUserQuery.countUsers()

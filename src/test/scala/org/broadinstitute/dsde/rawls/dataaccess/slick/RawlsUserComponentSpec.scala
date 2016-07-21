@@ -62,4 +62,22 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(rawlsUserQuery.loadUserByEmail(user.userEmail))
     }
   }
+
+  it should "count users" in withEmptyTestDatabase {
+    assertResult(0) {
+      runAndWait(rawlsUserQuery.countUsers())
+    }
+
+    val subjId = RawlsUserSubjectId("Subject")
+    val email = RawlsUserEmail("email@hotmail.com")
+    val user = RawlsUser(subjId, email)
+
+    assertResult(user) {
+      runAndWait(rawlsUserQuery.save(user))
+    }
+
+    assertResult(1) {
+      runAndWait(rawlsUserQuery.countUsers())
+    }
+  }
 }
