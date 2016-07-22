@@ -42,25 +42,30 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
     dataSource.inTransaction { dataAccess =>
       if(DateTime.parse(startDate).getMillis >= DateTime.parse(endDate).getMillis)
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Invalid date range"))
+      val submissionStatistics = dataAccess.submissionQuery.SubmissionStatisticsQueries
+      val workflowStatistics = dataAccess.workflowQuery.WorkflowStatisticsQueries
       for {
         currentTotalUsers <- dataAccess.rawlsUserQuery.countUsers()
-        submissionsDuringWindow <- dataAccess.submissionQuery.SubmissionStatisticsQueries.countSubmissionsInWindow(startDate, endDate)
-        workflowsDuringWindow <- dataAccess.workflowQuery.WorkflowStatisticsQueries.countWorkflowsInWindow(startDate, endDate)
-        usersWhoSubmittedDuringWindow <- dataAccess.submissionQuery.SubmissionStatisticsQueries.countUsersWhoSubmittedInWindow(startDate, endDate)
-        submissionsPerUser <- dataAccess.submissionQuery.SubmissionStatisticsQueries.countSubmissionsPerUserQuery(startDate, endDate)
-        workflowsPerUser <- dataAccess.workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerUserQuery(startDate, endDate)
-        workflowsPerSubmission <- dataAccess.workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerSubmission(startDate, endDate)
-        submissionRunTime <- dataAccess.submissionQuery.SubmissionStatisticsQueries.submissionRunTimeQuery(startDate, endDate)
-        workflowRunTime <- dataAccess.workflowQuery.WorkflowStatisticsQueries.workflowRunTimeQuery(startDate, endDate)
-      } yield RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, Map("currentTotalUsers" -> SingleStatistic(currentTotalUsers),
-                                                                   "submissionsDuringWindow" -> submissionsDuringWindow.head,
-                                                                   "workflowsDuringWindow" -> workflowsDuringWindow.head,
-                                                                   "usersWhoSubmittedDuringWindow" -> usersWhoSubmittedDuringWindow.head,
-                                                                   "submissionsPerUser" -> submissionsPerUser.head,
-                                                                   "workflowsPerUser" -> workflowsPerUser.head,
-                                                                   "workflowsPerSubmission" -> workflowsPerSubmission.head,
-                                                                   "submissionRunTimeSeconds" -> submissionRunTime.head,
-                                                                   "workflowRunTimeSeconds" -> workflowRunTime.head)))
+        submissionsDuringWindow <- submissionStatistics.countSubmissionsInWindow(startDate, endDate)
+        workflowsDuringWindow <- workflowStatistics.countWorkflowsInWindow(startDate, endDate)
+        usersWhoSubmittedDuringWindow <- submissionStatistics.countUsersWhoSubmittedInWindow(startDate, endDate)
+        submissionsPerUser <- submissionStatistics.countSubmissionsPerUserQuery(startDate, endDate)
+        workflowsPerUser <- workflowStatistics.countWorkflowsPerUserQuery(startDate, endDate)
+        workflowsPerSubmission <- workflowStatistics.countWorkflowsPerSubmission(startDate, endDate)
+        submissionRunTime <- submissionStatistics.submissionRunTimeQuery(startDate, endDate)
+        workflowRunTime <- workflowStatistics.workflowRunTimeQuery(startDate, endDate)
+      } yield RequestComplete(StatusCodes.OK,
+          StatisticsReport(startDate, endDate, Map("currentTotalUsers" -> SingleStatistic(currentTotalUsers),
+            "submissionsDuringWindow" -> submissionsDuringWindow.head,
+            "workflowsDuringWindow" -> workflowsDuringWindow.head,
+            "usersWhoSubmittedDuringWindow" -> usersWhoSubmittedDuringWindow.head,
+            "submissionsPerUser" -> submissionsPerUser.head,
+            "workflowsPerUser" -> workflowsPerUser.head,
+            "workflowsPerSubmission" -> workflowsPerSubmission.head,
+            "submissionRunTimeSeconds" -> submissionRunTime.head,
+            "workflowRunTimeSeconds" -> workflowRunTime.head)
+          )
+        )
     }
   }
 }
