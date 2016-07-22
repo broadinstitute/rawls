@@ -9,7 +9,7 @@ import spray.json._
 sealed trait Statistic
 case class SingleStatistic(value: Double) extends Statistic
 case class SummaryStatistics(min: Double, max: Double, mean: Double, stddev: Double) extends Statistic
-case class StatisticsReport(statistics: Map[String, Statistic])
+case class StatisticsReport(startDate: String, endDate: String, statistics: Map[String, Statistic])
 
 object StatisticsJsonSupport extends JsonSupport {
   implicit val SingleStatisticFormat = jsonFormat1(SingleStatistic)
@@ -25,5 +25,5 @@ object StatisticsJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val StatisticsReportFormat = jsonFormat1(StatisticsReport)
+  implicit val StatisticsReportFormat = jsonFormat3(StatisticsReport)
 }

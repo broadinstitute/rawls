@@ -52,7 +52,7 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
         workflowsPerSubmission <- dataAccess.workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerSubmission(startDate, endDate)
         submissionRunTime <- dataAccess.submissionQuery.SubmissionStatisticsQueries.submissionRunTimeQuery(startDate, endDate)
         workflowRunTime <- dataAccess.workflowQuery.WorkflowStatisticsQueries.workflowRunTimeQuery(startDate, endDate)
-      } yield RequestComplete(StatusCodes.OK, StatisticsReport(Map("currentTotalUsers" -> SingleStatistic(currentTotalUsers),
+      } yield RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, Map("currentTotalUsers" -> SingleStatistic(currentTotalUsers),
                                                                    "submissionsDuringWindow" -> submissionsDuringWindow.head,
                                                                    "workflowsDuringWindow" -> workflowsDuringWindow.head,
                                                                    "usersWhoSubmittedDuringWindow" -> usersWhoSubmittedDuringWindow.head,
