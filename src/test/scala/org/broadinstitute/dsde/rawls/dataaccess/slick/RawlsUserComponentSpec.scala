@@ -64,7 +64,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "count users" in withEmptyTestDatabase {
-    assertResult(0) {
+    assertResult(SingleStatistic(0)) {
       runAndWait(rawlsUserQuery.countUsers())
     }
 
@@ -76,7 +76,7 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(rawlsUserQuery.save(user))
     }
 
-    assertResult(1) {
+    assertResult(SingleStatistic(1)) {
       runAndWait(rawlsUserQuery.countUsers())
     }
   }
