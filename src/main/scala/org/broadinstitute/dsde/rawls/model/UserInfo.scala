@@ -9,7 +9,8 @@ import spray.http.OAuth2BearerToken
 case class UserInfo(userEmail: String, accessToken: OAuth2BearerToken, accessTokenExpiresIn: Long, userSubjectId: String)
 
 object UserInfo {
-  // TODO: handle failure cases
+  // TODO (GAWB-898): merge this code with HttpGoogleServicesDAO.getRawlsUserForCreds() ?
+  // - also covers handling failure cases better
   def buildFromTokens(credential: Credential): UserInfo = {
     val expiresInSeconds: Long = Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0)
     // TODO: alternate expiration test
