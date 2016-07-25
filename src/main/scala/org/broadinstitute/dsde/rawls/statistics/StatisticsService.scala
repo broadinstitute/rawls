@@ -64,8 +64,11 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
         DBIO.successful(name).zip(func(startDate, endDate))
       }
 
-      DBIO.sequence(actions).map { results =>
-        RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, results.toMap))
+      DBIO.sequence(actions).flatMap { results =>
+        dataAccess.rawlsUserQuery.countUsers() map { numUsers =>
+          val allResults = (results.toMap + ("currentTotalUsers" -> numUsers))
+          RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, allResults))
+        }
       }
     }
   }
