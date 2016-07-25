@@ -582,7 +582,7 @@ trait WorkflowComponent {
                     join SUBMISSION s on s.ID=w.SUBMISSION_ID
                     where s.DATE_SUBMITTED between $startDate and $endDate
                     group by s.SUBMITTER
-                ) as counts""".as[SummaryStatistics]
+                ) as counts""".as[SummaryStatistics].head
       }
 
       def countWorkflowsPerSubmission(startDate: String, endDate: String) = {
@@ -592,7 +592,7 @@ trait WorkflowComponent {
                     join SUBMISSION s on s.ID=w.SUBMISSION_ID
                     where s.DATE_SUBMITTED between $startDate and $endDate
                     group by w.SUBMISSION_ID
-                ) as counts""".as[SummaryStatistics]
+                ) as counts""".as[SummaryStatistics].head
       }
 
       def workflowRunTimeQuery(startDate: String, endDate: String) = {
@@ -602,13 +602,13 @@ trait WorkflowComponent {
                     from WORKFLOW w join AUDIT_WORKFLOW_STATUS a on w.ID=a.workflow_id
                     where w.STATUS in ("Succeeded") and a.STATUS in ("Queued","Succeeded")
                     and a.timestamp between $startDate and $endDate group by a.workflow_id
-                ) as runtimes""".as[SummaryStatistics]
+                ) as runtimes""".as[SummaryStatistics].head
       }
 
       def countWorkflowsInWindow(startDate: String, endDate: String) = {
         sql"""select count(1) from WORKFLOW w
                 join SUBMISSION s on s.ID=w.SUBMISSION_ID
-                where s.DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+                where s.DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic].head
       }
     }
   }

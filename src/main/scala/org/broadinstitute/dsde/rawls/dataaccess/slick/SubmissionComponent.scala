@@ -474,7 +474,7 @@ trait SubmissionComponent {
         sql"""select min(count), max(count), avg(count), stddev(count)
                 from (select count(1) as count from SUBMISSION
                 where DATE_SUBMITTED between $startDate and $endDate
-                group by SUBMITTER) as counts""".as[SummaryStatistics]
+                group by SUBMITTER) as counts""".as[SummaryStatistics].head
       }
 
       def submissionRunTimeQuery(startDate: String, endDate: String) = {
@@ -484,17 +484,17 @@ trait SubmissionComponent {
                     from SUBMISSION s join AUDIT_SUBMISSION_STATUS a on s.ID=a.submission_id
                     where s.STATUS in ("Done") and a.STATUS in ("Done")
                     and a.timestamp between $startDate and $endDate
-                ) as runtimes""".as[SummaryStatistics]
+                ) as runtimes""".as[SummaryStatistics].head
       }
 
       def countSubmissionsInWindow(startDate: String, endDate: String) = {
         sql"""select count(1) from SUBMISSION
-                where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+                where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic].head
       }
 
       def countUsersWhoSubmittedInWindow(startDate: String, endDate: String) = {
         sql"""select count(distinct SUBMITTER) from SUBMISSION
-                where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic]
+                where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic].head
       }
     }
   }

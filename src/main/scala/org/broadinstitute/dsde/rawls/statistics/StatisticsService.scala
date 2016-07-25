@@ -4,6 +4,7 @@ import akka.actor.{Actor, Props}
 import akka.pattern._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.StatisticsJsonSupport._
 
 import org.broadinstitute.dsde.rawls.model._
@@ -34,6 +35,8 @@ object StatisticsService {
 
 class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
 
+  import dataSource.dataAccess.driver.api._
+
   override def receive = {
     case GetStatistics(startDate, endDate) => asAdmin {getStatistics(startDate, endDate)} pipeTo sender
   }
@@ -42,30 +45,28 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
     dataSource.inTransaction { dataAccess =>
       if(DateTime.parse(startDate).getMillis >= DateTime.parse(endDate).getMillis)
         throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Invalid date range"))
+
       val submissionStatistics = dataAccess.submissionQuery.SubmissionStatisticsQueries
       val workflowStatistics = dataAccess.workflowQuery.WorkflowStatisticsQueries
-      for {
-        currentTotalUsers <- dataAccess.rawlsUserQuery.countUsers()
-        submissionsDuringWindow <- submissionStatistics.countSubmissionsInWindow(startDate, endDate)
-        workflowsDuringWindow <- workflowStatistics.countWorkflowsInWindow(startDate, endDate)
-        usersWhoSubmittedDuringWindow <- submissionStatistics.countUsersWhoSubmittedInWindow(startDate, endDate)
-        submissionsPerUser <- submissionStatistics.countSubmissionsPerUserQuery(startDate, endDate)
-        workflowsPerUser <- workflowStatistics.countWorkflowsPerUserQuery(startDate, endDate)
-        workflowsPerSubmission <- workflowStatistics.countWorkflowsPerSubmission(startDate, endDate)
-        submissionRunTime <- submissionStatistics.submissionRunTimeQuery(startDate, endDate)
-        workflowRunTime <- workflowStatistics.workflowRunTimeQuery(startDate, endDate)
-      } yield RequestComplete(StatusCodes.OK,
-          StatisticsReport(startDate, endDate, Map("currentTotalUsers" -> SingleStatistic(currentTotalUsers),
-            "submissionsDuringWindow" -> submissionsDuringWindow.head,
-            "workflowsDuringWindow" -> workflowsDuringWindow.head,
-            "usersWhoSubmittedDuringWindow" -> usersWhoSubmittedDuringWindow.head,
-            "submissionsPerUser" -> submissionsPerUser.head,
-            "workflowsPerUser" -> workflowsPerUser.head,
-            "workflowsPerSubmission" -> workflowsPerSubmission.head,
-            "submissionRunTimeSeconds" -> submissionRunTime.head,
-            "workflowRunTimeSeconds" -> workflowRunTime.head)
-          )
-        )
+
+      val statistics = Map[String, (String, String) => ReadAction[Statistic]](
+        "submissionsDuringWindow" ->  submissionStatistics.countSubmissionsInWindow,
+        "workflowsDuringWindow" -> workflowStatistics.countWorkflowsInWindow,
+        "usersWhoSubmittedDuringWindow" -> submissionStatistics.countUsersWhoSubmittedInWindow,
+        "submissionsPerUser" -> submissionStatistics.countSubmissionsPerUserQuery,
+        "workflowsPerUser" -> workflowStatistics.countWorkflowsPerUserQuery,
+        "workflowsPerSubmission" -> workflowStatistics.countWorkflowsPerSubmission,
+        "submissionRunTime" -> submissionStatistics.submissionRunTimeQuery,
+        "workflowRunTime" -> workflowStatistics.workflowRunTimeQuery
+      )
+
+      val actions = statistics.map { case (name,func) =>
+        DBIO.successful(name).zip(func(startDate, endDate))
+      }
+
+      DBIO.sequence(actions).map { results =>
+        RequestComplete(StatusCodes.OK, StatisticsReport(startDate, endDate, results.toMap))
+      }
     }
   }
 }
