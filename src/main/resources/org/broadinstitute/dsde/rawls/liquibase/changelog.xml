@@ -18,4 +18,5 @@
     <include file="changesets/20160609_all_attributes_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160613_workflow_execution_url.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160715_execution_key_default.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160725_refactor_text_columns.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

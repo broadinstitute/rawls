@@ -72,7 +72,7 @@ trait SubmissionComponent {
     def workflowId = column[Option[Long]]("WORKFLOW_ID")
     def workflowFailureId = column[Option[Long]]("WORKFLOW_FAILURE_ID")
     def errorText = column[Option[String]]("ERROR_TEXT")
-    def inputName = column[String]("INPUT_NAME")
+    def inputName = column[String]("INPUT_NAME", O.Length(254))
 
     def * = (id, workflowId, workflowFailureId, errorText, inputName) <> (SubmissionValidationRecord.tupled, SubmissionValidationRecord.unapply)
 
