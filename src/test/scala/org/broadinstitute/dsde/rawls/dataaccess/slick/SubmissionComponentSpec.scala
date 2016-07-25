@@ -133,13 +133,13 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   //if this unit test breaks, chances are you have added a submission to the test data which has changed the values below
   it should "gather submission statistics" in withDefaultTestDatabase {
-    val submissionsRun = runAndWait(submissionQuery.SubmissionStatisticsQueries.countSubmissionsInWindow("2010-01-01", "2100-01-01")).head
+    val submissionsRun = runAndWait(submissionQuery.SubmissionStatisticsQueries.countSubmissionsInWindow("2010-01-01", "2100-01-01"))
     assert(submissionsRun.value == 6)
-    val usersWhoSubmitted = runAndWait(submissionQuery.SubmissionStatisticsQueries.countUsersWhoSubmittedInWindow("2010-01-01", "2100-01-01")).head
+    val usersWhoSubmitted = runAndWait(submissionQuery.SubmissionStatisticsQueries.countUsersWhoSubmittedInWindow("2010-01-01", "2100-01-01"))
     assert(usersWhoSubmitted.value == 1)
-    val workflowsPerActiveUser = runAndWait(submissionQuery.SubmissionStatisticsQueries.countSubmissionsPerUserQuery("2010-01-01", "2100-01-01")).head
+    val workflowsPerActiveUser = runAndWait(submissionQuery.SubmissionStatisticsQueries.countSubmissionsPerUserQuery("2010-01-01", "2100-01-01"))
     assert(workflowsPerActiveUser == SummaryStatistics(6.0,6.0,6.0,0.0))
-    val submissionRunTimes = runAndWait(submissionQuery.SubmissionStatisticsQueries.submissionRunTimeQuery("2010-01-01", "2100-01-01")).head
+    val submissionRunTimes = runAndWait(submissionQuery.SubmissionStatisticsQueries.submissionRunTimeQuery("2010-01-01", "2100-01-01"))
     assert(submissionRunTimes == SummaryStatistics(0.0,0.0,0.0,0.0))
   }
 
@@ -215,13 +215,13 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   //if this unit test breaks, chances are you have added a workflow to the test data which has changed the values below
   it should "gather workflow statistics" in withDefaultTestDatabase {
-    val workflowsRun = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsInWindow("2010-01-01", "2100-01-01")).head
+    val workflowsRun = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsInWindow("2010-01-01", "2100-01-01"))
     assert(workflowsRun.value == 12)
-    val workflowsPerSubmission = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerSubmission("2010-01-01", "2100-01-01")).head
+    val workflowsPerSubmission = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerSubmission("2010-01-01", "2100-01-01"))
     assert(workflowsPerSubmission == SummaryStatistics(1.0,4.0,2.4,1.2))
-    val workflowsPerActiveUser = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerUserQuery("2010-01-01", "2100-01-01")).head
+    val workflowsPerActiveUser = runAndWait(workflowQuery.WorkflowStatisticsQueries.countWorkflowsPerUserQuery("2010-01-01", "2100-01-01"))
     assert(workflowsPerActiveUser == SummaryStatistics(12.0,12.0,12.0,0.0))
-    val workflowRunTimes = runAndWait(workflowQuery.WorkflowStatisticsQueries.workflowRunTimeQuery("2010-01-01", "2100-01-01")).head
+    val workflowRunTimes = runAndWait(workflowQuery.WorkflowStatisticsQueries.workflowRunTimeQuery("2010-01-01", "2100-01-01"))
     assert(workflowRunTimes == SummaryStatistics(0.0,0.0,0.0,0.0))
   }
 }
