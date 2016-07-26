@@ -20,9 +20,7 @@ object StatisticsJsonSupport extends JsonSupport {
       case SingleStatistic(value) => JsObject(Map("value" -> JsNumber(value)))
       case SummaryStatistics(min, max, mean, stddev) => JsObject(Map("min" -> JsNumber(min), "max" -> JsNumber(max), "mean" -> JsNumber(mean), "stddev" -> JsNumber(stddev)))
     }
-    override def read(json: JsValue): Statistic = json match {
-      case _ => throw new DeserializationException("unexpected json type")
-    }
+    override def read(json: JsValue): Statistic = ???
   }
 
   implicit val StatisticsReportFormat = jsonFormat3(StatisticsReport)
