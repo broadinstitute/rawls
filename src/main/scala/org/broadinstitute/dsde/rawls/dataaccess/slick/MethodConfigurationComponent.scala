@@ -4,7 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.model.{MethodConfigurationShort, MethodRepoMethod, AttributeString, MethodConfiguration}
+import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
 
 case class MethodConfigurationRecord(id: Long,
@@ -96,15 +96,13 @@ trait MethodConfigurationComponent {
     def save(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
 
       def saveMaps(configId: Long) = {
-        DBIO.seq(methodConfig.prerequisites.map { case (key, value) =>
-          (methodConfigurationPrereqQuery returning methodConfigurationPrereqQuery.map(_.id)) += marshalConfigPrereq(configId, key, value)
-        }.toSeq: _*) andThen
-        DBIO.seq(methodConfig.inputs.map { case (key, value) =>
-          (methodConfigurationInputQuery returning methodConfigurationInputQuery.map(_.id)) += marshalConfigInput(configId, key, value)
-        }.toSeq: _*) andThen
-        DBIO.seq(methodConfig.outputs.map { case (key, value) =>
-          (methodConfigurationOutputQuery returning methodConfigurationOutputQuery.map(_.id)) +=  marshalConfigOutput(configId, key, value)
-        }.toSeq: _*)
+        val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
+        val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
+        val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }
+
+        (methodConfigurationPrereqQuery ++= prerequisites) andThen
+          (methodConfigurationInputQuery ++= inputs) andThen
+            (methodConfigurationOutputQuery ++= outputs)
       }
 
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
@@ -117,6 +115,7 @@ trait MethodConfigurationComponent {
           findInputsByConfigId(methodConfigRec.id).delete andThen
             findOutputsByConfigId(methodConfigRec.id).delete andThen
             findPrereqsByConfigId(methodConfigRec.id).delete andThen
+            findById(methodConfigRec.id).map(rec => (rec.methodNamespace, rec.methodName, rec.methodVersion)).update(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion) andThen
             saveMaps(methodConfigRec.id) andThen
             findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name).map(_.rootEntityType).update(methodConfig.rootEntityType)
       }
