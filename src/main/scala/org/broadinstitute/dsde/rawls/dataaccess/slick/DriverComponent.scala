@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.model.{Attributable, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{SingleStatistic, SummaryStatistics, Attributable, ErrorReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import slick.driver.JdbcDriver
 import slick.jdbc.{SQLActionBuilder, PositionedParameters, SetParameter, GetResult}
@@ -71,6 +71,9 @@ trait RawSqlQuery {
   implicit val GetUUIDOptionResult = GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
   implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
   implicit object SetUUIDOptionParameter extends SetParameter[Option[UUID]] { def apply(v: Option[UUID], pp: PositionedParameters) { pp.setBytesOption(v.map(uuidColumnType.toBytes)) } }
+
+  implicit val getSummaryStatisticsResult = GetResult { r => SummaryStatistics(r.<<, r.<<, r.<<, r.<<) }
+  implicit val getSingleStatisticResult = GetResult { r => SingleStatistic(r.<<) }
 
   def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder = {
     SQLActionBuilder(builders.flatMap(_.queryParts), new SetParameter[Unit] {

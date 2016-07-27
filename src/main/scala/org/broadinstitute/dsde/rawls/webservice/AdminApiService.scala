@@ -9,8 +9,10 @@ import java.net.URLDecoder
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.joda.time.DateTime
 import spray.routing._
 
 import scala.concurrent.ExecutionContext
@@ -24,6 +26,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val userServiceConstructor: UserInfo => UserService
   val genomicsServiceConstructor: UserInfo => GenomicsService
+  val statisticsServiceConstructor: UserInfo => StatisticsService
 
   val adminRoutes = requireUserInfo() { userInfo =>
     path("admin" / "billing" / "list" / Segment) { (userEmail) =>
@@ -231,6 +234,16 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           GenomicsService.props(genomicsServiceConstructor, userInfo),
           GenomicsService.GetOperation(jobId)
         )
+      }
+    } ~
+    path("admin" / "statistics") {
+      get {
+        parameters('startDate, 'endDate) { (startDate, endDate) =>
+          requestContext => perRequest(requestContext,
+            StatisticsService.props(statisticsServiceConstructor, userInfo),
+            StatisticsService.GetStatistics(startDate, endDate)
+          )
+        }
       }
     }
   }
