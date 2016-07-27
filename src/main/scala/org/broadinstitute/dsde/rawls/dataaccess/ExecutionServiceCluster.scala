@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
 
-import scala.concurrent.{Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 /**
@@ -16,7 +15,6 @@ trait ExecutionServiceCluster extends ErrorReportable {
   // ====================
   // facade methods
   // ====================
-  def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus]
 
   def submitWorkflows(workflowRecs: Seq[WorkflowRecord], wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])]
 

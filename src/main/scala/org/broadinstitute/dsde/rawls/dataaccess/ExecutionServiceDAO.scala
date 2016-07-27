@@ -10,7 +10,6 @@ import scala.util.Try
  */
 trait ExecutionServiceDAO extends ErrorReportable {
   override val errorReportSource = "cromwell"
-  def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus]
   def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
   def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus]
   def callLevelMetadata(id: String, userInfo: UserInfo): Future[ExecutionMetadata]

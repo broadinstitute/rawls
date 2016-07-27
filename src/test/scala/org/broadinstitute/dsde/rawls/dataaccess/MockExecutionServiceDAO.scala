@@ -12,18 +12,6 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   var submitInput: Seq[String] = null
   var submitOptions: Option[String] = None
 
-  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo) = {
-    this.submitInput = Seq(inputs)
-    this.submitWdl = wdl
-    this.submitOptions = options
-    if (timeout) {
-      Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.GatewayTimeout, s"Failed to submit")))
-    }
-    else {
-      Future.successful(ExecutionServiceStatus("69d1d92f-3895-4a7b-880a-82535e9a096e", "Submitted"))
-    }
-  }
-
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo)= {
     this.submitInput = inputs
     this.submitWdl = wdl
