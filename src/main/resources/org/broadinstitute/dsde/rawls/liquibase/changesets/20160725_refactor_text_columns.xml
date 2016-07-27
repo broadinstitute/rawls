@@ -15,7 +15,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-3">
         <sql stripComments="true">
-            alter table WORKFLOW modify EXTERNAL_ID varchar(64);
+            alter table WORKFLOW modify EXTERNAL_ID char(36);
         </sql>
     </changeSet>
 

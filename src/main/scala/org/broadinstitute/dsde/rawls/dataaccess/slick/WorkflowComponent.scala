@@ -49,7 +49,7 @@ trait WorkflowComponent {
 
   class WorkflowTable(tag: Tag) extends Table[WorkflowRecord](tag, "WORKFLOW") {
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
-    def externalId = column[Option[String]]("EXTERNAL_ID", O.Length(64))
+    def externalId = column[Option[String]]("EXTERNAL_ID", O.SqlType("CHAR(36)"))
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS", O.Length(32))
     def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
