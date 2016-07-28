@@ -48,11 +48,11 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.DeleteBillingProject(RawlsBillingProjectName(projectId)))
       }
     } ~
-    path("admin" / "billing" / Segment / Segment) { (projectId, userEmail) =>
+    path("admin" / "billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail), ProjectRoles.withName(role)))
       } ~
       delete {
         requestContext => perRequest(requestContext,

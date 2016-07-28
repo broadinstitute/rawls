@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import spray.json._
 
 sealed trait UserAuthRef
@@ -37,7 +38,25 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
+
+object ProjectRoles {
+  sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): ProjectRole = ProjectRoles.withName(name)
+
+  }
+
+  def withName(name: String): ProjectRole = name.toLowerCase match {
+    case "owner" => Owner
+    case "user" => User
+    case _ => throw new RawlsException(s"invalid ProjectRole [${name}]")
+  }
+
+  case object Owner extends ProjectRole
+  case object User extends ProjectRole
+}
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
 case class SyncReport(items: Seq[SyncReportItem])
@@ -66,7 +85,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat3(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat4(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat2(RawlsBillingAccount)
 

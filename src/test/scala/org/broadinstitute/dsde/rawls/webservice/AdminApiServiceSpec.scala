@@ -41,7 +41,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, "mockBucketUrl")
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl")
 
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
@@ -211,14 +211,27 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
         }
 
-        Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
+        Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
           sealRoute(services.adminRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
               status
             }
             assert {
-              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+              val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
+              loadedProject.users.contains(testData.userOwner) && !loadedProject.owners.contains(testData.userOwner)
+            }
+          }
+
+        Put(s"/admin/billing/${project.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
+          sealRoute(services.adminRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK) {
+              status
+            }
+            assert {
+              val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
+              !loadedProject.users.contains(testData.userOwner) && loadedProject.owners.contains(testData.userOwner)
             }
           }
       }
@@ -256,14 +269,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/billing/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Put(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
+        Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
           sealRoute(services.adminRoutes) ~>
           check {
             assert {
               runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
             }
 
-            Delete(s"/admin/billing/${project.projectName.value}/${testData.userOwner.userEmail.value}") ~>
+            Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
               sealRoute(services.adminRoutes) ~>
               check {
                 assertResult(StatusCodes.OK) {
@@ -327,7 +340,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Put(s"/admin/billing/${project1.projectName.value}/${testUser.userEmail.value}") ~>
+    Put(s"/admin/billing/${project1.projectName.value}/user/${testUser.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -532,7 +545,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set(testUser, user2), "mock cromwell URL")
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set.empty, Set(testUser, user2), "mock cromwell URL")
       runAndWait(rawlsBillingProjectQuery.save(project))
 
       assertResult(Some(project)) {
