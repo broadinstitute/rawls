@@ -32,9 +32,9 @@ trait MethodConfigurationComponent {
     def namespace = column[String]("NAMESPACE", O.Length(254))
     def name = column[String]("NAME", O.Length(254))
     def workspaceId = column[UUID]("WORKSPACE_ID")
-    def rootEntityType = column[String]("ROOT_ENTITY_TYPE")
-    def methodNamespace = column[String]("METHOD_NAMESPACE")
-    def methodName = column[String]("METHOD_NAME")
+    def rootEntityType = column[String]("ROOT_ENTITY_TYPE", O.Length(254))
+    def methodNamespace = column[String]("METHOD_NAMESPACE", O.Length(254))
+    def methodName = column[String]("METHOD_NAME", O.Length(254))
     def methodVersion = column[Int]("METHOD_VERSION")
 
     def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
@@ -47,7 +47,7 @@ trait MethodConfigurationComponent {
     def methodConfigId = column[Long]("METHOD_CONFIG_ID")
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def key = column[String]("KEY", O.Length(254))
-    def value = column[String]("VALUE")
+    def value = column[String]("VALUE", O.Length(254))
 
     def * = (methodConfigId, id, key, value) <> (MethodConfigurationInputRecord.tupled, MethodConfigurationInputRecord.unapply)
 
@@ -59,7 +59,7 @@ trait MethodConfigurationComponent {
     def methodConfigId = column[Long]("METHOD_CONFIG_ID")
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
     def key = column[String]("KEY", O.Length(254))
-    def value = column[String]("VALUE")
+    def value = column[String]("VALUE", O.Length(254))
 
     def * = (methodConfigId, id, key, value) <> (MethodConfigurationOutputRecord.tupled, MethodConfigurationOutputRecord.unapply)
 

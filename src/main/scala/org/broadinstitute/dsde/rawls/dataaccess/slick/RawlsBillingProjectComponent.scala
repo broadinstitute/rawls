@@ -13,7 +13,7 @@ trait RawlsBillingProjectComponent {
 
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
-    def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL")
+    def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
 
     def * = (projectName, cromwellAuthBucketUrl) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
