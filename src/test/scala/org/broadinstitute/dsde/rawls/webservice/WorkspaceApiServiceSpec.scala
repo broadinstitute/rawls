@@ -1327,7 +1327,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 400 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
+  it should "return 403 creating workspace in billing project that does not exist" in withTestDataApiServices { services =>
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
@@ -1338,14 +1338,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.BadRequest, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
           status
         }
       }
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
-    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, "mockBucketUrl")))
+    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, Set.empty, "mockBucketUrl")))
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",
