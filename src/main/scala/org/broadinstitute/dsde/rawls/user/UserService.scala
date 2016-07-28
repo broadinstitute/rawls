@@ -4,6 +4,7 @@ import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -54,7 +55,7 @@ object UserService {
   case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class CreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class DeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
 
   case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -94,7 +95,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
     case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
     case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
-    case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
+    case AddUserToBillingProject(projectName, userEmail, role) => addUserToBillingProject(projectName, userEmail, role) pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
 
     case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
@@ -159,7 +160,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.seq(u.billingProjects.map(projectName =>
-              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName)
+              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName, ProjectRoles.User)
             ): _*) map (_ => user)
           }
         }
@@ -311,7 +312,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case None =>
           DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
             val bucketUrl = "gs://" + bucketName
-            dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, Set.empty, bucketUrl))
+            dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, Set.empty, Set.empty, bucketUrl))
           } map(_ => RequestComplete(StatusCodes.Created))
       }
     }
@@ -328,11 +329,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
+  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[Any] = asAdmin {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName) map (_ => RequestComplete(StatusCodes.OK))
+          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName, role) map (_ => RequestComplete(StatusCodes.OK))
         }
       }
     }

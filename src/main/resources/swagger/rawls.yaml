@@ -130,7 +130,7 @@ paths:
             - openid
             - email
             - profile
-  '/api/admin/billing/{projectId}/{userEmail}':
+  '/api/admin/billing/{projectId}/{role}/{userEmail}':
     put:
       responses:
         '200':
@@ -154,6 +154,12 @@ paths:
           name: projectId
           required: true
           type: string
+        - in: path
+          description: role of user for project
+          name: role
+          required: true
+          type: string
+          enum: ["user", "owner"]
         - in: path
           description: User Email
           name: userEmail
@@ -192,6 +198,12 @@ paths:
           name: projectId
           required: true
           type: string
+        - in: path
+          description: role of user for project
+          name: role
+          required: true
+          type: string
+          enum: ["user", "owner"]
         - in: path
           description: User Email
           name: userEmail
@@ -2663,10 +2675,6 @@ paths:
             Location:
               description: The path to the newly created workspace
               type: string
-        '400':
-          description: Namespace does not exist
-          schema:
-            $ref: '#/definitions/ErrorReport'
         '403':
           description: User does not have access to create workspace in namespace
           schema:
