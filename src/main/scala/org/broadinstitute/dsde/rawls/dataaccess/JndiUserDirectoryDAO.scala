@@ -4,7 +4,9 @@ import java.util
 import javax.naming._
 import javax.naming.directory._
 
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
+import spray.http.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
@@ -16,8 +18,13 @@ import scala.collection.JavaConversions._
 class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
 
   override def createUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
-    val p = new Person(user)
-    ctx.bind(p.name, p)
+    try {
+      val p = new Person(user)
+      ctx.bind(p.name, p)
+    } catch {
+      case e: NameAlreadyBoundException =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, e.getMessage))
+    }
   }
 
   override def removeUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
