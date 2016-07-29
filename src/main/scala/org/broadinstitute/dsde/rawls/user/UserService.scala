@@ -131,7 +131,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
       toFutureTry(dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user).flatMap(user => addUsersToAllUsersGroup(Set(user), dataAccess)) }),
-      toFutureTry(userDirectoryDAO.createUser(user) flatMap( _ => userDirectoryDAO.enableUser(user)))
+      toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
@@ -209,7 +209,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = loadUser(userRef) flatMap { user =>
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
-      toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _)),
+      toFutureTry(userDirectoryDAO.isEnabled(user.userSubjectId).map("ldap" -> _)),
       toFutureTry {
         dataSource.inTransaction { dataAccess =>
           val allUsersGroup = getOrCreateAllUsersGroup(dataAccess)
@@ -226,7 +226,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.addUserToProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.enableUser(user))
+        toFutureTry(userDirectoryDAO.enableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors enabling user"))
     }
@@ -238,7 +238,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.removeUserFromProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.disableUser(user))
+        toFutureTry(userDirectoryDAO.disableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors disabling user"))
     }
@@ -279,9 +279,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     val userDirectoryRemoval = for {
-      user <- userF
-      _ <- userDirectoryDAO.disableUser(user)   // may not be strictly necessary, but does not hurt
-      _ <- userDirectoryDAO.removeUser(user)
+      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId)   // may not be strictly necessary, but does not hurt
+      _ <- userDirectoryDAO.removeUser(userRef.userSubjectId)
     } yield ()
 
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
