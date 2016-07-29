@@ -103,6 +103,16 @@ trait RawlsBillingProjectComponent {
         }
       }
     }
+    
+    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadAction[Boolean] = {
+      findProjectUser(projectName, user, roles).length.result.map(_ > 0)
+    }
+    
+    private def findProjectUser(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]) = {
+      projectUsersQuery.filter(pu => pu.projectName === projectName.value &&
+        pu.userSubjectId === user.userSubjectId.value &&
+        pu.role.inSetBind(roles.map(_.toString)))
+    }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
       RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl)

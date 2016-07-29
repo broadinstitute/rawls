@@ -33,31 +33,31 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.ListBillingProjectsForUser(RawlsUserEmail(userEmail)))
+          UserService.AdminListBillingProjectsForUser(RawlsUserEmail(userEmail)))
       }
     } ~
     path("admin" / "billing" / Segment) { (projectId) =>
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.CreateBillingProject(RawlsBillingProjectName(projectId)))
+          UserService.AdminCreateBillingProject(RawlsBillingProjectName(projectId)))
       } ~
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.DeleteBillingProject(RawlsBillingProjectName(projectId)))
+          UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
       }
     } ~
     path("admin" / "billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail), ProjectRoles.withName(role)))
+          UserService.AdminAddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail), ProjectRoles.withName(role)))
       } ~
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+          UserService.AdminRemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
       }
     } ~
     path("admin" / "submissions") {

@@ -56,6 +56,8 @@ object ProjectRoles {
 
   case object Owner extends ProjectRole
   case object User extends ProjectRole
+
+  val all: Set[ProjectRole] = Set(Owner, User)
 }
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])

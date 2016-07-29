@@ -95,6 +95,25 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(rawlsBillingProjectQuery.save(project1))
     runAndWait(rawlsBillingProjectQuery.save(project2))
 
+    assert {
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef1, Set(ProjectRoles.User)))
+    }
+    assert {
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef1, Set(ProjectRoles.User, ProjectRoles.Owner)))
+    }
+    assert {
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, owner, Set(ProjectRoles.User, ProjectRoles.Owner)))
+    }
+    assert {
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, owner, Set(ProjectRoles.Owner)))
+    }
+    assert {
+      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef1, Set(ProjectRoles.Owner)))
+    }
+    assert {
+      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef2, Set(ProjectRoles.User, ProjectRoles.Owner)))
+    }
+
     assertResult(Seq(projectName1)) {
      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }

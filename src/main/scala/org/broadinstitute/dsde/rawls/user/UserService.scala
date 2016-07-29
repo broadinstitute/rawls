@@ -56,9 +56,11 @@ object UserService {
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
-  case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class CreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class DeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminCreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
+  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
@@ -95,15 +97,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
-    // ListBillingProjects is for the current user, not as admin
-    // ListBillingProjectsForUser is for any user, as admin
-
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
-    case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
-    case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
-    case AddUserToBillingProject(projectName, userEmail, role) => addUserToBillingProject(projectName, userEmail, role) pipeTo sender
-    case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
+    case AdminListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case AdminCreateBillingProject(projectName) => asAdmin { createBillingProject(projectName) } pipeTo sender
+    case AdminDeleteBillingProject(projectName) => asAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, userEmail, role) => asAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+
+    case AddUserToBillingProject(projectName, userEmail, role) => asOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case RemoveUserFromBillingProject(projectName, userEmail) => asOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
@@ -119,6 +121,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AdminDeleteRefreshToken(userRef) => asAdmin { deleteRefreshToken(userRef) } pipeTo sender
     case AdminDeleteAllRefreshTokens => asAdmin { deleteAllRefreshTokens() } pipeTo sender
+  }
+
+  def asOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    val isOwner = dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), Set(ProjectRoles.Owner))
+    }
+    isOwner flatMap {
+      case true => op
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
+    }
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -351,7 +363,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[Any] = asAdmin {
+  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
@@ -361,7 +373,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
+  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
