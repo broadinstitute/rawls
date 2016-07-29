@@ -638,7 +638,7 @@ paths:
           - profile
     delete:
      responses:
-       '200':
+       '204':
          description: User deleted from LDAP
        '403':
          description: Only administrators can delete users from LDAP
