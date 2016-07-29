@@ -3053,6 +3053,37 @@ paths:
             - email
             - profile
 
+  '/api/user/billingAccounts':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of billing accounts for this user
+            items:
+              $ref: '#/definitions/BillingAccount'
+        '403':
+          description: Forbidden. You probably missed a scope; more details in the ErrorReport's message field
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: list billing accounts for a user
+      tags:
+        - billing
+        - users
+      summary: list billing accounts for a user
+      operationId: listUserBillingAccounts
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/cloud-billing
+
   '/api/user/group/{groupName}':
     get:
       responses:
@@ -3113,6 +3144,7 @@ securityDefinitions:
       email: email authorization
       profile: profile authorization
       https://www.googleapis.com/auth/devstorage.full_control: storage authorization
+      https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
 definitions:
   ErrorReport:
     description: ''

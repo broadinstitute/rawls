@@ -53,8 +53,8 @@ object Boot extends App with LazyLogging {
 
     val gcsConfig = conf.getConfig("gcs")
     val jsonFactory = JacksonFactory.getDefaultInstance
-    val clientSecrets = GoogleClientSecrets.load(
-      jsonFactory, new StringReader(gcsConfig.getString("secrets")))
+    val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
+    val billingClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("billingSecrets")))
     val gcsDAO = new HttpGoogleServicesDAO(
       false,
       clientSecrets,
@@ -65,7 +65,11 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("deletedBucketCheckSeconds"),
       gcsConfig.getString("serviceProject"),
       gcsConfig.getString("tokenEncryptionKey"),
-      gcsConfig.getString("tokenSecretsJson")
+      gcsConfig.getString("tokenSecretsJson"),
+      billingClientSecrets,
+      gcsConfig.getString("billingPemEmail"),
+      gcsConfig.getString("pathToBillingPem"),
+      gcsConfig.getString("billingEmail")
     )
 
     val ldapConfig = conf.getConfig("userLdap")

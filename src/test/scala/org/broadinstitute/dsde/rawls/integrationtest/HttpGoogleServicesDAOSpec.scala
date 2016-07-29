@@ -2,12 +2,14 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.io.StringReader
 import java.util.UUID
+
 import akka.actor.{ActorRef, ActorSystem}
-import com.google.api.client.http.HttpResponseException
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
-import scala.concurrent.{Future, Await}
+
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -15,8 +17,9 @@ import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
-import spray.http.{StatusCodes, OAuth2BearerToken}
+import spray.http.{OAuth2BearerToken, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+
 import scala.collection.JavaConversions._
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
@@ -33,7 +36,13 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     gcsConfig.getInt("deletedBucketCheckSeconds"),
     gcsConfig.getString("serviceProject"),
     gcsConfig.getString("tokenEncryptionKey"),
-    gcsConfig.getString("tokenSecretsJson")
+    gcsConfig.getString("tokenSecretsJson"),
+    GoogleClientSecrets.load(
+      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("billingSecrets"))),
+    gcsConfig.getString("billingPemEmail"),
+    gcsConfig.getString("pathToBillingPem"),
+    gcsConfig.getString("billingEmail")
+
   )
 
   slickDataSource.initWithSlick()
@@ -258,6 +267,55 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf))
+  }
+
+  it should "correctly compose rawls and user billing account access lists" in {
+    val jsonFactory = JacksonFactory.getDefaultInstance
+    val mockGcsDAO = new MockBillingHttpGoogleServicesDAO(
+      true, // use service account to manage buckets
+      GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets"))),
+      gcsConfig.getString("pathToPem"),
+      gcsConfig.getString("appsDomain"),
+      gcsConfig.getString("groupsPrefix"),
+      gcsConfig.getString("appName"),
+      gcsConfig.getInt("deletedBucketCheckSeconds"),
+      gcsConfig.getString("serviceProject"),
+      gcsConfig.getString("tokenEncryptionKey"),
+      gcsConfig.getString("tokenSecretsJson"),
+      GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("billingSecrets"))),
+      gcsConfig.getString("billingPemEmail"),
+      gcsConfig.getString("pathToBillingPem"),
+      gcsConfig.getString("billingEmail")
+      )
+
+    val userInfo = UserInfo("foo@bar.com", null, 0, testCreator.userSubjectId)
+    val user = RawlsUser(userInfo)
+    Await.result(mockGcsDAO.createProxyGroup(user), Duration.Inf)
+
+    assertResult(Seq(
+      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudHasThisOne"), firecloudHasAccess = true),
+      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne"), firecloudHasAccess = false)
+    )){
+      Await.result(mockGcsDAO.listBillingAccounts(userInfo), Duration.Inf)
+    }
+  }
+
+  it should "extract error messages from Google HttpResponseExceptions" in {
+    val exc = new HttpResponseException.Builder(403, "PERMISSION_DENIED", new HttpHeaders())
+        .setContent("""{
+                      |      "code" : 403,
+                      |      "errors" : [ {
+                      |        "domain" : "global",
+                      |        "message" : "Request had insufficient authentication scopes.",
+                      |        "reason" : "forbidden"
+                      |      } ],
+                      |      "message" : "Request had insufficient authentication scopes.",
+                      |      "status" : "PERMISSION_DENIED"
+                      |    }""")
+      .build()
+    assertResult("Request had insufficient authentication scopes.") {
+      gcsDAO.getGoogleErrorMessage(exc)
+    }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

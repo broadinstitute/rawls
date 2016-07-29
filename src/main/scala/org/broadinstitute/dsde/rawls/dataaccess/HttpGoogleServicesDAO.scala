@@ -1,8 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{InputStream, ByteArrayOutputStream, ByteArrayInputStream, StringReader}
-import java.net.URL
-import java.nio.charset.StandardCharsets
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, StringReader}
 import java.util.UUID
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -10,43 +8,40 @@ import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
 import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
-import com.google.api.services.genomics.{GenomicsScopes, Genomics}
 import com.google.api.services.oauth2.Oauth2
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import org.joda.time
-import spray.can.Http
 import spray.client.pipelining._
-import spray.json.{JsValue, JsObject}
+import spray.json._
 
 import scala.collection.JavaConversions._
-
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
-import com.google.api.client.auth.oauth2.{TokenResponse, Credential}
-import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
+import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
+import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.admin.directory.model._
-import com.google.api.services.compute.ComputeScopes
-import com.google.api.services.storage.model.Bucket.{Logging, Lifecycle}
+import com.google.api.services.cloudbilling.{Cloudbilling, CloudbillingScopes}
+import com.google.api.services.cloudbilling.model.BillingAccount
+import com.google.api.services.compute.{Compute, ComputeScopes}
+import com.google.api.services.genomics.{Genomics, GenomicsScopes}
+import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
-import com.google.api.services.storage.{StorageScopes, Storage}
-import com.google.api.services.storage.model.{StorageObject, Bucket, BucketAccessControl, ObjectAccessControl}
-
+import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-
-import spray.http.{StatusCode, HttpResponse, OAuth2BearerToken, StatusCodes}
+import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -58,7 +53,11 @@ class HttpGoogleServicesDAO(
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
   tokenEncryptionKey: String,
-  tokenClientSecretsJson: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
+  tokenClientSecretsJson: String,
+  billingClientSecrets: GoogleClientSecrets,
+  billingPemEmail: String,
+  billingPemFile: String,
+  billingEmail: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -66,6 +65,7 @@ class HttpGoogleServicesDAO(
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
+  val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing") //no constant for this in Google library, so hardcoded
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -77,7 +77,7 @@ class HttpGoogleServicesDAO(
 
   initTokenBucket()
 
-  private def initTokenBucket(): Unit = {
+  protected def initTokenBucket(): Unit = {
     try {
       getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
     } catch {
@@ -460,6 +460,80 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  def getBilling(credential: Credential) = {
+    new Cloudbilling.Builder(httpTransport, jsonFactory, credential).build()
+  }
+
+  /**
+    * NOTE: This function will returns "false" in both of the following cases:
+    * if you don't have sufficient scopes
+    *   - Google's JSON response body will contain "message": "Request had insufficient authentication scopes."
+    * if you're not authorized to see the billing account
+    *   - Google's JSON response body will contain "message" : "The caller does not have permission"
+    */
+  protected def credentialOwnsBillingAccount(credential: Credential, billingAccountName: String): Future[Boolean] = {
+    val fetcher = getBilling(credential).billingAccounts().get(billingAccountName)
+    retryWithRecoverWhen500orGoogleError(() => {
+      blocking {
+        executeGoogleRequest(fetcher)
+      }
+      true //if the request succeeds, it has access.
+    }) {
+      case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue => false
+    }
+  }
+
+  protected def listBillingAccounts(credential: Credential): Future[Seq[BillingAccount]] = {
+    val fetcher = getBilling(credential).billingAccounts().list()
+    retryWithRecoverWhen500orGoogleError(() => {
+      val list = blocking {
+        executeGoogleRequest(fetcher)
+      }
+      list.getBillingAccounts.toSeq
+    }) {
+      case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
+        getGoogleErrorMessage(e) match {
+          case Success(googlyError) if googlyError == "Request had insufficient authentication scopes." =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"""{"requiredScopes" : [%s]}""".format(billingScopes.head) ))
+          case Success(googlyError) =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, googlyError))
+          case Failure(regret) =>
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, e.getContent))
+        }
+    }
+  }
+
+  def getGoogleErrorMessage(exc: HttpResponseException): Try[String] = {
+    /* Google exception content generally looks like this:
+    {
+      "code" : 403,
+      "errors" : [ {
+        "domain" : "global",
+        "message" : "Request had insufficient authentication scopes.",
+        "reason" : "forbidden"
+      } ],
+      "message" : "Request had insufficient authentication scopes.",
+      "status" : "PERMISSION_DENIED"
+    }
+    */
+    Try(exc.getContent.parseJson.asJsObject.getFields("message").head.toString)
+  }
+
+  def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+    val cred = getUserCredential(userInfo)
+    val billingSvcCred = getBillingServiceAccountCredential
+    listBillingAccounts(cred) flatMap { accountList =>
+      Future.sequence(accountList map { acct =>
+        val acctName = acct.getName
+        //NOTE: We guarantee that the firecloud billing service account always has the correct scopes.
+        //So credentialOwnsBillingAccount == false definitely means no access (rather than no scopes).
+        credentialOwnsBillingAccount(billingSvcCred, acctName) map { firecloudHasAccount =>
+          RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount)
+        }
+      })
+    }
+  }
+
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
     retryWhen500orGoogleError(() => {
       val so = new StorageObject().setName(userInfo.userSubjectId)
@@ -590,7 +664,6 @@ class HttpGoogleServicesDAO(
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
-
   def getGenomicsServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -601,6 +674,16 @@ class HttpGoogleServicesDAO(
       .build()
   }
 
+  def getBillingServiceAccountCredential: Credential = {
+    new GoogleCredential.Builder()
+      .setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setServiceAccountScopes(billingScopes)
+      .setServiceAccountId(billingPemEmail)
+      .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
+      .setServiceAccountUser(billingEmail)
+      .build()
+  }
   def toProxyFromUser(rawlsUser: RawlsUser) = toProxyFromUserSubjectId(rawlsUser.userSubjectId.value)
   def toProxyFromUser(userInfo: UserInfo) = toProxyFromUserSubjectId(userInfo.userSubjectId)
   def toProxyFromUser(subjectId: RawlsUserSubjectId) = toProxyFromUserSubjectId(subjectId.value)
