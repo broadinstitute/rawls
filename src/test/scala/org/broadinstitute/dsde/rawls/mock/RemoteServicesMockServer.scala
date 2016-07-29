@@ -206,42 +206,27 @@ class RemoteServicesMockServer(port:Int) {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
-    val submissionPath = "/workflows/v1"
+    val submissionBatchPath = "/workflows/v1/batch"
 
     // delay for two seconds when the test asks for it
     mockServer.when(
       request()
         .withMethod("POST")
-        .withPath(submissionPath)
+        .withPath(submissionBatchPath)
         .withBody(new ParameterBody(new Parameter("workflowOptions", "two_second_delay")))
     ).respond(
       response()
         .withHeaders(jsonHeader)
         .withBody(
-          """{
-    "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
-    "status": "Submitted"
-}""")
+          """[
+            {"id": "69d1d92f-3895-4a7b-880a-82535e9a096e", "status": "Submitted"},
+            {"id": "69d1d92f-3895-4a7b-880a-82535e9a096f", "status": "Submitted"},
+            {"status": "error", "message": "stuff happens"}
+            ]""")
         .withStatusCode(StatusCodes.Created.intValue)
         .withDelay(new Delay(TimeUnit.SECONDS, 2))
     )
 
-    mockServer.when(
-      request()
-        .withMethod("POST")
-        .withPath(submissionPath)
-    ).respond(
-        response()
-          .withHeaders(jsonHeader)
-          .withBody(
-            """{
-    "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
-    "status": "Submitted"
-}""")
-          .withStatusCode(StatusCodes.Created.intValue)
-      )
-
-    val submissionBatchPath = "/workflows/v1/batch"
     mockServer.when(
       request()
         .withMethod("POST")

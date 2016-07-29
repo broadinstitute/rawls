@@ -305,11 +305,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     def execWith1SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(1, TimeUnit.SECONDS))
     def execWith3SecTimeout = new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, FiniteDuration(3, TimeUnit.SECONDS))
 
-    val execResponse = Await.result(execWith3SecTimeout.submitWorkflow(wdl, wdlInputs, workflowOptions, userInfo), Duration.Inf)
-    assertResult(expectedResponse) { execResponse }
+    val execResponse = Await.result(execWith3SecTimeout.submitWorkflows(wdl, Seq(wdlInputs), workflowOptions, userInfo), Duration.Inf)
+    assertResult(expectedResponse) { execResponse.head.left.get }
 
     intercept[AskTimeoutException] {
-      Await.result(execWith1SecTimeout.submitWorkflow(wdl, wdlInputs, workflowOptions, userInfo), Duration.Inf)
+      Await.result(execWith1SecTimeout.submitWorkflows(wdl, Seq(wdlInputs), workflowOptions, userInfo), Duration.Inf)
     }
   }
 

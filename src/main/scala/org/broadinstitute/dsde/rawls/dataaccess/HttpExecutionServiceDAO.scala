@@ -18,15 +18,6 @@ import scala.util.Try
  */
 class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: FiniteDuration )( implicit val system: ActorSystem ) extends ExecutionServiceDAO with DsdeHttpDAO with Retry with FutureSupport {
 
-  override def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
-    implicit val timeout = Timeout(submissionTimeout)
-    val url = executionServiceURL+"/workflows/v1"
-    import system.dispatcher
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
-    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs) ++ options.map("workflowOptions" -> _).toSeq)
-    pipeline(Post(url,formData))
-  }
-
   override def submitWorkflows(wdl: String, inputs: Seq[String], options: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]] = {
     implicit val timeout = Timeout(submissionTimeout)
     val url = executionServiceURL+"/workflows/v1/batch"

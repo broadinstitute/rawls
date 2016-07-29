@@ -1,17 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import _root_.slick.dbio.Effect.{Write, Read}
-import _root_.slick.dbio._
-import _root_.slick.driver.JdbcDriver
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
 
-import scala.concurrent._
-import scala.concurrent.Future._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.Future
+import scala.util.Try
 
 
 class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
@@ -24,12 +19,6 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   // ====================
   // facade methods
   // ====================
-
-  // only used in tests??? TODO: GAWB-861 update tests to use the same thing runtime does, or remove this.
-  def submitWorkflow(wdl: String, inputs: String, options: Option[String], userInfo: UserInfo): Future[ExecutionServiceStatus] = {
-    val targetMember = memberArray(scala.util.Random.nextInt(members.size))
-    targetMember.dao.submitWorkflow(wdl, inputs, options, userInfo)
-  }
 
   // by nature, this is only called for workflows that have not yet been submitted.
   // therefore, we want to send the workflows to the cromwell instance chosen
