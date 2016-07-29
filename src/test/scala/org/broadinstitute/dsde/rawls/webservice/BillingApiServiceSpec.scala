@@ -37,45 +37,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
-
   private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl")
-
-  private def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
-
-  private def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).isEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isEmpty || ! group.get.users.contains(user)
-    }
-
-    assert {
-      !services.gcsDAO.containsProxyGroup(user)
-    }
-    assert {
-      !services.directoryDAO.exists(user)
-    }
-  }
-
-  private def assertUserExists(services: TestApiService, user: RawlsUser): Unit = {
-    assert {
-      loadUser(user).nonEmpty
-    }
-    assert {
-      val group = runAndWait(rawlsGroupQuery.load(UserService.allUsersGroupRef))
-      group.isDefined && group.get.users.contains(user)
-    }
-
-    assert {
-      services.gcsDAO.containsProxyGroup(user)
-    }
-    assert {
-      services.directoryDAO.exists(user)
-    }
-  }
 
   private def createProject(services: TestApiService, project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     Put(s"/admin/billing/${project.projectName.value}") ~>
