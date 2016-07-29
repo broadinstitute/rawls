@@ -31,5 +31,5 @@ class MockUserDirectoryDAO extends UserDirectoryDAO{
 
   override def enableUser(user: RawlsUserSubjectId): Future[Unit] = Future.successful(users += (user -> true))
 
-  def exists(user: RawlsUser) = users.keys.exists(_ == user)
+  def exists(user: RawlsUserSubjectId) = users.keys.exists(_ == user)
 }

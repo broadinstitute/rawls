@@ -58,7 +58,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       !services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      !services.directoryDAO.exists(user)
+      !services.directoryDAO.exists(user.userSubjectId)
     }
   }
 
@@ -75,7 +75,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      services.directoryDAO.exists(user)
+      services.directoryDAO.exists(user.userSubjectId)
     }
   }
 
@@ -697,6 +697,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             status
           }
         }
+
+      assert {
+        services.directoryDAO.exists(RawlsUserSubjectId("12345"))
+      }
+
       Put(s"/admin/user/ldap/12345") ~>
       //should conflict a second time
         sealRoute(services.adminRoutes) ~>
