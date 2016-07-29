@@ -43,6 +43,8 @@ object UserService {
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
+  case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -83,6 +85,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
     case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminAddToLDAP(userSubjectId) => asAdmin { addToLDAP(userSubjectId) } pipeTo sender
+    case AdminRemoveFromLDAP(userSubjectId) => asAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case AdminListUsers => asAdmin { listUsers() } pipeTo sender
     case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
@@ -289,6 +293,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  def addToLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
+    userDirectoryDAO.createUser(userSubjectId) map { _ =>
+      RequestComplete(StatusCodes.Created)
+    }
+  }
+
+  def removeFromLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
+    userDirectoryDAO.removeUser(userSubjectId) map { _ =>
+      RequestComplete(StatusCodes.NoContent)
+    }
   }
 
   import spray.json.DefaultJsonProtocol._

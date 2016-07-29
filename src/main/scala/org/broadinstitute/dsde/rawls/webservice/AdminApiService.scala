@@ -151,11 +151,23 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminGetUserStatus(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
       } ~
-        delete {
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminDeleteUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
-        }
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminDeleteUser(RawlsUserRef(RawlsUserSubjectId(userSubjectId))))
+      }
+    } ~
+    path("admin" / "user" / "ldap" / Segment) { userSubjectId =>
+      put {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminAddToLDAP(RawlsUserSubjectId(userSubjectId)))
+      } ~
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminRemoveFromLDAP(RawlsUserSubjectId(userSubjectId)))
+      }
     } ~
     path("admin"/ "user" / Segment / "enable") { userSubjectId =>
       post {
