@@ -3146,6 +3146,19 @@ securityDefinitions:
       https://www.googleapis.com/auth/devstorage.full_control: storage authorization
       https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
 definitions:
+  BillingAccount:
+    description: 'Details for a single billing account'
+    required:
+          - accountName
+          - firecloudHasAccess
+    properties:
+      accountName:
+        type: string
+        description: name of billing account
+      firecloudHasAccess:
+        type: boolean
+        description: whether the Firecloud service has been given access to this billing account
+
   ErrorReport:
     description: ''
     required:
