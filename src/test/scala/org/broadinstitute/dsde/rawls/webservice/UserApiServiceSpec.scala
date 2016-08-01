@@ -65,7 +65,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       !services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      !services.directoryDAO.exists(user)
+      !services.directoryDAO.exists(user.userSubjectId)
     }
   }
 
@@ -82,7 +82,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      services.directoryDAO.exists(user)
+      services.directoryDAO.exists(user.userSubjectId)
     }
   }
 

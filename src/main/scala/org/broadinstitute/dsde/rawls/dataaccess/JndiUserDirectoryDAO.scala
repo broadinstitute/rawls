@@ -4,7 +4,9 @@ import java.util
 import javax.naming._
 import javax.naming.directory._
 
-import org.broadinstitute.dsde.rawls.model.RawlsUser
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUser, RawlsUserSubjectId}
+import spray.http.StatusCodes
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Success, Try}
@@ -15,24 +17,29 @@ import scala.collection.JavaConversions._
  */
 class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, groupDn: String, memberAttribute: String, userObjectClasses: List[String], userAttributes: List[String], userDnFormat: String)(implicit executionContext: ExecutionContext) extends UserDirectoryDAO {
 
-  override def createUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
-    val p = new Person(user)
-    ctx.bind(p.name, p)
+  override def createUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
+    try {
+      val p = new Person(user)
+      ctx.bind(p.name, p)
+    } catch {
+      case e: NameAlreadyBoundException =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, e.getMessage))
+    }
   }
 
-  override def removeUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
+  override def removeUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     ctx.unbind(new Person(user).name)
   }
 
-  override def disableUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
+  override def disableUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     ctx.modifyAttributes(groupDn, DirContext.REMOVE_ATTRIBUTE, new BasicAttributes(memberAttribute, new Person(user).name))
   }
 
-  override def enableUser(user: RawlsUser): Future[Unit] = withContext { ctx =>
+  override def enableUser(user: RawlsUserSubjectId): Future[Unit] = withContext { ctx =>
     ctx.modifyAttributes(groupDn, DirContext.ADD_ATTRIBUTE, new BasicAttributes(memberAttribute, new Person(user).name))
   }
 
-  override def isEnabled(user: RawlsUser): Future[Boolean] = withContext { ctx =>
+  override def isEnabled(user: RawlsUserSubjectId): Future[Boolean] = withContext { ctx =>
     val members = for (
       attr <- ctx.getAttributes(groupDn, Array(memberAttribute)).getAll;
       attrE <- attr.getAll
@@ -58,7 +65,7 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
     t.get
   }
 
-  private class Person(rawlsUser: RawlsUser) extends BaseDirContext {
+  private class Person(rawlsSubjectId: RawlsUserSubjectId) extends BaseDirContext {
     override def getAttributes(name: String): Attributes = {
       val myAttrs = new BasicAttributes(true)  // Case ignore
 
@@ -66,12 +73,12 @@ class JndiUserDirectoryDAO(providerUrl: String, user: String, password: String, 
       userObjectClasses.foreach(oc.add)
       myAttrs.put(oc)
 
-      userAttributes.foreach(myAttrs.put(_, rawlsUser.userSubjectId.value))
+      userAttributes.foreach(myAttrs.put(_, rawlsSubjectId.value))
 
       myAttrs
     }
 
-    val name = userDnFormat.format(rawlsUser.userSubjectId.value)
+    val name = userDnFormat.format(rawlsSubjectId.value)
   }
 }
 

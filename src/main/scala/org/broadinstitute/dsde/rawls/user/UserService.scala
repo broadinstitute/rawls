@@ -1,15 +1,17 @@
 package org.broadinstitute.dsde.rawls.user
 
+import javax.naming.NameAlreadyBoundException
+
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{UserWiths, FutureSupport, AdminSupport}
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.{RequestComplete, RequestCompleteWithLocation, PerRequestMessage}
+import org.broadinstitute.dsde.rawls.util.{AdminSupport, FutureSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete, RequestCompleteWithLocation}
 import spray.http.StatusCodes
 import spray.json._
 import spray.httpx.SprayJsonSupport._
@@ -17,8 +19,8 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-import scala.concurrent.{Future, ExecutionContext}
-import scala.util.{Success, Try, Failure}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Created by dvoet on 10/27/15.
@@ -43,6 +45,8 @@ object UserService {
   case class AdminEnableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDisableUser(userRef: RawlsUserRef) extends UserServiceMessage
   case class AdminDeleteUser(userRef: RawlsUserRef) extends UserServiceMessage
+  case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
+  case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
   case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
@@ -84,6 +88,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
     case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
     case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminAddToLDAP(userSubjectId) => asAdmin { addToLDAP(userSubjectId) } pipeTo sender
+    case AdminRemoveFromLDAP(userSubjectId) => asAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case AdminListUsers => asAdmin { listUsers() } pipeTo sender
     case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
@@ -133,7 +139,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
       toFutureTry(dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user).flatMap(user => addUsersToAllUsersGroup(Set(user), dataAccess)) }),
-      toFutureTry(userDirectoryDAO.createUser(user) flatMap( _ => userDirectoryDAO.enableUser(user)))
+      toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
@@ -211,7 +217,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getUserStatus(userRef: RawlsUserRef): Future[PerRequestMessage] = loadUser(userRef) flatMap { user =>
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.isUserInProxyGroup(user).map("google" -> _)),
-      toFutureTry(userDirectoryDAO.isEnabled(user).map("ldap" -> _)),
+      toFutureTry(userDirectoryDAO.isEnabled(user.userSubjectId).map("ldap" -> _)),
       toFutureTry {
         dataSource.inTransaction { dataAccess =>
           val allUsersGroup = getOrCreateAllUsersGroup(dataAccess)
@@ -228,7 +234,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.addUserToProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.enableUser(user))
+        toFutureTry(userDirectoryDAO.enableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors enabling user"))
     }
@@ -240,7 +246,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     loadUser(userRef) flatMap { user =>
       handleFutures(Future.sequence(Seq(
         toFutureTry(gcsDAO.removeUserFromProxyGroup(user)),
-        toFutureTry(userDirectoryDAO.disableUser(user))
+        toFutureTry(userDirectoryDAO.disableUser(user.userSubjectId))
 
       )))(_ => RequestComplete(StatusCodes.NoContent), handleException("Errors disabling user"))
     }
@@ -281,9 +287,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     val userDirectoryRemoval = for {
-      user <- userF
-      _ <- userDirectoryDAO.disableUser(user)   // may not be strictly necessary, but does not hurt
-      _ <- userDirectoryDAO.removeUser(user)
+      _ <- userDirectoryDAO.disableUser(userRef.userSubjectId)   // may not be strictly necessary, but does not hurt
+      _ <- userDirectoryDAO.removeUser(userRef.userSubjectId)
     } yield ()
 
     val proxyGroupDeletion = userF.flatMap(gcsDAO.deleteProxyGroup)
@@ -292,6 +297,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       _ <- Future.sequence(Seq(dbTablesRemoval, userDirectoryRemoval, proxyGroupDeletion, deleteRefreshTokenInternal(userRef)))
       _ <- deleteUserFromDB(userRef)
     } yield RequestComplete(StatusCodes.NoContent)
+  }
+
+  def addToLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
+    userDirectoryDAO.createUser(userSubjectId) map { _ =>
+      RequestComplete(StatusCodes.Created)
+    }
+  }
+
+  def removeFromLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
+    userDirectoryDAO.removeUser(userSubjectId) map { _ =>
+      RequestComplete(StatusCodes.NoContent)
+    }
   }
 
   import spray.json.DefaultJsonProtocol._

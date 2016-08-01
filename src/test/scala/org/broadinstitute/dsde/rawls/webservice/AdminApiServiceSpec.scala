@@ -58,7 +58,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       !services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      !services.directoryDAO.exists(user)
+      !services.directoryDAO.exists(user.userSubjectId)
     }
   }
 
@@ -75,7 +75,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       services.gcsDAO.containsProxyGroup(user)
     }
     assert {
-      services.directoryDAO.exists(user)
+      services.directoryDAO.exists(user.userSubjectId)
     }
   }
 
@@ -687,6 +687,39 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "add and remove users from ldap" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      Put(s"/admin/user/ldap/12345") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assert {
+        services.directoryDAO.exists(RawlsUserSubjectId("12345"))
+      }
+
+      Put(s"/admin/user/ldap/12345") ~>
+      //should conflict a second time
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.Conflict) {
+            status
+          }
+        }
+      Delete(s"/admin/user/ldap/12345") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+    }
+  }
+
   it should "return 200 when listing users" in withTestDataApiServices { services =>
     val userOwner = RawlsUserInfo(testData.userOwner, Seq(RawlsBillingProjectName("myNamespace")))
     val userWriter = RawlsUserInfo(testData.userWriter, Seq.empty)
@@ -865,7 +898,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
-      
+
     val group2 = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
 
       assertResult(Some(false)) {

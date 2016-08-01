@@ -606,6 +606,63 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/user/ldap/{userSubjectId}':
+    put:
+     responses:
+       '201':
+         description: Added user to LDAP
+       '403':
+         description: Only administrators can add users to LDAP
+       '409':
+         description: User is already added to LDAP
+       '500':
+         description: Rawls Internal Error
+         schema:
+           $ref: '#/definitions/ErrorReport'
+     description: "adds a user to LDAP"
+     tags:
+       - admin
+       - users
+     summary: Add user to LDAP
+     operationId: ldapAdd
+     parameters:
+      - in: path
+        description: subject id of user
+        name: userSubjectId
+        required: true
+        type: string
+     security:
+       - authorization:
+          - openid
+          - email
+          - profile
+    delete:
+     responses:
+       '204':
+         description: User deleted from LDAP
+       '403':
+         description: Only administrators can delete users from LDAP
+       '500':
+         description: Rawls Internal Error
+         schema:
+           $ref: '#/definitions/ErrorReport'
+     description: "Removes a user from LDAP"
+     tags:
+       - admin
+       - users
+     summary: Removes a user from LDAP
+     operationId: ldapRemove
+     parameters:
+      - in: path
+        description: subject id of user
+        name: userSubjectId
+        required: true
+        type: string
+     security:
+       - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/user/{userSubjectId}/enable':
        post:
          responses:

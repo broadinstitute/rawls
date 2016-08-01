@@ -20,14 +20,14 @@ class JndiUserDirectoryDAOSpec extends FlatSpec with Matchers with IntegrationTe
     val dao = new JndiUserDirectoryDAO(ldapProviderUrl, ldapUser, ldapPassword, ldapGroupDn, ldapMemberAttribute, ldapUserObjectClasses, ldapUserAttributes, ldapUserDnFormat)
     val user = RawlsUser(RawlsUserSubjectId(UUID.randomUUID().toString), RawlsUserEmail("foo@bar.com"))
 
-    assert(!Await.result(dao.isEnabled(user), Duration.Inf))
-    Await.result(dao.createUser(user), Duration.Inf)
-    assert(!Await.result(dao.isEnabled(user), Duration.Inf))
-    Await.result(dao.enableUser(user), Duration.Inf)
-    assert(Await.result(dao.isEnabled(user), Duration.Inf))
-    Await.result(dao.disableUser(user), Duration.Inf)
-    assert(!Await.result(dao.isEnabled(user), Duration.Inf))
-    Await.result(dao.removeUser(user), Duration.Inf)
-    assert(!Await.result(dao.isEnabled(user), Duration.Inf))
+    assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
+    Await.result(dao.createUser(user.userSubjectId), Duration.Inf)
+    assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
+    Await.result(dao.enableUser(user.userSubjectId), Duration.Inf)
+    assert(Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
+    Await.result(dao.disableUser(user.userSubjectId), Duration.Inf)
+    assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
+    Await.result(dao.removeUser(user.userSubjectId), Duration.Inf)
+    assert(!Await.result(dao.isEnabled(user.userSubjectId), Duration.Inf))
   }
 }

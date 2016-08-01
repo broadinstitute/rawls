@@ -171,8 +171,8 @@ object Boot extends App with LazyLogging {
   def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, userDirDAO: JndiUserDirectoryDAO): Unit = {
     val enableServiceAccountFuture = for {
       serviceAccountUser <- gcsDAO.getServiceAccountRawlsUser()
-      _ <- userDirDAO.createUser(serviceAccountUser).recover { case e: NameAlreadyBoundException => Unit } // if it already exists, ok
-      _ <- userDirDAO.enableUser(serviceAccountUser).recover { case e: AttributeInUseException => Unit } // if it is already enabled, ok
+      _ <- userDirDAO.createUser(serviceAccountUser.userSubjectId).recover { case e: NameAlreadyBoundException => Unit } // if it already exists, ok
+      _ <- userDirDAO.enableUser(serviceAccountUser.userSubjectId).recover { case e: AttributeInUseException => Unit } // if it is already enabled, ok
     } yield Unit
 
     enableServiceAccountFuture.onFailure {
