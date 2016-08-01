@@ -164,7 +164,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case GetWorkflowMetadata(workspaceName, submissionId, workflowId) => pipe(workflowMetadata(workspaceName, submissionId, workflowId)) to sender
     case WorkflowQueueStatus => pipe(workflowQueueStatus()) to sender
 
-    case AdminListAllActiveSubmissions => asAdmin { listAllActiveSubmissions() } pipeTo sender
+    case AdminListAllActiveSubmissions => asFCAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceName,submissionId) => pipe(adminAbortSubmission(workspaceName,submissionId)) to sender
     case AdminDeleteWorkspace(workspaceName) => pipe(adminDeleteWorkspace(workspaceName)) to sender
 
@@ -226,7 +226,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asAdmin {
+  def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         deleteWorkspace(workspaceName, dataAccess, workspaceContext)
@@ -1148,7 +1148,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, dataAccess)
@@ -1158,7 +1158,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def hasAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           dataAccess.rawlsGroupQuery.load(workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read)) map { readerGroup =>
@@ -1179,7 +1179,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def grantAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
@@ -1195,7 +1195,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def revokeAllUserReadAccess(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
@@ -1208,7 +1208,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listAllWorkspaces() = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
       }
@@ -1223,7 +1223,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       Await.result(dataSource.inTransaction { dataAccess => action(dataAccess) }, 10 seconds)
     }
     
-    asAdmin {
+    asFCAdmin {
       val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
       val STATUS_FOUND = "FOUND"
       val STATUS_NOT_FOUND = "NOT_FOUND"

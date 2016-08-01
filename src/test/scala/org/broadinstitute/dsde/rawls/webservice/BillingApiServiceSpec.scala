@@ -14,9 +14,6 @@ import spray.http.StatusCodes
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 
-/**
- * Created by tsharpe on 9/28/15.
- */
 class BillingApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 

@@ -86,44 +86,44 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => asAdmin { getUserStatus(userRef) } pipeTo sender
+    case AdminGetUserStatus(userRef) => asFCAdmin { getUserStatus(userRef) } pipeTo sender
     case UserGetUserStatus => getUserStatus() pipeTo sender
-    case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
-    case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
-    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
-    case AdminAddToLDAP(userSubjectId) => asAdmin { addToLDAP(userSubjectId) } pipeTo sender
-    case AdminRemoveFromLDAP(userSubjectId) => asAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
-    case AdminListUsers => asAdmin { listUsers() } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
+    case AdminEnableUser(userRef) => asFCAdmin { enableUser(userRef) } pipeTo sender
+    case AdminDisableUser(userRef) => asFCAdmin { disableUser(userRef) } pipeTo sender
+    case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
+    case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
+    case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asFCAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case AdminListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
-    case AdminCreateBillingProject(projectName) => asAdmin { createBillingProject(projectName) } pipeTo sender
-    case AdminDeleteBillingProject(projectName) => asAdmin { deleteBillingProject(projectName) } pipeTo sender
-    case AdminAddUserToBillingProject(projectName, userEmail, role) => asAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
-    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case AdminListBillingProjectsForUser(userEmail) => asFCAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case AdminCreateBillingProject(projectName) => asFCAdmin { createBillingProject(projectName) } pipeTo sender
+    case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, userEmail, role) => asFCAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
 
-    case AddUserToBillingProject(projectName, userEmail, role) => asOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
-    case RemoveUserFromBillingProject(projectName, userEmail) => asOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case AddUserToBillingProject(projectName, userEmail, role) => asProjectOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case RemoveUserFromBillingProject(projectName, userEmail) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
-    case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
-    case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
-    case AdminDeleteGroup(groupName) => asAdmin { deleteGroup(groupName) } pipeTo sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+    case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
+    case AdminListGroupMembers(groupName) => asFCAdmin { listGroupMembers(groupName) } pipeTo sender
+    case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
+    case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
+    case AdminSynchronizeGroupMembers(groupRef) => asFCAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
 
-    case AdminDeleteRefreshToken(userRef) => asAdmin { deleteRefreshToken(userRef) } pipeTo sender
-    case AdminDeleteAllRefreshTokens => asAdmin { deleteAllRefreshTokens() } pipeTo sender
+    case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
+    case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
   }
 
-  def asOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+  def asProjectOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
     val isOwner = dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), Set(ProjectRoles.Owner))
     }
@@ -338,7 +338,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       } map(RequestComplete(_))
     }
 
-  def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
+  def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
         case Some(_) =>
@@ -352,7 +352,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         dataAccess.rawlsBillingProjectQuery.delete(project) map {
@@ -384,7 +384,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def listGroupMembers(groupName: String): Future[PerRequestMessage] = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(groupName))) flatMap {
           case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist")))
