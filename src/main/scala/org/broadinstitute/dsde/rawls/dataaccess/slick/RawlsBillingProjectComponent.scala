@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String)
-case class ProjectUsersRecord(userSubjectId: String, projectName: String)
+case class ProjectUsersRecord(userSubjectId: String, projectName: String, role: String)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
@@ -21,8 +22,9 @@ trait RawlsBillingProjectComponent {
   class ProjectUsersTable(tag: Tag) extends Table[ProjectUsersRecord](tag, "PROJECT_USERS") {
     def userSubjectId = column[String]("USER_SUBJECT_ID", O.Length(254))
     def projectName = column[String]("PROJECT_NAME", O.Length(254))
+    def role = column[String]("ROLE", O.Length(20))
 
-    def * = (userSubjectId, projectName) <> (ProjectUsersRecord.tupled, ProjectUsersRecord.unapply)
+    def * = (userSubjectId, projectName, role) <> (ProjectUsersRecord.tupled, ProjectUsersRecord.unapply)
 
     def user = foreignKey("FK_PROJECT_USERS_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
     def project = foreignKey("FK_PROJECT_USERS_PROJECT", projectName, rawlsBillingProjectQuery)(_.projectName)
@@ -37,11 +39,13 @@ trait RawlsBillingProjectComponent {
 
     def save(billingProject: RawlsBillingProject): WriteAction[RawlsBillingProject] = {
       val projectInsert = rawlsBillingProjectQuery insertOrUpdate marshalBillingProject(billingProject)
-      val userInserts = billingProject.users.toSeq.map {
-        projectUsersQuery insertOrUpdate marshalProjectUsers(_, billingProject.projectName)
-      }
+      val ownerRecs = billingProject.owners.map(marshalProjectUsers(_, billingProject.projectName, ProjectRoles.Owner))
 
-      projectInsert andThen findUsersByProjectName(billingProject.projectName.value).delete andThen DBIO.seq(userInserts: _*) map { _ => billingProject }
+      // remove any owners that might have been put in the users list cause you can only be in 1
+      val userRecs = (billingProject.users -- billingProject.owners).map(marshalProjectUsers(_, billingProject.projectName, ProjectRoles.User))
+      val userInsert = projectUsersQuery ++= (ownerRecs ++ userRecs)
+
+      projectInsert andThen findUsersByProjectName(billingProject.projectName.value).delete andThen userInsert map { _ => billingProject }
     }
 
     def load(rawlsProjectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
@@ -66,8 +70,8 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def addUserToProject(userRef: RawlsUserRef, billingProjectName: RawlsBillingProjectName): WriteAction[ProjectUsersRecord] = {
-      val record = marshalProjectUsers(userRef, billingProjectName)
+    def addUserToProject(userRef: RawlsUserRef, billingProjectName: RawlsBillingProjectName, role: ProjectRole): WriteAction[ProjectUsersRecord] = {
+      val record = marshalProjectUsers(userRef, billingProjectName, role)
       projectUsersQuery insertOrUpdate record map { _ => record }
     }
 
@@ -99,18 +103,30 @@ trait RawlsBillingProjectComponent {
         }
       }
     }
+    
+    def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadAction[Boolean] = {
+      findProjectUser(projectName, user, roles).length.result.map(_ > 0)
+    }
+    
+    private def findProjectUser(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]) = {
+      projectUsersQuery.filter(pu => pu.projectName === projectName.value &&
+        pu.userSubjectId === user.userSubjectId.value &&
+        pu.role.inSetBind(roles.map(_.toString)))
+    }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
       RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, userRecords: Set[ProjectUsersRecord]): RawlsBillingProject = {
-      val userRefs = userRecords.map { u => RawlsUserRef(RawlsUserSubjectId(u.userSubjectId)) }
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), userRefs, projectRecord.cromwellAuthBucketUrl)
+      val userRefsByRole = userRecords.groupBy(rec => ProjectRoles.withName(rec.role)).map { case (role, records) =>
+        role -> records.map { u => RawlsUserRef(RawlsUserSubjectId(u.userSubjectId)) }
+      }
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), userRefsByRole.getOrElse(ProjectRoles.Owner, Set.empty), userRefsByRole.getOrElse(ProjectRoles.User, Set.empty), projectRecord.cromwellAuthBucketUrl)
     }
 
-    private def marshalProjectUsers(userRef: RawlsUserRef, projectName: RawlsBillingProjectName): ProjectUsersRecord = {
-      ProjectUsersRecord(userRef.userSubjectId.value, projectName.value)
+    private def marshalProjectUsers(userRef: RawlsUserRef, projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole): ProjectUsersRecord = {
+      ProjectUsersRecord(userRef.userSubjectId.value, projectName.value, role.toString)
     }
 
     private def findBillingProjectByName(name: String): RawlsBillingProjectQuery = {

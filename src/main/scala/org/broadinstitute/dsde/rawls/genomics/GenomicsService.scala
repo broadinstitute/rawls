@@ -33,7 +33,7 @@ object GenomicsService {
 class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
 
   override def receive = {
-    case GetOperation(jobId) =>  asAdmin {getOperation(jobId)} pipeTo sender
+    case GetOperation(jobId) =>  asFCAdmin {getOperation(jobId)} pipeTo sender
   }
 
   def getOperation(jobId: String): Future[PerRequestMessage] = {

@@ -38,7 +38,7 @@ class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickD
   import dataSource.dataAccess.driver.api._
 
   override def receive = {
-    case GetStatistics(startDate, endDate) => asAdmin {getStatistics(startDate, endDate)} pipeTo sender
+    case GetStatistics(startDate, endDate) => asFCAdmin {getStatistics(startDate, endDate)} pipeTo sender
   }
 
   def getStatistics(startDate: String, endDate: String): Future[PerRequestMessage] = {

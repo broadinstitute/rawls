@@ -5,8 +5,9 @@ import javax.naming.NameAlreadyBoundException
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
@@ -55,10 +56,12 @@ object UserService {
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
 
   case object ListBillingProjects extends UserServiceMessage
-  case class ListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class CreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class DeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminCreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
+  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
 
@@ -83,41 +86,51 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetRefreshTokenDate => getRefreshTokenDate() pipeTo sender
 
     case CreateUser => createUser() pipeTo sender
-    case AdminGetUserStatus(userRef) => asAdmin { getUserStatus(userRef) } pipeTo sender
+    case AdminGetUserStatus(userRef) => asFCAdmin { getUserStatus(userRef) } pipeTo sender
     case UserGetUserStatus => getUserStatus() pipeTo sender
-    case AdminEnableUser(userRef) => asAdmin { enableUser(userRef) } pipeTo sender
-    case AdminDisableUser(userRef) => asAdmin { disableUser(userRef) } pipeTo sender
-    case AdminDeleteUser(userRef) => asAdmin { deleteUser(userRef) } pipeTo sender
-    case AdminAddToLDAP(userSubjectId) => asAdmin { addToLDAP(userSubjectId) } pipeTo sender
-    case AdminRemoveFromLDAP(userSubjectId) => asAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
-    case AdminListUsers => asAdmin { listUsers() } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
+    case AdminEnableUser(userRef) => asFCAdmin { enableUser(userRef) } pipeTo sender
+    case AdminDisableUser(userRef) => asFCAdmin { disableUser(userRef) } pipeTo sender
+    case AdminDeleteUser(userRef) => asFCAdmin { deleteUser(userRef) } pipeTo sender
+    case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
+    case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
+    case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
+    case AdminImportUsers(rawlsUserInfoList) => asFCAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
-    // ListBillingProjects is for the current user, not as admin
-    // ListBillingProjectsForUser is for any user, as admin
-
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
-    case ListBillingProjectsForUser(userEmail) => asAdmin { listBillingProjects(userEmail) } pipeTo sender
-    case CreateBillingProject(projectName) => createBillingProject(projectName) pipeTo sender
-    case DeleteBillingProject(projectName) => deleteBillingProject(projectName) pipeTo sender
-    case AddUserToBillingProject(projectName, userEmail) => addUserToBillingProject(projectName, userEmail) pipeTo sender
-    case RemoveUserFromBillingProject(projectName, userEmail) => removeUserFromBillingProject(projectName, userEmail) pipeTo sender
+    case AdminListBillingProjectsForUser(userEmail) => asFCAdmin { listBillingProjects(userEmail) } pipeTo sender
+    case AdminCreateBillingProject(projectName) => asFCAdmin { createBillingProject(projectName) } pipeTo sender
+    case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, userEmail, role) => asFCAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+
+    case AddUserToBillingProject(projectName, userEmail, role) => asProjectOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case RemoveUserFromBillingProject(projectName, userEmail) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
-    case AdminCreateGroup(groupRef) => asAdmin { createGroup(groupRef) } pipeTo sender
-    case AdminListGroupMembers(groupName) => asAdmin { listGroupMembers(groupName) } pipeTo sender
-    case AdminDeleteGroup(groupName) => asAdmin { deleteGroup(groupName) } pipeTo sender
-    case AdminOverwriteGroupMembers(groupName, memberList) => asAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+    case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
+    case AdminListGroupMembers(groupName) => asFCAdmin { listGroupMembers(groupName) } pipeTo sender
+    case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
+    case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
+    case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
     case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
     case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
+    case AdminSynchronizeGroupMembers(groupRef) => asFCAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
 
-    case AdminDeleteRefreshToken(userRef) => asAdmin { deleteRefreshToken(userRef) } pipeTo sender
-    case AdminDeleteAllRefreshTokens => asAdmin { deleteAllRefreshTokens() } pipeTo sender
+    case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
+    case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
+  }
+
+  def asProjectOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    val isOwner = dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), Set(ProjectRoles.Owner))
+    }
+    isOwner flatMap {
+      case true => op
+      case false => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a project owner.")))
+    }
   }
 
   def setRefreshToken(userRefreshToken: UserRefreshToken): Future[PerRequestMessage] = {
@@ -167,7 +180,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.seq(u.billingProjects.map(projectName =>
-              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName)
+              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName, ProjectRoles.User)
             ): _*) map (_ => user)
           }
         }
@@ -325,7 +338,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       } map(RequestComplete(_))
     }
 
-  def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
+  def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
         case Some(_) =>
@@ -333,13 +346,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case None =>
           DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
             val bucketUrl = "gs://" + bucketName
-            dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, Set.empty, bucketUrl))
+            dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, Set.empty, Set.empty, bucketUrl))
           } map(_ => RequestComplete(StatusCodes.Created))
       }
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asAdmin {
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         dataAccess.rawlsBillingProjectQuery.delete(project) map {
@@ -350,17 +363,17 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
+  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName) map (_ => RequestComplete(StatusCodes.OK))
+          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName, role) map (_ => RequestComplete(StatusCodes.OK))
         }
       }
     }
   }
 
-  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = asAdmin {
+  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
@@ -371,7 +384,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def listGroupMembers(groupName: String): Future[PerRequestMessage] = {
-    asAdmin {
+    asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(groupName))) flatMap {
           case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist")))

@@ -142,7 +142,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     // first add the project and user to the DB
 
     val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, "mockBucketUrl")
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl")
 
     runAndWait(rawlsUserQuery.save(billingUser))
 
@@ -153,7 +153,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Put(s"/admin/billing/${project1.projectName.value}/${billingUser.userEmail.value}") ~>
+    Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
