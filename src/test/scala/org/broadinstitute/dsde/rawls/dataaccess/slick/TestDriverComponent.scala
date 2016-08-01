@@ -87,14 +87,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
       Workflow(uuid, status, testDate, ref.toReference, inputResolutions(ref))
     }
-
+/*
     val failedWorkflows = failedWorkflowEntities map { ref =>
         WorkflowFailure(ref.name, ref.entityType, failedInputResolutions(ref), Seq(AttributeString("errorMessage1"), AttributeString("errorMessage2")))
-    }
+    }*/
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
-      workflows,
-      failedWorkflows, SubmissionStatuses.Submitted)
+      workflows/*,
+      failedWorkflows*/, SubmissionStatuses.Submitted)
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
@@ -340,7 +340,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,sample1.toReference, inputResolutions),
         Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,sample2.toReference, inputResolutions),
         Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,sample3.toReference, inputResolutions),
-        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions))/*, Seq.empty[WorkflowFailure]*/, SubmissionStatuses.Submitted)
 
     override def save() = {
       DBIO.seq(

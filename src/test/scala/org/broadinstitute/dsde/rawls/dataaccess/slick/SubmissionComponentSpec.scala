@@ -118,7 +118,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Done.toString))
     assert(Option(1) == runAndWait(submissionQuery.countByStatus(workspaceContext)).get(SubmissionStatuses.Aborted.toString))
   }
-
+/*
   it should "save a submission with workflow failures" in withDefaultTestDatabase {
     val workspaceContext= SlickWorkspaceContext(testData.workspace)
 
@@ -130,6 +130,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.get(workspaceContext, submissionWithFailedWorkflows.submissionId))
     }
   }
+*/
 
   //if this unit test breaks, chances are you have added a submission to the test data which has changed the values below
   it should "gather submission statistics" in withConstantTestDatabase {
