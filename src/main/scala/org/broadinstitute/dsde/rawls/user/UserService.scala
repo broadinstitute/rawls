@@ -33,7 +33,7 @@ object UserService {
   }
 
   def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, billingProjectTemplate)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -76,11 +76,9 @@ object UserService {
   case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
-  
-//  case class CreateBillingProject(projectName: String, ) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
@@ -678,11 +676,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccounts =>
       billingAccounts.find(_.accountName == billingAccount) match {
         case Some(RawlsBillingAccount(_, true)) => dataSource.inTransaction { dataAccess =>
-          for {
-            _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty)
-            _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, null))
-          } yield {
-            RequestComplete(StatusCodes.Created)
+          dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+            case None =>
+              for {
+                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate))
+                _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty)
+              } yield {
+                RequestComplete(StatusCodes.Created)
+              }
+
+            case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
           }
         }
 

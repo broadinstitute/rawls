@@ -505,7 +505,7 @@ class HttpGoogleServicesDAO(
       val list = blocking {
         executeGoogleRequest(fetcher)
       }
-      list.getBillingAccounts.toSeq
+      Option(list.getBillingAccounts.toSeq).getOrElse(Seq.empty)
     }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
         getGoogleErrorMessage(e) match {
@@ -637,7 +637,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value)))
       }).recover {
         case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A project by the name $projectName already exists"))
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
       }
 
       // set the billing account
