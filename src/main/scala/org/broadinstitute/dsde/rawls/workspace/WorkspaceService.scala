@@ -68,7 +68,7 @@ object WorkspaceService {
   case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
   case class BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
-//
+
   case class CreateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
   case class GetMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String) extends WorkspaceServiceMessage
   case class UpdateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration) extends WorkspaceServiceMessage
@@ -1013,12 +1013,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows ++ workflowFailures,
-          //notstarted = Nil,
           status = SubmissionStatuses.Submitted
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes/*, failures*/))
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes))
         }
     }
 

@@ -44,8 +44,6 @@ trait DataAccess
       submissionAttributeQuery.schema ++
       submissionValidationQuery.schema ++
       workflowQuery.schema ++
-      //workflowErrorQuery.schema ++
-      //workflowFailureQuery.schema ++
       workflowMessageQuery.schema ++
       workflowAuditStatusQuery.schema ++
       submissionAuditStatusQuery.schema
@@ -65,8 +63,6 @@ trait DataAccess
       TableQuery[SubmissionValidationTable].delete andThen        // FK to workflow, workflowfailure
       TableQuery[WorkflowMessageTable].delete andThen             // FK to workflow
       TableQuery[WorkflowTable].delete andThen                    // FK to submission, entity
-      //TableQuery[WorkflowErrorTable].delete andThen               // FK to workflowfailure
-      //TableQuery[WorkflowFailureTable].delete andThen             // FK to submission, entity
       TableQuery[SubmissionTable].delete andThen                  // FK to workspace, user, MC, entity
       TableQuery[MethodConfigurationTable].delete andThen         // FK to workspace
       TableQuery[ProjectUsersTable].delete andThen                // FK to billingproject, user
