@@ -64,6 +64,8 @@ case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProject
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
 case class SyncReport(items: Seq[SyncReportItem])
 
+case class BillingAccountScopes(requiredScopes: Seq[String])
+
 object UserAuthJsonSupport extends JsonSupport {
 
   case class UserAuthJsonFormatter[T <: UserAuthType](create: String => T) extends RootJsonFormat[T] {
@@ -110,4 +112,6 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportFormat = jsonFormat1(SyncReport)
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat2(CreateRawlsBillingProjectFullRequest)
+
+  implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 }

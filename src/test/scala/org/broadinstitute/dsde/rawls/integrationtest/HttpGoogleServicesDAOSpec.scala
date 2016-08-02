@@ -305,26 +305,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
   }
 
-  it should "extract error messages from Google HttpResponseExceptions" in {
-    val exc = new HttpResponseException.Builder(403, "PERMISSION_DENIED", new HttpHeaders())
-      .setContent(
-        """{
-                      |      "code" : 403,
-                      |      "errors" : [ {
-                      |        "domain" : "global",
-                      |        "message" : "Request had insufficient authentication scopes.",
-                      |        "reason" : "forbidden"
-                      |      } ],
-                      |      "message" : "Request had insufficient authentication scopes.",
-                      |      "status" : "PERMISSION_DENIED"
-                      |    }""")
-      .build()
-    assertResult("Request had insufficient authentication scopes.") {
-      gcsDAO.
-        getGoogleErrorMessage(exc)
-    }
-  }
-
   it should "create a project" in {
     val projectName = RawlsBillingProjectName("dsde-test-" + UUID.randomUUID().toString.take(8))
     try {
