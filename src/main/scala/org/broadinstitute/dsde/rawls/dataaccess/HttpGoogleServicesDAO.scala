@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, StringReader}
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
 import java.util.UUID
 
@@ -8,20 +7,11 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.json.JsonHttpContent
-import com.google.api.client.http.{EmptyContent, HttpResponseException, InputStreamContent}
-import com.google.api.services.oauth2.Oauth2
-import com.google.api.services.oauth2.Oauth2.Builder
-import com.google.api.services.plus.PlusScopes
-import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import com.google.api.client.http.{ HttpResponseException, InputStreamContent}
-import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.model.UsageExportLocation
-import com.google.api.services.genomics.{GenomicsScopes, Genomics}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.typesafe.scalalogging.LazyLogging
@@ -39,7 +29,6 @@ import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent._
 import scala.concurrent.duration._
-import scala.io.Source
 import scala.util.{Failure, Success, Try}
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
@@ -47,11 +36,9 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.admin.directory.model._
-import com.google.api.services.cloudbilling.{Cloudbilling, CloudbillingScopes}
+import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.BillingAccount
-import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
-import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.storage.model.Bucket.{Logging, Lifecycle}
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
@@ -59,8 +46,6 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
-
 import spray.http.{HttpResponse, StatusCode, OAuth2BearerToken, StatusCodes}
 
 class HttpGoogleServicesDAO(
@@ -85,7 +70,7 @@ class HttpGoogleServicesDAO(
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(GenomicsScopes.GENOMICS) // google requires GENOMICS, not just GENOMICS_READONLY, even though we're only doing reads
-  val billingScopes = Seq(ComputeScopes.CLOUD_PLATFORM)
+  val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
@@ -792,7 +777,7 @@ class HttpGoogleServicesDAO(
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountScopes(billingScopes)
+      .setServiceAccountScopes(Seq(ComputeScopes.CLOUD_PLATFORM)) // need this broad scope to create/manage projects
       .setServiceAccountId(billingPemEmail)
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(billingPemFile))
       .setServiceAccountUser(billingEmail)

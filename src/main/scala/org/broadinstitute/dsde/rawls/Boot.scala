@@ -112,7 +112,7 @@ object Boot extends App with LazyLogging {
     val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
-    
+
     val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, projectTemplate)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)

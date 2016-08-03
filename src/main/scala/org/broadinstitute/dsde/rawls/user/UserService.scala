@@ -689,7 +689,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         }
 
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing adminstrator of ${billingAccount.value} to create a project with it.")))
+        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccount.value} to create a project with it.")))
         case Some(RawlsBillingAccount(_, false)) => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing adminstrator of ${billingAccount.value} to create a project with it.")))
       }
     }
