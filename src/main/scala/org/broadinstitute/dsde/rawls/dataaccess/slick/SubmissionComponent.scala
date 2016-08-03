@@ -425,7 +425,6 @@ trait SubmissionComponent {
         DBIO.seq(
           deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
           deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
-          deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW_FAILURE", "workflow_id"),
           deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id")
         ) andThen {
           DBIO.sequence(Seq("WORKFLOW") map { workflow_table =>

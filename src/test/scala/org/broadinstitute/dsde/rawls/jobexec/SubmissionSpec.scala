@@ -379,10 +379,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert(submissionStatusResponse.workflows.size == 3)
 
     // the rest are in queued
-    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Queued) )
-    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Failed) )
-    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Submitted) )
-    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Succeeded) )
+    assert( submissionStatusResponse.workflows.count(_.status == WorkflowStatuses.Queued) == 2 )
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
