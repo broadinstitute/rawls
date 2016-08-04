@@ -15,6 +15,8 @@ import scala.concurrent.Future
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   override val errorReportSource = "google"
 
+  val billingEmail: String
+
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo]
 
@@ -81,6 +83,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getBucketServiceAccountCredential: Credential
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]
+
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])
+case class ProjectTemplate(policies: Map[String, Seq[String]], services: Seq[String])

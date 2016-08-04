@@ -43,6 +43,8 @@ libraryDependencies ++= {
     ("com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-genomics" % "v1-rev89-1.22.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-storage" % "v1-rev35-1.20.0").exclude("com.google.guava", "guava-jdk5"),
+    ("com.google.apis" % "google-api-services-cloudresourcemanager" % "v1beta1-rev16-1.22.0").exclude("com.google.guava", "guava-jdk5"),
+    ("com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0").exclude("com.google.guava", "guava-jdk5"),
     ("com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0"),
     ("com.google.apis" % "google-api-services-plus" % "v1-rev381-1.20.0"),
     ("com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0"),

@@ -37,4 +37,8 @@
     -->
     <!-- netty (mock server) produces a huge amount of DEBUG output during tests without this line -->
     <logger name="io.netty" level="WARN"/>
+    <logger name="org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO" level="debug" additivity="false">
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+    </logger>
 </configuration>

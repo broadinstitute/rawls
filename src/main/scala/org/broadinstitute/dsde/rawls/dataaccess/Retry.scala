@@ -23,6 +23,21 @@ trait Retry {
     retry(exponentialBackOffIntervals)(op,pred)
   }
 
+  /**
+   * will retry at the given interval until success or the overall timeout has passed
+   * @param pred which failures to retry
+   * @param interval how often to retry
+   * @param timeout how long from now to give up
+   * @param op what to try
+   * @param executionContext
+   * @tparam T
+   * @return
+   */
+  def retryUntilSuccessOrTimeout[T](pred: (Throwable) => Boolean = always)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+    val trialCount = Math.ceil(timeout / interval).toInt
+    retry(Seq.fill(trialCount)(interval))(op,pred)
+  }
+
   private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: (Throwable) => Boolean)(implicit executionContext: ExecutionContext): Future[T] = {
     op().recoverWith {
       case t if pred(t) && !remainingBackoffIntervals.isEmpty => after(remainingBackoffIntervals.head, system.scheduler) {
@@ -31,7 +46,7 @@ trait Retry {
     }
   }
 
-  private def always( throwable: Throwable ) = { true }
+  def always( throwable: Throwable ) = { true }
 
   private val allBackoffIntervals = Seq(100 milliseconds, 1 second, 3 seconds)
 

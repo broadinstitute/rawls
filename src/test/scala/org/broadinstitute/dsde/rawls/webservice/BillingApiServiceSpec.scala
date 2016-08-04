@@ -201,4 +201,39 @@ class BillingApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
+    val projectName = RawlsBillingProjectName("test_good")
+    Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
+          case None => fail("project does not exist in db")
+          case Some(project) => assert(project.users.isEmpty && project.owners.size == 1 && project.owners.head.userSubjectId.value == "123456789876543212345")
+        }
+      }
+  }
+
+  it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), services.gcsDAO.inaccessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+  }
+
+  it should "return 403 when creating a project with inaccessible to user billing account" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), RawlsBillingAccountName("this does not exist"))) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
 }

@@ -45,7 +45,6 @@ object ProjectRoles {
     override def toString = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): ProjectRole = ProjectRoles.withName(name)
-
   }
 
   def withName(name: String): ProjectRole = name.toLowerCase match {
@@ -59,6 +58,8 @@ object ProjectRoles {
 
   val all: Set[ProjectRole] = Set(Owner, User)
 }
+
+case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
 
 case class SyncReportItem(operation: String, user: Option[RawlsUser], subGroup: Option[RawlsGroupShort], errorReport: Option[ErrorReport])
 case class SyncReport(items: Seq[SyncReportItem])
@@ -107,4 +108,6 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportItemFormat = jsonFormat4(SyncReportItem)
 
   implicit val SyncReportFormat = jsonFormat1(SyncReport)
+
+  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat2(CreateRawlsBillingProjectFullRequest)
 }

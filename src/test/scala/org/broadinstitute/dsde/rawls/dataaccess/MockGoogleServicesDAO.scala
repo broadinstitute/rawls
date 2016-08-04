@@ -4,6 +4,7 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.cloudbilling.model.BillingAccount
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -17,13 +18,19 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
+  val billingEmail: String = "billing@test.firecloud.org"
   private var token: String = null
   private var tokenDate: DateTime = null
 
   private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
 
+  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
+  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    Future.successful(Seq.empty[RawlsBillingAccount])
+    val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true)
+    val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false)
+    Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
   override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
@@ -190,4 +197,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     import spray.json._
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
+
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
 }
