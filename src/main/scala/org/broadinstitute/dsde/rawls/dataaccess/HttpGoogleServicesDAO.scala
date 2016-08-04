@@ -1,52 +1,50 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{ByteArrayOutputStream, ByteArrayInputStream, StringReader}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, StringReader}
 import java.util.UUID
 
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import akka.actor.{ActorRef, ActorSystem}
-import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
-import com.google.api.client.http.json.JsonHttpContent
-import com.google.api.client.http.{ HttpResponseException, InputStreamContent}
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
-import com.google.api.services.cloudresourcemanager.CloudResourceManager
-import com.google.api.services.cloudresourcemanager.model._
-import com.google.api.services.compute.model.UsageExportLocation
-import com.google.api.services.oauth2.Oauth2.Builder
-import com.google.api.services.plus.PlusScopes
-import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
-import org.broadinstitute.dsde.rawls.crypto.{EncryptedBytes, Aes256Cbc, SecretKey}
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
-import org.broadinstitute.dsde.rawls.util.FutureSupport
-import org.joda.time
-import spray.client.pipelining._
-import spray.json._
-import spray.http.HttpHeaders.Authorization
-import spray.json.{JsValue, JsObject}
-
-import scala.collection.JavaConversions._
-import scala.concurrent.Future
-import scala.concurrent._
-import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
 import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
+import com.google.api.client.http.json.JsonHttpContent
+import com.google.api.client.http.{HttpResponseException, InputStreamContent}
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.admin.directory.model._
+import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.BillingAccount
-import com.google.api.services.genomics.{Genomics, GenomicsScopes}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo}
+import com.google.api.services.cloudresourcemanager.CloudResourceManager
+import com.google.api.services.cloudresourcemanager.model._
+import com.google.api.services.compute.model.UsageExportLocation
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.storage.model.Bucket.{Logging, Lifecycle}
+import com.google.api.services.genomics.{Genomics, GenomicsScopes}
+import com.google.api.services.oauth2.Oauth2.Builder
+import com.google.api.services.plus.PlusScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
-import com.google.api.services.storage.{Storage, StorageScopes}
+import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
-import org.broadinstitute.dsde.rawls.model._
+import com.google.api.services.storage.{Storage, StorageScopes}
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import spray.http.{HttpResponse, StatusCode, OAuth2BearerToken, StatusCodes}
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
+import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.joda.time
+import spray.client.pipelining._
+import spray.http.HttpHeaders.Authorization
+import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
+import spray.json._
+
+import scala.collection.JavaConversions._
+import scala.concurrent.{Future, _}
+import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 class HttpGoogleServicesDAO(
   useServiceAccountForBuckets: Boolean,
@@ -490,34 +488,14 @@ class HttpGoogleServicesDAO(
       val list = blocking {
         executeGoogleRequest(fetcher)
       }
-      Option(list.getBillingAccounts.toSeq).getOrElse(Seq.empty)
+      // option-wrap getBillingAccounts because it returns null for an empty list
+      Option(list.getBillingAccounts).map(_.toSeq).getOrElse(Seq.empty)
     }) {
-      case e: HttpResponseException if e.getStatusCode == StatusCodes.Forbidden.intValue =>
-        getGoogleErrorMessage(e) match {
-          case Success(googlyError) if googlyError == "Request had insufficient authentication scopes." =>
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"""{"requiredScopes" : [%s]}""".format(billingScopes.head) ))
-          case Success(googlyError) =>
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, googlyError))
-          case Failure(regret) =>
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, e.getContent))
-        }
+      case gjre: GoogleJsonResponseException
+        if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
+          gjre.getDetails.getMessage == "Request had insufficient authentication scopes." =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, BillingAccountScopes(billingScopes).toJson.toString))
     }
-  }
-
-  def getGoogleErrorMessage(exc: HttpResponseException): Try[String] = {
-    /* Google exception content generally looks like this:
-    {
-      "code" : 403,
-      "errors" : [ {
-        "domain" : "global",
-        "message" : "Request had insufficient authentication scopes.",
-        "reason" : "forbidden"
-      } ],
-      "message" : "Request had insufficient authentication scopes.",
-      "status" : "PERMISSION_DENIED"
-    }
-    */
-    Try(exc.getContent.parseJson.asJsObject.getFields("message").head.toString)
   }
 
   def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
