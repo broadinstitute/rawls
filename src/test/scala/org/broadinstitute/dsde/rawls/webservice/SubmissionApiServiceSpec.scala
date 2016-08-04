@@ -2,11 +2,12 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, WorkflowAuditStatusRecord}
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat, WorkflowOutputsFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
+import spray.json.{JsString, JsArray}
 import scala.concurrent.ExecutionContext
 import java.util.UUID
 
@@ -312,5 +313,30 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     assertResult(5) {
       status.workflowsBeforeNextUserWorkflow
     }
+  }
+
+  it should "handle unsupported workflow outputs" in withTestDataApiServices { services =>
+    import driver.api._
+
+    val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
+    val workflows = Seq(
+      // use the UUID of the workflow that has an output of array(array)
+      Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
+    )
+
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, Seq.empty, SubmissionStatuses.Done)
+
+    runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
+    runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
+
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {status}
+        val expectedOutputs = WorkflowOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data" -> TaskOutput(None, Option(Map("aggregate_data_workflow.aggregate_data.output_array" -> Right(UnsupportedOutputType(JsArray(Vector(
+          JsArray(Vector(JsString("foo"), JsString("bar"))),
+          JsArray(Vector(JsString("baz"), JsString("qux"))))))))))))
+        assertResult(expectedOutputs) { responseAs[WorkflowOutputs] }
+      }
   }
 }

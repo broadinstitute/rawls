@@ -121,14 +121,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
               stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stdout-2.txt",
               stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-y/job.stderr-2.txt")
           )),
-          Some(Map("wf.y.six" -> AttributeNumber(4)))),
+          Some(Map("wf.y.six" -> Left(AttributeNumber(4))))),
         "wf.x" -> TaskOutput(
           Some(Seq(ExecutionServiceCallLogs(
             stdout = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stdout.txt",
             stderr = "gs://cromwell-dev/cromwell-executions/wf/this_workflow_exists/call-x/job.stderr.txt"))),
           Some(Map(
-            "wf.x.four" -> AttributeNumber(4),
-            "wf.x.five" -> AttributeNumber(4))))))
+            "wf.x.four" -> Left(AttributeNumber(4)),
+            "wf.x.five" -> Left(AttributeNumber(4)))))))
 
     override def save() = {
       DBIO.seq(
@@ -543,6 +543,17 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assertResult(StatusCodes.OK) {
       status
     }
+  }
+
+  "ExecutionService" should "parse unsupported output data types" in {
+    val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
+    assertResult(ExecutionServiceOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data.output_array" -> Right(UnsupportedOutputType(JsArray(Vector(
+      JsArray(Vector(JsString("foo"), JsString("bar"))),
+      JsArray(Vector(JsString("baz"), JsString("qux")))))))))) {
+
+      Await.result(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout).outputs(workflowId, userInfo), Duration.Inf)
+    }
+
   }
 }
 

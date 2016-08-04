@@ -279,9 +279,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
       val attributes = outputExpressions.map { case (outputName, attributeName) =>
         Try {
-          attributeName.value -> outputs.getOrElse(outputName, {
-            throw new RawlsException(s"output named ${outputName} does not exist")
-          })
+          outputs.get(outputName) match {
+            case None => throw new RawlsException(s"output named ${outputName} does not exist")
+            case Some(Right(uot: UnsupportedOutputType)) => throw new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}")
+            case Some(Left(output)) => attributeName.value -> output
+          }
         }
       }
 
