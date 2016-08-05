@@ -9,10 +9,12 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import spray.http.OAuth2BearerToken
+
 import scala.collection.mutable
-import scala.concurrent.duration.{FiniteDuration, Duration}
-import scala.util.{Success, Try, Failure}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, ReadAction, WorkflowRecord, DataAccess}
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.{Failure, Success, Try}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction, WorkflowRecord}
+
 import scala.concurrent.{ExecutionContext, Future}
 import akka.pattern._
 import java.util.UUID
@@ -35,7 +37,8 @@ object SubmissionMonitorActor {
 
   /**
    * The response from querying the exec services.
-   * @param statusResponse If a successful response shows an unchanged status there
+    *
+    * @param statusResponse If a successful response shows an unchanged status there
    * will be a Success(None) entry in the statusResponse Seq. If the status has changed it will be
    * Some(workflowRecord, outputsOption) where workflowRecord will have the updated status. When the workflow
    * has Succeeded and there are outputs, outputsOption will contain the response from the exec service.
@@ -176,7 +179,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   /**
    * once all the execution service queries have completed this function is called to handle the responses
-   * @param response
+    *
+    * @param response
    * @param executionContext
    * @return
    */
@@ -185,7 +189,8 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       logger.error(s"Failure monitoring workflow in submission $submissionId", t)
     }
 
-    datasource.inTransaction { dataAccess =>
+    //Update the workflow statuses in their own transaction
+    val workflowsWithOutputsF = datasource.inTransaction { dataAccess =>
       val updatedRecs = response.statusResponse.collect {
         case Success(Some((updatedRec, _))) => updatedRec
       }
@@ -197,15 +202,29 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       // to minimize database updates do 1 update per status
       DBIO.seq(updatedRecs.groupBy(_.status).map { case (status, recs) =>
         dataAccess.workflowQuery.batchUpdateStatus(recs, WorkflowStatuses.withName(status))
-      }.toSeq :_*) andThen
-        handleOutputs(workflowsWithOutputs, dataAccess) andThen
-          checkOverallStatus(dataAccess)
-    } map { shouldStop => StatusCheckComplete(shouldStop) }
+      }.toSeq: _*) andThen
+        DBIO.successful(workflowsWithOutputs)
+    }
+
+    //Then in a new transaction, update the submission status.
+    //If this transaction throws an exception, it'll roll back, but the workflows will still be in their terminal state.
+    //The submission supervisor will restart the submission monitor, which will find this submission (again) in a non-terminal state,
+    //query Cromwell again, and restart from the top of this function with the results.
+    workflowsWithOutputsF flatMap { workflowsWithOutputs =>
+      datasource.inTransaction { dataAccess =>
+        handleOutputs(workflowsWithOutputs, dataAccess) flatMap { _ =>
+          checkOverallStatus(dataAccess) map {
+            shouldStop => StatusCheckComplete(shouldStop)
+          }
+        }
+      }
+    }
   }
 
   /**
    * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
-   * @param dataAccess
+    *
+    * @param dataAccess
    * @param executionContext
    * @return true if the submission is done/aborted
    */
@@ -227,11 +246,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     }
   }
 
-  def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext) = {
+  def handleOutputs(workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Unit] = {
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(Unit)
     } else {
-      for {
+      (for {
         // load all the starting data
         entitiesById <-      listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
         outputExpressions <- listMethodConfigOutputsForSubmission(dataAccess)
@@ -244,7 +263,10 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
         _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace)
         _ <- saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
-      } yield Unit
+      } yield Unit)  map (_ => Unit)
+      //map to Unit? apparently so, otherwise scala thinks the return type of this function is:
+      //DBIOAction[Unit.type, NoStream, Read with Read with Read with Read with Write with Read with Write with Read with Write with Write]
+      //...not what we mean.
     }
   }
 
