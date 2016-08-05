@@ -251,14 +251,6 @@ trait WorkflowComponent {
         findWorkflowById(id).delete
     }
 
-    //gather all workflowIds and workflowFailureIds in a submission and delete their attributes
-    def deleteSubmissionAttributes(submissionId: UUID) = {
-      val workflows = workflowQuery.filter(_.submissionId === submissionId).result
-
-      workflows map { workflowRecs =>
-        val workflowIds = workflowRecs.map(_.id)
-      }
-    }
 
     def deleteWorkflowAttributes(id: Long) = {
       findInputResolutionsByWorkflowId(id).result flatMap { validations =>
