@@ -38,6 +38,7 @@ trait RawlsBillingProjectComponent {
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
     def save(billingProject: RawlsBillingProject): WriteAction[RawlsBillingProject] = {
+      validateUserDefinedString(billingProject.projectName.value)
       val projectInsert = rawlsBillingProjectQuery insertOrUpdate marshalBillingProject(billingProject)
       val ownerRecs = billingProject.owners.map(marshalProjectUsers(_, billingProject.projectName, ProjectRoles.Owner))
 

@@ -422,6 +422,64 @@ class RemoteServicesMockServer(port:Int) {
             """.stripMargin)
           .withStatusCode(StatusCodes.Created.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/outputs")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
+              |  "outputs": {
+              |    "aggregate_data_workflow.aggregate_data.output_array": [["foo", "bar"], ["baz", "qux"]]
+              |  }
+              |}
+            """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/metadata")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
+              |  "status": "Unknown",
+              |  "submission": "2010-09-10T11:12:13.456Z",
+              |  "inputs": {"test": ["foo", "bar", "baz"]},
+              |  "outputs": {"aggregate_data_workflow.aggregate_data.output_array": [["foo", "bar"], ["baz", "qux"]]},
+              |  "calls": {}
+              |}
+            """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/workflows/v1/8afafe21-2b70-4180-a565-748cb573e10c/logs")
+    ).respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(
+            """
+              |{
+              |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
+              |  "logs": {
+              |  }
+              |}
+            """.stripMargin)
+          .withStatusCode(StatusCodes.Created.intValue)
+      )
   }
 
   def stopServer = mockServer.stop()

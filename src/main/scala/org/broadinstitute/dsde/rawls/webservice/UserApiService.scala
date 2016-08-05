@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.routing.Directive.pimpApply
