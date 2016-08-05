@@ -105,19 +105,16 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
     //flip the workflows to Launching in a separate txn.
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
-    dataSource.inTransaction { dataAccess =>
-      DBIO.from(workflowRecsToLaunch map { wfRecs =>
+    workflowRecsToLaunch map { wfRecs =>
+      dataSource.inTransaction { dataAccess =>
         dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching).map(_ => wfRecs)
-      })
-    }
+      }
 
-    workflowRecsToLaunch.map {
-      // submit the batch we found
-      case workflowRecs if workflowRecs.nonEmpty => SubmitWorkflowBatch(workflowRecs.map(_.id))
-
-      // if we didn't find any then look again in a little bit
-      case _ => ScheduleNextWorkflowQuery
-
+      if( wfRecs.nonEmpty ) {
+        SubmitWorkflowBatch(wfRecs.map(_.id))
+      } else {
+        ScheduleNextWorkflowQuery
+      }
     } recover {
       // if we found some but another actor reserved the first look again immediately
       case t: RawlsConcurrentModificationException => LookForWorkflows
