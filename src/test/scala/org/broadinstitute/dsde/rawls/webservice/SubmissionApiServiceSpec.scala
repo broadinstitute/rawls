@@ -108,9 +108,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     assertResult(3) {
       submission.workflows.size
     }
-    assertResult(0) {
-      submission.notstarted.size
-    }
   }
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
