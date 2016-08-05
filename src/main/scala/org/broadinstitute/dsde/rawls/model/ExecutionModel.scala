@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import UserAuthJsonSupport._
@@ -8,10 +9,11 @@ import spray.json._
 import org.joda.time.DateTime
 import org.broadinstitute.dsde.rawls.RawlsException
 
+import scala.util.{Failure, Success, Try}
+
 /**
  * @author tsharpe
  */
-
 // this is what a client sends to have us create a submission
 
 // Request for a submission
@@ -37,9 +39,11 @@ case class ExecutionServiceValidation(
   error: String
 )
 
+case class UnsupportedOutputType(json: JsValue)
+
 case class ExecutionServiceOutputs(
   id: String,
-  outputs: Map[String, Attribute]
+  outputs: Map[String, OutputType]
 )
 
 case class ExecutionServiceLogs(
@@ -83,7 +87,7 @@ case class WorkflowFailure(
 
 case class TaskOutput(
   logs: Option[Seq[ExecutionServiceCallLogs]],
-  outputs: Option[Map[String, Attribute]]
+  outputs: Option[Map[String, OutputType]]
 )
 
 case class WorkflowOutputs(
@@ -181,7 +185,7 @@ case class CallMetadata(
   backend: Option[String],
   backendStatus: Option[String],
   backendLogs: Option[Map[String, Attribute]],
-  outputs: Option[Map[String, Attribute]],
+  outputs: Option[Map[String, OutputType]],
   start: Option[DateTime],
   end: Option[DateTime],
   jobId: Option[String],
@@ -199,7 +203,7 @@ case class ExecutionMetadata
   start: Option[DateTime],
   end: Option[DateTime],
   inputs: Map[String, Attribute],
-  outputs: Option[Map[String, Attribute]],
+  outputs: Option[Map[String, OutputType]],
   calls: Map[String, Seq[CallMetadata]]
 )
 
@@ -218,6 +222,7 @@ case class WorkflowQueueStatusResponse
 )
 
 object ExecutionJsonSupport extends JsonSupport {
+  type OutputType = Either[Attribute, UnsupportedOutputType]
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
@@ -232,6 +237,21 @@ object ExecutionJsonSupport extends JsonSupport {
     override def read(json: JsValue): SubmissionStatus = json match {
       case JsString(name) => SubmissionStatuses.withName(name)
       case x => throw new DeserializationException("invalid value: " + x)
+    }
+  }
+
+  implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
+    override def write(obj: OutputType): JsValue = obj match {
+      case Left(attribute) => AttributeFormat.write(attribute)
+      case Right(UnsupportedOutputType(json)) => json
+    }
+
+    override def read(json: JsValue): OutputType = {
+      Try { AttributeFormat.read(json) } match {
+        case Success(attribute) => Left(attribute)
+        case Failure(e: DeserializationException) => Right(UnsupportedOutputType(json))
+        case Failure(t) => throw t
+      }
     }
   }
 
