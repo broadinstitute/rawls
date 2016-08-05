@@ -992,11 +992,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             status = WorkflowStatuses.Queued,
             statusLastChangedDate = DateTime.now,
             workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName),
-            inputResolutions = entityInputs.inputResolutions)
+            inputResolutions = entityInputs.inputResolutions
+          )
         }
-        val workflowFailures = failures.map { entityInputs =>
-          val errors = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.error.get))
-          WorkflowFailure(entityInputs.entityName, header.entityType, entityInputs.inputResolutions, errors)
+
+        val workflowFailures = failures map { entityInputs =>
+          Workflow(workflowId = None,
+            status = WorkflowStatuses.Failed,
+            statusLastChangedDate = DateTime.now,
+            workflowEntity = AttributeEntityReference(entityType = header.entityType, entityName = entityInputs.entityName),
+            inputResolutions = entityInputs.inputResolutions,
+            messages = for (entityValue <- entityInputs.inputResolutions if entityValue.error.isDefined) yield (AttributeString(entityValue.inputName + " - " + entityValue.error.get))
+           )
         }
 
         val submission = Submission(submissionId = submissionId,
@@ -1005,13 +1012,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
-          workflows = workflows,
-          notstarted = workflowFailures,
+          workflows = workflows ++ workflowFailures,
           status = SubmissionStatuses.Submitted
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
-          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes, failures))
+          RequestComplete(StatusCodes.Created, SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail, submission.status, header, successes))
         }
     }
 

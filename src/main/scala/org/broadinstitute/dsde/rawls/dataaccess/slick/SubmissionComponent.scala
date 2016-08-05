@@ -27,8 +27,7 @@ case class SubmissionRecord(id: UUID,
                            )
 
 case class SubmissionValidationRecord(id: Long,
-                                      workflowId: Option[Long],
-                                      workflowFailureId: Option[Long],
+                                      workflowId: Long,
                                       errorText: Option[String],
                                       inputName: String
                                      )
@@ -69,15 +68,13 @@ trait SubmissionComponent {
       See GAWB-288
      */
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
-    def workflowId = column[Option[Long]]("WORKFLOW_ID")
-    def workflowFailureId = column[Option[Long]]("WORKFLOW_FAILURE_ID")
+    def workflowId = column[Long]("WORKFLOW_ID")
     def errorText = column[Option[String]]("ERROR_TEXT")
     def inputName = column[String]("INPUT_NAME", O.Length(254))
 
-    def * = (id, workflowId, workflowFailureId, errorText, inputName) <> (SubmissionValidationRecord.tupled, SubmissionValidationRecord.unapply)
+    def * = (id, workflowId, errorText, inputName) <> (SubmissionValidationRecord.tupled, SubmissionValidationRecord.unapply)
 
-    def workflow = foreignKey("FK_SUB_VALIDATION_WF", workflowId, workflowQuery)(_.id.?)
-    def workflowFailure = foreignKey("FK_SUB_VALIDATION_FAIL", workflowFailureId, workflowFailureQuery)(_.id.?)
+    def workflow = foreignKey("FK_SUB_VALIDATION_WF", workflowId, workflowQuery)(_.id)
   }
 
   // this table records the timestamp and status of every submission, each time a submission changes status.
@@ -129,7 +126,7 @@ trait SubmissionComponent {
             val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
             val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
             val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
-            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty, Seq.empty)
+            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty)
             new SubmissionListResponse(sub, user)
         }
       }
@@ -150,12 +147,6 @@ trait SubmissionComponent {
         workflowQuery.createWorkflows(workspaceContext, UUID.fromString(submission.submissionId), workflows)
       }
 
-      def saveSubmissionWorkflowFailures(workflowFailures: Seq[WorkflowFailure]) = {
-        DBIO.seq(workflowFailures.map { case (wff) =>
-          workflowFailureQuery.save(workspaceContext, UUID.fromString(submission.submissionId), wff)
-        }.toSeq: _*)
-      }
-
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {
         case None =>
           val configIdAction = uniqueResult[Long](methodConfigurationQuery.findByName(
@@ -165,8 +156,7 @@ trait SubmissionComponent {
             configIdAction flatMap { configId =>
               (submissionQuery += marshalSubmission(workspaceContext.workspaceId, submission, entityId, configId.get))
             } andThen
-              saveSubmissionWorkflows(submission.workflows) andThen
-              saveSubmissionWorkflowFailures(submission.notstarted)
+              saveSubmissionWorkflows(submission.workflows)
           }
         case Some(_) =>
           throw new RawlsException(s"A submission already exists by the id [${submission.submissionId}]")
@@ -199,14 +189,7 @@ trait SubmissionComponent {
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
       }
 
-      val workflowFailureResolutionDeletes = workflowFailureQuery.filter(_.submissionId === submissionId).result flatMap { result =>
-        DBIO.seq(result.map(wff => workflowQuery.deleteFailureResolutions(wff.id)).toSeq:_*)
-      }
-
       workflowDeletes andThen
-        workflowFailureResolutionDeletes andThen
-        workflowQuery.deleteWorkflowErrors(submissionId) andThen
-        workflowQuery.deleteWorkflowFailures(submissionId) andThen
         submissionQuery.filter(_.id === submissionId).delete
     }
 
@@ -241,8 +224,7 @@ trait SubmissionComponent {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
             workflows <- loadSubmissionWorkflows(submissionRec.id)
             entity <- loadSubmissionEntity(submissionRec.submissionEntityId)
-            notStarted <- workflowQuery.loadWorkflowFailures(submissionRec.id)
-          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows, notStarted))
+          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows))
       }
     }
 
@@ -252,9 +234,8 @@ trait SubmissionComponent {
           config <- methodConfigurationQuery.loadMethodConfigurationById(rec.get.methodConfigurationId)
           workflows <- loadSubmissionWorkflows(rec.get.id)
           entity <- loadSubmissionEntity(rec.get.submissionEntityId)
-          notStarted <- workflowQuery.loadWorkflowFailures(rec.get.id)
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
-        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows, notStarted)
+        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows)
       }
     }
 
@@ -347,7 +328,7 @@ trait SubmissionComponent {
         submission.status.toString)
     }
 
-    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): Submission = {
+    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): Submission = {
       Submission(
         submissionRec.id.toString,
         new DateTime(submissionRec.submissionDate.getTime),
@@ -356,23 +337,17 @@ trait SubmissionComponent {
         config.name,
         entity,
         workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
-        notStarted.toList,
         SubmissionStatuses.withName(submissionRec.status))
     }
 
-    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], notStarted: Seq[WorkflowFailure]): ActiveSubmission = {
+    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): ActiveSubmission = {
       ActiveSubmission(workspace.namespace, workspace.name,
         unmarshalSubmission(
           submissionRec,
           config,
           entity,
-          workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
-          notStarted)
+          workflows.toList.sortBy(wf => wf.workflowEntity.entityName))
       )
-    }
-
-    def marshalWorkflowFailure(entityId: Long, submissionId: UUID): WorkflowFailureRecord = {
-      WorkflowFailureRecord(0, submissionId, entityId)
     }
 
     private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = {
@@ -409,7 +384,7 @@ trait SubmissionComponent {
         val workflowRec = WorkflowRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
-            ( Option(SubmissionValidationRecord(submissionValidationId, Option(workflowRec.id), r.<<, r.<<, r.<<)),
+            ( Option(SubmissionValidationRecord(submissionValidationId, workflowRec.id, r.<<, r.<<)),
               r.nextLongOption().map(SubmissionAttributeRecord(_, submissionValidationId, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)) )
           case None => (None, None)
         }
@@ -417,7 +392,7 @@ trait SubmissionComponent {
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, sv.id, sv.WORKFLOW_FAILURE_ID, sv.ERROR_TEXT, sv.INPUT_NAME, sa.id, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, sv.id, sv.ERROR_TEXT, sv.INPUT_NAME, sa.id, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
         from WORKFLOW w
         left outer join SUBMISSION_VALIDATION sv on sv.workflow_id = w.id
         left outer join SUBMISSION_ATTRIBUTE sa on sa.owner_id = sv.id
@@ -449,15 +424,11 @@ trait SubmissionComponent {
 
         DBIO.seq(
           deleteSubmissionAttributes("WORKFLOW", "workflow_id"),
-          deleteSubmissionAttributes("WORKFLOW_FAILURE", "workflow_failure_id"),
           deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW", "workflow_id"),
-          deleteFromTable("WORKFLOW_MESSAGE", "WORKFLOW_FAILURE", "workflow_id"),
-          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id"),
-          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW_FAILURE", "workflow_failure_id"),
-          deleteFromTable("WORKFLOW_ERROR", "WORKFLOW_FAILURE", "workflow_failure_id")
+          deleteFromTable("SUBMISSION_VALIDATION", "WORKFLOW", "workflow_id")
         ) andThen {
-          DBIO.sequence(Seq("WORKFLOW", "WORKFLOW_FAILURE") map { workflow_table =>
-            // delete workflows and workflow failure
+          DBIO.sequence(Seq("WORKFLOW") map { workflow_table =>
+            // delete workflows
             sqlu"""delete w from #$workflow_table w
                    inner join SUBMISSION s on w.submission_id=s.id
                    where s.workspace_id=$workspaceId

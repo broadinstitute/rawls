@@ -77,14 +77,6 @@ case class Workflow(
   messages: Seq[AttributeString] = Seq.empty
 )
 
-// Encapsulating errors for workflows that failed to start
-case class WorkflowFailure(
-  entityName: String,
-  entityType: String,
-  inputResolutions: Seq[SubmissionValidationValue],
-  errors: Seq[AttributeString]
-)
-
 case class TaskOutput(
   logs: Option[Seq[ExecutionServiceCallLogs]],
   outputs: Option[Map[String, OutputType]]
@@ -104,7 +96,6 @@ case class Submission(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
-  notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
 )
 
@@ -116,10 +107,9 @@ case class SubmissionStatusResponse(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
-  notstarted: Seq[WorkflowFailure],
   status: SubmissionStatus
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.workflows, submission.notstarted, submission.status)
+  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.workflows, submission.status)
 }
 
 case class SubmissionListResponse(
@@ -175,8 +165,7 @@ case class SubmissionReport(
   submitter: String,
   status: SubmissionStatus,
   header: SubmissionValidationHeader,
-  workflows: Seq[SubmissionValidationEntityInputs],
-  notstarted: Seq[SubmissionValidationEntityInputs]
+  workflows: Seq[SubmissionValidationEntityInputs]
 )
 
 case class CallMetadata(
@@ -287,13 +276,11 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat6(Workflow)
 
-  implicit val WorkflowFailureFormat = jsonFormat4(WorkflowFailure)
+  implicit val SubmissionFormat = jsonFormat8(Submission)
 
-  implicit val SubmissionFormat = jsonFormat9(Submission)
+  implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionReportFormat = jsonFormat8(SubmissionReport)
-
-  implicit val SubmissionStatusResponseFormat = jsonFormat9(SubmissionStatusResponse)
+  implicit val SubmissionStatusResponseFormat = jsonFormat8(SubmissionStatusResponse)
 
   implicit val SubmissionListResponseFormat = jsonFormat7(SubmissionListResponse)
 

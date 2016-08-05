@@ -77,32 +77,26 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     
     
     val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)),
-      Seq.empty[WorkflowFailure], SubmissionStatuses.Submitted)
+        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
@@ -261,7 +255,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
     assert(monitorActor != None) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
 
-    assert(newSubmissionReport.notstarted.size == 0)
     assert(newSubmissionReport.workflows.size == 1)
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
@@ -287,7 +280,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
-    assert( newSubmissionReport.notstarted.size == 0 )
     assert( newSubmissionReport.workflows.size == 6 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
@@ -332,7 +324,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
-    assert( newSubmissionReport.notstarted.size == 3 )
     assert( newSubmissionReport.workflows.size == 0 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
@@ -346,7 +337,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       status
     }
 
-    assert( newSubmissionReport.notstarted.size == 1 )
     assert( newSubmissionReport.workflows.size == 2 )
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
@@ -387,14 +377,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     // Only the workflow with the dodgy expression (sample.tumortype on a normal) should fail
-    assert(submissionStatusResponse.notstarted.size == 1)
-    assert(submissionStatusResponse.workflows.size == 2)
-
-    // the first fails to start for bad expression issues
-    assert(submissionStatusResponse.notstarted.head.errors.head.value == "Expected single value for workflow input, but evaluated result set was empty")
+    assert(submissionStatusResponse.workflows.size == 3)
 
     // the rest are in queued
-    assert( submissionStatusResponse.workflows.forall(_.status == WorkflowStatuses.Queued) )
+    assert( submissionStatusResponse.workflows.count(_.status == WorkflowStatuses.Queued) == 2 )
   }
 
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
