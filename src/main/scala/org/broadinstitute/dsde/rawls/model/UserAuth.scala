@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
 sealed trait UserAuthRef
@@ -14,6 +15,8 @@ case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
+case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole)
+case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
 case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
@@ -114,4 +117,17 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat2(CreateRawlsBillingProjectFullRequest)
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
+
+  implicit object ProjectRoleFormat extends RootJsonFormat[ProjectRole] {
+    override def write(obj: ProjectRole): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): ProjectRole = json match {
+      case JsString(name) => ProjectRoles.withName(name)
+      case _ => throw new DeserializationException("could not deserialize project role")
+    }
+  }
+
+  implicit val RawlsBillingProjectMembershipFormat = jsonFormat2(RawlsBillingProjectMembership)
+
+  implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 }

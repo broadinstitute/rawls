@@ -354,8 +354,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Set(project1.projectName)) {
-          responseAs[Seq[RawlsBillingProjectName]].toSet
+        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User))) {
+          responseAs[Seq[RawlsBillingProjectMembership]].toSet
         }
       }
   }
