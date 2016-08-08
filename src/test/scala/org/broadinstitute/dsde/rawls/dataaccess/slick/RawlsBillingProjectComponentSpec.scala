@@ -114,15 +114,15 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef2, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
 
-    assertResult(Seq(projectName1)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User))) {
      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
-    assertResult(Seq(projectName2)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef2))
     }
 
-    assertResult(Seq(projectName2)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef3))
     }
 
@@ -130,7 +130,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef4))
     }
 
-    assertResult(Seq(projectName1, projectName2)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.Owner), RawlsBillingProjectMembership(projectName2, ProjectRoles.Owner))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(owner))
     }
 
@@ -158,7 +158,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
     }
 
-    assertResult(Seq(projectName1, projectName2)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User), RawlsBillingProjectMembership(projectName2, ProjectRoles.User))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
@@ -174,7 +174,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
     }
 
-    assertResult(Seq(projectName1)) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 

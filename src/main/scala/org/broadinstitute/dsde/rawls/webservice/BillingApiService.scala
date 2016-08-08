@@ -22,6 +22,13 @@ trait BillingApiService extends HttpService with PerRequestCreator with UserInfo
   val userServiceConstructor: UserInfo => UserService
 
   val billingRoutes = requireUserInfo() { userInfo =>
+    path("billing" / Segment / "members") { projectId =>
+      get {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.GetBillingProjectMembers(RawlsBillingProjectName(projectId)))
+        }
+    } ~
     path("billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
       put {
         requestContext => perRequest(requestContext,

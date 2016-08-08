@@ -255,6 +255,39 @@ paths:
             - openid
             - email
             - profile
+  '/api/billing/{projectId}/members':
+    get:
+      responses:
+        '200':
+          description: Success
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/RawlsBillingProjectMember'
+        '403':
+          description: You must be a project owner to view the members of a project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: list members of billing project the caller owns
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+      tags:
+        - billing
+      summary: list members of billing project the caller owns
+      operationId: listBillingProjectMembers
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/billing/{projectId}/{role}/{userEmail}':
     put:
       responses:
@@ -3220,7 +3253,7 @@ paths:
             type: array
             description: list of billing projects for this user
             items:
-              type: string
+              $ref: '#/definitions/RawlsBillingProjectMembership'
         '404':
           description:  User not found
           schema:
@@ -4471,3 +4504,27 @@ definitions:
       billingAccount:
         type: string
         description: the id of the billing account to use, must start with 'billingAccounts/'
+  RawlsBillingProjectMembership:
+    description: an element of a list of projects and related role for a user
+    required:
+      - projectName
+      - role
+    properties:
+      projectName:
+        type: string
+        description: the name of the project to create
+      role:
+        type: string
+        description: the role of the current user in the project
+  RawlsBillingProjectMember:
+    description: an element of a list of project users and their role
+    required:
+      - email
+      - role
+    properties:
+      email:
+        type: string
+        description: the email of the user
+      role:
+        type: string
+        description: the role of the user in the project

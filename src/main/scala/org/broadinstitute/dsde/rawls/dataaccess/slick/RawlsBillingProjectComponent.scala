@@ -60,6 +60,19 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    def loadProjectUsersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
+      val name = rawlsProjectName.value
+
+      val query = for {
+        projectUser <- projectUsersQuery if projectUser.projectName === name
+        user <- rawlsUserQuery if user.userSubjectId === projectUser.userSubjectId
+      } yield (user.userEmail, projectUser.role)
+
+      query.result.map(_.map { case (email, role) =>
+        RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))
+      })
+    }
+
     def delete(billingProject: RawlsBillingProject): ReadWriteAction[Boolean] = {
       val name = billingProject.projectName.value
       val projectQuery = findBillingProjectByName(name)
@@ -85,9 +98,9 @@ trait RawlsBillingProjectComponent {
       findProjectsByUserSubjectId(userRef.userSubjectId.value).delete.map { count => count > 0 }
     }
 
-    def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectName]] = {
+    def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {
       findProjectsByUserSubjectId(rawlsUser.userSubjectId.value).result.map { projects =>
-        projects.map { rec => RawlsBillingProjectName(rec.projectName) }
+        projects.map { rec => RawlsBillingProjectMembership(RawlsBillingProjectName(rec.projectName), ProjectRoles.withName(rec.role)) }
       }
     }
 

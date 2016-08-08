@@ -65,6 +65,7 @@ object UserService {
   case object ListBillingAccounts extends UserServiceMessage
 
   case class CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) extends UserServiceMessage
+  case class GetBillingProjectMembers(projectName: RawlsBillingProjectName) extends UserServiceMessage
 
   case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminListGroupMembers(groupName: String) extends UserServiceMessage
@@ -115,6 +116,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => createBillingProjectFull(projectName, billingAccount) pipeTo sender
+    case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
 
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
     case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
@@ -344,6 +346,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         dataAccess.rawlsBillingProjectQuery.listUserProjects(user)
       } map(RequestComplete(_))
     }
+
+  def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.loadProjectUsersWithEmail(projectName).map(RequestComplete(_))
+    }
+  }
 
   def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {

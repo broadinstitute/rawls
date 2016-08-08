@@ -236,4 +236,35 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "return 200 when listing billing project members as owner" in withTestDataApiServices { services =>
+    val project = billingProjectFromName("new_project")
+
+    createProject(services, project)
+
+    Get(s"/billing/${project.projectName.value}/members") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq(RawlsBillingProjectMember(testData.userOwner.userEmail, ProjectRoles.Owner))) {
+          responseAs[Seq[RawlsBillingProjectMember]]
+        }
+      }
+  }
+
+  it should "return 403 when listing billing project members as non-owner" in withTestDataApiServices { services =>
+    val project = billingProjectFromName("new_project")
+
+    createProject(services, project, testData.userWriter)
+
+    Get(s"/billing/${project.projectName.value}/members") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
 }
