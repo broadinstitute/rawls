@@ -107,6 +107,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
     workflowRecsToLaunch map { wfRecs =>
       dataSource.inTransaction { dataAccess =>
+        println("getUnlaunchedWorkflowBatch updating ids to Launching: " + wfRecs.map(_.id))
         dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching).map(_ => wfRecs)
       }
 
@@ -123,7 +124,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   def reserveWorkflowBatch(dataAccess: DataAccess, activeCount: Int)(implicit executionContext: ExecutionContext): ReadWriteAction[Seq[WorkflowRecord]] = {
     if (activeCount > maxActiveWorkflowsTotal) {
-      logger.warn(s"There are $activeCount active workflows which is beyond the total active cap of $maxActiveWorkflowsTotal. Workflows will not be submitted.")
+      println(s"There are $activeCount active workflows which is beyond the total active cap of $maxActiveWorkflowsTotal. Workflows will not be submitted.")
       DBIO.successful(Seq.empty)
     } else {
       for {

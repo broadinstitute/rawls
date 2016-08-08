@@ -74,6 +74,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
+    println("workflowRecs ids: " + workflowRecs.map(_.id))
 
     val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     workflowSubMsg match {

@@ -16,8 +16,7 @@ before_install:
   - docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.7
 
 script:
-  - SBT_OPTS=-Xmx3g sbt clean coverage test -Denv.type=test -Dmysql.host=localhost it:compile
+  - SBT_OPTS=-Xmx3g sbt clean test:testOnly *WorkflowSubmissionSpec -Denv.type=test -Dmysql.host=localhost
 
 after_success:
-  - SBT_OPTS=-Xmx3g sbt coveralls
   - docker rm -f mysql
