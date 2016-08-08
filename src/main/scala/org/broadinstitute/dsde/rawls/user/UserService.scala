@@ -324,8 +324,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def removeFromLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
-    userDirectoryDAO.removeUser(userSubjectId) map { _ =>
-      RequestComplete(StatusCodes.NoContent)
+    userDirectoryDAO.disableUser(userSubjectId) flatMap { _ =>
+      userDirectoryDAO.removeUser(userSubjectId) map { _ =>
+        RequestComplete(StatusCodes.NoContent)
+      }
     }
   }
 
