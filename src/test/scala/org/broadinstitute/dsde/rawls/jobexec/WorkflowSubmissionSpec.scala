@@ -82,7 +82,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       case _ => fail("wrong workflow submission message")
     }
 
-    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
+    val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
+    val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
+    println(byStatus)
+    assert(supposedlyLaunchedRecs.forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
   def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
