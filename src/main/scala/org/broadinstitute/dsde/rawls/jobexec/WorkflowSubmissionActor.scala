@@ -6,22 +6,22 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths}
 import _root_.slick.dbio.DBIOAction
-import _root_.slick.dbio.Effect.{Write, Read}
-import spray.http.{StatusCodes, OAuth2BearerToken}
+import _root_.slick.dbio.Effect.{Read, Write}
+import org.joda.time.DateTime
+import spray.http.{OAuth2BearerToken, StatusCodes}
 import spray.json._
 import spray.httpx.SprayJsonSupport._
 
-
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 
 
 object WorkflowSubmissionActor {
@@ -107,8 +107,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
     workflowRecsToLaunch map { wfRecs =>
       dataSource.inTransaction { dataAccess =>
-        println("getUnlaunchedWorkflowBatch updating ids to Launching: " + wfRecs.map(_.id))
-        dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching).map(_ => wfRecs)
+        println( DateTime.now() + " getUnlaunchedWorkflowBatch updating ids to Launching: " + wfRecs.map(_.id))
+        dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
       }
 
       if( wfRecs.nonEmpty ) {
@@ -119,7 +119,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     } recover {
       // if we found some but another actor reserved the first look again immediately
       case t: RawlsConcurrentModificationException =>
-        println("concurrent modification exception, heading back to LookForWorkflows")
+        println(DateTime.now() + " concurrent modification exception, heading back to LookForWorkflows")
         LookForWorkflows
     }
   }

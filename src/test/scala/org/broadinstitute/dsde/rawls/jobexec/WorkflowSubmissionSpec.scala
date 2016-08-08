@@ -2,18 +2,19 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import akka.actor.{PoisonPill, ActorSystem}
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
-import spray.json.{JsString, JsObject, JsValue}
+import spray.json.{JsObject, JsString, JsValue}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -74,7 +75,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
-    println("workflowRecs ids: " + workflowRecs.map(_.id))
+    println(DateTime.now() + " workflowRecs ids: " + workflowRecs.map(_.id))
 
     val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     workflowSubMsg match {
@@ -85,7 +86,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
     val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
-    println(byStatus)
+    println(DateTime.now() + " " + byStatus)
     assert(supposedlyLaunchedRecs.forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
