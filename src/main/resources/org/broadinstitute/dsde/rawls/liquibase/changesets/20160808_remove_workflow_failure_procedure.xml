@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummmy" author="ansingh" id="remove-workflow-failure-procedure-1">
         <sql stripComments="true">
-            DROP PROCEDURE IF EXISTS migrate_workflow_failures;
+            DROP PROCEDURE migrate_workflow_failures;
         </sql>
     </changeSet>
 
