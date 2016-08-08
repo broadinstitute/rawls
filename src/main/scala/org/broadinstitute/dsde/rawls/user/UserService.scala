@@ -317,14 +317,17 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addToLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
-    userDirectoryDAO.createUser(userSubjectId) map { _ =>
-      RequestComplete(StatusCodes.Created)
+    userDirectoryDAO.createUser(userSubjectId) flatMap { _ =>
+      userDirectoryDAO.enableUser(userSubjectId) } map { _ =>
+        RequestComplete(StatusCodes.Created)
     }
   }
 
   def removeFromLDAP(userSubjectId: RawlsUserSubjectId): Future[PerRequestMessage] = {
-    userDirectoryDAO.removeUser(userSubjectId) map { _ =>
-      RequestComplete(StatusCodes.NoContent)
+    userDirectoryDAO.disableUser(userSubjectId) flatMap { _ =>
+      userDirectoryDAO.removeUser(userSubjectId) map { _ =>
+        RequestComplete(StatusCodes.NoContent)
+      }
     }
   }
 
