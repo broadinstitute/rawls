@@ -117,8 +117,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       }
     } recover {
       // if we found some but another actor reserved the first look again immediately
-      case t: RawlsConcurrentModificationException =>
-        LookForWorkflows
+      case t: RawlsConcurrentModificationException => LookForWorkflows
     }
   }
 
