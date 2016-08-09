@@ -80,7 +80,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: create billing project
+      description: create billing project in Rawls DB
       parameters:
         - in: path
           description: Project ID
@@ -113,7 +113,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: delete billing project
+      description: delete billing project from Rawls DB
       parameters:
         - in: path
           description: Project ID
@@ -223,7 +223,7 @@ paths:
     post:
       responses:
         '204':
-          description: Successfully Created Billing Project
+          description: Successfully Created Billing Project in Rawls and Google
         '400':
           description: firecloud billing user must be an administrator of the billing account
           schema:
@@ -238,7 +238,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: add user to billing project the caller owns
+      description: create new billing project in rawls and google
       parameters:
         - in: body
           description: create project request
@@ -248,13 +248,14 @@ paths:
             $ref: '#/definitions/CreateRawlsBillingProjectFullRequest'
       tags:
         - billing
-      summary: add user to billing project the caller owns
-      operationId: addUserToBillingProject
+      summary: create billing project in rawls and google
+      operationId: createBillingProjectFull
       security:
         - authorization:
             - openid
             - email
             - profile
+            - https://www.googleapis.com/auth/cloud-billing
   '/api/billing/{projectId}/members':
     get:
       responses:
