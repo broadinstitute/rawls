@@ -2,19 +2,18 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.actor.{PoisonPill, ActorSystem}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.StatusCodes
-import spray.json.{JsObject, JsString, JsValue}
+import spray.json.{JsString, JsObject, JsValue}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -75,7 +74,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
-    println( " workflowRecs ids: " + workflowRecs.map(_.id))
 
     val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     workflowSubMsg match {
@@ -84,10 +82,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       case _ => fail("wrong workflow submission message")
     }
 
-    val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
-    val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
-    println(" " + byStatus)
-    assert(supposedlyLaunchedRecs.forall(_.status == WorkflowStatuses.Launching.toString))
+    assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
   def setWorkflowBatchToQueued(batchSize: Int, submissionId: String): Seq[WorkflowRecord] = {
@@ -139,10 +134,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       case error => fail(s"Didn't schedule submission of a new workflow batch, instead got: $error")
     }
 
-    val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
-    val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
-    println( " " + byStatus)
-    
     assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
