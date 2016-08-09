@@ -90,7 +90,7 @@ paths:
       tags:
         - admin
         - billing
-      summary: create billing project
+      summary: create billing project in Rawls DB
       operationId: createBillingProject
       security:
         - authorization:
@@ -123,7 +123,7 @@ paths:
       tags:
         - admin
         - billing
-      summary: delete billing project
+      summary: delete billing project from Rawls DB
       operationId: deleteBillingProject
       security:
         - authorization:
