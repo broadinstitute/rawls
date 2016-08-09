@@ -293,7 +293,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       gcsConfig.getString("billingEmail")
       )
 
-    val userInfo = UserInfo("foo@bar.com", null, 0, testCreator.userSubjectId)
+    val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
     val user = RawlsUser(userInfo)
     Await.result(mockGcsDAO.createProxyGroup(user), Duration.Inf)
 
