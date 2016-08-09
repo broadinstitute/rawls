@@ -139,6 +139,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       case error => fail(s"Didn't schedule submission of a new workflow batch, instead got: $error")
     }
 
+    val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
+    val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
+    println(DateTime.now() + " " + byStatus)
+    
     assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
