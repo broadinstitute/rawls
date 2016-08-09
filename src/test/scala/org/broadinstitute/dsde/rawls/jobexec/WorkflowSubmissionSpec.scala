@@ -75,7 +75,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     val workflowRecs: Seq[WorkflowRecord] = setWorkflowBatchToQueued(workflowSubmission.batchSize, testData.submission1.submissionId)
-    println(DateTime.now() + " workflowRecs ids: " + workflowRecs.map(_.id))
+    println( " workflowRecs ids: " + workflowRecs.map(_.id))
 
     val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     workflowSubMsg match {
@@ -86,7 +86,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
     val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
-    println(DateTime.now() + " " + byStatus)
+    println(" " + byStatus)
     assert(supposedlyLaunchedRecs.forall(_.status == WorkflowStatuses.Launching.toString))
   }
 
@@ -141,7 +141,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     val supposedlyLaunchedRecs = runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result)
     val byStatus = supposedlyLaunchedRecs.groupBy(wfr => wfr.status ) map { case (status, recs) => status -> recs.size }
-    println(DateTime.now() + " " + byStatus)
+    println( " " + byStatus)
     
     assert(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).result).forall(_.status == WorkflowStatuses.Launching.toString))
   }

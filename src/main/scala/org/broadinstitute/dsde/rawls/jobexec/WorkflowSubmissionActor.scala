@@ -107,7 +107,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
     workflowRecsToLaunch map { wfRecs =>
       dataSource.inTransaction { dataAccess =>
-        println( DateTime.now() + " getUnlaunchedWorkflowBatch updating ids to Launching: " + wfRecs.map(_.id))
+        println( " getUnlaunchedWorkflowBatch updating ids to Launching: " + wfRecs.map(_.id))
         dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
       }
 
@@ -119,7 +119,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     } recover {
       // if we found some but another actor reserved the first look again immediately
       case t: RawlsConcurrentModificationException =>
-        println(DateTime.now() + " concurrent modification exception, heading back to LookForWorkflows")
+        println(" concurrent modification exception, heading back to LookForWorkflows")
         LookForWorkflows
     }
   }
