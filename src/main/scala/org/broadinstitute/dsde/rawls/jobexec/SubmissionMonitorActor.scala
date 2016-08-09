@@ -250,7 +250,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     if (workflowsWithOutputs.isEmpty) {
       DBIO.successful(Unit)
     } else {
-      (for {
+      for {
         // load all the starting data
         entitiesById <-      listWorkflowEntitiesById(workflowsWithOutputs, dataAccess)
         outputExpressions <- listMethodConfigOutputsForSubmission(dataAccess)
@@ -263,10 +263,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
         _ <- saveWorkspace(dataAccess, updatedEntitiesAndWorkspace)
         _ <- saveEntities(dataAccess, workspace, updatedEntitiesAndWorkspace)
         _ <- saveErrors(updatedEntitiesAndWorkspace.collect { case Right(errors) => errors }, dataAccess)
-      } yield Unit)  map (_ => Unit)
-      //map to Unit? apparently so, otherwise scala thinks the return type of this function is:
-      //DBIOAction[Unit.type, NoStream, Read with Read with Read with Read with Write with Read with Write with Read with Write with Write]
-      //...not what we mean.
+      } yield ()
     }
   }
 
