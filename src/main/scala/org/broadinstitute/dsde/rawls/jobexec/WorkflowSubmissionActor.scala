@@ -6,22 +6,22 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{MethodWiths, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths}
 import _root_.slick.dbio.DBIOAction
-import _root_.slick.dbio.Effect.{Write, Read}
-import spray.http.{StatusCodes, OAuth2BearerToken}
+import _root_.slick.dbio.Effect.{Read, Write}
+import org.joda.time.DateTime
+import spray.http.{OAuth2BearerToken, StatusCodes}
 import spray.json._
 import spray.httpx.SprayJsonSupport._
 
-
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.{Success, Failure}
+import scala.util.{Failure, Success}
 
 
 object WorkflowSubmissionActor {
@@ -96,20 +96,25 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
   //Get a blob of unlaunched workflows, flip their status, and queue them for submission.
   def getUnlaunchedWorkflowBatch()(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
-    val unlaunchedWfOptF = dataSource.inTransaction { dataAccess =>
+    val workflowRecsToLaunch = dataSource.inTransaction { dataAccess =>
       for {
         runningCount <- dataAccess.workflowQuery.countWorkflows(WorkflowStatuses.runningStatuses)
         reservedWorkflowRecs <- reserveWorkflowBatch(dataAccess, runningCount)
       } yield reservedWorkflowRecs
     }
 
-    unlaunchedWfOptF.map {
-      // submit the batch we found
-      case workflowRecs if workflowRecs.nonEmpty => SubmitWorkflowBatch(workflowRecs.map(_.id))
-
-      // if we didn't find any then look again in a little bit
-      case _ => ScheduleNextWorkflowQuery
-
+    //flip the workflows to Launching in a separate txn.
+    //if this optimistic-lock-exceptions with another txn, this one will barf and we'll reschedule when we pipe it back to ourselves
+    workflowRecsToLaunch flatMap { wfRecs =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workflowQuery.batchUpdateStatus(wfRecs, WorkflowStatuses.Launching)
+      } map { count =>
+        if( wfRecs.nonEmpty ) {
+          SubmitWorkflowBatch(wfRecs.map(_.id))
+        } else {
+          ScheduleNextWorkflowQuery
+        }
+      }
     } recover {
       // if we found some but another actor reserved the first look again immediately
       case t: RawlsConcurrentModificationException => LookForWorkflows
@@ -129,8 +134,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
             DBIO.successful(workflowRecs)
           } else {
             //they should also all have the same submission ID
-            val wfsWithASingleSubmission = workflowRecs.filter(_.submissionId == workflowRecs.head.submissionId)
-            dataAccess.workflowQuery.batchUpdateStatus(wfsWithASingleSubmission, WorkflowStatuses.Launching).map(_ => wfsWithASingleSubmission)
+            DBIO.successful(workflowRecs.filter(_.submissionId == workflowRecs.head.submissionId))
           }
       } yield reservedRecs
     }
@@ -229,6 +233,9 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       (executionServiceKey, workflowRecs.zip(executionServiceResults))
     }
 
+    //Second txn to update workflows to Launching.
+    //If this txn fails we'll just end up rescheduling the next workflow query and will restart this function from the top.
+    //Since the first txn didn't do any writes to the db it won't be left in a weird halfway state.
     cromwellSubmission flatMap { case (executionServiceKey, results) =>
       dataSource.inTransaction { dataAccess =>
         //save successes as submitted workflows and hook up their cromwell ids
