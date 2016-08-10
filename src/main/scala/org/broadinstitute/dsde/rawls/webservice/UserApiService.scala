@@ -21,7 +21,8 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
 
   val userServiceConstructor: UserInfo => UserService
 
-  // special route for registration that has different access control
+  // these routes have different access control and their paths have /register instead of /api
+
   val createUserRoute = requireUserInfo() { userInfo =>
     path("user") {
       post {
@@ -41,6 +42,8 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
       }
     }
   }
+
+  // standard /api routes begin here
 
   val userRoutes = requireUserInfo() { userInfo =>
     path("user" / "refreshToken") {
