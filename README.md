@@ -28,23 +28,31 @@ Spin up mysql locally:
 ```
 docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.7
 ```
-Run tests. Replace the `default` value with your docker machine name (or leave it out altogether if you have only a single machine):
+Run tests. Replace the `default` value with your docker machine name:
 ```
 sbt clean compile test -Dmysql.host=`docker-machine ip default`
+```
+Optionally include a custom mysql port. 
+The default is 3306 but can be changed by setting the system property:
+```
+sbt clean compile test -Dmysql.host=<mysql hostname> -Dmysql.port=<mysql port>
 ```
 And when you're done, spin down mysql:
 ```
 docker stop mysql && docker rm mysql
 ```
 
-## Unit Testing
-Unit tests require a mysql host configured similarly to the above docker instance.  
+## Integration Testing with MySQL in Docker
+Running the Integration Test requires the above setup plus a few support files in the */etc* folder.
+These can be softlinks to existing files in your Rawls Config folder.  If you have set that up correctly
+via the procedure described in the firecloud-develop repo, run these commands:
 ```
-sbt clean compile test -Dmysql.host=<mysql hostname>
+cd /etc
+sudo ln -s <path_to_rawls_src>/config/rawls.conf
+sudo ln -s <path_to_rawls_src>/config/rawls-account.pem
+sudo ln -s <path_to_rawls_src>/config/billing-account.pem
 ```
-
-Unit tests can optionally include a custom mysql port. 
-The default is 3306 but can be changed with an optional environment variable:
+Run tests using mysql similarly to unit tests.
 ```
-sbt clean compile test -Dmysql.host=<mysql hostname> -Dmysql.port=<mysql port>
+sbt clean compile it:test -Dmysql.host=<mysql hostname>
 ```
