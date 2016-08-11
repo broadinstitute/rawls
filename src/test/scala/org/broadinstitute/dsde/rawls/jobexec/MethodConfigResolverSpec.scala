@@ -54,12 +54,20 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val workspace = new Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
   val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
+  val sampleGood2 = new Entity("sampleGood2", "Sample", Map("blah" -> AttributeNumber(2)))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
 
   val sampleSet = new Entity("daSampleSet", "SampleSet",
     Map("samples" -> AttributeEntityReferenceList(Seq(
       AttributeEntityReference("Sample", "sampleGood"),
       AttributeEntityReference("Sample", "sampleMissingValue")
+    )))
+  )
+
+  val sampleSet2 = new Entity("daSampleSet2", "SampleSet",
+    Map("samples" -> AttributeEntityReferenceList(Seq(
+      AttributeEntityReference("Sample", "sampleGood"),
+      AttributeEntityReference("Sample", "sampleGood2")
     )))
   )
 
@@ -127,6 +135,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
         Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayName)))
+
+      runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
+        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayName)))
 
       // failure cases
       assertResult(true, "Missing values should return an error") {
