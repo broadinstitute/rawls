@@ -17,6 +17,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -260,6 +261,37 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
     assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
     assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+  }
+
+  it should "do stuff" in {
+
+    // get token date here should work?
+
+    val rawlsUser = Await.result(gcsDAO.getServiceAccountRawlsUser, Duration.Inf)
+    val credOption = Await.result(gcsDAO.getUserCredentials(rawlsUser), Duration.Inf)
+    credOption match {
+      case Some(credential) =>
+        assert(credential.refreshToken())
+        print("credential refresh token: ", credential.getRefreshToken)
+      case None => assert(2==3)
+    }
+
+
+    val userInfo = Await.result(gcsDAO.getServiceAccountUserInfo, Duration.Inf)
+
+    print("token: ", Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf))
+
+    // get token date is returning none
+    print("token date: ", Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf)) // this should be a valid token and not throw an error?
+      // intercept[TokenResponseException] { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+
+//    Await.result(gcsDAO.revokeToken(rawlsUser), Duration.Inf)
+//    Await.result(gcsDAO.deleteToken(rawlsUser), Duration.Inf)
+//    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+
+//    Await.result(gcsDAO.revokeToken(RawlsUser(userInfo)), Duration.Inf)
+//    Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
+//    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
 
   it should "crud proxy groups" in {
