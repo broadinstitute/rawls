@@ -39,7 +39,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Unit)
   }
 
-  override def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]] = {
+  override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]] = {
     Future.successful(Option(tokenDate))
   }
 

@@ -69,7 +69,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
   def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
-  def getTokenDate(userInfo: UserInfo): Future[Option[DateTime]]
+  def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
   def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
   def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
 

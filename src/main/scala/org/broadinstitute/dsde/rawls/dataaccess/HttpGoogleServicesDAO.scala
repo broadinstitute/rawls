@@ -529,14 +529,14 @@ class HttpGoogleServicesDAO(
     getTokenAndDate(rawlsUserRef.userSubjectId.value) map { _.map { case (token, date) => token } }
   }
 
-  override def getTokenDate(userInfo: UserInfo): Future[Option[time.DateTime]] = {
-    getTokenAndDate(userInfo.userSubjectId) map { _.map {
-      case (token, date) =>
-        // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
-        UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
-        date
-    } }
-  }
+  override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[time.DateTime]] = {
+    getTokenAndDate(rawlsUserRef.userSubjectId.value) map { _.map { case (token, date) =>
+            // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
+            UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
+            date
+        } }
+      }
+
 
   private def getTokenAndDate(userSubjectID: String): Future[Option[(String, time.DateTime)]] = {
     retryWhen500orGoogleError(() => {

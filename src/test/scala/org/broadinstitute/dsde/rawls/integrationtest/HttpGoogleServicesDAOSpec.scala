@@ -242,11 +242,12 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "crud tokens" in {
     val userInfo = UserInfo(null, null, 0, UUID.randomUUID().toString)
-    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+    val rawlsUser = RawlsUser(userInfo)
+    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf) }
     Await.result(gcsDAO.storeToken(userInfo, "testtoken"), Duration.Inf)
-    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    val storeTime = Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get
+    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    intercept[TokenResponseException] { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf).get }
 
     Thread.sleep(100)
 
@@ -254,44 +255,33 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     credential.refreshToken()
     val testToken = credential.getAccessToken
     Await.result(gcsDAO.storeToken(userInfo, testToken), Duration.Inf)
-    assertResult(Some(testToken)) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
+    assertResult(Some(testToken)) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
 
-    Await.result(gcsDAO.revokeToken(RawlsUser(userInfo)), Duration.Inf)
-    Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
-    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+    Await.result(gcsDAO.revokeToken(rawlsUser), Duration.Inf)
+    Await.result(gcsDAO.deleteToken(rawlsUser), Duration.Inf)
+    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf) }
   }
 
-  it should "do stuff" in {
+  it should "test get token date" in {
 
-    // get token date here should work?
+    val rawlsUser = RawlsUser(RawlsUserSubjectId("110101671348597476266"), RawlsUserEmail("joel.broad.dev@gmail.com"))
+    val credential = Await.result(gcsDAO.getUserCredentials(rawlsUser), Duration.Inf).get
 
-    val rawlsUser = Await.result(gcsDAO.getServiceAccountRawlsUser, Duration.Inf)
-    val credOption = Await.result(gcsDAO.getUserCredentials(rawlsUser), Duration.Inf)
-    credOption match {
-      case Some(credential) =>
-        assert(credential.refreshToken())
-        print("credential refresh token: ", credential.getRefreshToken)
-      case None => assert(2==3)
+    val refreshTokenOption = Option(credential.getRefreshToken)
+    refreshTokenOption match {
+      case Some(refreshToken) =>
+        // we can only get token date if we have a real refresh token
+        val optionDate = Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf)
+        optionDate match {
+          case Some(date) =>
+            assert(true)
+          case None =>
+            assert(false) // make test fail if we're not returning a date
+        }
+      case None =>
+        assert(false) // make test fail if we don't have a real refresh token
     }
-
-
-    val userInfo = Await.result(gcsDAO.getServiceAccountUserInfo, Duration.Inf)
-
-    print("token: ", Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf))
-
-    // get token date is returning none
-    print("token date: ", Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf)) // this should be a valid token and not throw an error?
-      // intercept[TokenResponseException] { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
-
-//    Await.result(gcsDAO.revokeToken(rawlsUser), Duration.Inf)
-//    Await.result(gcsDAO.deleteToken(rawlsUser), Duration.Inf)
-//    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
-
-//    Await.result(gcsDAO.revokeToken(RawlsUser(userInfo)), Duration.Inf)
-//    Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
-//    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
   }
 
   it should "crud proxy groups" in {
