@@ -94,8 +94,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sampleGood),
+            entityQuery.save(context, sampleGood2),
             entityQuery.save(context, sampleMissingValue),
             entityQuery.save(context, sampleSet),
+            entityQuery.save(context, sampleSet2),
             methodConfigurationQuery.save(context, configGood),
             methodConfigurationQuery.save(context, configMissingExpr),
             methodConfigurationQuery.save(context, configSampleSet)
