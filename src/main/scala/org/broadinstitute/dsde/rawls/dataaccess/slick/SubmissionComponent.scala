@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -12,6 +13,8 @@ import slick.driver.H2Driver.api._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import slick.profile.FixedSqlAction
+
+import scala.collection.immutable.Iterable
 
 /**
  * Created by mbemis on 2/18/16.
@@ -263,21 +266,37 @@ trait SubmissionComponent {
             // for each of them.
             val wr: WorkflowRecord = record.head.workflowRecord // first in the record
             val er: EntityRecord = record.head.entityRecord // second in the record
+            println("wr " + wr)
+            println("er " + er)
             // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
             // translate any/all messages that exist into a Seq[AttributeString]
             val messages: Seq[AttributeString] = record.map {_.messageRecord}.collect { case Some(wm) => AttributeString(wm.message) }
 
             // attach the input resolutions to the workflow object
-            val workflowResolutions = groupedResolutions.get(wr.id).map {seq =>
-              seq.collect {
+            println("groupedResolutions @ wrid: " + groupedResolutions.get(wr.id))
+            val workflowResolutions: Seq[SubmissionValidationValue] = groupedResolutions.get(wr.id).map { seq =>
+
+              //collect up the workflow resolution results by input
+              val resolutionsByInput = seq.collect {
                 case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
-                  // unmarshalAttributes returns a highly nested structure; it is meant for bulk translation of
-                  // attributes, but we use it here for just one
-                  val attr = attribute.map{attrRec =>
-                    submissionAttributeQuery.unmarshalAttributes(Seq( ((attrRec.id,attrRec), None) ))
-                  }.map{_.values.head}.map{_.values.head}
-                SubmissionValidationValue(attr, resolution.errorText, resolution.inputName)
+                  (resolution, attribute)
+              }.groupBy { _._1.inputName }
+
+              //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
+              //To get around this, we split by input, so that each input is successful (or not) individually.
+              val submissionValues = resolutionsByInput map { case (inputName, recTuples: Vector[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
+                val attr = if( recTuples.forall( _._2.isDefined ) ) {
+                  //all attributes are real
+                  Some(
+                    submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((wr.id, attrOpt.get), None) } ).get(wr.id).get(inputName)
+                  )
+                } else {
+                  None
+                }
+                //assuming that the first elem has the error here
+                SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
               }
+              submissionValues.toSeq
             }.getOrElse(Seq.empty)
 
             // create the Workflow object, now that we've processed all records for this workflow.

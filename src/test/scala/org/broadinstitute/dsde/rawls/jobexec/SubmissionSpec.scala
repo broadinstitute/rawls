@@ -329,6 +329,16 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
   }
 
+  it should "return a reasonable and sane number of input resolutions" in withWorkspaceService { workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "ArrayMethodConfig", "SampleSet", "sset1", None)
+    val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmissionReport) = rqComplete.response
+    println(newSubmissionReport)
+
+    val subStatus = Await.result(workspaceService.getSubmissionStatus(testData.wsName, newSubmissionReport.submissionId), Duration.Inf)
+    println(subStatus)
+  }
+
   it should "return a successful Submission with unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "NotAllSamplesMethodConfig", "Individual", "indiv1", Some("this.sset.samples"))
     val rqComplete = Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]

@@ -127,6 +127,49 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
 
   "MethodConfigResolver" should {
+
+    "blop" in withConfigData {
+      val context = new SlickWorkspaceContext(workspace)
+
+      import scala.concurrent.duration._
+
+      val brokenWdl = """task aggregate_data {
+                        |	Array[String] input_array
+                        |
+                        |	command {
+                        |    echo "foo"
+                        |
+                        |	}
+                        |
+                        |	output {
+                        |		Array[String] output_array = input_array
+                        |	}
+                        |
+                        |	runtime {
+                        |		docker : "broadgdac/aggregate_data:31"
+                        |	}
+                        |
+                        |	meta {
+                        |		author : "Tim DeFreitas"
+                        |		email : "timdef@broadinstitute.org"
+                        |	}
+                        |
+                        |}
+                        |
+                        |workflow aggregate_data_workflow {
+                        |	call aggregate_data
+                        |}""".stripMargin
+
+      val stringArrayName = "aggregate_data_workflow.aggregate_data.input_array"
+
+      val brokenConfig = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
+        Map.empty, Map(stringArrayName -> AttributeString("this.samples.blah")), Map.empty,
+        MethodRepoMethod( "method_namespace", "test_method", 1))
+
+      runAndWait(testResolveInputs(context, brokenConfig, sampleSet2, brokenWdl, this), 20 minutes) shouldBe
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, stringArrayName)))
+    }
+
     "resolve method config inputs" in withConfigData {
       val context = new SlickWorkspaceContext(workspace)
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
