@@ -266,14 +266,11 @@ trait SubmissionComponent {
             // for each of them.
             val wr: WorkflowRecord = record.head.workflowRecord // first in the record
             val er: EntityRecord = record.head.entityRecord // second in the record
-            println("wr " + wr)
-            println("er " + er)
             // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
             // translate any/all messages that exist into a Seq[AttributeString]
             val messages: Seq[AttributeString] = record.map {_.messageRecord}.collect { case Some(wm) => AttributeString(wm.message) }
 
             // attach the input resolutions to the workflow object
-            println("groupedResolutions @ wrid: " + groupedResolutions.get(wr.id))
             val workflowResolutions: Seq[SubmissionValidationValue] = groupedResolutions.get(wr.id).map { seq =>
 
               //collect up the workflow resolution results by input
@@ -304,7 +301,7 @@ trait SubmissionComponent {
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
               AttributeEntityReference(er.entityType, er.name),
-              workflowResolutions,
+              workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
             )
           }.toSeq
