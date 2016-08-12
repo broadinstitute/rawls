@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
@@ -13,8 +12,6 @@ import slick.driver.H2Driver.api._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
 import slick.profile.FixedSqlAction
-
-import scala.collection.immutable.Iterable
 
 /**
  * Created by mbemis on 2/18/16.

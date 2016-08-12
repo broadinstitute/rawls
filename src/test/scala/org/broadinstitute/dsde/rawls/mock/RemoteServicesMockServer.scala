@@ -219,12 +219,12 @@ class RemoteServicesMockServer(port:Int) {
                      |	}
                      |
                      |	runtime {
-                     |		docker : "broadgdac/aggregate_data:31"
+                     |		docker : "broadinstitute/aaaa:31"
                      |	}
                      |
                      |	meta {
-                     |		author : "Tim DeFreitas"
-                     |		email : "timdef@broadinstitute.org"
+                     |		author : "Barack Obama"
+                     |		email : "barryo@whitehouse.gov"
                      |	}
                      |
                      |}

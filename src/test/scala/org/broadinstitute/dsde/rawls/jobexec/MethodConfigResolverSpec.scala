@@ -54,20 +54,12 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val workspace = new Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
   val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
-  val sampleGood2 = new Entity("sampleGood2", "Sample", Map("blah" -> AttributeNumber(2)))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
 
   val sampleSet = new Entity("daSampleSet", "SampleSet",
     Map("samples" -> AttributeEntityReferenceList(Seq(
       AttributeEntityReference("Sample", "sampleGood"),
       AttributeEntityReference("Sample", "sampleMissingValue")
-    )))
-  )
-
-  val sampleSet2 = new Entity("daSampleSet2", "SampleSet",
-    Map("samples" -> AttributeEntityReferenceList(Seq(
-      AttributeEntityReference("Sample", "sampleGood"),
-      AttributeEntityReference("Sample", "sampleGood2")
     )))
   )
 
@@ -94,10 +86,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sampleGood),
-            entityQuery.save(context, sampleGood2),
             entityQuery.save(context, sampleMissingValue),
             entityQuery.save(context, sampleSet),
-            entityQuery.save(context, sampleSet2),
             methodConfigurationQuery.save(context, configGood),
             methodConfigurationQuery.save(context, configMissingExpr),
             methodConfigurationQuery.save(context, configSampleSet)
@@ -127,49 +117,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
 
   "MethodConfigResolver" should {
-
-    "blop" in withConfigData {
-      val context = new SlickWorkspaceContext(workspace)
-
-      import scala.concurrent.duration._
-
-      val brokenWdl = """task aggregate_data {
-                        |	Array[String] input_array
-                        |
-                        |	command {
-                        |    echo "foo"
-                        |
-                        |	}
-                        |
-                        |	output {
-                        |		Array[String] output_array = input_array
-                        |	}
-                        |
-                        |	runtime {
-                        |		docker : "broadgdac/aggregate_data:31"
-                        |	}
-                        |
-                        |	meta {
-                        |		author : "Tim DeFreitas"
-                        |		email : "timdef@broadinstitute.org"
-                        |	}
-                        |
-                        |}
-                        |
-                        |workflow aggregate_data_workflow {
-                        |	call aggregate_data
-                        |}""".stripMargin
-
-      val stringArrayName = "aggregate_data_workflow.aggregate_data.input_array"
-
-      val brokenConfig = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
-        Map.empty, Map(stringArrayName -> AttributeString("this.samples.blah")), Map.empty,
-        MethodRepoMethod( "method_namespace", "test_method", 1))
-
-      runAndWait(testResolveInputs(context, brokenConfig, sampleSet2, brokenWdl, this), 20 minutes) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, stringArrayName)))
-    }
-
     "resolve method config inputs" in withConfigData {
       val context = new SlickWorkspaceContext(workspace)
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
@@ -180,9 +127,6 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
         Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayName)))
-
-      runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayName)))
 
       // failure cases
       assertResult(true, "Missing values should return an error") {

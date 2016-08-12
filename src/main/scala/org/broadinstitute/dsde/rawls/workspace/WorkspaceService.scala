@@ -1038,7 +1038,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         DBIO.successful(RequestComplete(StatusCodes.OK, SubmissionValidationReport(submissionRequest, header, succeeded, failed)))
     }
 
-  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[PerRequestMessage] = {
+  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String) = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
