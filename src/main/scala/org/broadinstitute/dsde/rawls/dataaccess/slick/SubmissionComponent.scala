@@ -274,12 +274,12 @@ trait SubmissionComponent {
               val resolutionsByInput = seq.collect {
                 case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
                   (resolution, attribute)
-              }.groupBy { _._1.inputName }
+              }.groupBy { case (resolution, attribute) => resolution.inputName }
 
               //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
               //To get around this, we split by input, so that each input is successful (or not) individually.
               val submissionValues = resolutionsByInput map { case (inputName, recTuples: Vector[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
-                val attr = if( recTuples.forall( _._2.isDefined ) ) {
+                val attr = if( recTuples.forall({ case (submissionRec, attrRecOpt) => attrRecOpt.isDefined }) ) {
                   //all attributes are real
                   Some(
                     submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((wr.id, attrOpt.get), None) } ).get(wr.id).get(inputName)
