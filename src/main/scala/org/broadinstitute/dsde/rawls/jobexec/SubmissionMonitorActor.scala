@@ -123,7 +123,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
         // look up abortable WorkflowRecs for this submission
         val wrquery = dataAccess.workflowQuery.findWorkflowsForAbort(submissionId)
         wrquery.result map { _.map{ wr =>
-          Future.successful(wr.externalId).zip(executionServiceCluster.abort(wr, getUserInfo))
+          Future.successful(wr.externalId).zip(executionServiceCluster.abort(wr, UserInfo.buildFromTokens(credential)))
         }}
       }
     }
@@ -160,7 +160,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
 
   private def execServiceStatus(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[WorkflowRecord]] = {
     workflowRec.externalId match {
-      case Some(externalId) =>     executionServiceCluster.status(workflowRec, getUserInfo).map(newStatus => {
+      case Some(externalId) =>     executionServiceCluster.status(workflowRec, UserInfo.buildFromTokens(credential)).map(newStatus => {
         if (newStatus.status != workflowRec.status) Option(workflowRec.copy(status = newStatus.status))
         else None
       })
@@ -171,7 +171,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
   private def execServiceOutputs(workflowRec: WorkflowRecord)(implicit executionContext: ExecutionContext): Future[Option[(WorkflowRecord, Option[ExecutionServiceOutputs])]] = {
     WorkflowStatuses.withName(workflowRec.status) match {
       case WorkflowStatuses.Succeeded =>
-        executionServiceCluster.outputs(workflowRec, getUserInfo).map(outputs => Option((workflowRec, Option(outputs))))
+        executionServiceCluster.outputs(workflowRec, UserInfo.buildFromTokens(credential)).map(outputs => Option((workflowRec, Option(outputs))))
 
       case _ => Future.successful(Option((workflowRec, None)))
     }
@@ -333,13 +333,5 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
         dataAccess.workflowQuery.saveMessages(errorMessages, workflowRecord.id)
     })
-  }
-
-  private def getUserInfo = {
-    val expiresInSeconds: Long = Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0)
-    if (expiresInSeconds <= 5*60) {
-      credential.refreshToken()
-    }
-    UserInfo("", OAuth2BearerToken(credential.getAccessToken), Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
   }
 }

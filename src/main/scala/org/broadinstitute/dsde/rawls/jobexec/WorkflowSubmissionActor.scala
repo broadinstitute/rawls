@@ -152,7 +152,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def getWdl(methodConfig: MethodConfiguration, userCredentials: Credential)(implicit executionContext: ExecutionContext): ReadWriteAction[String] = {
-    withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, getUserInfo(userCredentials)) { method =>
+    withMethod(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, UserInfo.buildFromTokens(userCredentials)) { method =>
       withWdl(method) { wdl =>
         DBIO.successful(wdl)
       }
@@ -224,7 +224,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     import ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
     val cromwellSubmission = for {
       (wdl, workflowRecs, wfInputsBatch, wfOpts) <- workflowBatchFuture
-      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), getUserInfo(credential))
+      workflowSubmitResult <- executionServiceCluster.submitWorkflows(workflowRecs, wdl, wfInputsBatch, Option(wfOpts.toJson.toString), UserInfo.buildFromTokens(credential))
     } yield {
       // call to submitWorkflows returns a tuple:
       val executionServiceKey = workflowSubmitResult._1
@@ -266,14 +266,4 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         } map { _ => throw t }
     }
   }
-
-  //FIXME: I lifted this from the bottom of SubmissionMonitorActor. Maybe it should be centralised?
-  def getUserInfo(cred: Credential) = {
-    val expiresInSeconds: Long = Option(cred.getExpiresInSeconds).map(_.toLong).getOrElse(0)
-    if (expiresInSeconds <= 5*60) {
-      cred.refreshToken()
-    }
-    UserInfo("", OAuth2BearerToken(cred.getAccessToken), Option(cred.getExpiresInSeconds).map(_.toLong).getOrElse(0), "")
-  }
-
 }

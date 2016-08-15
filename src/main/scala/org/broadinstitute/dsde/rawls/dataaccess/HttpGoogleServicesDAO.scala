@@ -526,25 +526,33 @@ class HttpGoogleServicesDAO(
   }
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
-    retryWhen500orGoogleError(() => {
-      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, rawlsUserRef.userSubjectId.value)
-      get.getMediaHttpDownloader().setDirectDownloadEnabled(true);
-      val tokenBytes = new ByteArrayOutputStream()
-      try {
-        get.executeMediaAndDownloadTo(tokenBytes)
-        val so = executeGoogleRequest(get)
-        Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
-      } catch {
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-    } )
+    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
+      _.map { case (token, date) => token }
+    }
   }
 
-  override def getTokenDate(userInfo: UserInfo): Future[Option[time.DateTime]] = {
+  override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[time.DateTime]] = {
+    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
+      _.map { case (token, date) =>
+        // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
+        UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
+        date
+      }
+    }
+  }
+
+  private def getTokenAndDate(userSubjectID: String): Future[Option[(String, time.DateTime)]] = {
     retryWhen500orGoogleError(() => {
-      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userInfo.userSubjectId)
+      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userSubjectID)
+      get.getMediaHttpDownloader.setDirectDownloadEnabled(true)
       try {
-        Option(new time.DateTime(executeGoogleRequest(get).getUpdated.getValue))
+        val tokenBytes = new ByteArrayOutputStream()
+        get.executeMediaAndDownloadTo(tokenBytes)
+        val so = executeGoogleRequest(get)
+        for {
+          t <- Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
+          d <- Option(new time.DateTime(so.getUpdated.getValue))
+        } yield (t, d)
       } catch {
         case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
       }
@@ -775,12 +783,16 @@ class HttpGoogleServicesDAO(
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
     getToken(rawlsUserRef) map { refreshTokenOption =>
       refreshTokenOption.map { refreshToken =>
-        new GoogleCredential.Builder().setTransport(httpTransport)
-          .setJsonFactory(jsonFactory)
-          .setClientSecrets(tokenClientSecrets)
-          .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
+        buildCredentialFromRefreshToken(refreshToken)
       }
     }
+  }
+
+  private def buildCredentialFromRefreshToken(refreshToken: String): GoogleCredential = {
+    new GoogleCredential.Builder().setTransport(httpTransport)
+      .setJsonFactory(jsonFactory)
+      .setClientSecrets(tokenClientSecrets)
+      .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
   }
 
   def getServiceAccountRawlsUser(): Future[RawlsUser] = {

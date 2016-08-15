@@ -17,6 +17,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
+import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -241,11 +242,12 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "crud tokens" in {
     val userInfo = UserInfo(null, null, 0, UUID.randomUUID().toString)
-    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+    val rawlsUser = RawlsUser(userInfo)
+    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf) }
     Await.result(gcsDAO.storeToken(userInfo, "testtoken"), Duration.Inf)
-    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    val storeTime = Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get
+    assertResult(Some("testtoken")) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    intercept[TokenResponseException] { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf).get }
 
     Thread.sleep(100)
 
@@ -253,13 +255,21 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     credential.refreshToken()
     val testToken = credential.getAccessToken
     Await.result(gcsDAO.storeToken(userInfo, testToken), Duration.Inf)
-    assertResult(Some(testToken)) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assert(Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf).get.isAfter(storeTime))
+    assertResult(Some(testToken)) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
 
-    Await.result(gcsDAO.revokeToken(RawlsUser(userInfo)), Duration.Inf)
-    Await.result(gcsDAO.deleteToken(RawlsUser(userInfo)), Duration.Inf)
-    assertResult(None) { Await.result(gcsDAO.getToken(RawlsUser(userInfo)), Duration.Inf) }
-    assertResult(None) { Await.result(gcsDAO.getTokenDate(userInfo), Duration.Inf) }
+    Await.result(gcsDAO.revokeToken(rawlsUser), Duration.Inf)
+    Await.result(gcsDAO.deleteToken(rawlsUser), Duration.Inf)
+    assertResult(None) { Await.result(gcsDAO.getToken(rawlsUser), Duration.Inf) }
+    assertResult(None) { Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf) }
+  }
+
+  it should "test get token date" in {
+    // this RawlsUser must be a real user in the Dev environment with an up-to-date refresh token
+    val rawlsUser = RawlsUser(RawlsUserSubjectId("110101671348597476266"), RawlsUserEmail("joel.broad.dev@gmail.com"))
+    val credential = Await.result(gcsDAO.getUserCredentials(rawlsUser), Duration.Inf).get
+
+    assert(Option(credential.getRefreshToken).isDefined)
+    assert(Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf).isDefined)
   }
 
   it should "crud proxy groups" in {
