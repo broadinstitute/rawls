@@ -526,17 +526,20 @@ class HttpGoogleServicesDAO(
   }
 
   override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
-    getTokenAndDate(rawlsUserRef.userSubjectId.value) map { _.map { case (token, date) => token } }
+    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
+      _.map { case (token, date) => token }
+    }
   }
 
   override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[time.DateTime]] = {
-    getTokenAndDate(rawlsUserRef.userSubjectId.value) map { _.map { case (token, date) =>
-            // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
-            UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
-            date
-        } }
+    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
+      _.map { case (token, date) =>
+        // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
+        UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
+        date
       }
-
+    }
+  }
 
   private def getTokenAndDate(userSubjectID: String): Future[Option[(String, time.DateTime)]] = {
     retryWhen500orGoogleError(() => {
@@ -555,7 +558,6 @@ class HttpGoogleServicesDAO(
       }
     } )
   }
-
 
   override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
     getToken(rawlsUserRef) map {

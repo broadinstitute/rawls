@@ -11,7 +11,6 @@ case class UserInfo(userEmail: String, accessToken: OAuth2BearerToken, accessTok
 object UserInfo {
   def buildFromTokens(credential: Credential): UserInfo = {
     val expiresInSeconds: Long = Option(credential.getExpiresInSeconds).map(_.toLong).getOrElse(0)
-    // TODO: alternate expiration test
     if (expiresInSeconds <= 5*60) {
       credential.refreshToken()
     }

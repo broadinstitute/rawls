@@ -264,24 +264,12 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "test get token date" in {
-
+    // this RawlsUser must be a real user in the Dev environment with an up-to-date refresh token
     val rawlsUser = RawlsUser(RawlsUserSubjectId("110101671348597476266"), RawlsUserEmail("joel.broad.dev@gmail.com"))
     val credential = Await.result(gcsDAO.getUserCredentials(rawlsUser), Duration.Inf).get
 
-    val refreshTokenOption = Option(credential.getRefreshToken)
-    refreshTokenOption match {
-      case Some(refreshToken) =>
-        // we can only get token date if we have a real refresh token
-        val optionDate = Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf)
-        optionDate match {
-          case Some(date) =>
-            assert(true)
-          case None =>
-            assert(false) // make test fail if we're not returning a date
-        }
-      case None =>
-        assert(false) // make test fail if we don't have a real refresh token
-    }
+    assert(Option(credential.getRefreshToken).isDefined)
+    assert(Await.result(gcsDAO.getTokenDate(rawlsUser), Duration.Inf).isDefined)
   }
 
   it should "crud proxy groups" in {

@@ -144,8 +144,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def getRefreshTokenDate(): Future[PerRequestMessage] = {
-    val user = RawlsUser(userInfo)
-    gcsDAO.getTokenDate(user).map(_ match {
+    gcsDAO.getTokenDate(RawlsUser(userInfo)).map(_ match {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     })
