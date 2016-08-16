@@ -139,6 +139,9 @@ trait AttributeComponent {
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
           refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index), Option(refs.length))}
+        //convert empty AttributeValueList to AttributeEmptyList
+        //TODO: Do the same with EntityReferenceLists?
+        case AttributeValueList(values) if values.isEmpty => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
           values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index), Option(values.length))}

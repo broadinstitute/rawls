@@ -33,7 +33,12 @@ object MethodConfigResolver {
   }
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
-    SubmissionValidationValue(Some(AttributeValueList(seq.filter(v => v != null && v != AttributeNull).toSeq)), None, inputName)
+    val filterSeq = seq.filter(v => v != null && v != AttributeNull).toSeq
+    if(filterSeq.isEmpty) {
+      SubmissionValidationValue(Some(AttributeEmptyList), None, inputName)
+    } else {
+      SubmissionValidationValue(Some(AttributeValueList(filterSeq)), None, inputName)
+    }
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
