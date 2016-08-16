@@ -206,6 +206,44 @@ class RemoteServicesMockServer(port:Int) {
         .withStatusCode(StatusCodes.OK.intValue)
     )
 
+    val arrayWdl = """task aggregate_data {
+                     |	Array[String] input_array
+                     |
+                     |	command {
+                     |    echo "foo"
+                     |
+                     |	}
+                     |
+                     |	output {
+                     |		Array[String] output_array = input_array
+                     |	}
+                     |
+                     |	runtime {
+                     |		docker : "broadinstitute/aaaa:31"
+                     |	}
+                     |
+                     |	meta {
+                     |		author : "Barack Obama"
+                     |		email : "barryo@whitehouse.gov"
+                     |	}
+                     |
+                     |}
+                     |
+                     |workflow aggregate_data_workflow {
+                     |	call aggregate_data
+                     |}""".stripMargin
+    val arrayMethod = AgoraEntity(Some("dsde"),Some("array_task"),Some(1),None,None,None,None,Some(arrayWdl),None,Some(AgoraEntityType.Workflow))
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(methodPath + "/dsde/array_task/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(arrayMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
+
     val submissionBatchPath = "/workflows/v1/batch"
 
     // delay for two seconds when the test asks for it

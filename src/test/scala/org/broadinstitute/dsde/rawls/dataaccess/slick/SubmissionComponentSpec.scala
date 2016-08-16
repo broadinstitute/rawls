@@ -30,6 +30,11 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       testData.sample5 -> testData.inputResolutions2,
       testData.sample6 -> testData.inputResolutions2))
 
+  val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+    AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+  private val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+    Seq.empty, Map.empty)
 
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
@@ -75,6 +80,16 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     assert(!runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submission3))
     assert(!runAndWait(submissionQuery.list(workspaceContext)).toSet.contains(submission4))
+  }
+
+  it should "save and unmarshal listy input resolutions correctly" in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    runAndWait(submissionQuery.create(workspaceContext, submissionList))
+
+    assertResult(Some(submissionList)) {
+      runAndWait(submissionQuery.get(workspaceContext, submissionList.submissionId))
+    }
   }
 
   it should "fail to delete submissions that don't exist" in withDefaultTestDatabase {

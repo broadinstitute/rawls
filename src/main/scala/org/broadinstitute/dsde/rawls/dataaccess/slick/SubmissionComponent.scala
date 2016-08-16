@@ -268,16 +268,29 @@ trait SubmissionComponent {
             val messages: Seq[AttributeString] = record.map {_.messageRecord}.collect { case Some(wm) => AttributeString(wm.message) }
 
             // attach the input resolutions to the workflow object
-            val workflowResolutions = groupedResolutions.get(wr.id).map {seq =>
-              seq.collect {
+            val workflowResolutions: Seq[SubmissionValidationValue] = groupedResolutions.get(wr.id).map { seq =>
+
+              //collect up the workflow resolution results by input
+              val resolutionsByInput = seq.collect {
                 case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
-                  // unmarshalAttributes returns a highly nested structure; it is meant for bulk translation of
-                  // attributes, but we use it here for just one
-                  val attr = attribute.map{attrRec =>
-                    submissionAttributeQuery.unmarshalAttributes(Seq( ((attrRec.id,attrRec), None) ))
-                  }.map{_.values.head}.map{_.values.head}
-                SubmissionValidationValue(attr, resolution.errorText, resolution.inputName)
+                  (resolution, attribute)
+              }.groupBy { case (resolution, attribute) => resolution.inputName }
+
+              //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
+              //To get around this, we split by input, so that each input is successful (or not) individually.
+              val submissionValues = resolutionsByInput map { case (inputName, recTuples: Vector[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
+                val attr = if( recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined } ) {
+                  //all attributes are real
+                  Some(
+                    submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((wr.id, attrOpt.get), None) } ).get(wr.id).get(inputName)
+                  )
+                } else {
+                  None
+                }
+                //assuming that the first elem has the error here
+                SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
               }
+              submissionValues.toSeq
             }.getOrElse(Seq.empty)
 
             // create the Workflow object, now that we've processed all records for this workflow.
@@ -285,7 +298,7 @@ trait SubmissionComponent {
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
               AttributeEntityReference(er.entityType, er.name),
-              workflowResolutions,
+              workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
             )
           }.toSeq
