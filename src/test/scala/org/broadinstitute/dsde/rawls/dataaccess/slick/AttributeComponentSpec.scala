@@ -68,6 +68,27 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
+  }
+
+  it should "save empty AttributeValueLists as AttributeEmptyList" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueList(Seq())
+    runAndWait(workspaceQuery.save(workspace))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
+    assertResult(1) { numRows.head }
+
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
+  }
+
+  it should "save empty AttributeEntityReferenceLists as AttributeEmptyList" in withEmptyTestDatabase {
+    val testAttribute = AttributeEntityReferenceList(Seq())
+    runAndWait(workspaceQuery.save(workspace))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
+    assertResult(1) { numRows.head }
+
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
   }
 

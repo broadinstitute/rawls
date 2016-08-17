@@ -135,7 +135,18 @@ trait AttributeComponent {
      * @return a sequence of write actions the resulting value being the attribute id inserted
      */
     def insertAttributeRecords(ownerId: OWNER_ID, name: String, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
+
+      def insertEmpty : Seq[ReadWriteAction[Int]] = {
+        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
+        Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+      }
+
       attribute match {
+        case AttributeEmptyList => insertEmpty
+        //convert empty AttributeList types to AttributeEmptyList on save
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => insertEmpty
+        case AttributeValueList(values) if values.isEmpty => insertEmpty
+
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
           refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index), Option(refs.length))}
@@ -144,7 +155,6 @@ trait AttributeComponent {
           values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(insertAttributeValue(ownerId, name, value))
         case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, name, workspaceId, ref))
-        case AttributeEmptyList => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
       }
     }
 
@@ -161,16 +171,27 @@ trait AttributeComponent {
     }
 
     def marshalAttribute(ownerId: OWNER_ID, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
+
+      def marshalEmpty : Seq[T#TableElementType] = {
+        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
+        Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+      }
       attribute match {
+        case AttributeEmptyList => marshalEmpty
+        //convert empty AttributeList types to AttributeEmptyList on save
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => marshalEmpty
+        case AttributeValueList(values) if values.isEmpty => marshalEmpty
+
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
           refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, name, Option(index), ref, entityIdsByRef, Option(refs.length))}
+
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
           values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(marshalAttributeValue(ownerId, name, value, None, None))
         case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, name, None, ref, entityIdsByRef, None))
-        case AttributeEmptyList => Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
+
       }
     }
 
@@ -304,6 +325,7 @@ trait AttributeComponent {
 
     private def unmarshalList(attributeRecsWithRef: Set[(RECORD, Option[EntityRecord])]) = {
       val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
+      //NOTE: listIndex of -1 means "empty list"
       if (sortedRecs.head._1.listIndex.get == -1) {
         AttributeEmptyList
       } else if (sortedRecs.head._2.isDefined) {

@@ -87,6 +87,10 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty,
     MethodRepoMethod( "method_namespace", "test_method", 1))
 
+  val configEmptyArray = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
+    Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty,
+    MethodRepoMethod( "method_namespace", "test_method", 1))
+
   class ConfigData extends TestData {
     override def save() = {
       DBIO.seq(
@@ -128,7 +132,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   "MethodConfigResolver" should {
     "resolve method config inputs" in withConfigData {
-      val context = new SlickWorkspaceContext(workspace)
+      val context = SlickWorkspaceContext(workspace)
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
         Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName)))
 
@@ -152,6 +156,13 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       intercept[RawlsException] {
         runAndWait(testResolveInputs(context, configMissingExpr, sampleGood, littleWdl, this))
       }
+    }
+
+    "resolve empty lists into AttributeEmptyLists" in withConfigData {
+      val context = SlickWorkspaceContext(workspace)
+
+      runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, intArrayName)))
     }
   }
 }

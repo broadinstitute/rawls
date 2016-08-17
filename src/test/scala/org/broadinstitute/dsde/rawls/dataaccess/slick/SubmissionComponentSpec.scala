@@ -36,6 +36,17 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
     Seq.empty, Map.empty)
 
+  val inputResolutionsListEmpty = Seq(SubmissionValidationValue(Option(
+    AttributeValueList(Seq())), Option("message4"), "test_input_name4"))
+  private val submissionListEmpty = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsListEmpty),
+    Seq.empty, Map.empty)
+
+  val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeEmptyList), Option("message4"), "test_input_name4"))
+  private val submissionAttrEmptyList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+    Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsAttrEmptyList),
+    Seq.empty, Map.empty)
+
   "SubmissionComponent" should "save, get, list, and delete a submission status" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
@@ -89,6 +100,28 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     assertResult(Some(submissionList)) {
       runAndWait(submissionQuery.get(workspaceContext, submissionList.submissionId))
+    }
+  }
+
+  it should "quietly marshal AttributeList(Seq()) input resolutions into AttributeEmptyList"  in withDefaultTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+    val turnedIntoAttrEmptyList = submissionListEmpty.copy(
+      workflows = Seq(submissionListEmpty.workflows.head.copy(inputResolutions = inputResolutionsAttrEmptyList)))
+
+    runAndWait(submissionQuery.create(workspaceContext, submissionListEmpty))
+    assertResult(Some(turnedIntoAttrEmptyList)) {
+      runAndWait(submissionQuery.get(workspaceContext, submissionListEmpty.submissionId))
+    }
+  }
+
+  it should "save and unmarshal AttributeEmptyList input resolutions correctly"  in withDefaultTestDatabase {
+    //This test passes because saving AttributeEmptyList gives us AttributeEmptyList back
+    val workspaceContext = SlickWorkspaceContext(testData.workspace)
+
+      runAndWait(submissionQuery.create(workspaceContext, submissionAttrEmptyList))
+    assertResult(Some(submissionAttrEmptyList)) {
+      runAndWait(submissionQuery.get(workspaceContext, submissionAttrEmptyList.submissionId))
     }
   }
 
