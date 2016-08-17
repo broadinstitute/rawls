@@ -36,7 +36,8 @@
     <changeSet logicalFilePath="dummmy" author="mbemis" id="workflow-failure-migration-v2-6">
         <sql stripComments="true">
             INSERT INTO WORKFLOW_MESSAGE (WORKFLOW_ID, MESSAGE)
-                SELECT wf.ID, we.ERROR_TEXT FROM WORKFLOW_ERROR we JOIN WORKFLOW wf on wf.TEMP_WORKFLOW_FAILURE_ID = we.WORKFLOW_FAILURE_ID;
+                SELECT wf.ID, we.ERROR_TEXT
+                FROM WORKFLOW_ERROR we JOIN WORKFLOW wf on wf.TEMP_WORKFLOW_FAILURE_ID = we.WORKFLOW_FAILURE_ID;
         </sql>
     </changeSet>
 
