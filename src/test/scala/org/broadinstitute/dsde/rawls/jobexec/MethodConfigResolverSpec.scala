@@ -132,7 +132,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   "MethodConfigResolver" should {
     "resolve method config inputs" in withConfigData {
-      val context = new SlickWorkspaceContext(workspace)
+      val context = SlickWorkspaceContext(workspace)
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
         Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName)))
 
@@ -159,7 +159,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     }
 
     "resolve empty lists into AttributeEmptyLists" in withConfigData {
-      val context = new SlickWorkspaceContext(workspace)
+      val context = SlickWorkspaceContext(workspace)
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, intArrayName)))
