@@ -103,17 +103,19 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
-  it should "save and unmarshal empty list input resolutions correctly"  in withDefaultTestDatabase {
-    //This test fails because saving AttributeList(Seq()) gives us None back
+  it should "quietly marshal AttributeList(Seq()) input resolutions into AttributeEmptyList"  in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
+    val turnedIntoAttrEmptyList = submissionListEmpty.copy(
+      workflows = Seq(submissionListEmpty.workflows.head.copy(inputResolutions = inputResolutionsAttrEmptyList)))
+
     runAndWait(submissionQuery.create(workspaceContext, submissionListEmpty))
-    assertResult(Some(submissionListEmpty)) {
+    assertResult(Some(turnedIntoAttrEmptyList)) {
       runAndWait(submissionQuery.get(workspaceContext, submissionListEmpty.submissionId))
     }
   }
 
-  it should "save and unmarshal attribute empty list input resolutions correctly"  in withDefaultTestDatabase {
+  it should "save and unmarshal AttributeEmptyList input resolutions correctly"  in withDefaultTestDatabase {
     //This test passes because saving AttributeEmptyList gives us AttributeEmptyList back
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 

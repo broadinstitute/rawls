@@ -71,6 +71,24 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
+  it should "save empty AttributeValueLists as AttributeEmptyList" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueList(Seq())
+    runAndWait(workspaceQuery.save(workspace))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
+    assertResult(1) { numRows.head }
+
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
+  }
+
+  it should "save empty AttributeEntityReferenceLists as AttributeEmptyList" in withEmptyTestDatabase {
+    val testAttribute = AttributeEntityReferenceList(Seq())
+    runAndWait(workspaceQuery.save(workspace))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
+    assertResult(1) { numRows.head }
+
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
+  }
+
   it should "insert null attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNull
     runAndWait(workspaceQuery.save(workspace))

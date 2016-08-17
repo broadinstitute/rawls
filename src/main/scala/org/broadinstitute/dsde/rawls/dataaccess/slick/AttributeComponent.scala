@@ -135,19 +135,26 @@ trait AttributeComponent {
      * @return a sequence of write actions the resulting value being the attribute id inserted
      */
     def insertAttributeRecords(ownerId: OWNER_ID, name: String, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
+
+      def insertEmpty : Seq[ReadWriteAction[Int]] = {
+        // storing empty list as an element with index -1
+        Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+      }
+
       attribute match {
+        case AttributeEmptyList => insertEmpty
+        //convert empty AttributeList types to AttributeEmptyList on save
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => insertEmpty
+        case AttributeValueList(values) if values.isEmpty => insertEmpty
+
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
           refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index), Option(refs.length))}
-        //convert empty AttributeValueList to AttributeEmptyList
-        //TODO: Do the same with EntityReferenceLists?
-        case AttributeValueList(values) if values.isEmpty => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
           values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(insertAttributeValue(ownerId, name, value))
         case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, name, workspaceId, ref))
-        case AttributeEmptyList => Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
       }
     }
 
@@ -164,16 +171,27 @@ trait AttributeComponent {
     }
 
     def marshalAttribute(ownerId: OWNER_ID, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
+
+      def marshalEmpty : Seq[T#TableElementType] = {
+        // storing empty list as an element with index -1
+        Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+      }
       attribute match {
+        case AttributeEmptyList => marshalEmpty
+        //convert empty AttributeList types to AttributeEmptyList on save
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => marshalEmpty
+        case AttributeValueList(values) if values.isEmpty => marshalEmpty
+
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
           refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, name, Option(index), ref, entityIdsByRef, Option(refs.length))}
+
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
           values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
         case value: AttributeValue => Seq(marshalAttributeValue(ownerId, name, value, None, None))
         case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, name, None, ref, entityIdsByRef, None))
-        case AttributeEmptyList => Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0))) // storing empty list as an element with index -1
+
       }
     }
 
