@@ -137,7 +137,7 @@ trait AttributeComponent {
     def insertAttributeRecords(ownerId: OWNER_ID, name: String, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
 
       def insertEmpty : Seq[ReadWriteAction[Int]] = {
-        // storing empty list as an element with index -1
+        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
         Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
       }
 
@@ -173,7 +173,7 @@ trait AttributeComponent {
     def marshalAttribute(ownerId: OWNER_ID, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
       def marshalEmpty : Seq[T#TableElementType] = {
-        // storing empty list as an element with index -1
+        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
         Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
       }
       attribute match {
@@ -325,6 +325,7 @@ trait AttributeComponent {
 
     private def unmarshalList(attributeRecsWithRef: Set[(RECORD, Option[EntityRecord])]) = {
       val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
+      //NOTE: listIndex of -1 means "empty list"
       if (sortedRecs.head._1.listIndex.get == -1) {
         AttributeEmptyList
       } else if (sortedRecs.head._2.isDefined) {

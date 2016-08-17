@@ -68,6 +68,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
@@ -77,6 +78,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
@@ -86,6 +88,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, "test", testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
+    //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
