@@ -164,9 +164,5 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq())), None, intArrayName)))
     }
-
-    "translate empty AttributeLists into empty array WDL" in withConfigData {
-      //check methodConfigResolver.propertiesToWdlInputs too
-    }
   }
 }
