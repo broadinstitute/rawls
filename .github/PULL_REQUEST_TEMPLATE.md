@@ -1,7 +1,8 @@
 - [ ] **Submitter**: Rebase to develop. DO NOT SQUASH
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
 - [ ] **Submitter**: Make sure documentation for code is complete
-- [ ] **Submitter**: Make sure liquibase is updated if appropriate
+- [ ] **Submitter**: Make sure liquibase is updated if appropriate. 
+ - If doing a migration, take a backup of the dev and alpha DBs in Google Cloud Console
 - [ ] **Submitter**: Review code comments; remove done TODOs, create stories for remaining TODOs
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
 - [ ] **Submitter**: Add description or comments on the PR explaining the hows/whys (if not obvious)
