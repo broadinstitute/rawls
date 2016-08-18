@@ -97,15 +97,7 @@ trait WorkflowComponent {
     }
     
     def getWithWorkflowIds(workspaceContext: SlickWorkspaceContext, submissionId: String): ReadAction[Seq[(Long, Workflow)]] = {
-      workflowQuery.filter(_.submissionId === UUID.fromString(submissionId)).result.flatMap { records =>
-        DBIO.sequence(records.map { rec =>
-          for {
-            entity <- loadWorkflowEntity(rec.workflowEntityId)
-            inputResolutions <- loadInputResolutions(rec.id)
-            messages <- loadWorkflowMessages(rec.id)
-          } yield((rec.id, unmarshalWorkflow(rec, entity, inputResolutions, messages)))
-        })
-      }
+      submissionQuery.loadSubmissionWorkflowsWithIds(UUID.fromString(submissionId))
     }
 
     def getByExternalId(externalId: String, submissionId: String): ReadAction[Option[Workflow]] = {
@@ -461,18 +453,34 @@ trait WorkflowComponent {
       )
     }
 
-    private def unmarshalInputResolution(validationRec: SubmissionValidationRecord, value: Option[SubmissionAttributeRecord]): SubmissionValidationValue = {
-      value match {
-        case Some(attr) => SubmissionValidationValue(Some(submissionAttributeQuery.unmarshalAttributes(Seq(((attr.id, attr), None)))(attr.id).values.head), validationRec.errorText, validationRec.inputName)
-        case None => SubmissionValidationValue(None, validationRec.errorText, validationRec.inputName)
-      }
+    def unmarshalOneWorkflowInputs(wfInputResolutionRecs: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])], workflowId: Long): Seq[SubmissionValidationValue] = {
+
+        //collect up the workflow resolution results by input
+        val resolutionsByInput = wfInputResolutionRecs.groupBy { case (resolution, attribute) => resolution.inputName }
+
+        //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
+        //To get around this, we split by input, so that each input is successful (or not) individually.
+        val submissionValues = resolutionsByInput map { case (inputName, recTuples: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
+          val attr = if( recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined } ) {
+            //all attributes are real
+            Some(
+              submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((workflowId, attrOpt.get), None) } ).get(workflowId).get(inputName)
+            )
+          } else {
+            None
+          }
+          //assuming that the first elem has the error here
+          SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
+        }
+        submissionValues.toSeq
     }
 
-    private def unmarshalInputResolutions(resolutions: WorkflowQueryWithInputResolutions) = {
-      resolutions.result map { inputResolutionRecord =>
-        inputResolutionRecord map { case (inputResolution, attribute) =>
-          unmarshalInputResolution(inputResolution, Option(attribute))
+    private def unmarshalInputResolutions(resolutions: WorkflowQueryWithInputResolutions): ReadAction[Seq[SubmissionValidationValue]] = {
+      resolutions.result map { (inputResolutionRecords: Seq[(SubmissionValidationRecord, SubmissionAttributeRecord)]) =>
+        val fff = inputResolutionRecords map {
+          case (valRec, attrRec) => (valRec, Option(attrRec))
         }
+        unmarshalOneWorkflowInputs(fff, fff.head._1.workflowId)
       }
     }
 

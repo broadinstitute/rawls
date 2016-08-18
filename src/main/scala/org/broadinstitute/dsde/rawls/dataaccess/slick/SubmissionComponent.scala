@@ -239,7 +239,7 @@ trait SubmissionComponent {
       }
     }
 
-    def loadSubmissionWorkflows(submissionId: UUID): ReadAction[Seq[Workflow]] = {
+    def loadSubmissionWorkflowsWithIds(submissionId: UUID): ReadAction[Seq[(Long, Workflow)]] = {
       // get all workflows for this submission, with their entity and messages:
       val workflows = WorkflowAndMessagesRawSqlQuery.action(submissionId)
 
@@ -270,40 +270,29 @@ trait SubmissionComponent {
             // attach the input resolutions to the workflow object
             val workflowResolutions: Seq[SubmissionValidationValue] = groupedResolutions.get(wr.id).map { seq =>
 
-              //collect up the workflow resolution results by input
-              val resolutionsByInput = seq.collect {
+              //collect up the workflow resolution results
+              val resolutions = seq.collect {
                 case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
-                  (resolution, attribute)
-              }.groupBy { case (resolution, attribute) => resolution.inputName }
+                  (resolution, attribute) }
+              workflowQuery.unmarshalOneWorkflowInputs(resolutions, workflowId)
 
-              //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
-              //To get around this, we split by input, so that each input is successful (or not) individually.
-              val submissionValues = resolutionsByInput map { case (inputName, recTuples: Vector[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
-                val attr = if( recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined } ) {
-                  //all attributes are real
-                  Some(
-                    submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((wr.id, attrOpt.get), None) } ).get(wr.id).get(inputName)
-                  )
-                } else {
-                  None
-                }
-                //assuming that the first elem has the error here
-                SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
-              }
-              submissionValues.toSeq
             }.getOrElse(Seq.empty)
 
             // create the Workflow object, now that we've processed all records for this workflow.
-            Workflow(wr.externalId,
+            (wr.id, Workflow(wr.externalId,
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
               AttributeEntityReference(er.entityType, er.name),
               workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
-            )
+            ))
           }.toSeq
         }
       }
+    }
+
+    def loadSubmissionWorkflows(submissionId: UUID): ReadAction[Seq[Workflow]] = {
+      loadSubmissionWorkflowsWithIds(submissionId) map( _ map (_._2) )
     }
 
     def loadSubmissionEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
