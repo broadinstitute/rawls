@@ -453,6 +453,7 @@ trait WorkflowComponent {
       )
     }
 
+    //Unmarshal all input resolutions for a single workflow. Assumes that everything in wfInputResolutionRecs has the same workflowId.
     def unmarshalOneWorkflowInputs(wfInputResolutionRecs: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])], workflowId: Long): Seq[SubmissionValidationValue] = {
 
         //collect up the workflow resolution results by input
@@ -464,7 +465,7 @@ trait WorkflowComponent {
           val attr = if( recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined } ) {
             //all attributes are real
             Some(
-              submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((workflowId, attrOpt.get), None) } ).get(workflowId).get(inputName)
+              submissionAttributeQuery.unmarshalAttributes( recTuples map { case (rec, attrOpt) => ((workflowId, attrOpt.get), None) } )(workflowId)(inputName)
             )
           } else {
             None
@@ -477,10 +478,11 @@ trait WorkflowComponent {
 
     private def unmarshalInputResolutions(resolutions: WorkflowQueryWithInputResolutions): ReadAction[Seq[SubmissionValidationValue]] = {
       resolutions.result map { (inputResolutionRecords: Seq[(SubmissionValidationRecord, SubmissionAttributeRecord)]) =>
-        val fff = inputResolutionRecords map {
+        val submissionRecs = inputResolutionRecords map {
+          //recast to option
           case (valRec, attrRec) => (valRec, Option(attrRec))
         }
-        unmarshalOneWorkflowInputs(fff, fff.head._1.workflowId)
+        unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
       }
     }
 

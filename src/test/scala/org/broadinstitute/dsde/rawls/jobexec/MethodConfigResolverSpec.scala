@@ -164,18 +164,5 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, intArrayName)))
     }
-
-    "correctly resolve WDL from lists" in withConfigData {
-      val attrList = Map("stringArray" ->
-        AttributeValueList(
-          Seq(
-            AttributeString("TP"),
-            AttributeString("NB"),
-            AttributeString("NB"),
-            AttributeString("NB"),
-            AttributeString("TP"))))
-
-      println(MethodConfigResolver.propertiesToWdlInputs(attrList))
-    }
   }
 }
