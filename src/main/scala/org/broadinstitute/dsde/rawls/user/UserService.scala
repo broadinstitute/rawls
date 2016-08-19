@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
+import com.google.api.client.auth.oauth2.TokenResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WriteAction, ReadAction, ReadWriteAction, DataAccess}
@@ -147,7 +148,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     gcsDAO.getTokenDate(RawlsUser(userInfo)).map(_ match {
       case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"no refresh token stored for ${userInfo.userEmail}"))
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
-    })
+    }).recover {
+      case t: TokenResponseException =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(400, "Invalid refresh token"))
+    }
   }
 
   def createUser(): Future[PerRequestMessage] = {
