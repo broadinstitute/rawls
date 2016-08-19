@@ -292,7 +292,7 @@ trait SubmissionComponent {
     }
 
     def loadSubmissionWorkflows(submissionId: UUID): ReadAction[Seq[Workflow]] = {
-      loadSubmissionWorkflowsWithIds(submissionId) map( _ map (_._2) )
+      loadSubmissionWorkflowsWithIds(submissionId) map( _ map { case (workflowId, workflow) => workflow } )
     }
 
     def loadSubmissionEntity(entityId: Long): ReadAction[AttributeEntityReference] = {
