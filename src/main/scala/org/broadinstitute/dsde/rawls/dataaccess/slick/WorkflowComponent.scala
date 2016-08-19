@@ -95,10 +95,6 @@ trait WorkflowComponent {
     def get(id: Long): ReadAction[Option[Workflow]] = {
       loadWorkflow(findWorkflowById(id))
     }
-    
-    def getWithWorkflowIds(workspaceContext: SlickWorkspaceContext, submissionId: String): ReadAction[Seq[(Long, Workflow)]] = {
-      submissionQuery.loadSubmissionWorkflowsWithIds(UUID.fromString(submissionId))
-    }
 
     def getByExternalId(externalId: String, submissionId: String): ReadAction[Option[Workflow]] = {
       loadWorkflow(findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)))

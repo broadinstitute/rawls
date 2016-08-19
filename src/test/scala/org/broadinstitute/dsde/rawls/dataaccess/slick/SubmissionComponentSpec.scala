@@ -225,7 +225,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       runAndWait(submissionQuery.create(ctx, submissionList))
 
       //This is a bit roundabout, but we need to get the workflow IDs so we can load them individually through the loadWorkflow codepath.
-      val workflowIds = runAndWait(workflowQuery.getWithWorkflowIds(ctx, submissionList.submissionId)).map(_._1)
+      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionList.submissionId))).map(_.id)
 
       submissionList.workflows should contain theSameElementsAs {
         workflowIds map { id => runAndWait(workflowQuery.get(id)).get }
