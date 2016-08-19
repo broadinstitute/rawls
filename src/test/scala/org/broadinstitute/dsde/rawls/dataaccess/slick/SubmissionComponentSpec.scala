@@ -5,6 +5,9 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 /**
  * Created by mbemis on 2/22/16.
  */
@@ -203,6 +206,31 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     assert(workflowRecsAfter.forall(_.status == WorkflowStatuses.Failed.toString))
     assert(workflowRecsAfter.forall(_.recordVersion == 1))
+  }
+
+  it should "load workflows input resolutions correctly" in withDefaultTestDatabase {
+    //You'd have thought that testing we can save and load a submission would therefore test that we can load workflows!
+    //Not so! There's a different code path for "load a workflow because you're loading its submission" to "load a workflow on its own".
+    // :(
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+
+      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+        Seq.empty, Map.empty)
+
+      runAndWait(submissionQuery.create(ctx, submissionList))
+
+      //This is a bit roundabout, but we need to get the workflow IDs so we can load them individually through the loadWorkflow codepath.
+      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionList.submissionId))).map(_.id)
+
+      submissionList.workflows should contain theSameElementsAs {
+        workflowIds map { id => runAndWait(workflowQuery.get(id)).get }
+      }
+    }
   }
 
   /*

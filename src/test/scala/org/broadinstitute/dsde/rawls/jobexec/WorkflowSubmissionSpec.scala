@@ -162,7 +162,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     withWorkspaceContext(testData.workspace) { ctx =>
 
-      val workflowIds = runAndWait(workflowQuery.getWithWorkflowIds(ctx, testData.submission1.submissionId)).map(_._1)
+      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
 
       assertResult(ScheduleNextWorkflowQuery) {
         Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
@@ -183,7 +183,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     withWorkspaceContext(testData.workspace) { ctx =>
 
-      val workflowIds = runAndWait(workflowQuery.getWithWorkflowIds(ctx, testData.submission1.submissionId)).map(_._1)
+      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
       assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
@@ -253,7 +253,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     withWorkspaceContext(testData.workspace) { ctx =>
 
-      val workflowIds = runAndWait(workflowQuery.getWithWorkflowIds(ctx, testData.submission1.submissionId)).map(_._1)
+      val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
 
       //This call throws an exception, which is piped back to the actor
       val submitFailureExc = intercept[RawlsExceptionWithErrorReport] {
