@@ -77,6 +77,10 @@ object UserService {
   case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+
+  case class GetCuratorStatus(userEmail: String) extends UserServiceMessage
+  case class AdminAddLibraryCurator(userEmail: String) extends UserServiceMessage
+  case class AdminRemoveLibraryCurator(userEmail: String) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
@@ -127,6 +131,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
     case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
+
+    case GetCuratorStatus(userEmail) => { isLibraryCurator(RawlsUserEmail(userEmail)) } pipeTo sender
+    case AdminAddLibraryCurator(userEmail) => asFCAdmin { addLibraryCurator(RawlsUserEmail(userEmail)) } pipeTo sender
+    case AdminRemoveLibraryCurator(userEmail) => asFCAdmin { removeLibraryCurator(RawlsUserEmail(userEmail)) } pipeTo sender
   }
 
   def asProjectOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -330,6 +338,25 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       userDirectoryDAO.removeUser(userSubjectId) map { _ =>
         RequestComplete(StatusCodes.NoContent)
       }
+    }
+  }
+
+  def isLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    gcsDAO.isCurator(userEmail.value) map {
+      case true => RequestComplete(StatusCodes.OK)
+      case false => RequestComplete(StatusCodes.NotFound)
+    }
+  }
+
+  def addLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    gcsDAO.addLibraryCurator(userEmail.value) map { _ =>
+      RequestComplete(StatusCodes.OK)
+    }
+  }
+
+  def removeLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    gcsDAO.removeLibraryCurator(userEmail.value) map { _ =>
+      RequestComplete(StatusCodes.OK)
     }
   }
 
