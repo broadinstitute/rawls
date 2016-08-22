@@ -150,7 +150,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     }).recover {
       case t: TokenResponseException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(400, "Invalid refresh token"))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(t, t.getStatusCode))
     }
   }
 
