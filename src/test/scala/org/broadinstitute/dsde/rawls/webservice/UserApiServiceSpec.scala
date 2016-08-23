@@ -146,7 +146,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsUserQuery.save(billingUser))
 
-    Put(s"/admin/billing/${project1.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {

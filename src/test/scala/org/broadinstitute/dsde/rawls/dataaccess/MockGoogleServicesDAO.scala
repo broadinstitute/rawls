@@ -199,4 +199,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
+
+  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
 }
