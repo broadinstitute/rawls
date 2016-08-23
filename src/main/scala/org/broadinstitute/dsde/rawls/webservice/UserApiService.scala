@@ -73,7 +73,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
       get {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.GetCuratorStatus(userInfo.userEmail))
+          UserService.IsLibraryCurator(RawlsUserEmail(userInfo.userEmail)))
       }
     } ~
     path("user" / "billingAccounts") {

@@ -145,16 +145,16 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         }
       }
     } ~
-    path("admin" / "user" / "role" / Segment) { (userEmail) =>
+    path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminAddLibraryCurator(userEmail))
+          UserService.AdminAddLibraryCurator(RawlsUserEmail(userEmail)))
       } ~
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminRemoveLibraryCurator(userEmail))
+          UserService.AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)))
       }
     } ~
     path("admin" / "user" / Segment) { userSubjectId =>

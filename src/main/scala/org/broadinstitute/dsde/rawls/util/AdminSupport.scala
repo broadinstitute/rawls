@@ -26,15 +26,4 @@ trait AdminSupport {
       if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
     }
   }
-
-  //maybe generic-ify this?
-  def tryIsFCCurator(userId: String): Future[Boolean] = {
-    gcsDAO.isLibraryCurator(userId) transform( s => s, t => throw new RawlsException("Unable to query for library curator status.", t))
-  }
-
-  def asFCCurator(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
-    tryIsFCCurator(userInfo.userEmail) flatMap { isLibraryCurator =>
-      if (isLibraryCurator) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a designated library curator.")))
-    }
-  }
 }
