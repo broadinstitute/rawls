@@ -46,7 +46,11 @@ object Boot extends App with LazyLogging {
 
     val liquibaseConf = conf.getConfig("liquibase")
     val liquibaseChangeLog = liquibaseConf.getString("changelog")
-    slickDataSource.initWithLiquibase(liquibaseChangeLog)
+    val initWithLiquibase = liquibaseConf.getBoolean("initWithLiquibase")
+
+    if(initWithLiquibase) {
+      slickDataSource.initWithLiquibase(liquibaseChangeLog)
+    }
 
     // For testing/migration.  Not for production code!
     //slickDataSource.initWithSlick()
