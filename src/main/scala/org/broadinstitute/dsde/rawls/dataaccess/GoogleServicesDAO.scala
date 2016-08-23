@@ -28,7 +28,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def isAdmin(userId: String): Future[Boolean]
 
-  def isCurator(userId: String): Future[Boolean]
+  def isLibraryCurator(userId: String): Future[Boolean]
 
   def addLibraryCurator(userEmail: String): Future[Unit]
 
@@ -69,9 +69,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
-  def addEmailToGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
+  def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
-  def removeMemberFromGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit]
+  def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
 

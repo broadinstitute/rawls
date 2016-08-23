@@ -342,21 +342,23 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def isLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    gcsDAO.isCurator(userEmail.value) map {
+    gcsDAO.isLibraryCurator(userEmail.value) map {
       case true => RequestComplete(StatusCodes.OK)
       case false => RequestComplete(StatusCodes.NotFound)
     }
   }
 
   def addLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    gcsDAO.addLibraryCurator(userEmail.value) map { _ =>
-      RequestComplete(StatusCodes.OK)
+    toFutureTry(gcsDAO.addLibraryCurator(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }
 
   def removeLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    gcsDAO.removeLibraryCurator(userEmail.value) map { _ =>
-      RequestComplete(StatusCodes.OK)
+    toFutureTry(gcsDAO.removeLibraryCurator(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }
 

@@ -266,7 +266,7 @@ class HttpGoogleServicesDAO(
     hasGoogleRole(adminGroupName, userId)
   }
 
-  override def isCurator(userId: String): Future[Boolean] = {
+  override def isLibraryCurator(userId: String): Future[Boolean] = {
     hasGoogleRole(curatorGroupName, userId)
   }
 
