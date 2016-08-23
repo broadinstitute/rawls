@@ -17,7 +17,8 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmission
 /**
  * Created by tsharpe on 9/28/15.
  */
-class AdminApiServiceSpec extends ApiServiceSpec {
+class
+AdminApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
@@ -407,6 +408,30 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+
+  it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
+    val testUser = "foo@bar.com"
+    Put(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 200 when removing a library curator" in withTestDataApiServices { services =>
+    val testUser = "foo@bar.com"
+    Put(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Delete(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
       }
   }
 

@@ -242,5 +242,30 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return OK for a user who is a curator" in withTestDataApiServices { services =>
+    Get("/user/role/curator") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "return Not Found for a user who is not a curator" in withTestDataApiServices { services =>
+    Delete(s"/admin/user/role/curator/test_token") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get("/user/role/curator") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
 
 }

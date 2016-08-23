@@ -34,7 +34,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def removeLibraryCurator(userEmail: String): Future[Unit]
 
-  def hasGoogleRole(userId: String, roleGroupName: String): Future[Boolean]
+  def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean]
 
   /**
    *
