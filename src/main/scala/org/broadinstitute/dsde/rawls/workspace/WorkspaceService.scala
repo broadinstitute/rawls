@@ -253,6 +253,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           Failure(regrets)
         case success => success
       }
+      case _ => //nothing
     }} andThen {
       DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
     } andThen {
