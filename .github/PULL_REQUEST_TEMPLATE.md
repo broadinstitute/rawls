@@ -1,12 +1,15 @@
-- [ ] **Submitter**: Rebase to develop. DO NOT SQUASH
-- [ ] **Submitter**: Make sure Swagger is updated if API changes
-- [ ] **Submitter**: Make sure documentation for code is complete
-- [ ] **Submitter**: Make sure liquibase is updated if appropriate. 
- - If doing a migration, take a backup of the dev and alpha DBs in Google Cloud Console
-- [ ] **Submitter**: Review code comments; remove done TODOs, create stories for remaining TODOs
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
-- [ ] **Submitter**: Add description or comments on the PR explaining the hows/whys (if not obvious)
-- [ ] **Submitter**: If PR includes new or changed db queries, include the explain plans in the description
+- [ ] **Submitter**: Make sure Swagger is updated if API changes
+- [ ] **Submitter**: Check documentation and code comments. Add explanatory PR comments if helpful.
+- [ ] **Submitter**: JIRA ticket checks:
+  * Acceptance criteria exists and is met
+  * Note any changes to implementation from the description
+  * Add notes on what you've tested
+- [ ] **Submitter**: Update RC_XXX release ticket with any config or environment changes necessary
+- [ ] **Submitter**: Database checks:
+  * If PR includes new or changed db queries, include the explain plans in the description
+  * Make sure liquibase is updated if appropriate. 
+  * If doing a migration, take a backup of the dev and alpha DBs in Google Cloud Console
 - [ ] **Submitter**: Update FISMA documentation if changes to:
   * Authentication
   * Authorization
@@ -26,11 +29,9 @@
 - [ ] ![](http://i.imgur.com/9dLzbPd.png) sign off
 - [ ] **LR** sign off
 - [ ] **Assign to submitter** to finalize
-- [ ] **Submitter**: Squash commits, rebase if necessary
 - [ ] **Submitter**: Verify all tests go green, including CI tests
-- [ ] **Submitter**: Merge to develop 
+- [ ] **Submitter**: Squash commits and merge to develop
 - [ ] **Submitter**: Delete branch after merge
-- [ ] **Submitter**: Check configuration files in Jenkins in case they need changes
 - [ ] **Submitter**: **Test this change works on dev environment after deployment**. YOU own getting it fixed if dev isn't working for ANY reason!
 - [ ] **Submitter**: Verify swagger UI on dev environment still works after deployment
 - [ ] **Submitter**: Inform other teams of any API changes via hipchat and/or email
