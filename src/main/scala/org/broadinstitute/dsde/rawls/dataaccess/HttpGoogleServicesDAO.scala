@@ -649,8 +649,9 @@ class HttpGoogleServicesDAO(
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
-    val resMgr = getCloudResourceManager(getBillingServiceAccountCredential)
-    val billingManager = getCloudBillingManager(getBillingServiceAccountCredential)
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+    val resMgr = getCloudResourceManager(billingServiceAccountCredential)
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
     val projectNameString = projectName.value
     for {
       _ <- retryWhen500orGoogleError(() => {

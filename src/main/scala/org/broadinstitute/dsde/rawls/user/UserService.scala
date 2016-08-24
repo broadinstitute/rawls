@@ -357,8 +357,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     // delete actual project in google-y way, then remove from Rawls DB
-    DBIO.from(gcsDAO.deleteProject(projectName))
-    unregisterBillingProject(projectName)
+    gcsDAO.deleteProject(projectName) flatMap {
+      _ => unregisterBillingProject(projectName)
+    }
   }
 
   def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
