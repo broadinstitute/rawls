@@ -2,18 +2,19 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import akka.actor.{PoisonPill, ActorSystem}
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.mockserver.model.{Body, StringBody}
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.StatusCodes
-import spray.json.{JsString, JsObject, JsValue}
+import spray.http.{FormData, StatusCodes}
+import spray.json.{JsObject, JsString, JsValue}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -306,4 +307,43 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
     workflowSubmissionActor ! PoisonPill
   }
+
+  it should "not truncate array inputs" in withDefaultTestDatabase {
+
+    // To Do:
+    // fix wdlSource
+    // fix workflowInputs
+
+    val inputs  = Map( "hello.hello.addressee" -> "world")
+    val data = FormData(Seq("wdlSource" -> wdlSource, "workflowInputs" -> s"[$inputs, $inputs]")))
+
+    val body = newStringBody(s"$data", Body.Type.JSON)
+
+
+    // move verify somewhere else?
+    mockServer.verify(
+      request()
+        .withMethod("POST")
+        .withPath(submissionBatchPath)
+        .withBody(body)
+    )
+
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+
+      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+        Seq.empty, Map.empty)
+
+      runAndWait(submissionQuery.create(ctx, submissionList))
+      val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+
+    }
+  }
 }
+
