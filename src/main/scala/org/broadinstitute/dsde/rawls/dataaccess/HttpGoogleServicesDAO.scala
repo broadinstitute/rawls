@@ -648,6 +648,23 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+    val resMgr = getCloudResourceManager(billingServiceAccountCredential)
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    val projectNameString = projectName.value
+    for {
+      _ <- retryWhen500orGoogleError(() => {
+      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+      })
+      - <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest (resMgr.projects ().delete (projectNameString))
+      })
+    } yield {
+      // nothing
+    }
+  }
+
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
