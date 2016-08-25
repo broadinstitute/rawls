@@ -63,14 +63,10 @@ trait SubmissionComponent {
   }
 
   class SubmissionValidationTable(tag: Tag) extends Table[SubmissionValidationRecord](tag, "SUBMISSION_VALIDATION") {
-    /*
-      TODO: add a constraint to ensure that one of workflowId / workflowFailureId are present
-      See GAWB-288
-     */
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def workflowId = column[Long]("WORKFLOW_ID")
     def errorText = column[Option[String]]("ERROR_TEXT")
-    def inputName = column[String]("INPUT_NAME", O.Length(254))
+    def inputName = column[String]("INPUT_NAME")
 
     def * = (id, workflowId, errorText, inputName) <> (SubmissionValidationRecord.tupled, SubmissionValidationRecord.unapply)
 
