@@ -1,5 +1,6 @@
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
+- [ ] **Submitter**: If updating admin endpoints, also update [firecloud-admin-cli](https://github.com/broadinstitute/firecloud-admin-cli)
 - [ ] **Submitter**: Check documentation and code comments. Add explanatory PR comments if helpful.
 - [ ] **Submitter**: JIRA ticket checks:
   * Acceptance criteria exists and is met
@@ -8,7 +9,7 @@
 - [ ] **Submitter**: Update RC_XXX release ticket with any config or environment changes necessary
 - [ ] **Submitter**: Database checks:
   * If PR includes new or changed db queries, include the explain plans in the description
-  * Make sure liquibase is updated if appropriate. 
+  * Make sure liquibase is updated if appropriate
   * If doing a migration, take a backup of the dev and alpha DBs in Google Cloud Console
 - [ ] **Submitter**: Update FISMA documentation if changes to:
   * Authentication
