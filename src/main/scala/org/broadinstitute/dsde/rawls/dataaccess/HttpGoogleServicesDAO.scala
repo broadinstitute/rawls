@@ -658,7 +658,7 @@ class HttpGoogleServicesDAO(
 
       // create project usage export bucket
       bucket <- retryWhen500orGoogleError(() => {
-        val bucket = new Bucket().setName(s"${projectName.value}-usage-export")
+        val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       })
 
@@ -694,6 +694,16 @@ class HttpGoogleServicesDAO(
     } yield {
       // nothing
     }
+
+  def projectUsageExportBucketName(projectName: RawlsBillingProjectName): String = {
+    s"${projectName.value}-usage-export"
+  }
+
+  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = {
+    val credential = getBillingServiceAccountCredential
+    val computeManager = getComputeManager(credential)
+
+    toFutureTry(Future(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")).execute()))
   }
 
   def getComputeManager(credential: Credential): Compute = {

@@ -41,7 +41,7 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String, status: ProjectStatuses.ProjectStatus)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -60,6 +60,25 @@ object ProjectRoles {
   case object User extends ProjectRole
 
   val all: Set[ProjectRole] = Set(Owner, User)
+}
+
+object ProjectStatuses {
+  sealed trait ProjectStatus extends RawlsEnumeration[ProjectStatus] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): ProjectStatus = ProjectStatuses.withName(name)
+  }
+
+  def withName(name: String): ProjectStatus = name.toLowerCase match {
+    case "creating" => Creating
+    case "ready" => Ready
+    case _ => throw new RawlsException(s"invalid ProjectStatus [${name}]")
+  }
+
+  case object Creating extends ProjectStatus
+  case object Ready extends ProjectStatus
+
+  val all: Set[ProjectStatus] = Set(Creating, Ready)
 }
 
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
@@ -93,7 +112,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat4(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -124,6 +143,15 @@ object UserAuthJsonSupport extends JsonSupport {
     override def read(json: JsValue): ProjectRole = json match {
       case JsString(name) => ProjectRoles.withName(name)
       case _ => throw new DeserializationException("could not deserialize project role")
+    }
+  }
+
+  implicit object ProjectStatusFormat extends RootJsonFormat[ProjectStatuses.ProjectStatus] {
+    override def write(obj: ProjectStatuses.ProjectStatus): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): ProjectStatuses.ProjectStatus = json match {
+      case JsString(name) => ProjectStatuses.withName(name)
+      case _ => throw new DeserializationException("could not deserialize project status")
     }
   }
 

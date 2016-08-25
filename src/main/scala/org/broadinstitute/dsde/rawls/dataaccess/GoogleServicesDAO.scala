@@ -11,6 +11,7 @@ import org.joda.time.DateTime
 import spray.http.StatusCodes
 import spray.json.JsObject
 import scala.concurrent.Future
+import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   override val errorReportSource = "google"
@@ -98,6 +99,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
+  def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])

@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
-import org.broadinstitute.dsde.rawls.monitor.{BootMonitors, BucketDeletionMonitor}
+import org.broadinstitute.dsde.rawls.monitor.{CreatingBillingProjectMonitor, BootMonitors, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
@@ -109,6 +109,8 @@ object Boot extends App with LazyLogging {
     ).withDispatcher("submission-monitor-dispatcher"), "rawls-submission-supervisor")
 
     val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
+
+    system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO))
 
     BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
