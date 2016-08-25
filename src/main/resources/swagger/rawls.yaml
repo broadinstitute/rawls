@@ -983,6 +983,57 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/user/role/curator/{userEmail}':
+     put:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "adds a user to the list of curators"
+       tags:
+         - admin
+         - users
+       summary: Add a library curator
+       operationId: adminAddCurator
+       parameters:
+        - in: path
+          description: email of user
+          name: userEmail
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+     delete:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "removes a user from the list of curators"
+       tags:
+         - admin
+         - users
+       summary: Remove a library curator
+       operationId: adminRemoveCurator
+       parameters:
+        - in: path
+          description: email of user
+          name: userEmail
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
   '/api/admin/allUserReadAccess/{workspaceNamespace}/{workspaceName}':
     get:
       responses:
@@ -3262,7 +3313,25 @@ paths:
             - openid
             - email
             - profile
-
+  '/api/user/role/curator':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the curator status of a user"
+       tags:
+         - users
+       summary: Query to see if you're a library curator
+       operationId: isCurator
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/billing':
     get:
       responses:
