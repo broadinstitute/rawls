@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Created by dvoet on 11/5/15.
  */
-trait AdminSupport {
+trait RoleSupport {
   protected val gcsDAO: GoogleServicesDAO
   protected val userInfo: UserInfo
   implicit protected val executionContext: ExecutionContext

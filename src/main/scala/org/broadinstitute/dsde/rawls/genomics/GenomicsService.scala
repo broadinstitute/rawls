@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService._
-import org.broadinstitute.dsde.rawls.util.{AdminSupport, FutureSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
@@ -30,7 +30,7 @@ object GenomicsService {
 
 }
 
-class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
+class GenomicsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   override def receive = {
     case GetOperation(jobId) =>  asFCAdmin {getOperation(jobId)} pipeTo sender
