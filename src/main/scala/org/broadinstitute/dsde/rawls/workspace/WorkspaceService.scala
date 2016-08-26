@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissio
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import scala.concurrent.Await
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 /**
  * Created by dvoet on 4/27/15.
  */
@@ -246,16 +247,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.map {
+    dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
       case wf if !WorkflowStatuses.withName(wf.status).isDone && wf.externalId.isDefined => executionServiceCluster.abort(wf, userInfo).map {
         case Failure(regrets) =>
           logger.info(s"failure aborting workflow ${wf.externalId} while deleting workspace ${workspaceName}", regrets)
           Failure(regrets)
         case success => success
       }
-      case _ => //nothing
-    }} andThen {
-      DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
+      //If a workflow is not done, automatically changed its status to Aborted
+      case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
+    }
+    } andThen {
+      DBIO.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
     } andThen {
       val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
       DBIO.seq(groupRefs.map { groupRef => dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
