@@ -57,8 +57,9 @@ object UserService {
 
   case object ListBillingProjects extends UserServiceMessage
   case class AdminListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class AdminCreateBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
+  case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
   case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
@@ -78,6 +79,10 @@ object UserService {
   case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+
+  case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminAddLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
 class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
@@ -102,8 +107,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
     case AdminListBillingProjectsForUser(userEmail) => asFCAdmin { listBillingProjects(userEmail) } pipeTo sender
-    case AdminCreateBillingProject(projectName) => asFCAdmin { createBillingProject(projectName) } pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
+    case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
+    case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
     case AdminAddUserToBillingProject(projectName, userEmail, role) => asFCAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
     case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
 
@@ -128,6 +134,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
     case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
+
+    case IsLibraryCurator(userEmail) => { isLibraryCurator(userEmail) } pipeTo sender
+    case AdminAddLibraryCurator(userEmail) => asFCAdmin { addLibraryCurator(userEmail) } pipeTo sender
+    case AdminRemoveLibraryCurator(userEmail) => asFCAdmin { removeLibraryCurator(userEmail) } pipeTo sender
   }
 
   def asProjectOwner(projectName: RawlsBillingProjectName)(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -337,6 +347,30 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  def isLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    toFutureTry(gcsDAO.isLibraryCurator(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(b) => b match {
+        case true => RequestComplete(StatusCodes.OK)
+        case false => RequestComplete(StatusCodes.NotFound)
+      }
+    }
+  }
+
+  def addLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    toFutureTry(gcsDAO.addLibraryCurator(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(_) => RequestComplete(StatusCodes.OK)
+    }
+  }
+
+  def removeLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    toFutureTry(gcsDAO.removeLibraryCurator(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(_) => RequestComplete(StatusCodes.OK)
+    }
+  }
+
   import spray.json.DefaultJsonProtocol._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
 
@@ -357,7 +391,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    // delete actual project in google-y way, then remove from Rawls DB
+    gcsDAO.deleteProject(projectName) flatMap {
+      _ => unregisterBillingProject(projectName)
+    }
+  }
+
+  def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
@@ -373,7 +414,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
+  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     withBillingProject(projectName, dataAccess) { project =>
       dataAccess.rawlsBillingProjectQuery.delete(project) map {
         case true => RequestComplete(StatusCodes.OK)

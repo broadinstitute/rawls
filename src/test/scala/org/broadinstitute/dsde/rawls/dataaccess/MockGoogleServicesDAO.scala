@@ -6,6 +6,7 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudbilling.model.BillingAccount
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
@@ -125,17 +126,40 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("test_token")
+  val curatorList = scala.collection.mutable.Set("test_token")
 
-  override def isAdmin(userId: String): Future[Boolean] = Future.successful(adminList.contains(userId))
+  val googleGroups = Map(
+    "fc-ADMINS@dev.test.firecloud.org" -> adminList,
+    "fc-CURATORS@dev.test.firecloud.org" -> curatorList
+  )
+
+  override def isAdmin(userId: String): Future[Boolean] = hasGoogleRole("fc-ADMINS@dev.test.firecloud.org", userId)
+
+  override def isLibraryCurator(userId: String): Future[Boolean] = hasGoogleRole("fc-CURATORS@dev.test.firecloud.org", userId)
+
+  override def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean] = Future.successful(googleGroups(roleGroupName).contains(userId))
+
+  override def addLibraryCurator(userEmail: String): Future[Unit] = {
+    curatorList += userEmail
+    Future.successful(())
+  }
+
+  override def removeLibraryCurator(userEmail: String): Future[Unit] = {
+    if(curatorList.contains(userEmail)) {
+      curatorList -= userEmail
+      Future.successful(())
+    }
+    else Future.failed(new RawlsException("Unable to remove user"))
+  }
 
   override def createProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups += (user -> false)
-    Future.successful(Unit)
+    Future.successful(())
   }
 
   override def deleteProxyGroup(user: RawlsUser): Future[Unit] = {
     mockProxyGroups -= user
-    Future.successful(Unit)
+    Future.successful(())
   }
 
   def containsProxyGroup(user: RawlsUser) = mockProxyGroups.keySet.contains(user)
@@ -160,11 +184,21 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     groups.remove(group)
   }
 
+  override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
+    googleGroups(groupEmail) += emailToAdd
+    Future.successful(())
+  }
+
   override def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
     groups.get(group) match {
       case Some(members) => groups.update(group, members + member)
       case None => throw new RuntimeException(s"group $group does not exist")
     }
+  }
+
+  override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
+    googleGroups(groupEmail) -= emailToRemove
+    Future.successful(())
   }
 
   override def removeMemberFromGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]) = Future {
@@ -199,4 +233,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   }
 
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
+
+  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
 }

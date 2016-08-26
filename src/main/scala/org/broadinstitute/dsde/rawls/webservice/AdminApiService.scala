@@ -37,15 +37,24 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       }
     } ~
     path("admin" / "billing" / Segment) { (projectId) =>
-      put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminCreateBillingProject(RawlsBillingProjectName(projectId)))
-      } ~
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
+      }
+    } ~
+    path("admin" / "billing" / "register" / Segment) { (projectId) =>
+      put {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminRegisterBillingProject(RawlsBillingProjectName(projectId)))
+      }
+    } ~
+    path("admin" / "billing" / "unregister" / Segment) { (projectId) =>
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectId)))
       }
     } ~
     path("admin" / "billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
@@ -143,6 +152,18 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             UserService.props(userServiceConstructor, userInfo),
             UserService.AdminImportUsers(userInfoList))
         }
+      }
+    } ~
+    path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
+      put {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminAddLibraryCurator(RawlsUserEmail(userEmail)))
+      } ~
+      delete {
+        requestContext => perRequest(requestContext,
+          UserService.props(userServiceConstructor, userInfo),
+          UserService.AdminRemoveLibraryCurator(RawlsUserEmail(userEmail)))
       }
     } ~
     path("admin" / "user" / Segment) { userSubjectId =>

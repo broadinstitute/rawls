@@ -64,39 +64,6 @@ paths:
           - email
           - profile
   '/api/admin/billing/{projectId}':
-    put:
-      responses:
-        '201':
-          description: Successfully Created Billing Project
-        '403':
-          description: You must be an admin to create a billing project
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '409':
-          description: Billing Project already exists
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '500':
-          description: Rawls Internal Error
-          schema:
-            $ref: '#/definitions/ErrorReport'
-      description: create billing project in Rawls DB
-      parameters:
-        - in: path
-          description: Project ID
-          name: projectId
-          required: true
-          type: string
-      tags:
-        - admin
-        - billing
-      summary: create billing project in Rawls DB
-      operationId: createBillingProject
-      security:
-        - authorization:
-            - openid
-            - email
-            - profile
     delete:
       responses:
         '200':
@@ -113,7 +80,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: delete billing project from Rawls DB
+      description: delete billing project from Google and Rawls DB
       parameters:
         - in: path
           description: Project ID
@@ -123,8 +90,76 @@ paths:
       tags:
         - admin
         - billing
-      summary: delete billing project from Rawls DB
+      summary: delete billing project from Google and Rawls DB
       operationId: deleteBillingProject
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
+  '/api/admin/billing/register/{projectId}':
+    put:
+      responses:
+        '201':
+          description: Successfully Registered Billing Project to Rawls DB
+        '403':
+          description: You must be an admin to register a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Billing Project already exists
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: register billing project in Rawls DB
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+      tags:
+        - admin
+        - billing
+      summary: register billing project in Rawls DB
+      operationId: registerBillingProject
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/billing/unregister/{projectId}':
+    delete:
+      responses:
+        '200':
+          description: Successfully Unregistered Billing Project from Rawls DB
+        '403':
+          description: You must be an admin to unregister a billing project
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '404':
+          description: Billing Project not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: unregister billing project from Rawls DB
+      parameters:
+        - in: path
+          description: Project ID
+          name: projectId
+          required: true
+          type: string
+      tags:
+        - admin
+        - billing
+      summary: unregister billing project from Rawls DB
+      operationId: unregisterBillingProject
       security:
         - authorization:
             - openid
@@ -941,6 +976,57 @@ paths:
         - in: path
           description: subject id of user
           name: userSubjectId
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+  '/api/admin/user/role/curator/{userEmail}':
+     put:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "adds a user to the list of curators"
+       tags:
+         - admin
+         - users
+       summary: Add a library curator
+       operationId: adminAddCurator
+       parameters:
+        - in: path
+          description: email of user
+          name: userEmail
+          required: true
+          type: string
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
+     delete:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "removes a user from the list of curators"
+       tags:
+         - admin
+         - users
+       summary: Remove a library curator
+       operationId: adminRemoveCurator
+       parameters:
+        - in: path
+          description: email of user
+          name: userEmail
           required: true
           type: string
        security:
@@ -3227,7 +3313,25 @@ paths:
             - openid
             - email
             - profile
-
+  '/api/user/role/curator':
+     get:
+       responses:
+         '200':
+           description: Successful Request
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the curator status of a user"
+       tags:
+         - users
+       summary: Query to see if you're a library curator
+       operationId: isCurator
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/billing':
     get:
       responses:

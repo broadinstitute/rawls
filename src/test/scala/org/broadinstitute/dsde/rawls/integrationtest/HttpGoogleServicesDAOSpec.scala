@@ -325,16 +325,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
       Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices)), Duration.Inf)
     } finally {
-      deleteProject(projectName)
+      gcsDAO.deleteProject(projectName)
     }
-  }
-
-  def deleteProject(projectName: RawlsBillingProjectName): Unit = {
-    val resMgr = gcsDAO.getCloudResourceManager(gcsDAO.getBillingServiceAccountCredential)
-    val billingManager = gcsDAO.getCloudBillingManager(gcsDAO.getBillingServiceAccountCredential)
-    val projectNameString = projectName.value
-    println(s"disabling billing for project $projectNameString: ${Try(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)).execute())}")
-    println(s"deleting project $projectNameString: ${Try(resMgr.projects().delete(projectNameString).execute())}")
   }
 
   private def when500( throwable: Throwable ): Boolean = {

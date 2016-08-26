@@ -258,6 +258,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
     }
     } andThen {
+      // Instead of deleting bucket, send message to delete bucket to BucketDeletionMonitor
       DBIO.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
     } andThen {
       val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values

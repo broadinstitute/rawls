@@ -17,7 +17,8 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmission
 /**
  * Created by tsharpe on 9/28/15.
  */
-class AdminApiServiceSpec extends ApiServiceSpec {
+class
+AdminApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
@@ -135,15 +136,52 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) { status }
       }
   }
+  
+  it should "return 200 when deleting a billing project" in withTestDataApiServices { services =>
+    val project = billingProjectFromName("new_project")
+    assert {
+      getBillingProject(services.dataSource, project).isEmpty
+    }
 
-  it should "return 201 when creating a billing project" in withTestDataApiServices { services =>
+    Post("/billing", CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assert {
+          getBillingProject(services.dataSource, project).nonEmpty
+        }
+      }
+
+    Delete(s"/admin/billing/${project.projectName.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 when deleting a nonexistent billing project" in withTestDataApiServices { services =>
+    Delete(s"/admin/billing/missing_project") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 201 when registering a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
     assert {
       getBillingProject(services.dataSource, project).isEmpty
     }
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -156,11 +194,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 409 when attempting to recreate an existing billing project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/duplicated_project") ~>
+  it should "return 409 when attempting to re-register an existing billing project" in withTestDataApiServices { services =>
+    Put(s"/admin/billing/register/duplicated_project") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Put(s"/admin/billing/duplicated_project") ~>
+        Put(s"/admin/billing/register/duplicated_project") ~>
           sealRoute(services.adminRoutes) ~>
           check {
             assertResult(StatusCodes.Conflict) {
@@ -170,17 +208,17 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when deleting a billing project" in withTestDataApiServices { services =>
+  it should "return 200 when unregistering a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
           getBillingProject(services.dataSource, project).nonEmpty
         }
 
-        Delete(s"/admin/billing/${project.projectName.value}") ~>
+        Delete(s"/admin/billing/unregister/${project.projectName.value}") ~>
           sealRoute(services.adminRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
@@ -193,18 +231,20 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when deleting a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/missing_project") ~>
+  it should "return 404 when unregistering a nonexistent billing project" in withTestDataApiServices { services =>
+    Delete(s"/admin/billing/unregister/missing_project") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
       }
   }
 
   it should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
@@ -240,7 +280,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when adding a nonexistent user to a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         Put(s"/admin/billing/${project.projectName.value}/nobody") ~>
@@ -266,7 +306,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
@@ -293,7 +333,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when removing a nonexistent user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
 
-    Put(s"/admin/billing/${project.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         Delete(s"/admin/billing/${project.projectName.value}/nobody") ~>
@@ -333,7 +373,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Put(s"/admin/billing/${project1.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -407,6 +447,30 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+
+  it should "return 200 when adding a library curator" in withTestDataApiServices { services =>
+    val testUser = "foo@bar.com"
+    Put(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "return 200 when removing a library curator" in withTestDataApiServices { services =>
+    val testUser = "foo@bar.com"
+    Put(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Delete(s"/admin/user/role/curator/${testUser}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
       }
   }
 

@@ -263,7 +263,23 @@ class HttpGoogleServicesDAO(
   }
 
   override def isAdmin(userId: String): Future[Boolean] = {
-    val query = getGroupDirectory.members.get(adminGroupName,userId)
+    hasGoogleRole(adminGroupName, userId)
+  }
+
+  override def isLibraryCurator(userId: String): Future[Boolean] = {
+    hasGoogleRole(curatorGroupName, userId)
+  }
+
+  override def addLibraryCurator(userEmail: String): Future[Unit] = {
+    addEmailToGoogleGroup(curatorGroupName, userEmail)
+  }
+
+  override def removeLibraryCurator(userEmail: String): Future[Unit] = {
+    removeEmailFromGoogleGroup(curatorGroupName, userEmail)
+  }
+
+  override def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean] = {
+    val query = getGroupDirectory.members.get(roleGroupName, userId)
     retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(query)
       true
@@ -390,10 +406,14 @@ class HttpGoogleServicesDAO(
 
   override def addMemberToGoogleGroup(group: RawlsGroup, memberToAdd: Either[RawlsUser, RawlsGroup]): Future[Unit] = {
     val memberEmail = memberToAdd match {
-      case Left(member) => new Member().setEmail(toProxyFromUser(member)).setRole(groupMemberRole)
-      case Right(member) => new Member().setEmail(member.groupEmail.value).setRole(groupMemberRole)
+      case Left(member) => toProxyFromUser(member)
+      case Right(member) => member.groupEmail.value
     }
-    val inserter = getGroupDirectory.members.insert(group.groupEmail.value, memberEmail)
+    addEmailToGoogleGroup(group.groupEmail.value, memberEmail)
+  }
+
+  override def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit] = {
+    val inserter = getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(inserter) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.Conflict.intValue => () // it is ok of the email is already there
     }
@@ -404,7 +424,11 @@ class HttpGoogleServicesDAO(
       case Left(member) => toProxyFromUser(member.userSubjectId)
       case Right(member) => member.groupEmail.value
     }
-    val deleter = getGroupDirectory.members.delete(group.groupEmail.value, memberEmail)
+    removeEmailFromGoogleGroup(group.groupEmail.value, memberEmail)
+  }
+
+  override def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit] = {
+    val deleter = getGroupDirectory.members.delete(groupEmail, emailToRemove)
     retryWithRecoverWhen500orGoogleError[Unit](() => { executeGoogleRequest(deleter) }) {
       case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => () // it is ok of the email is already missing
     }
@@ -648,6 +672,23 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {
+    val billingServiceAccountCredential = getBillingServiceAccountCredential
+    val resMgr = getCloudResourceManager(billingServiceAccountCredential)
+    val billingManager = getCloudBillingManager(billingServiceAccountCredential)
+    val projectNameString = projectName.value
+    for {
+      _ <- retryWhen500orGoogleError(() => {
+      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+      })
+      - <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest (resMgr.projects ().delete (projectNameString))
+      })
+    } yield {
+      // nothing
+    }
+  }
+
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
@@ -778,6 +819,7 @@ class HttpGoogleServicesDAO(
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
+  def curatorGroupName = s"${groupsPrefix}-CURATORS@${appsDomain}"
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {

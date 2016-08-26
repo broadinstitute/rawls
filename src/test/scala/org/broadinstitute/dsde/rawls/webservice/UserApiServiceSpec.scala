@@ -146,7 +146,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(rawlsUserQuery.save(billingUser))
 
-    Put(s"/admin/billing/${project1.projectName.value}") ~>
+    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -234,6 +234,31 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "get not details of a group that does not exist" in withTestDataApiServices { services =>
     Get("/user/group/blarg") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return OK for a user who is a curator" in withTestDataApiServices { services =>
+    Get("/user/role/curator") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "return Not Found for a user who is not a curator" in withTestDataApiServices { services =>
+    Delete(s"/admin/user/role/curator/test_token") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get("/user/role/curator") ~>
       sealRoute(services.userRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {

@@ -1,39 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-1">
-        <sql stripComments="true">
-            alter table METHOD_CONFIG_INPUT modify VALUE varchar(254);
-        </sql>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-2">
-        <sql stripComments="true">
-            alter table METHOD_CONFIG modify METHOD_NAMESPACE varchar(254);
-        </sql>
-    </changeSet>
-
     <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-3">
         <sql stripComments="true">
             alter table WORKFLOW modify EXTERNAL_ID char(36);
-        </sql>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-4">
-        <sql stripComments="true">
-            alter table METHOD_CONFIG_OUTPUT modify VALUE varchar(254);
-        </sql>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-5">
-        <sql stripComments="true">
-            alter table SUBMISSION_VALIDATION modify INPUT_NAME varchar(254);
-        </sql>
-    </changeSet>
-
-    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-text-columns-6">
-        <sql stripComments="true">
-            alter table METHOD_CONFIG modify METHOD_NAME varchar(254);
         </sql>
     </changeSet>
 
