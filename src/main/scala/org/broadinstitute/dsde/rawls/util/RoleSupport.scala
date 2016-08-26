@@ -26,4 +26,14 @@ trait RoleSupport {
       if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
     }
   }
+  
+  def tryIsCurator(userId: String): Future[Boolean] = {
+    gcsDAO.isLibraryCurator(userId) transform( s => s, t => throw new RawlsException("Unable to query for library curator status.", t))
+  }
+
+  def asCurator(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
+    tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
+      if (isCurator) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a library curator.")))
+    }
+  }
 }
