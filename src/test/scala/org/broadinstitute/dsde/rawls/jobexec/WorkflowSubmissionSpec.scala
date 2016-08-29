@@ -11,10 +11,15 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.{Body, StringBody}
+import org.mockserver.matchers.Times
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.{FormData, StatusCodes}
-import spray.json.{JsObject, JsString, JsValue}
+import spray.json._
+import spray.httpx.marshalling._
+import DefaultJsonProtocol._
+import org.mockserver.verify.VerificationTimes
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -310,24 +315,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "not truncate array inputs" in withDefaultTestDatabase {
 
-    // To Do:
-    // fix wdlSource
-    // fix workflowInputs
-
-    val inputs  = Map( "hello.hello.addressee" -> "world")
-    val data = FormData(Seq("wdlSource" -> wdlSource, "workflowInputs" -> s"[$inputs, $inputs]")))
-
-    val body = newStringBody(s"$data", Body.Type.JSON)
-
-
-    // move verify somewhere else?
-    mockServer.verify(
-      request()
-        .withMethod("POST")
-        .withPath(submissionBatchPath)
-        .withBody(body)
-    )
-
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     withWorkspaceContext(testData.workspace) { ctx =>
@@ -335,11 +322,34 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
+      // copied from remote services mock server (part of goodResult) -- although shouldn't it be array list wdl ?
+      val wdlSource = "{\"name\":\"testConfig1\",\"workspaceName\":{\"namespace\":\"myNamespace\",\"name\":\"myWorkspace\"},\"methodRepoMethod\":{\"methodNamespace\":\"ns-config\",\"methodName\":\"meth1\",\"methodVersion\":1},\"methodRepoConfig\":{\"methodConfigNamespace\":\"ns\",\"methodConfigName\":\"meth1\",\"methodConfigVersion\":1},\"outputs\":{\"p1\":\"prereq expr\"},\"inputs\":{\"o1\":\"output expr\"},\"rootEntityType\":\"Sample\",\"prerequisites\":{\"i1\":\"input expr\"},\"namespace\":\"ns\"}"
+
+      val inputs = Map("test_input_name" -> "value").toJson
+      val marshalled = marshal(FormData(Seq("wdlSource" -> wdlSource, "workflowInputs" -> s"[${inputs},${inputs},${inputs}]")))
+      marshalled match {
+        case Left(err) => assert(false)
+        case Right(thing) => {
+          val encodedStringWithHeader = thing.asString
+          val index = encodedStringWithHeader.indexOf("wdlSource")
+          val encodedStringNoHeader = encodedStringWithHeader.substring(index)
+          val exactStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
+          mockServer.mockServer.verify(
+            request()
+              .withMethod("POST")
+              .withPath("/workflows/v1/batch")
+              .withBody(exactStringBody),
+            VerificationTimes.atLeast(1)
+          )
+        }
+      }
+
       val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
         Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
         Seq.empty, Map.empty)
 
       runAndWait(submissionQuery.create(ctx, submissionList))
+
       val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
