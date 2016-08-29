@@ -14,6 +14,7 @@ trait DataAccess
   with MethodConfigurationComponent
   with SubmissionComponent
   with WorkflowComponent
+  with AttributeNamespaceComponent
   with SlickExpressionParser {
 
   this: DriverComponent =>
@@ -46,9 +47,12 @@ trait DataAccess
       workflowQuery.schema ++
       workflowMessageQuery.schema ++
       workflowAuditStatusQuery.schema ++
-      submissionAuditStatusQuery.schema
+      submissionAuditStatusQuery.schema ++
+      attributeNamespaceQuery.schema
 
   def truncateAll: WriteAction[Int] = {
+    // Don't truncate AttributeNamespaceTable after tests because it is a read-only table pre-populated by Liquibase.
+
     // important to keep the right order for referential integrity !
 
     TableQuery[GroupSubgroupsTable].delete andThen                // FK to group

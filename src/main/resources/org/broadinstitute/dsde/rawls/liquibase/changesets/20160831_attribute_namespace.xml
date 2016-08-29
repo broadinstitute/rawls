@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-1">
+        <sql stripComments="true">
+            CREATE TABLE ATTRIBUTE_NAMESPACE (
+                id bigint(20) unsigned AUTO_INCREMENT,
+                name varchar(254) NOT NULL,
+                PRIMARY KEY (id)
+            );
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-2">
+        <sql stripComments="true">
+            INSERT INTO ATTRIBUTE_NAMESPACE(name) values ("default"),("library");
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-3">
+        <sql stripComments="true">
+            ALTER TABLE ENTITY_ATTRIBUTE
+                ADD COLUMN namespace bigint(20) unsigned NOT NULL default 1,
+                ADD CONSTRAINT `FK_ENT_ATTRIBUTE_NAMESPACE_ID` FOREIGN KEY (namespace)
+                REFERENCES ATTRIBUTE_NAMESPACE(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-4">
+        <sql stripComments="true">
+            ALTER TABLE WORKSPACE_ATTRIBUTE
+                ADD COLUMN namespace bigint(20) unsigned NOT NULL default 1,
+                ADD CONSTRAINT `FK_WS_ATTRIBUTE_NAMESPACE_ID` FOREIGN KEY (namespace)
+                REFERENCES ATTRIBUTE_NAMESPACE(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-5">
+        <sql stripComments="true">
+            ALTER TABLE SUBMISSION_ATTRIBUTE
+                ADD COLUMN namespace bigint(20) unsigned NOT NULL default 1,
+                ADD CONSTRAINT `FK_SUB_ATTRIBUTE_NAMESPACE_ID` FOREIGN KEY (namespace)
+                REFERENCES ATTRIBUTE_NAMESPACE(id);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="attribute-namespace-6">
+        <sql stripComments="true">
+            ALTER TABLE SUBMISSION_VALIDATION
+                ADD COLUMN INPUT_NAMESPACE bigint(20) unsigned NOT NULL default 1,
+                ADD CONSTRAINT `FK_SUB_VAL_NAMESPACE_ID` FOREIGN KEY (INPUT_NAMESPACE)
+                REFERENCES ATTRIBUTE_NAMESPACE(id);
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

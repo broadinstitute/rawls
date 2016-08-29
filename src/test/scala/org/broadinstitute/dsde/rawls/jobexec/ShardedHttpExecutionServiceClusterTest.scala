@@ -52,7 +52,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val ownerGroup = makeRawlsGroup("ExecClusterTestDataOwnerGroup", Set(user))
     val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "ExecClusterTestDataBucket", currentTime(), currentTime(), "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
-    val sample1 = Entity("sample1", "Sample", Map("type" -> AttributeString("normal")))
+    val sample1 = Entity("sample1", "Sample", Map(defaultAttributeName("type") -> AttributeString("normal")))
 
     val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)

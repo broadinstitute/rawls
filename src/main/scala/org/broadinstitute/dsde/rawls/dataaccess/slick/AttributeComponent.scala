@@ -3,14 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.ast.TypedType
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import spray.http.StatusCodes
+
 import reflect.runtime.universe._
 
 /**
@@ -18,6 +20,7 @@ import reflect.runtime.universe._
  */
 trait AttributeRecord {
   val id: Long
+  val namespace: Long
   val name: String
   val valueString: Option[String]
   val valueNumber: Option[Double]
@@ -29,6 +32,7 @@ trait AttributeRecord {
 
 case class EntityAttributeRecord(id: Long,
                                  entityId: Long,
+                                 namespace: Long,
                                  name: String,
                                  valueString: Option[String],
                                  valueNumber: Option[Double],
@@ -39,6 +43,7 @@ case class EntityAttributeRecord(id: Long,
 
 case class WorkspaceAttributeRecord(id: Long,
                                     workspaceId: UUID,
+                                    namespace: Long,
                                     name: String,
                                     valueString: Option[String],
                                     valueNumber: Option[Double],
@@ -49,6 +54,7 @@ case class WorkspaceAttributeRecord(id: Long,
 
 case class SubmissionAttributeRecord(id: Long,
                                      validationId: Long,
+                                     namespace: Long,
                                      name: String,
                                      valueString: Option[String],
                                      valueNumber: Option[Double],
@@ -59,6 +65,7 @@ case class SubmissionAttributeRecord(id: Long,
 
 trait AttributeComponent {
   this: DriverComponent
+    with AttributeNamespaceComponent
     with EntityComponent
     with WorkspaceComponent
     with SubmissionComponent =>
@@ -70,6 +77,7 @@ trait AttributeComponent {
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def ownerId = column[OWNER_ID]("owner_id")
+    def namespace = column[Long]("namespace")
     def name = column[String]("name")
     def valueString = column[Option[String]]("value_string")
     def valueNumber = column[Option[Double]]("value_number")
@@ -80,32 +88,35 @@ trait AttributeComponent {
   }
 
   class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
+    def namespaceId = foreignKey("FK_ENT_ATTRIBUTE_NAMESPACE_ID", namespace, attributeNamespaceQuery)(_.id)
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_WS_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def workspace = foreignKey("FK_ATTRIBUTE_PARENT_WORKSPACE", ownerId, workspaceQuery)(_.id)
+    def namespaceId = foreignKey("FK_WS_ATTRIBUTE_NAMESPACE_ID", namespace, attributeNamespaceQuery)(_.id)
   }
 
   class SubmissionAttributeTable(tag: Tag) extends AttributeTable[Long, SubmissionAttributeRecord](tag, "SUBMISSION_ATTRIBUTE") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
 
     def entityRef = foreignKey("FK_SUB_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
+    def namespaceId = foreignKey("FK_SUB_ATTRIBUTE_NAMESPACE_ID", namespace, attributeNamespaceQuery)(_.id)
   }
 
   class EntityAttributeTempTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
   }
 
   class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
@@ -123,22 +134,23 @@ trait AttributeComponent {
    * @tparam OWNER_ID the type of the ownerId field
    * @tparam RECORD the record class
    */
-  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, Long, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
 
     /**
      * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
      * referenced entities.
      *
-     * @param name
+     * @param ownerId
+     * @param attributeName
      * @param attribute
      * @param workspaceId used only for AttributeEntityReferences (or lists of them) to resolve the reference within the workspace
      * @return a sequence of write actions the resulting value being the attribute id inserted
      */
-    def insertAttributeRecords(ownerId: OWNER_ID, name: String, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
+    def insertAttributeRecords(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
 
-      def insertEmpty : Seq[ReadWriteAction[Int]] = {
+      def insertEmpty: Seq[ReadWriteAction[Int]] = {
         //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
-        Seq(insertAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+        Seq(insertAttributeValue(ownerId, attributeName, AttributeNull, Option(-1), Option(0)))
       }
 
       attribute match {
@@ -149,32 +161,37 @@ trait AttributeComponent {
 
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, name, workspaceId, ref, Option(index), Option(refs.length))}
+          refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, attributeName, workspaceId, ref, Option(index), Option(refs.length)) }
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
-          values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
-        case value: AttributeValue => Seq(insertAttributeValue(ownerId, name, value))
-        case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, name, workspaceId, ref))
+          values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, attributeName, value, Option(index), Option(values.length)) }
+        case value: AttributeValue => Seq(insertAttributeValue(ownerId, attributeName, value))
+        case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, attributeName, workspaceId, ref))
       }
     }
 
-    private def insertAttributeRef(ownerId: OWNER_ID, name: String, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
-      entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName).result.flatMap {
-        case Seq() => throw new RawlsException(s"$ref not found in workspace $workspaceId")
-        case Seq(entityRecord) =>
-          (this += marshalAttributeEntityReference(ownerId, name, listIndex, ref, Map(ref -> entityRecord.id), listLength))
+    private def insertAttributeRef(ownerId: OWNER_ID, attributeName: AttributeName, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
+      uniqueResult[EntityRecord](entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName)).map {
+        case None => throw new RawlsException(s"$ref not found in workspace $workspaceId")
+        case Some(entityRecord) => entityRecord.id
+      } flatMap { entityId =>
+        attributeNamespaceQuery.getId(attributeName.namespace) flatMap { attributeNamespaceId =>
+          (this += marshalAttributeEntityReference(ownerId, attributeNamespaceId, attributeName.name, listIndex, ref, Map(ref -> entityId), listLength))
+        }
       }
     }
 
-    private def insertAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
-      (this += marshalAttributeValue(ownerId, name, value, listIndex, listLength))
+    private def insertAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
+      attributeNamespaceQuery.getId(attributeName.namespace) flatMap { attributeNamespaceId =>
+        (this += marshalAttributeValue(ownerId, attributeNamespaceId, attributeName.name, value, listIndex, listLength))
+      }
     }
 
-    def marshalAttribute(ownerId: OWNER_ID, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
+    def marshalAttribute(ownerId: OWNER_ID, namespace: Long, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
       def marshalEmpty : Seq[T#TableElementType] = {
         //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
-        Seq(marshalAttributeValue(ownerId, name, AttributeNull, Option(-1), Option(0)))
+        Seq(marshalAttributeValue(ownerId, namespace, name, AttributeNull, Option(-1), Option(0)))
       }
       attribute match {
         case AttributeEmptyList => marshalEmpty
@@ -184,13 +201,13 @@ trait AttributeComponent {
 
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, name, Option(index), ref, entityIdsByRef, Option(refs.length))}
+          refs.zipWithIndex.map { case (ref, index) => marshalAttributeEntityReference(ownerId, namespace, name, Option(index), ref, entityIdsByRef, Option(refs.length))}
 
         case AttributeValueList(values) =>
           assertConsistentValueListMembers(values)
-          values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, name, value, Option(index), Option(values.length))}
-        case value: AttributeValue => Seq(marshalAttributeValue(ownerId, name, value, None, None))
-        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, name, None, ref, entityIdsByRef, None))
+          values.zipWithIndex.map { case (value, index) => marshalAttributeValue(ownerId, namespace, name, value, Option(index), Option(values.length))}
+        case value: AttributeValue => Seq(marshalAttributeValue(ownerId, namespace, name, value, None, None))
+        case ref: AttributeEntityReference => Seq(marshalAttributeEntityReference(ownerId, namespace, name, None, ref, entityIdsByRef, None))
 
       }
     }
@@ -199,12 +216,12 @@ trait AttributeComponent {
       insertInBatches(this, attributes)
     }
 
-    def marshalAttributeEntityReference(ownerId: OWNER_ID, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
+    def marshalAttributeEntityReference(ownerId: OWNER_ID, namespace: Long, name: String, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
       val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
-      createRecord(0, ownerId, name, None, None, None, Option(entityId), listIndex, listLength)
+      createRecord(0, ownerId, namespace, name, None, None, None, Option(entityId), listIndex, listLength)
     }
 
-    def marshalAttributeValue(ownerId: OWNER_ID, name: String, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
+    def marshalAttributeValue(ownerId: OWNER_ID, namespace: Long, name: String, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
       val valueBoolean = value match {
         case AttributeBoolean(b) => Option(b)
         case _ => None
@@ -218,7 +235,7 @@ trait AttributeComponent {
         case _ => None
       }
 
-      createRecord(0, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength)
+      createRecord(0, ownerId, namespace, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength)
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
@@ -255,24 +272,25 @@ trait AttributeComponent {
       def deleteFromMasterAction(ownerIds: Seq[OWNER_ID]) =
         concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
                 left join #${baseTableRow.tableName}_TEMP ta
-                on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
+                on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2))
                 where ta.owner_id is null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
       def updateInMasterAction(ownerIds: Seq[OWNER_ID]) =
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_TEMP ta
-                on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
+                on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2))
                 set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
       def insertIntoMasterAction(ownerIds: Seq[OWNER_ID]) =
-        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
-                select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
+        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(namespace,name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
+                select ta.namespace,ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
                 from #${baseTableRow.tableName}_TEMP ta
                 left join #${baseTableRow.tableName} a
-                on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
+                on (a.namespace,a.name,a.owner_id,a.list_index)<=>(ta.namespace,ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
                 sql""" where a.owner_id is null""").as[Int]
 
       def createAttributeTempTableAction() = {
         val prefix = sql"""create temporary table #${baseTableRow.tableName}_TEMP (
               id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
+              namespace bigint(20) NOT NULL,
               name text NOT NULL,
               value_string text,
               value_number double DEFAULT NULL,
@@ -305,21 +323,30 @@ trait AttributeComponent {
       }
     }
 
-    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[String, Attribute]] = {
+    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): ReadAction[Map[ID, AttributeMap]] = {
+      attributeNamespaceQuery.getMap map { namespaceMap =>
+        unmarshalAttributes(namespaceMap, allAttributeRecsWithRef)
+      }
+    }
+
+    def unmarshalAttributes[ID](attributeNamespaces: Map[String, Long], allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
-        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => attrRec.name }.map { case (name, attributeRecsWithRefForNameWithDupes) =>
-          val attributeRecsWithRefForName: Set[(RECORD, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
-          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
-            unmarshalList(attributeRecsWithRefForName)
-          } else if (attributeRecsWithRefForName.size > 1) {
-            throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
-          } else if (attributeRecsWithRefForName.head._2.isDefined) {
-            unmarshalReference(attributeRecsWithRefForName.head._2.get)
-          } else {
-            unmarshalValue(attributeRecsWithRefForName.head._1)
+        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attributeNamespaces.map(_.swap).get(attrRec.namespace).get, attrRec.name) }.map {
+          case (attrName, attributeRecsWithRefForNameWithDupes) =>
+            val attributeRecsWithRefForName: Set[(RECORD, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map {
+              case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec)
+            }.toSet
+            val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
+              unmarshalList(attributeRecsWithRefForName)
+            } else if (attributeRecsWithRefForName.size > 1) {
+              throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
+            } else if (attributeRecsWithRefForName.head._2.isDefined) {
+              unmarshalReference(attributeRecsWithRefForName.head._2.get)
+            } else {
+              unmarshalValue(attributeRecsWithRefForName.head._1)
+            }
+            attrName -> unmarshalled
           }
-          name -> unmarshalled
-        }
       }
     }
 

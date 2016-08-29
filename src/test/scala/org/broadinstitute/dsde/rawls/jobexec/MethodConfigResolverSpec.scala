@@ -53,19 +53,19 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val workspace = new Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
-  val sampleGood = new Entity("sampleGood", "Sample", Map("blah" -> AttributeNumber(1)))
-  val sampleGood2 = new Entity("sampleGood2", "Sample", Map("blah" -> AttributeNumber(2)))
+  val sampleGood = new Entity("sampleGood", "Sample", Map(defaultAttributeName("blah") -> AttributeNumber(1)))
+  val sampleGood2 = new Entity("sampleGood2", "Sample", Map(defaultAttributeName("blah") -> AttributeNumber(2)))
   val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
 
   val sampleSet = new Entity("daSampleSet", "SampleSet",
-    Map("samples" -> AttributeEntityReferenceList(Seq(
+    Map(defaultAttributeName("samples") -> AttributeEntityReferenceList(Seq(
       AttributeEntityReference("Sample", "sampleGood"),
       AttributeEntityReference("Sample", "sampleMissingValue")
     )))
   )
 
   val sampleSet2 = new Entity("daSampleSet2", "SampleSet",
-    Map("samples" -> AttributeEntityReferenceList(Seq(
+    Map(defaultAttributeName("samples") -> AttributeEntityReferenceList(Seq(
       AttributeEntityReference("Sample", "sampleGood"),
       AttributeEntityReference("Sample", "sampleGood2")
     )))
@@ -134,21 +134,21 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     "resolve method config inputs" in withConfigData {
       val context = SlickWorkspaceContext(workspace)
       runAndWait(testResolveInputs(context, configGood, sampleGood, littleWdl, this)) shouldBe
-        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName)))
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, defaultAttributeName(intArgName))))
 
       runAndWait(testResolveInputs(context, configEvenBetter, sampleGood, littleWdl, this)) shouldBe
-        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, intArgName), SubmissionValidationValue(Some(AttributeNumber(1)), None, intOptName)))
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeNumber(1)), None, defaultAttributeName(intArgName)), SubmissionValidationValue(Some(AttributeNumber(1)), None, defaultAttributeName(intOptName))))
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet, arrayWdl, this)) shouldBe
-        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, intArrayName)))
+        Map(sampleSet.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1)))), None, defaultAttributeName(intArrayName))))
 
       runAndWait(testResolveInputs(context, configSampleSet, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, intArrayName)))
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))), None, defaultAttributeName(intArrayName))))
 
       // failure cases
       assertResult(true, "Missing values should return an error") {
         runAndWait(testResolveInputs(context, configGood, sampleMissingValue, littleWdl, this)).get("sampleMissingValue").get match {
-          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg == intArgName => true
+          case List(SubmissionValidationValue(None, Some(_), intArg)) if intArg.name == intArgName => true
         }
       }
 
@@ -162,7 +162,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val context = SlickWorkspaceContext(workspace)
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, intArrayName)))
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, defaultAttributeName(intArrayName))))
     }
   }
 }
