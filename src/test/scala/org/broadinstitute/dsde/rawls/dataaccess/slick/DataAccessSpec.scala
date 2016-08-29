@@ -17,6 +17,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       case "USER" => Option("`USER`")
       case "DATABASECHANGELOG" => None        // managed by Liquibase
       case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
+      case "ATTRIBUTE_NAMESPACE" => None      // read-only table pre-populated by Liquibase
       case other => Option(other)
     }
 
