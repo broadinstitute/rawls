@@ -324,36 +324,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      val arrayWdl = """task aggregate_data {
-                           |	Array[String] input_array
-                           |
-                           |	command {
-                           |    echo "foo"
-                           |
-                           |	}
-                           |
-                           |	output {
-                           |		Array[String] output_array = input_array
-                           |	}
-                           |
-                           |	runtime {
-                           |		docker : "broadinstitute/aaaa:31"
-                           |	}
-                           |
-                           |	meta {
-                           |		author : "Barack Obama"
-                           |		email : "barryo@whitehouse.gov"
-                           |	}
-                           |
-                           |}
-                           |
-                           |workflow aggregate_data_workflow {
-                           |	call aggregate_data
-                           |}""".stripMargin
-
-      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
-      val marshalled = marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]")))
-
       val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
         Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
         Seq.empty, Map.empty)
@@ -363,18 +333,47 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
-      marshalled match {
+      val arrayWdl = """task aggregate_data {
+                       |	Array[String] input_array
+                       |
+                       |	command {
+                       |    echo "foo"
+                       |
+                       |	}
+                       |
+                       |	output {
+                       |		Array[String] output_array = input_array
+                       |	}
+                       |
+                       |	runtime {
+                       |		docker : "broadinstitute/aaaa:31"
+                       |	}
+                       |
+                       |	meta {
+                       |		author : "Barack Obama"
+                       |		email : "barryo@whitehouse.gov"
+                       |	}
+                       |
+                       |}
+                       |
+                       |workflow aggregate_data_workflow {
+                       |	call aggregate_data
+                       |}""".stripMargin
+
+      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
+      marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]"))) match {
         case Left(err) => assert(false)
         case Right(thing) => {
           val encodedStringWithHeader = thing.asString
           val index = encodedStringWithHeader.indexOf("wdlSource")
           val encodedStringNoHeader = encodedStringWithHeader.substring(index)
-          val exactStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
+          val regexStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
+
           mockServer.mockServer.verify(
             HttpRequest.request()
               .withMethod("POST")
               .withPath("/workflows/v1/batch")
-              .withBody(exactStringBody),
+              .withBody(regexStringBody),
             VerificationTimes.atLeast(1)
           )
         }
@@ -382,5 +381,3 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     }
   }
 }
-
-
