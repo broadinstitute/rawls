@@ -301,7 +301,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
           outputs.get(outputName) match {
             case None => throw new RawlsException(s"output named ${outputName} does not exist")
             case Some(Right(uot: UnsupportedOutputType)) => throw new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}")
-            case Some(Left(output)) => attributeName.value -> output
+            case Some(Left(output)) => DefaultAttributeName(attributeName) -> output
           }
         }
       }
@@ -315,12 +315,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[String, Attribute]): (Option[Entity], Option[Workspace]) = {
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[AttributeName, Attribute]): (Option[Entity], Option[Workspace]) = {
     //Partition outputs by whether their attributes are entity attributes (begin with "this.") or workspace ones (implicitly; begin with "workspace.")
     //This assumption (that it's either "this." or "workspace.") will be guaranteed by checking of the method config when it's imported; see DSDEEPB-1603.
-    val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.startsWith("this.") })
-    val entityAttributes = partitionEntity.map({ case (k, v) => (k.stripPrefix("this."), v) })
-    val workspaceAttributes = partitionWorkspace.map({ case (k, v) => (k.stripPrefix("workspace."), v) })
+    val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.name.startsWith("this.") })
+    val entityAttributes = partitionEntity.map({ case (k, v) => (AttributeName(k.namespace, k.name.stripPrefix("this.")), v) })
+    val workspaceAttributes = partitionWorkspace.map({ case (k, v) => (AttributeName(k.namespace, k.name.stripPrefix("workspace.")), v) })
 
     val updatedEntity = if (entityAttributes.isEmpty) None else Option(entity.copy(attributes = entity.attributes ++ entityAttributes))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))

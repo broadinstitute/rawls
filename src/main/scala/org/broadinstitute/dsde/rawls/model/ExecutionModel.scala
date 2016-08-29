@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import UserAuthJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
+import UserAuthJsonSupport.RawlsUserRefFormat
 
 import spray.json._
 import org.joda.time.DateTime
@@ -140,7 +141,7 @@ case class SubmissionValidationHeader(
 case class SubmissionValidationValue(
   value: Option[Attribute],
   error: Option[String],
-  inputName: String
+  inputName: AttributeName
 )
 
 // the results of parsing each of the inputs for one entity

@@ -31,6 +31,7 @@ case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLev
 trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
+    with AttributeNamespaceComponent
     with RawlsGroupComponent
     with RawlsUserComponent
     with EntityComponent
@@ -84,9 +85,9 @@ trait WorkspaceComponent {
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateUserDefinedString(workspace.name)
-      workspace.attributes.keys.foreach { value =>
-        validateUserDefinedString(value)
-        validateAttributeName(value)
+      workspace.attributes.keys.foreach { attrName =>
+        validateUserDefinedString(attrName.name)
+        validateAttributeName(attrName)
       }
 
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
@@ -116,15 +117,19 @@ trait WorkspaceComponent {
         val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
         val entitiesToLookup = (entityRefs ++ entityRefListMembers)
 
-        entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
-          val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-          workspaceAttributeTempQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeTempQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq)
+        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+          entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+            val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
+            val workspaceAttrRecs = workspace.attributes.toSeq.flatMap { case (attributeName, attribute) =>
+              workspaceAttributeTempQuery.marshalAttribute(workspaceId, attributeNamespaceMapping(attributeName.namespace), attributeName.name, attribute, entityIdsByRef)
+            }
+            workspaceAttributeTempQuery.batchInsertAttributes(workspaceAttrRecs)
+          }
         }
       }
 
       //this is really only ever going to be one id but in order to be generic we pretend it's a list
       workspaceAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(Seq(workspaceId), insertTempAttributes)
-
     }
 
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
@@ -381,7 +386,7 @@ trait WorkspaceComponent {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value), 0)
     }
 
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[String, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[AttributeName, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
       val realm = workspaceRec.realmGroupName.map(name => RawlsGroupRef(RawlsGroupName(name)))
       Workspace(workspaceRec.namespace, workspaceRec.name, realm, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, realmACLs, workspaceRec.isLocked)
     }

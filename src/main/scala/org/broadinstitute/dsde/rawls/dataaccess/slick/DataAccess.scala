@@ -14,6 +14,7 @@ trait DataAccess
   with MethodConfigurationComponent
   with SubmissionComponent
   with WorkflowComponent
+  with AttributeNamespaceComponent
   with SlickExpressionParser {
 
   this: DriverComponent =>
@@ -46,7 +47,8 @@ trait DataAccess
       workflowQuery.schema ++
       workflowMessageQuery.schema ++
       workflowAuditStatusQuery.schema ++
-      submissionAuditStatusQuery.schema
+      submissionAuditStatusQuery.schema ++
+      attributeNamespaceQuery.schema
 
   def truncateAll: WriteAction[Int] = {
     // important to keep the right order for referential integrity !
@@ -54,6 +56,7 @@ trait DataAccess
     TableQuery[GroupSubgroupsTable].delete andThen                // FK to group
       TableQuery[GroupUsersTable].delete andThen                  // FK to group, users
       TableQuery[WorkspaceAccessTable].delete andThen             // FK to group, workspace
+    TableQuery[AttributeNamespaceTable].delete andThen      // TODO: placement and FKs to this
       TableQuery[EntityAttributeTable].delete andThen             // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation

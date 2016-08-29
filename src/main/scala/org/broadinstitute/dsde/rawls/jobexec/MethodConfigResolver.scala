@@ -24,20 +24,20 @@ object MethodConfigResolver {
   private def getSingleResult(inputName: String, seq: Iterable[AttributeValue], optional: Boolean): SubmissionValidationValue = {
     def handleEmpty = if (optional) None else Some(emptyResultError)
     seq match {
-      case Seq() => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(null) => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, inputName)
-      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None, inputName)
-      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues.toSeq)), Some(multipleResultError), inputName)
+      case Seq() => SubmissionValidationValue(None, handleEmpty, DefaultAttributeName(inputName))
+      case Seq(null) => SubmissionValidationValue(None, handleEmpty, DefaultAttributeName(inputName))
+      case Seq(AttributeNull) => SubmissionValidationValue(None, handleEmpty, DefaultAttributeName(inputName))
+      case Seq(singleValue) => SubmissionValidationValue(Some(singleValue), None, DefaultAttributeName(inputName))
+      case multipleValues => SubmissionValidationValue(Some(AttributeValueList(multipleValues.toSeq)), Some(multipleResultError), DefaultAttributeName(inputName))
     }
   }
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
     val filterSeq = seq.filter(v => v != null && v != AttributeNull).toSeq
     if(filterSeq.isEmpty) {
-      SubmissionValidationValue(Some(AttributeEmptyList), None, inputName)
+      SubmissionValidationValue(Some(AttributeEmptyList), None, DefaultAttributeName(inputName))
     } else {
-      SubmissionValidationValue(Some(AttributeValueList(filterSeq)), None, inputName)
+      SubmissionValidationValue(Some(AttributeValueList(filterSeq)), None, DefaultAttributeName(inputName))
     }
   }
 
@@ -80,12 +80,12 @@ object MethodConfigResolver {
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
                 //The DBIOAction failed - this input expression was unparseable. Make an error for each entity.
-                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)))
+                entities.map(e => (e.name, SubmissionValidationValue(None, Some(regret.getMessage), DefaultAttributeName(input.workflowInput.fqn))))
               case Success(attributeMap) =>
                 //The expression was parseable, but that doesn't mean we got results...
                 attributeMap.map {
                   case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
-                  case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.fqn)
+                  case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), DefaultAttributeName(input.workflowInput.fqn))
                 }.toSeq
             }
             validationValuesByEntity
@@ -104,10 +104,10 @@ object MethodConfigResolver {
    * Convert result of resolveInputs to WDL input format, ignoring AttributeNulls.
    * @return serialized JSON to send to Cromwell
    */
-  def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
+  def propertiesToWdlInputs(inputs: Map[AttributeName, Attribute]): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
-      case (key, notNullValue) => Some((key, notNullValue.toJson))
+      case (key, notNullValue) => Some((AttributeName.toDelimitedName(key), notNullValue.toJson))   // TODO can Cromwell handle colons?
     }
   ) toString
 

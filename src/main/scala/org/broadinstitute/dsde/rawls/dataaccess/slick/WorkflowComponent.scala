@@ -36,7 +36,8 @@ trait WorkflowComponent {
   this: DriverComponent
     with EntityComponent
     with SubmissionComponent
-    with AttributeComponent =>
+    with AttributeComponent
+    with AttributeNamespaceComponent =>
 
   import driver.api._
 
@@ -115,39 +116,48 @@ trait WorkflowComponent {
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert) andThen
-        insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
-          AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name) -> workflowRec
-        }.toMap)
+          insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
+            AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name) -> workflowRec
+          }.toMap)
       }
 
-      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]): ReadWriteAction[Map[(AttributeEntityReference, String), SubmissionValidationRecord]] = {
-        val inputResolutionRecs = for {
-          workflow <- workflows
-          inputResolution <- workflow.inputResolutions
-        } yield {
-          marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
+      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]): ReadWriteAction[Map[(AttributeEntityReference, AttributeName), SubmissionValidationRecord]] = {
+        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+
+          val inputResolutionRecs: Seq[SubmissionValidationRecord] = for {
+            workflow <- workflows
+            inputResolution <- workflow.inputResolutions
+          } yield marshalInputResolution(inputResolution, attributeNamespaceMapping(inputResolution.inputName.namespace), workflowRecsByEntity(workflow.workflowEntity).id)
+
+          val insertedRecQuery = for {
+            workflowRec <- findWorkflowsBySubmissionId(submissionId)
+            workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
+            insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
+          } yield (workflowEntityRec, insertedInputResolutionRec)
+
+          insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
+            insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
+              (AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name), DefaultAttributeName(insertedInputResolutionRec.inputName)) -> insertedInputResolutionRec
+            }.toMap)
         }
-
-        val insertedRecQuery = for {
-          workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          workflowEntityRec <- entityQuery if workflowEntityRec.id === workflowRec.workflowEntityId
-          insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
-        } yield (workflowEntityRec, insertedInputResolutionRec)
-
-        insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
-        insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
-          (AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name), insertedInputResolutionRec.inputName) -> insertedInputResolutionRec
-        }.toMap)
       }
 
-      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, String), SubmissionValidationRecord]) = {
-        val attributeRecs = for {
-          workflow <- workflows
-          inputResolution <- workflow.inputResolutions
-          attribute <- inputResolution.value
-        } yield submissionAttributeQuery.marshalAttribute(inputResolutionRecs(workflow.workflowEntity, inputResolution.inputName).id, inputResolution.inputName, attribute, Map.empty)
+      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, AttributeName), SubmissionValidationRecord]): ReadWriteAction[Unit] = {
+        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+          val attrTuples: Seq[(Workflow, SubmissionValidationValue, Attribute)] = for {
+            workflow <- workflows
+            inputResolution <- workflow.inputResolutions
+            attribute <- inputResolution.value
+          } yield (workflow, inputResolution, attribute)
 
-        submissionAttributeQuery.batchInsertAttributes(attributeRecs.flatten)
+          val attributeRecs: Seq[SubmissionAttributeRecord] = attrTuples flatMap { case (workflow, inputResolution, attribute) =>
+            val ownerId = inputResolutionRecs(workflow.workflowEntity, inputResolution.inputName).id
+            val attributeNamespaceId = attributeNamespaceMapping(inputResolution.inputName.namespace)
+            submissionAttributeQuery.marshalAttribute(ownerId, attributeNamespaceId, inputResolution.inputName.name, attribute, Map.empty)
+          }
+
+          submissionAttributeQuery.batchInsertAttributes(attributeRecs)
+        }
       }
 
       def insertMessages(workflows: Seq[Workflow], workflowRecsByEntity: Map[AttributeEntityReference, WorkflowRecord]) = {
@@ -428,12 +438,13 @@ trait WorkflowComponent {
       )
     }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, parentId: Long): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, attributeNamespaceId: Int, parentId: Long): SubmissionValidationRecord = {
       SubmissionValidationRecord(
         0,
         parentId,
         value.error,
-        value.inputName
+        attributeNamespaceId,
+        value.inputName.name
       )
     }
 
@@ -441,7 +452,7 @@ trait WorkflowComponent {
     def unmarshalOneWorkflowInputs(wfInputResolutionRecs: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])], workflowId: Long): Seq[SubmissionValidationValue] = {
 
         //collect up the workflow resolution results by input
-        val resolutionsByInput = wfInputResolutionRecs.groupBy { case (resolution, attribute) => resolution.inputName }
+        val resolutionsByInput = wfInputResolutionRecs.groupBy { case (resolution, attribute) => DefaultAttributeName(resolution.inputName) }
 
         //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
         //To get around this, we split by input, so that each input is successful (or not) individually.

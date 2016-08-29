@@ -731,7 +731,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
   }
 
-  private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): Map[String, Attribute] = {
+  private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): Map[AttributeName, Attribute] = {
     operations.foldLeft(attributable.attributes) { (startingAttributes, operation) =>
       operation match {
         case AddUpdateAttribute(attributeName, attribute) => startingAttributes + (attributeName -> attribute)

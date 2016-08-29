@@ -193,7 +193,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
       // the optional entity rec is used for references. Since we know we are not dealing with a reference here
       // as this is the attribute final func, we can pass in None.
       val attributesOption = workspaceAttributeQuery.unmarshalAttributes(wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
-      val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(attributeName, AttributeNull)) }.getOrElse(Seq.empty)
+      val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(DefaultAttributeName(attributeName), AttributeNull)) }.getOrElse(Seq.empty)
 
       //Return the value of the expression once for each entity we wanted to evaluate this expression against!
       context.rootEntities.map( rec => (rec.name, wsExprResult) ).toMap
@@ -238,7 +238,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
         // as this is the attribute final func, we can pass in None.
         val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(attrs.map{ case(root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
 
-        val namedAttributesOnlyByEntityId = attributesByEntityId.map({ case (k,v) => k -> v.getOrElse(attributeName, AttributeNull)}).toSeq
+        val namedAttributesOnlyByEntityId = attributesByEntityId.map({ case (k,v) => k -> v.getOrElse(DefaultAttributeName(attributeName), AttributeNull)}).toSeq
         // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query
         val orderedEntityNameAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityName1, _), (entityName2, _)) =>
           entityName1 < entityName2

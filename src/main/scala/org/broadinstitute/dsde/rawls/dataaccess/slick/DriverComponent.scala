@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.model.{SingleStatistic, SummaryStatistics, Attributable, ErrorReport}
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import slick.driver.JdbcDriver
-import slick.jdbc.{SQLActionBuilder, PositionedParameters, SetParameter, GetResult}
+import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.http.StatusCodes
 
 import scala.concurrent.ExecutionContext
@@ -42,9 +42,10 @@ trait DriverComponent {
     if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
   }
 
-  def validateAttributeName(name: String) = {
-    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(name))) {
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name $name is reserved", statusCode = StatusCodes.BadRequest))
+  // TODO: validate attribute namespace ?
+  def validateAttributeName(an: AttributeName) = {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name))) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
     }
   }
 

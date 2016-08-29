@@ -16,7 +16,10 @@ import spray.http.StatusCodes
 case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID, recordVersion: Long, allAttributeValues: Option[String])
 
 trait EntityComponent {
-  this: DriverComponent with WorkspaceComponent with AttributeComponent =>
+  this: DriverComponent
+    with WorkspaceComponent
+    with AttributeComponent
+    with AttributeNamespaceComponent =>
 
   import driver.api._
 
@@ -62,7 +65,7 @@ trait EntityComponent {
         val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None)
 
         val attributeIdOption: Option[Long] = r.<<
-        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption
@@ -77,7 +80,7 @@ trait EntityComponent {
       // the where clause for this query is filled in specific to the use case
       val baseEntityAndAttributeSql =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version,
-          a.id, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, a.list_length,
+          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, a.list_length,
           e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
@@ -295,14 +298,16 @@ trait EntityComponent {
       val entityIds = entityRecs.map(_.id).toSeq
 
       def insertTempAttributes(): ReadWriteAction[Unit] = {
-        val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
-        val attributeRecsToEntityId = (for {
-          entity <- entities
-          (attributeName, attribute) <- entity.attributes
-          attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeName, attribute, entityIdsByName)
-        } yield attributeRec)
+        attributeNamespaceQuery.getMap.flatMap { attributeNamespaceMap =>
+          val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
+          val attributeRecsToEntityId = for {
+            entity <- entities
+            (attributeName, attribute) <- entity.attributes
+            attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeNamespaceMap(attributeName.namespace), attributeName.name, attribute, entityIdsByName)
+          } yield attributeRec
 
-        entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq)
+          entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq)
+        }
       }
 
       entityAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(entityIds, insertTempAttributes)
@@ -445,22 +450,21 @@ trait EntityComponent {
     }
 
     def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
-      val entityInserts = batchInsertEntities(destWorkspaceContext, entities.toSeq.map(e => marshalNewEntity(e, destWorkspaceContext.workspaceId)))
-
-      val attributeInserts = entityInserts flatMap { ids =>
+      batchInsertEntities(destWorkspaceContext, entities.toSeq.map(e => marshalNewEntity(e, destWorkspaceContext.workspaceId))) flatMap { ids =>
         val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
-        val entityIdsByRef = entityIdByEntity.map{ case (entityId, entity) => entity.toReference -> entityId}.toMap
+        val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
 
-        val attributeRecords = entityIdByEntity flatMap { case (entityId, entity) =>
-          entity.attributes.toIterable.flatMap { case (name, attr) =>
-            entityAttributeQuery.marshalAttribute(entityId, name, attr, entityIdsByRef)
+        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+          val attributeRecords = entityIdByEntity flatMap { case (entityId, entity) =>
+            entity.attributes.flatMap { case (attributeName, attr) =>
+              val namespaceId = attributeNamespaceMapping(attributeName.namespace)
+              entityAttributeQuery.marshalAttribute(entityId, namespaceId, attributeName.name, attr, entityIdsByRef)
+            }
           }
+
+          entityAttributeQuery.batchInsertAttributes(attributeRecords)
         }
-
-        entityAttributeQuery.batchInsertAttributes(attributeRecords)
       }
-
-      attributeInserts.map(_ => Unit)
     }
 
     /**
@@ -535,7 +539,7 @@ trait EntityComponent {
       EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity))
     }
 
-    def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[String, Attribute]) = {
+    def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[AttributeName, Attribute]) = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 
@@ -551,9 +555,9 @@ trait EntityComponent {
   def validateEntity(entity: Entity): Unit = {
     validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
     validateUserDefinedString(entity.name)
-    entity.attributes.keys.foreach { value =>
-      validateUserDefinedString(value)
-      validateAttributeName(value)
+    entity.attributes.keys.foreach { attrName =>
+      validateUserDefinedString(attrName.name)
+      validateAttributeName(attrName)
     }
   }
 
