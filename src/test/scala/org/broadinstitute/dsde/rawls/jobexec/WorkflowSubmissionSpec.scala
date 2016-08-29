@@ -351,11 +351,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                            |	call aggregate_data
                            |}""".stripMargin
 
-      // This is what it *should* be (I think)
-//      def inputs(elem: String) = Map("test_input_name3" -> elem).toJson
-//      val marshalled = marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[${inputs("elem1")},${inputs("elem2")},${inputs("elem3")}]")))
-      
-      // This passes
       val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
       val marshalled = marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]")))
 
