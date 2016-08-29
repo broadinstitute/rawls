@@ -31,7 +31,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-  val mockServer = RemoteServicesMockServer()
+  var mockServer = RemoteServicesMockServer()
 
   class TestWorkflowSubmission(
     val dataSource: SlickDataSource,
@@ -313,6 +313,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   it should "not truncate array inputs" in withDefaultTestDatabase {
 
+    mockServer.stopServer
+    mockServer = RemoteServicesMockServer()
+    mockServer.startServer
+
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
     withWorkspaceContext(testData.workspace) { ctx =>
@@ -320,11 +324,50 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
         AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
 
-      // copied from remote services mock server (part of goodResult) -- although shouldn't it be array list wdl ?
-      val wdlSource = "{\"name\":\"testConfig1\",\"workspaceName\":{\"namespace\":\"myNamespace\",\"name\":\"myWorkspace\"},\"methodRepoMethod\":{\"methodNamespace\":\"ns-config\",\"methodName\":\"meth1\",\"methodVersion\":1},\"methodRepoConfig\":{\"methodConfigNamespace\":\"ns\",\"methodConfigName\":\"meth1\",\"methodConfigVersion\":1},\"outputs\":{\"p1\":\"prereq expr\"},\"inputs\":{\"o1\":\"output expr\"},\"rootEntityType\":\"Sample\",\"prerequisites\":{\"i1\":\"input expr\"},\"namespace\":\"ns\"}"
+      val arrayWdl = """task aggregate_data {
+                           |	Array[String] input_array
+                           |
+                           |	command {
+                           |    echo "foo"
+                           |
+                           |	}
+                           |
+                           |	output {
+                           |		Array[String] output_array = input_array
+                           |	}
+                           |
+                           |	runtime {
+                           |		docker : "broadinstitute/aaaa:31"
+                           |	}
+                           |
+                           |	meta {
+                           |		author : "Barack Obama"
+                           |		email : "barryo@whitehouse.gov"
+                           |	}
+                           |
+                           |}
+                           |
+                           |workflow aggregate_data_workflow {
+                           |	call aggregate_data
+                           |}""".stripMargin
 
-      val inputs = Map("test_input_name" -> "value").toJson
-      val marshalled = marshal(FormData(Seq("wdlSource" -> wdlSource, "workflowInputs" -> s"[${inputs},${inputs},${inputs}]")))
+      // This is what it *should* be (I think)
+//      def inputs(elem: String) = Map("test_input_name3" -> elem).toJson
+//      val marshalled = marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[${inputs("elem1")},${inputs("elem2")},${inputs("elem3")}]")))
+      
+      // This passes
+      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
+      val marshalled = marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]")))
+
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+        Seq.empty, Map.empty)
+
+      runAndWait(submissionQuery.create(ctx, submissionList))
+
+      val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+
       marshalled match {
         case Left(err) => assert(false)
         case Right(thing) => {
@@ -341,16 +384,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           )
         }
       }
-
-      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
-        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
-        Seq.empty, Map.empty)
-
-      runAndWait(submissionQuery.create(ctx, submissionList))
-
-      val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
-      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
-
     }
   }
 }
