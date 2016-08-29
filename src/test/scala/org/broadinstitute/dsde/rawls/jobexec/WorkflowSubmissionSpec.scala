@@ -11,15 +11,13 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.mockserver.model.HttpRequest.request
-import org.mockserver.model.{Body, StringBody}
-import org.mockserver.matchers.Times
+import org.mockserver.model.{Body, HttpRequest, StringBody}
+import org.mockserver.verify.VerificationTimes
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
 import spray.http.{FormData, StatusCodes}
-import spray.json._
 import spray.httpx.marshalling._
+import spray.json._
 import DefaultJsonProtocol._
-import org.mockserver.verify.VerificationTimes
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -335,7 +333,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
           val encodedStringNoHeader = encodedStringWithHeader.substring(index)
           val exactStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
           mockServer.mockServer.verify(
-            request()
+            HttpRequest.request()
               .withMethod("POST")
               .withPath("/workflows/v1/batch")
               .withBody(exactStringBody),
