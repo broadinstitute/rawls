@@ -255,7 +255,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val x: Future[(Seq[WorkflowRecord], String, Set[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
+    val x: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
       for {
         workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
@@ -273,7 +273,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- DBIO.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
 
         groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-        groupsToRemove <- DBIO.sequence(groupRefs.map (groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
+        groupsToRemove <- DBIO.sequence(groupRefs.toSeq.map (groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
@@ -292,9 +292,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
     for {
       (workflowsToAbort, bucketName, groupsToRemove) <- x
-      _ <- workflowsToAbort.map {wf => executionServiceCluster.abort(wf, userInfo)}
+      _ <- Future.traverse(workflowsToAbort) {wf => executionServiceCluster.abort(wf, userInfo)}
       _ <- Future.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
-      _ <- Future.traverse(groupsToRemove) { group => gcsDAO.deleteGoogleGroup(group)}
+      _ <- Future.traverse(groupsToRemove) {
+        case Some(group) => gcsDAO.deleteGoogleGroup(group)
+        case None => Future.successful(())
+      }
     } yield {
       RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${bucketName} will be deleted within 24h.")
     }
