@@ -40,7 +40,7 @@ object RawlsGroup {
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
-case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean)
+case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
 
 object ProjectRoles {
@@ -95,7 +95,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsBillingProjectFormat = jsonFormat4(RawlsBillingProject)
 
-  implicit val RawlsBillingAccountFormat = jsonFormat2(RawlsBillingAccount)
+  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
 
