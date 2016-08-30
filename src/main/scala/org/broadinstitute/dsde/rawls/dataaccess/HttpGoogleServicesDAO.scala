@@ -522,7 +522,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+  override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
     val billingSvcCred = getBillingServiceAccountCredential
     listBillingAccounts(cred) flatMap { accountList =>
@@ -531,7 +531,7 @@ class HttpGoogleServicesDAO(
         //NOTE: We guarantee that the firecloud billing service account always has the correct scopes.
         //So credentialOwnsBillingAccount == false definitely means no access (rather than no scopes).
         credentialOwnsBillingAccount(billingSvcCred, acctName) map { firecloudHasAccount =>
-          RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount)
+          RawlsBillingAccount(RawlsBillingAccountName(acctName), firecloudHasAccount, acct.getDisplayName)
         }
       })
     }
@@ -618,7 +618,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -629,7 +629,7 @@ class HttpGoogleServicesDAO(
     for {
       // create the project
       project <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value)))
+        executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
       }).recover {
         case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
@@ -637,7 +637,7 @@ class HttpGoogleServicesDAO(
 
       // set the billing account
       billing <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount.value)))
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount.accountName.value)))
       })
 
       // get current permissions
@@ -670,6 +670,13 @@ class HttpGoogleServicesDAO(
     } yield {
       // nothing
     }
+  }
+
+  def labelSafeString(s: String): String = {
+    // The google ui says the only valid values for labels are lower case letters and numbers and must start with
+    // a letter. Dashes also appear to be acceptable though the ui does not say so.
+    // The fc in front ensures it starts with a lower case letter
+    "fc-" + s.toLowerCase.replaceAll("[^a-z0-9\\-]", "-")
   }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]= {

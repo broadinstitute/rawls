@@ -308,8 +308,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(mockGcsDAO.createProxyGroup(user), Duration.Inf)
 
     assertResult(Seq(
-      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudHasThisOne"), firecloudHasAccess = true),
-      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne"), firecloudHasAccess = false)
+      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudHasThisOne"), true, "testBillingAccount"),
+      RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne"), false, "testBillingAccount")
     )){
       Await.result(mockGcsDAO.listBillingAccounts(userInfo), Duration.Inf)
     }
@@ -318,7 +318,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   it should "create a project" in {
     val projectName = RawlsBillingProjectName("dsde-test-" + UUID.randomUUID().toString.take(8))
     try {
-      val billingAccount = RawlsBillingAccountName("billingAccounts/0089F0-98A321-679BA7")
+      val billingAccount = RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/0089F0-98A321-679BA7"), true, " This is A test ___-444")
 
       val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
       val projectServices = gcsConfig.getStringList("projectTemplate.services")

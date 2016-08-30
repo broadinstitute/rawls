@@ -96,7 +96,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]
 
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit]
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 }
 

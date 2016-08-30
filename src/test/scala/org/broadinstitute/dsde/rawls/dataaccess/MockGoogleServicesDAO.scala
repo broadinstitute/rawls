@@ -29,8 +29,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true)
-    val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false)
+    val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
+    val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false, "testBillingAccount")
     Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
@@ -232,7 +232,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
 }

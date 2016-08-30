@@ -728,10 +728,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName): Future[PerRequestMessage] = {
-    gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccounts =>
-      billingAccounts.find(_.accountName == billingAccount) match {
-        case Some(RawlsBillingAccount(_, true)) => dataSource.inTransaction { dataAccess =>
+  def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
+    gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
+      billingAccountNames.find(_.accountName == billingAccountName) match {
+        case Some(billingAccount) if billingAccount.firecloudHasAccess => dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
             case None =>
               for {
@@ -745,8 +745,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         }
 
-        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccount.value} to create a project with it.")))
-        case Some(RawlsBillingAccount(_, false)) => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing adminstrator of ${billingAccount.value} to create a project with it.")))
+        case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing adminstrator of ${billingAccountName.value} to create a project with it.")))
       }
     }
   }
