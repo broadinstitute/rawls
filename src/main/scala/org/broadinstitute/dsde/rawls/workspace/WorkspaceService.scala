@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissio
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import scala.concurrent.Await
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 /**
  * Created by dvoet on 4/27/15.
  */
