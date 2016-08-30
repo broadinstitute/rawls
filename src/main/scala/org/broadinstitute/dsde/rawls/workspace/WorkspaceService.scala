@@ -229,54 +229,76 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        deleteWorkspace(workspaceName, dataAccess, workspaceContext)
+        DBIO.successful(workspaceContext)
       }
+    } flatMap { ctx =>
+      deleteWorkspace(workspaceName, ctx)
+    }
+
+  }
+
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
+        DBIO.successful(workspaceContext)
+      }
+    } flatMap { ctx =>
+      deleteWorkspace(workspaceName, ctx)
     }
   }
 
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
-        deleteWorkspace(workspaceName, dataAccess, workspaceContext)
-      }
-    }
 
-  private def deleteWorkspace(workspaceName: WorkspaceName, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[PerRequestMessage] = {
+
+  private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: SlickWorkspaceContext): Future[PerRequestMessage] = {
     //Attempt to abort any running workflows so they don't write any more to the bucket.
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.map {
-      case wf if !WorkflowStatuses.withName(wf.status).isDone && wf.externalId.isDefined => executionServiceCluster.abort(wf, userInfo).map {
-        case Failure(regrets) =>
-          logger.info(s"failure aborting workflow ${wf.externalId} while deleting workspace ${workspaceName}", regrets)
-          Failure(regrets)
-        case success => success
+    val x: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
+      for {
+        workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+        _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
+          case wf if !WorkflowStatuses.withName(wf.status).isDone && wf.externalId.isDefined => executionServiceCluster.abort(wf, userInfo).map {
+            case Failure(regrets) =>
+              logger.info(s"failure aborting workflow ${wf.externalId} while deleting workspace ${workspaceName}", regrets)
+              Failure(regrets)
+            case success => success
+          }
+          //If a workflow is not done, automatically changed its status to Aborted
+          case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
+        }
+        }
+        // Instead of deleting bucket, send message to delete bucket to BucketDeletionMonitor
+        _ <- DBIO.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
+
+        groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
+        groupsToRemove <- DBIO.sequence(groupRefs.toSeq.map (groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
+
+        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
+        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
+        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
+        _ <- {
+          DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
+            dataAccess.rawlsGroupQuery.delete(group)
+          }.toSeq: _*)
+        }
+        _ <- dataAccess.workspaceQuery.delete(workspaceName)
+      } yield {
+        (workflowsToAbort, workspaceContext.workspace.bucketName, groupsToRemove)
       }
-    }} andThen {
-      DBIO.from(gcsDAO.deleteBucket(workspaceContext.workspace.bucketName, bucketDeletionMonitor))
-    } andThen {
-      val groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-      DBIO.seq(groupRefs.map { groupRef => dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-        case Some(group) => DBIO.from(gcsDAO.deleteGoogleGroup(group))
-        case None => DBIO.successful(Unit)
-      }}.toSeq: _*)
-    } andThen {
-      DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
-    } andThen {
-      DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
-    } andThen {
-      DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
-    } andThen {
-      dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
-    } andThen {
-      DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
-        dataAccess.rawlsGroupQuery.delete(group)
-      }.toSeq: _*)
-    } andThen {
-      dataAccess.workspaceQuery.delete(workspaceName)
-    } andThen {
-      DBIO.successful(RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${workspaceContext.workspace.bucketName} will be deleted within 24h."))
+    }
+    }
+    for {
+      (workflowsToAbort, bucketName, groupsToRemove) <- x
+      _ <- Future.traverse(workflowsToAbort) {wf => executionServiceCluster.abort(wf, userInfo)}
+      _ <- Future.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
+      _ <- Future.traverse(groupsToRemove) {
+        case Some(group) => gcsDAO.deleteGoogleGroup(group)
+        case None => Future.successful(())
+      }
+    } yield {
+      RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${bucketName} will be deleted within 24h.")
     }
   }
 
@@ -1414,20 +1436,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def withWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withWorkspaceContextAndPermissions[T](workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]): ReadWriteAction[T] = {
     withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
       requireAccess(workspaceContext.workspace, accessLevel, dataAccess) { op(workspaceContext) }
     }
   }
 
-  private def withWorkspaceContext(workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]) = {
+  private def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess)(op: (SlickWorkspaceContext) => ReadWriteAction[T]) = {
     dataAccess.workspaceQuery.findByName(workspaceName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
       case Some(workspace) => op(SlickWorkspaceContext(workspace))
     }
   }
 
-  private def requireAccess(workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def requireAccess[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
     getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
       if (userLevel >= requiredLevel) {
         if ( (requiredLevel > WorkspaceAccessLevels.Read) && workspace.isLocked )
