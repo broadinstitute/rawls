@@ -4,13 +4,11 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException
-
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
-
 import org.scalatest.FunSuite
 
 import scala.collection.immutable.IndexedSeq
@@ -177,7 +175,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       assertResult(wsNameResults) { Map( "2" -> TrySuccess( wsEntityResults.map(e => AttributeString(e.name)))) }
     }
 
-    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, Map[String, Attribute])], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
+    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
       val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
         entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
       }

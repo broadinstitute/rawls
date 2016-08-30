@@ -64,9 +64,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map(WorkspaceAccessLevels.Owner -> ownerGroup), Map(WorkspaceAccessLevels.Owner -> ownerGroup))
 
     val sample1 = Entity("sample1", "Sample",
-      Map("type" -> AttributeString("normal")))
+      Map(DefaultAttributeName("type") -> AttributeString("normal")))
     val sample2 = Entity("sample2", "Sample",
-      Map("type" -> AttributeString("normal")))
+      Map(DefaultAttributeName("type") -> AttributeString("normal")))
 
     val refreshToken = UUID.randomUUID.toString
 
@@ -262,7 +262,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   it should "return a successful Submission when given an entity expression that evaluates to a set of entities" in withWorkspaceService { workspaceService =>
     val sset = Entity("testset6", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(
+      Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList( Seq(
         AttributeEntityReference("Sample", "sample1"),
         AttributeEntityReference("Sample", "sample2"),
         AttributeEntityReference("Sample", "sample3"),
@@ -413,7 +413,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       vStatus
     }
 
-    assertResult(testData.sset1.attributes("samples").asInstanceOf[AttributeEntityReferenceList].list.size) { vData.validEntities.length }
+    assertResult(testData.sset1.attributes(DefaultAttributeName("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.validEntities.length }
     assert(vData.invalidEntities.isEmpty)
   }
 
@@ -436,7 +436,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assert(vData.validEntities.isEmpty)
-    assertResult(testData.sset1.attributes("samples").asInstanceOf[AttributeEntityReferenceList].list.size) { vData.invalidEntities.length }
+    assertResult(testData.sset1.attributes(DefaultAttributeName("samples")).asInstanceOf[AttributeEntityReferenceList].list.size) { vData.invalidEntities.length }
   }
 
   it should "report validated inputs and a mixture of started and unstarted workflows where method configuration inputs are missing on some entities" in withWorkspaceService { workspaceService =>
@@ -447,7 +447,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       vStatus
     }
 
-    assertResult(testData.sset1.attributes("samples").asInstanceOf[AttributeEntityReferenceList].list.size-1) { vData.validEntities.length }
+    assertResult(testData.sset1.attributes(DefaultAttributeName("samples")).asInstanceOf[AttributeEntityReferenceList].list.size-1) { vData.validEntities.length }
     assertResult(1) { vData.invalidEntities.length }
   }
 

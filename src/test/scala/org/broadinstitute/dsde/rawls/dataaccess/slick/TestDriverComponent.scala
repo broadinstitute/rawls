@@ -161,10 +161,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), Set.empty, "testBucketUrl")
 
     val wsAttrs = Map(
-      "string" -> AttributeString("yep, it's a string"),
-      "number" -> AttributeNumber(10),
-      "empty" -> AttributeEmptyList,
-      "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
+      DefaultAttributeName("string") -> AttributeString("yep, it's a string"),
+      DefaultAttributeName("number") -> AttributeNumber(10),
+      DefaultAttributeName("empty") -> AttributeEmptyList,
+      DefaultAttributeName("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
@@ -212,60 +212,60 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val sample1 = Entity("sample1", "Sample",
       Map(
-        "type" -> AttributeString("normal"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-        "quot" -> AttributeEntityReference("Aliquot", "aliquot1"),
-        "somefoo" -> AttributeString("itsfoo")))
+        DefaultAttributeName("type") -> AttributeString("normal"),
+        DefaultAttributeName("whatsit") -> AttributeNumber(100),
+        DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+        DefaultAttributeName("quot") -> AttributeEntityReference("Aliquot", "aliquot1"),
+        DefaultAttributeName("somefoo") -> AttributeString("itsfoo")))
 
-    val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ) )
-    val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ) )
-    val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
-    val sample8 = Entity("sample8", "Sample", Map("type" -> AttributeString("tumor")))
+    val sample2 = Entity("sample2", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("tumortype") -> AttributeString("LUSC"), DefaultAttributeName("confused") -> AttributeString("huh?") ) )
+    val sample3 = Entity("sample3", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("tumortype") -> AttributeString("LUSC"), DefaultAttributeName("confused") -> AttributeEntityReference("Sample", "sample1") ) )
+    val sample4 = Entity("sample4", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample5 = Entity("sample5", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample6 = Entity("sample6", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample7 = Entity("sample7", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("cycle") -> AttributeEntityReference("Sample", "sample6")))
+    val sample8 = Entity("sample8", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
     val extraSample = Entity("extraSample", "Sample", Map.empty)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
 
     val pair1 = Entity("pair1", "Pair",
-      Map( "case" -> AttributeEntityReference("Sample", "sample2"),
-        "control" -> AttributeEntityReference("Sample", "sample1"),
-        "whatsit" -> AttributeString("occurs in sample too! oh no!")) )
+      Map(DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample2"),
+        DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1"),
+        DefaultAttributeName("whatsit") -> AttributeString("occurs in sample too! oh no!")) )
     val pair2 = Entity("pair2", "Pair",
-      Map( "case" -> AttributeEntityReference("Sample", "sample3"),
-        "control" -> AttributeEntityReference("Sample", "sample1") ) )
+      Map(DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample3"),
+        DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1") ) )
 
     val sset1 = Entity("sset1", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample1"),
+      Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample1"),
         AttributeEntityReference("Sample", "sample2"),
         AttributeEntityReference("Sample", "sample3"))) ) )
     val sset2 = new Entity("sset2", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ) )
+      Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ) )
 
     val sset3 = Entity("sset3", "SampleSet",
-      Map("hasSamples" -> AttributeEntityReferenceList(Seq(
+      Map(DefaultAttributeName("hasSamples") -> AttributeEntityReferenceList(Seq(
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6")))))
 
     val sset4 = Entity("sset4", "SampleSet",
-      Map("hasSamples" -> AttributeEntityReferenceList(Seq(
+      Map(DefaultAttributeName("hasSamples") -> AttributeEntityReferenceList(Seq(
         AttributeEntityReference("Sample", "sample7")))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map( "samples" -> AttributeEmptyList ))
+      Map(DefaultAttributeName("samples") -> AttributeEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
-      Map( "pairs" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
+      Map(DefaultAttributeName("pairs") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
         AttributeEntityReference("Pair", "pair2"))) ) )
 
     val indiv1 = Entity("indiv1", "Individual",
-      Map( "sset" -> AttributeEntityReference("SampleSet", "sset1") ) )
+      Map(DefaultAttributeName("sset") -> AttributeEntityReference("SampleSet", "sset1") ) )
 
     val indiv2 = Entity("indiv2", "Individual",
-      Map( "sset" -> AttributeEntityReference("SampleSet", "sset2") ) )
+      Map(DefaultAttributeName("sset") -> AttributeEntityReference("SampleSet", "sset2") ) )
 
     val methodConfig = MethodConfiguration(
       "ns",
@@ -316,8 +316,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
 
-    val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
-    val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
+    val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), DefaultAttributeName("test_input_name")))
+    val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), DefaultAttributeName("test_input_name2")))
 
     val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
       Seq.empty, Map.empty,
@@ -438,10 +438,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), Set.empty, "testBucketUrl")
 
     val wsAttrs = Map(
-      "string" -> AttributeString("yep, it's a string"),
-      "number" -> AttributeNumber(10),
-      "empty" -> AttributeEmptyList,
-      "values" -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
+      DefaultAttributeName("string") -> AttributeString("yep, it's a string"),
+      DefaultAttributeName("number") -> AttributeNumber(10),
+      DefaultAttributeName("empty") -> AttributeEmptyList,
+      DefaultAttributeName("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
     val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
@@ -450,60 +450,60 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val sample1 = Entity("sample1", "Sample",
       Map(
-        "type" -> AttributeString("normal"),
-        "whatsit" -> AttributeNumber(100),
-        "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-        "quot" -> AttributeEntityReference("Aliquot", "aliquot1"),
-        "somefoo" -> AttributeString("itsfoo")))
+        DefaultAttributeName("type") -> AttributeString("normal"),
+        DefaultAttributeName("whatsit") -> AttributeNumber(100),
+        DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+        DefaultAttributeName("quot") -> AttributeEntityReference("Aliquot", "aliquot1"),
+        DefaultAttributeName("somefoo") -> AttributeString("itsfoo")))
 
-    val sample2 = Entity("sample2", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeString("huh?") ) )
-    val sample3 = Entity("sample3", "Sample", Map( "type" -> AttributeString("tumor"), "tumortype" -> AttributeString("LUSC"), "confused" -> AttributeEntityReference("Sample", "sample1") ) )
-    val sample4 = Entity("sample4", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample5 = Entity("sample5", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample6 = Entity("sample6", "Sample", Map("type" -> AttributeString("tumor")))
-    val sample7 = Entity("sample7", "Sample", Map("type" -> AttributeString("tumor"), "cycle" -> AttributeEntityReference("Sample", "sample6")))
-    val sample8 = Entity("sample8", "Sample", Map("type" -> AttributeString("tumor")))
+    val sample2 = Entity("sample2", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("tumortype") -> AttributeString("LUSC"), DefaultAttributeName("confused") -> AttributeString("huh?") ) )
+    val sample3 = Entity("sample3", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("tumortype") -> AttributeString("LUSC"), DefaultAttributeName("confused") -> AttributeEntityReference("Sample", "sample1") ) )
+    val sample4 = Entity("sample4", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample5 = Entity("sample5", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample6 = Entity("sample6", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
+    val sample7 = Entity("sample7", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor"), DefaultAttributeName("cycle") -> AttributeEntityReference("Sample", "sample6")))
+    val sample8 = Entity("sample8", "Sample", Map(DefaultAttributeName("type") -> AttributeString("tumor")))
     val extraSample = Entity("extraSample", "Sample", Map.empty)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
 
     val pair1 = Entity("pair1", "Pair",
-      Map( "case" -> AttributeEntityReference("Sample", "sample2"),
-        "control" -> AttributeEntityReference("Sample", "sample1"),
-        "whatsit" -> AttributeString("occurs in sample too! oh no!")) )
+      Map(DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample2"),
+        DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1"),
+        DefaultAttributeName("whatsit") -> AttributeString("occurs in sample too! oh no!")) )
     val pair2 = Entity("pair2", "Pair",
-      Map( "case" -> AttributeEntityReference("Sample", "sample3"),
-        "control" -> AttributeEntityReference("Sample", "sample1") ) )
+      Map(DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample3"),
+        DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1") ) )
 
     val sset1 = Entity("sset1", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample1"),
+      Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample1"),
         AttributeEntityReference("Sample", "sample2"),
         AttributeEntityReference("Sample", "sample3"))) ) )
     val sset2 = new Entity("sset2", "SampleSet",
-      Map( "samples" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ) )
+      Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Sample", "sample2"))) ) )
 
     val sset3 = Entity("sset3", "SampleSet",
-      Map("hasSamples" -> AttributeEntityReferenceList(Seq(
+      Map(DefaultAttributeName("hasSamples") -> AttributeEntityReferenceList(Seq(
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6")))))
 
     val sset4 = Entity("sset4", "SampleSet",
-      Map("hasSamples" -> AttributeEntityReferenceList(Seq(
+      Map(DefaultAttributeName("hasSamples") -> AttributeEntityReferenceList(Seq(
         AttributeEntityReference("Sample", "sample7")))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map( "samples" -> AttributeEmptyList ))
+      Map(DefaultAttributeName("samples") -> AttributeEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
-      Map( "pairs" -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
+      Map(DefaultAttributeName("pairs") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
         AttributeEntityReference("Pair", "pair2"))) ) )
 
     val indiv1 = Entity("indiv1", "Individual",
-      Map( "sset" -> AttributeEntityReference("SampleSet", "sset1") ) )
+      Map(DefaultAttributeName("sset") -> AttributeEntityReference("SampleSet", "sset1") ) )
 
     val indiv2 = Entity("indiv2", "Individual",
-      Map( "sset" -> AttributeEntityReference("SampleSet", "sset2") ) )
+      Map(DefaultAttributeName("sset") -> AttributeEntityReference("SampleSet", "sset2") ) )
 
     val methodConfig = MethodConfiguration(
       "ns",
@@ -545,8 +545,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val uniqueMethodConfigName = UUID.randomUUID.toString
     val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
 
-    val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
-    val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
+    val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), DefaultAttributeName("test_input_name")))
+    val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), DefaultAttributeName("test_input_name2")))
 
     val submissionNoWorkflows = createTestSubmission(workspace, methodConfig, indiv1, userOwner,
       Seq.empty, Map.empty,

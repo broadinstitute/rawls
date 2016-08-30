@@ -31,33 +31,35 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val target2 = Entity("target2", "type", Map.empty)
     runAndWait(entityQuery.save(workspaceContext, target2))
 
-    val updatedEntity = entity.copy(attributes = Map("string" -> AttributeString("foo"),
-      "ref" -> target1.toReference,
-      "refList" -> AttributeEntityReferenceList(Seq(target1.toReference, target2.toReference))))
+    val updatedEntity = entity.copy(attributes = Map(
+      DefaultAttributeName("string") -> AttributeString("foo"),
+      DefaultAttributeName("ref") -> target1.toReference,
+      DefaultAttributeName("refList") -> AttributeEntityReferenceList(Seq(target1.toReference, target2.toReference))))
 
     assertResult(updatedEntity) { runAndWait(entityQuery.save(workspaceContext, updatedEntity)) }
     assertResult(Some(updatedEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
-    val updatedAgainEntity = updatedEntity.copy(attributes = Map("string2" -> AttributeString("foo"),
-      "ref" -> target2.toReference,
-      "refList" -> AttributeEntityReferenceList(Seq(target2.toReference, target1.toReference))))
+    val updatedAgainEntity = updatedEntity.copy(attributes = Map(
+      DefaultAttributeName("string2") -> AttributeString("foo"),
+      DefaultAttributeName("ref") -> target2.toReference,
+      DefaultAttributeName("refList") -> AttributeEntityReferenceList(Seq(target2.toReference, target1.toReference))))
     assertResult(updatedAgainEntity) { runAndWait(entityQuery.save(workspaceContext, updatedAgainEntity)) }
     assertResult(Some(updatedAgainEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
     assertResult(entity) { runAndWait(entityQuery.save(workspaceContext, entity)) }
     assertResult(Some(entity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
-    val emptyListAttributeEntity = entity.copy(name = "emptyListy", attributes = Map("emptyList" -> AttributeEmptyList))
+    val emptyListAttributeEntity = entity.copy(name = "emptyListy", attributes = Map(DefaultAttributeName("emptyList") -> AttributeEmptyList))
     runAndWait(entityQuery.save(workspaceContext, emptyListAttributeEntity))
     assertResult(Some(emptyListAttributeEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyListy")) }
 
     //convert AttributeValueList(Seq()) -> AttributeEmptyList
-    val emptyValListEntity = entity.copy(name = "emptyValList", attributes = Map("emptyList" -> AttributeValueList(Seq())))
+    val emptyValListEntity = entity.copy(name = "emptyValList", attributes = Map(DefaultAttributeName("emptyList") -> AttributeValueList(Seq())))
     runAndWait(entityQuery.save(workspaceContext, emptyValListEntity))
     assertResult(Some(emptyListAttributeEntity.copy(name="emptyValList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyValList")) }
 
     //convert AttributeEntityReferenceList(Seq()) -> AttributeEmptyList
-    val emptyRefListEntity = entity.copy(name = "emptyRefList", attributes = Map("emptyList" -> AttributeEntityReferenceList(Seq())))
+    val emptyRefListEntity = entity.copy(name = "emptyRefList", attributes = Map(DefaultAttributeName("emptyList") -> AttributeEntityReferenceList(Seq())))
     runAndWait(entityQuery.save(workspaceContext, emptyRefListEntity))
     assertResult(Some(emptyListAttributeEntity.copy(name="emptyRefList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyRefList")) }
 
@@ -152,7 +154,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val workspace = new Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID.toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",
-      Map("aliquot" -> AttributeEntityReference("Aliquot", "aliquot1")))
+      Map(DefaultAttributeName("aliquot") -> AttributeEntityReference("Aliquot", "aliquot1")))
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
 
@@ -211,8 +213,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       withWorkspaceContext(testData.workspace) { context =>
         val pair2 = Entity("pair2", "Pair",
           Map(
-            "case" -> AttributeEntityReference("Sample", "sample3"),
-            "control" -> AttributeEntityReference("Sample", "sample1")))
+            DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample3"),
+            DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1")))
         runAndWait(entityQuery.save(context, pair2))
         assert {
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined
@@ -224,8 +226,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   it should "update an entity's attributes many times concurrently" in withDefaultTestDatabase {
     val pair2 = Entity("pair2", "Pair",
       Map(
-        "case" -> AttributeEntityReference("Sample", "sample3"),
-        "control" -> AttributeEntityReference("Sample", "sample1")))
+        DefaultAttributeName("case") -> AttributeEntityReference("Sample", "sample3"),
+        DefaultAttributeName("control") -> AttributeEntityReference("Sample", "sample1")))
 
     withWorkspaceContext(testData.workspace) { context =>
       runAndWait(entityQuery.save(context, pair2))
@@ -276,9 +278,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     )
 
 
-      val c1 = Entity("c1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle1" -> AttributeEntityReference("samples", "c2")))
-      val c2 = Entity("c2", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle2" -> AttributeEntityReference("samples", "c3")))
-      val c3 = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3)))
+      val c1 = Entity("c1", "samples", Map(DefaultAttributeName("foo") -> AttributeString("x"), DefaultAttributeName("bar") -> AttributeNumber(3), DefaultAttributeName("cycle1") -> AttributeEntityReference("samples", "c2")))
+      val c2 = Entity("c2", "samples", Map(DefaultAttributeName("foo") -> AttributeString("x"), DefaultAttributeName("bar") -> AttributeNumber(3), DefaultAttributeName("cycle2") -> AttributeEntityReference("samples", "c3")))
+      val c3 = Entity("c3", "samples", Map(DefaultAttributeName("foo") -> AttributeString("x"), DefaultAttributeName("bar") -> AttributeNumber(3)))
 
       runAndWait(workspaceQuery.save(workspaceOriginal))
       runAndWait(workspaceQuery.save(workspaceClone))
@@ -289,7 +291,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
           runAndWait(entityQuery.save(originalContext, c2))
           runAndWait(entityQuery.save(originalContext, c1))
 
-          val c3_updated = Entity("c3", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "cycle3" -> AttributeEntityReference("samples", "c1")))
+          val c3_updated = Entity("c3", "samples", Map(DefaultAttributeName("foo") -> AttributeString("x"), DefaultAttributeName("bar") -> AttributeNumber(3), DefaultAttributeName("cycle3") -> AttributeEntityReference("samples", "c1")))
 
           runAndWait(entityQuery.save(originalContext, c3_updated))
           runAndWait(entityQuery.cloneAllEntities(originalContext, cloneContext))
@@ -309,7 +311,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   it should "throw an exception if trying to save invalid references" in withDefaultTestDatabase {
 
       withWorkspaceContext(testData.workspace) { context =>
-        val baz = Entity("wig", "wug", Map("edgeToNowhere" -> AttributeEntityReference("sample", "notTheSampleYoureLookingFor")))
+        val baz = Entity("wig", "wug", Map(DefaultAttributeName("edgeToNowhere") -> AttributeEntityReference("sample", "notTheSampleYoureLookingFor")))
         intercept[RawlsException] {
           runAndWait(entityQuery.save(context, baz))
         }
@@ -331,32 +333,32 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       withWorkspaceContext(testData.workspace) { context =>
         val sample1Copy = Entity("sample1", "Sample",
           Map(
-            "type" -> AttributeString("normal"),
-            "whatsit" -> AttributeNumber(100),
-            "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-            "aliquot" -> AttributeEntityReference("Aliquot", "aliquot1"),
-            "cycle" -> AttributeEntityReference("SampleSet", "sset1")))
+            DefaultAttributeName("type") -> AttributeString("normal"),
+            DefaultAttributeName("whatsit") -> AttributeNumber(100),
+            DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+            DefaultAttributeName("aliquot") -> AttributeEntityReference("Aliquot", "aliquot1"),
+            DefaultAttributeName("cycle") -> AttributeEntityReference("SampleSet", "sset1")))
         runAndWait(entityQuery.save(context, sample1Copy))
         val sample5Copy = Entity("sample5", "Sample",
           Map(
-            "type" -> AttributeString("tumor"),
-            "whatsit" -> AttributeNumber(100),
-            "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-            "cycle" -> AttributeEntityReference("SampleSet", "sset4")))
+            DefaultAttributeName("type") -> AttributeString("tumor"),
+            DefaultAttributeName("whatsit") -> AttributeNumber(100),
+            DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+            DefaultAttributeName("cycle") -> AttributeEntityReference("SampleSet", "sset4")))
         runAndWait(entityQuery.save(context, sample5Copy))
         val sample7Copy = Entity("sample7", "Sample",
           Map(
-            "type" -> AttributeString("tumor"),
-            "whatsit" -> AttributeNumber(100),
-            "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-            "cycle" -> AttributeEntityReference("Sample", "sample6")))
+            DefaultAttributeName("type") -> AttributeString("tumor"),
+            DefaultAttributeName("whatsit") -> AttributeNumber(100),
+            DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+            DefaultAttributeName("cycle") -> AttributeEntityReference("Sample", "sample6")))
         runAndWait(entityQuery.save(context, sample7Copy))
         val sample6Copy = Entity("sample6", "Sample",
           Map(
-            "type" -> AttributeString("tumor"),
-            "whatsit" -> AttributeNumber(100),
-            "thingies" -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
-            "cycle" -> AttributeEntityReference("SampleSet", "sset3")))
+            DefaultAttributeName("type") -> AttributeString("tumor"),
+            DefaultAttributeName("whatsit") -> AttributeNumber(100),
+            DefaultAttributeName("thingies") -> AttributeValueList(Seq(AttributeString("a"), AttributeString("b"))),
+            DefaultAttributeName("cycle") -> AttributeEntityReference("SampleSet", "sset3")))
         runAndWait(entityQuery.save(context, sample6Copy))
         val entitiesWithCycles = List(sample1Copy, sample5Copy, sample7Copy, sample6Copy)
         entitiesWithCycles.foreach( entity =>
@@ -390,7 +392,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  val x1 = Entity("x1", "SampleSet", Map("child" -> AttributeEntityReference("SampleSet", "x2")))
+  val x1 = Entity("x1", "SampleSet", Map(DefaultAttributeName("child") -> AttributeEntityReference("SampleSet", "x2")))
   val x2 = Entity("x2", "SampleSet", Map.empty)
 
   val workspace2 = Workspace(
@@ -414,7 +416,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
         withWorkspaceContext(workspace2) { context2 =>
           runAndWait(entityQuery.save(context2, x2))
           runAndWait(entityQuery.save(context2, x1))
-          val x2_updated = Entity("x2", "SampleSet", Map("child" -> AttributeEntityReference("SampleSet", "x1")))
+          val x2_updated = Entity("x2", "SampleSet", Map(DefaultAttributeName("child") -> AttributeEntityReference("SampleSet", "x1")))
           runAndWait(entityQuery.save(context2, x2_updated))
 
           assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x1))

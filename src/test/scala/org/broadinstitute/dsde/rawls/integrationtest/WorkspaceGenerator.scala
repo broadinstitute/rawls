@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
 import org.broadinstitute.dsde.rawls.integrationtest.WorkspaceGenerator._
 import org.broadinstitute.dsde.rawls.model._
 import AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.joda.time.DateTime
 
 import scala.util.Random
@@ -106,7 +107,7 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
   def deleteEntities(entityType: String, entityNames: Seq[String]) = entityNames.map(entities(entityType).remove(_))
   def deleteMethodConfigs(configNames: Seq[String]) = configNames.map(methodConfigs.remove(_))
 
-  def createEntitySingle(entityType: String, nRandomAnnotations: Int, specialAnnotations: Map[String, Attribute]) = {
+  def createEntitySingle(entityType: String, nRandomAnnotations: Int, specialAnnotations: AttributeMap) = {
     Entity(makeEntityName(entityType), entityType, generateEntityAnnotations(nRandomAnnotations) ++ specialAnnotations)
   }
 
