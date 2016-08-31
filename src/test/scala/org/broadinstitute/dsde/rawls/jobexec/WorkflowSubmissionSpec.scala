@@ -31,7 +31,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
-  var mockServer = RemoteServicesMockServer()
+  val mockServer = RemoteServicesMockServer()
 
   class TestWorkflowSubmission(
     val dataSource: SlickDataSource,
@@ -312,10 +312,6 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
   }
 
   it should "not truncate array inputs" in withDefaultTestDatabase {
-
-    mockServer.stopServer
-    mockServer = RemoteServicesMockServer()
-    mockServer.startServer
 
     val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
 
