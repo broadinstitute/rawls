@@ -227,78 +227,91 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
+  def getWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         DBIO.successful(workspaceContext)
       }
-    } flatMap { ctx =>
-      deleteWorkspace(workspaceName, ctx)
     }
-
   }
 
-  def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+  def adminGetWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
         DBIO.successful(workspaceContext)
       }
-    } flatMap { ctx =>
+    }
+  }
+
+  def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
+    getWorkspaceContext(workspaceName) flatMap { ctx =>
       deleteWorkspace(workspaceName, ctx)
     }
   }
 
-
+  def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
+     adminGetWorkspaceContext(workspaceName) flatMap { ctx =>
+      deleteWorkspace(workspaceName, ctx)
+    }
+  }
 
   private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: SlickWorkspaceContext): Future[PerRequestMessage] = {
+    def deleteGroups(dataAccess: DataAccess): Iterable[ReadWriteAction[Boolean]] = {
+    workspaceContext.workspace.accessLevels.map { case (_, group) =>
+      dataAccess.rawlsGroupQuery.delete(group)}
+    }
     //Attempt to abort any running workflows so they don't write any more to the bucket.
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val x: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
+    val deletionFuture: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
       for {
+        // Gather any active workflows with external ids
         workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
+
+        //If a workflow is not done, automatically change its status to Aborted
         _ <- dataAccess.workflowQuery.findWorkflowsByWorkspace(workspaceContext).result.map { recs => recs.collect {
-          case wf if !WorkflowStatuses.withName(wf.status).isDone && wf.externalId.isDefined => executionServiceCluster.abort(wf, userInfo).map {
-            case Failure(regrets) =>
-              logger.info(s"failure aborting workflow ${wf.externalId} while deleting workspace ${workspaceName}", regrets)
-              Failure(regrets)
-            case success => success
-          }
-          //If a workflow is not done, automatically changed its status to Aborted
           case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
-        }
-        }
-        // Instead of deleting bucket, send message to delete bucket to BucketDeletionMonitor
-        _ <- DBIO.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
+        }}
 
+        //Gather the Google groups to remove
         groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-        groupsToRemove <- DBIO.sequence(groupRefs.toSeq.map (groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
+        groupsToRemove <- DBIO.sequence(groupRefs.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
+        // Delete components of the workspace
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
         _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
-        _ <- {
-          DBIO.seq(workspaceContext.workspace.accessLevels.map { case (_, group) =>
-            dataAccess.rawlsGroupQuery.delete(group)
-          }.toSeq: _*)
-        }
+
+        // Delete groups
+        _ <- DBIO.seq(deleteGroups(dataAccess).toSeq: _*)
+
+        // Delete the workspace
         _ <- dataAccess.workspaceQuery.delete(workspaceName)
+
       } yield {
         (workflowsToAbort, workspaceContext.workspace.bucketName, groupsToRemove)
       }
-    }
-    }
+    }}
     for {
-      (workflowsToAbort, bucketName, groupsToRemove) <- x
-      _ <- Future.traverse(workflowsToAbort) {wf => executionServiceCluster.abort(wf, userInfo)}
+      (workflowsToAbort, bucketName, groupsToRemove) <- deletionFuture
+
+      // Abort running workflows
+      aborts = Future.traverse(workflowsToAbort) { wf => executionServiceCluster.abort(wf, userInfo) }
+
+      // Send message to delete bucket to BucketDeletionMonitor
       _ <- Future.successful(bucketDeletionMonitor ! BucketDeletionMonitor.DeleteBucket(workspaceContext.workspace.bucketName))
+
+      // Remove Google Groups
       _ <- Future.traverse(groupsToRemove) {
         case Some(group) => gcsDAO.deleteGoogleGroup(group)
         case None => Future.successful(())
       }
     } yield {
+      aborts.onFailure {
+        case t: Throwable => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
+      }
       RequestComplete(StatusCodes.Accepted, s"Your Google bucket ${bucketName} will be deleted within 24h.")
     }
   }
@@ -363,7 +376,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }.toSeq
     }
   }
-  
+
   private def getWorkspaceSubmissionStats(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[WorkspaceSubmissionStats] = {
     // listSubmissionSummaryStats works against a sequence of workspaces; we call it just for this one workspace
     dataAccess.workspaceQuery
@@ -439,37 +452,37 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               case (Left(rawlsUser:RawlsUser), level) => RawlsUser.toRef(rawlsUser)
               case (Right(rawlsGroup:RawlsGroup), level) => RawlsGroup.toRef(rawlsGroup)
             }.toSet
-  
+
             getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { currentUserAccess =>
               if (allTheRefs.contains(UserService.allUsersGroupRef)) {
                 // UserService.allUsersGroupRef cannot be updated in this code path, there is an admin end point for that
                 DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}")))
-    
+
               } else if (!updateMap.get(Left(RawlsUser(userInfo))).forall(_ == currentUserAccess)) {
                 // don't allow the user to change their own permissions but let it pass if they are in the list and their current access level
                 // is the same as the new value
                 DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not change your own permissions")))
-    
+
               } else {
                 val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
                 val groupsByLevel: Map[WorkspaceAccessLevel, Map[Either[RawlsUser, RawlsGroup], WorkspaceAccessLevel]] = updateMap.groupBy({ case (key, value) => value })
-    
+
                 // go through the access level groups on the workspace and update them
                 val groupUpdateResults = DBIO.sequence(workspaceContext.workspace.accessLevels.map { case (level, groupRef) =>
                   withGroup(groupRef, dataAccess) { group =>
                     //remove existing records for users and groups in the acl update list
                     val usersNotChanging = group.users.filter(userRef => !allTheRefs.contains(userRef))
                     val groupsNotChanging = group.subGroups.filter(groupRef => !allTheRefs.contains(groupRef))
-  
+
                     //generate the list of new references
                     val newUsers = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Left(ru) => RawlsUser.toRef(ru) })
                     val newgroups = groupsByLevel.getOrElse(level, Map.empty).keys.collect({ case Right(rg) => RawlsGroup.toRef(rg) })
-  
+
                     val groupUpdateFuture = (userServiceRef ? UserService.OverwriteGroupMembers(group, RawlsGroupMemberList(
                       userSubjectIds = Option((usersNotChanging ++ newUsers).map(_.userSubjectId.value).toSeq),
                       subGroupNames = Option((groupsNotChanging ++ newgroups).map(_.groupName.value).toSeq)
                     ))).asInstanceOf[Future[PerRequestMessage]]
-                    
+
                     DBIO.from(groupUpdateFuture)
                   }
                 }).map(_.reduce { (prior, next) =>
@@ -479,7 +492,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                     case otherwise => prior
                   }
                 })
-                
+
                 groupUpdateResults.map {
                   case RequestComplete(StatusCodes.NoContent) =>
                     val emailNotFoundReports = (aclUpdates.map( wau => wau.email ) diff updateMap.keys.map({
@@ -487,7 +500,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       case Right(rawlsGroup:RawlsGroup) => rawlsGroup.groupEmail.value
                     }).toSeq)
                       .map( email => ErrorReport( StatusCodes.NotFound, email ) )
-    
+
                     if (emailNotFoundReports.isEmpty) {
                       RequestComplete(StatusCodes.OK)
                     } else {
@@ -495,12 +508,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                       //we will process the emails that are valid, and report any others as invalid
                       RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
                     }
-    
+
                   case otherwise => otherwise
                 }
               }
             }
-          }  
+          }
         }
       }
     }
@@ -970,7 +983,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def createMethodConfigurationTemplate( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess => 
+    dataSource.inTransaction { dataAccess =>
       withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
         withWdl(method) { wdl =>
           DBIO.successful(RequestComplete(StatusCodes.OK, MethodConfigResolver.toMethodConfiguration(wdl, methodRepoMethod)))
@@ -980,7 +993,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getMethodInputsOutputs( methodRepoMethod: MethodRepoMethod ): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess => 
+    dataSource.inTransaction { dataAccess =>
       withMethod(methodRepoMethod.methodNamespace,methodRepoMethod.methodName,methodRepoMethod.methodVersion,userInfo) { method =>
         withWdl(method) { wdl =>
           DBIO.successful(RequestComplete(StatusCodes.OK, MethodConfigResolver.getMethodInputsOutputs(wdl)))
@@ -1251,7 +1264,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def run[T](action: DataAccess => ReadWriteAction[T]): T = {
       Await.result(dataSource.inTransaction { dataAccess => action(dataAccess) }, 10 seconds)
     }
-    
+
     asFCAdmin {
       val workspace = run { _.workspaceQuery.findByName(workspaceName) }.get
       val STATUS_FOUND = "FOUND"

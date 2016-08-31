@@ -232,6 +232,12 @@ trait WorkflowComponent {
       UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
     }
 
+    def findActiveWorkflowsWithoutExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
+      findWorkflowsByWorkspace(workspaceContext).filter(!_.externalId.isDefined).result map {workflowRecords =>
+        workflowRecords.filter(wf => !WorkflowStatuses.withName(wf.status).isDone)
+      }
+    }
+
     def findActiveWorkflowsWithExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
       findWorkflowsByWorkspace(workspaceContext).filter(_.externalId.isDefined).result map {workflowRecords =>
         workflowRecords.filter(wf => !WorkflowStatuses.withName(wf.status).isDone)
