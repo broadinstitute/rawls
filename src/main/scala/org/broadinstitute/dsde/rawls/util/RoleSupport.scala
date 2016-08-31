@@ -18,7 +18,7 @@ trait RoleSupport {
   implicit protected val executionContext: ExecutionContext
 
   def tryIsFCAdmin(userId: String): Future[Boolean] = {
-    gcsDAO.isAdmin(userId) transform( s => s, t => throw new RawlsException("Unable to query for admin status.", t))
+    gcsDAO.isAdmin(userId) recoverWith { case t => throw new RawlsException("Unable to query for admin status.", t) }
   }
 
   def asFCAdmin(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
@@ -28,7 +28,7 @@ trait RoleSupport {
   }
   
   def tryIsCurator(userId: String): Future[Boolean] = {
-    gcsDAO.isLibraryCurator(userId) transform( s => s, t => throw new RawlsException("Unable to query for library curator status.", t))
+    gcsDAO.isLibraryCurator(userId) recoverWith { case t => throw new RawlsException("Unable to query for library curator status.", t) }
   }
 
   def asCurator(op: => Future[PerRequestMessage]): Future[PerRequestMessage] = {
