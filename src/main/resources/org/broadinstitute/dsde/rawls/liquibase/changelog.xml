@@ -21,4 +21,5 @@
     <include file="changesets/20160725_refactor_text_columns.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160728_billing_role.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160817_workflow_failure_migration_v2.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160831_attribute_namespace.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

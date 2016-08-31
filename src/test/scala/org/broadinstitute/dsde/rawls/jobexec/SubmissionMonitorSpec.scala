@@ -173,8 +173,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(
-      (Option(entity.copy(attributes = entity.attributes ++ Map("bar" -> AttributeString("hello world!"), "baz" -> AttributeString("hello world.")))),
-        Option(testData.workspace.copy(attributes = testData.workspace.attributes + ("garble" -> AttributeString("hello workspace.")))))))) {
+      (Option(entity.copy(attributes = entity.attributes ++ Map(DefaultAttributeName("bar") -> AttributeString("hello world!"), DefaultAttributeName("baz") -> AttributeString("hello world.")))),
+        Option(testData.workspace.copy(attributes = testData.workspace.attributes + (DefaultAttributeName("garble") -> AttributeString("hello workspace.")))))))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExprepressions)
     }
   }
@@ -189,7 +189,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, testData.submission1, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(
-      (Option(entity.copy(attributes = entity.attributes ++ Map("bar" -> AttributeString("hello world!"), "baz" -> AttributeString("hello world.")))),
+      (Option(entity.copy(attributes = entity.attributes ++ Map(DefaultAttributeName("bar") -> AttributeString("hello world!"), DefaultAttributeName("baz") -> AttributeString("hello world.")))),
         None)))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExprepressions)
     }
@@ -248,7 +248,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
     runAndWait(monitor.handleOutputs(workflowRecs.map(r => (r, ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))), this))
 
-    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (DefaultAttributeName("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
       }
@@ -307,7 +307,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       await(monitor.handleStatusResponses(ExecutionServiceStatusResponse(workflowsRecs.map(r => scala.util.Success(Option((r.copy(status = status.toString), Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result"))))))))))))
     }
 
-    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + ("foo" -> AttributeString("result"))))) {
+    assertResult(Seq(testData.indiv1.copy(attributes = testData.indiv1.attributes + (DefaultAttributeName("foo") -> AttributeString("result"))))) {
       testData.submissionUpdateEntity.workflows.map { wf =>
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), wf.workflowEntity.entityType, wf.workflowEntity.entityName)).get
       }

@@ -191,18 +191,18 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         val bAttributes = for (b <- 0 until 5) yield {
           val cAttributes = for (c <- (0 until 20)) yield {
 
-            (s"${a}_${b}_${c}", Map("attr" -> AttributeString(s"${a}_${b}_${c}")))
+            (s"${a}_${b}_${c}", Map(DefaultAttributeName("attr") -> AttributeString(s"${a}_${b}_${c}")))
           }
 
-          (s"${a}_${b}", Map("cs" -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
+          (s"${a}_${b}", Map(DefaultAttributeName("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
         }
 
-        (s"$a", Map("bs" -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
+        (s"$a", Map(DefaultAttributeName("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
       }
 
       val as = createEntities("a", aAttributes, wsc)
 
-      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + ("as" -> AttributeEntityReferenceList(as)))))
+      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (DefaultAttributeName("as") -> AttributeEntityReferenceList(as)))))
     }
   }
 
@@ -282,16 +282,16 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
   test("workspace attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get("string").get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(DefaultAttributeName("string")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.string"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get("number").get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(DefaultAttributeName("number")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.number"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get("type").get)))) {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get(DefaultAttributeName("type")).get)))) {
+        val attributesPlusReference = testData.workspace.attributes + (DefaultAttributeName("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref.type"))
@@ -323,7 +323,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 //      }
 
       intercept[RawlsException] {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (DefaultAttributeName("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref."))
@@ -352,7 +352,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     withTestWorkspace { workspaceContext =>
 
       assertResult(Set("sample1")) {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (DefaultAttributeName("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.sample1ref")).map(_.name).toSet
@@ -360,7 +360,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       assertResult(Set("sample2")) {
         val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
-        val attributesPlusReference = testData.workspace.attributes + ("samplerefs" -> reflist)
+        val attributesPlusReference = testData.workspace.attributes + (DefaultAttributeName("samplerefs") -> reflist)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.samplerefs")).map(_.name).toSet

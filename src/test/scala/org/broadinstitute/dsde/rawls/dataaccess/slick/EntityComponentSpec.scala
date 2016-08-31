@@ -445,12 +445,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     withWorkspaceContext(testData.workspace) { context1 =>
       withWorkspaceContext(workspace2) { context2 =>
         val a = Entity("a", "test", Map.empty)
-        val a6 = Entity("a6", "test", Map("next" -> AttributeEntityReference("test", "a1")))
-        val a5 = Entity("a5", "test", Map("next" -> AttributeEntityReference("test", "a6")))
-        val a4 = Entity("a4", "test", Map("next" -> AttributeEntityReference("test", "a5")))
-        val a3 = Entity("a3", "test", Map("next" -> AttributeEntityReference("test", "a4"), "side" -> AttributeEntityReference("test", "a")))
-        val a2 = Entity("a2", "test", Map("next" -> AttributeEntityReference("test", "a3")))
-        val a1 = Entity("a1", "test", Map("next" -> AttributeEntityReference("test", "a2")))
+        val a6 = Entity("a6", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a1")))
+        val a5 = Entity("a5", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a6")))
+        val a4 = Entity("a4", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a5")))
+        val a3 = Entity("a3", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a4"), DefaultAttributeName("side") -> AttributeEntityReference("test", "a")))
+        val a2 = Entity("a2", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a3")))
+        val a1 = Entity("a1", "test", Map(DefaultAttributeName("next") -> AttributeEntityReference("test", "a2")))
         runAndWait(entityQuery.save(context2, a))
 
         // save a6 first without attributes because a1 does not exist yet
@@ -502,7 +502,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase { 
     val dottyName = Entity("dotty.name", "Sample", Map.empty)
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
-    val dottyAttr = Entity("dottyAttr", "Sample", Map("foo.bar" -> AttributeBoolean(true)))
+    val dottyAttr = Entity("dottyAttr", "Sample", Map(DefaultAttributeName("foo.bar") -> AttributeBoolean(true)))
 
       withWorkspaceContext(testData.workspace) { context =>
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyName)) }
@@ -514,7 +514,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   Attributable.reservedAttributeNames.foreach { reserved =>
     it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { 
-      val e = Entity("test_sample", "Sample", Map(reserved -> AttributeString("foo")))
+      val e = Entity("test_sample", "Sample", Map(DefaultAttributeName(reserved) -> AttributeString("foo")))
 
         withWorkspaceContext(testData.workspace) { context =>
           intercept[RawlsException] { runAndWait(entityQuery.save(context, e)) }

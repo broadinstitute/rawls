@@ -186,7 +186,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
-      assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
+      assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName.name}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
         mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
@@ -220,12 +220,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         AttributeEntityReference("Sample", "sample4"),
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6"))
-      val sset = Entity("testset6", "SampleSet", Map( "samples" -> AttributeEntityReferenceList(samples)))
+      val sset = Entity("testset6", "SampleSet", Map(DefaultAttributeName("samples") -> AttributeEntityReferenceList(samples)))
 
       runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
 
       def inputResolutions(sampleName: String) = {
-        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
+        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), DefaultAttributeName("three_step.cgrep.pattern")))
       }
 
       val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, testData.userOwner,

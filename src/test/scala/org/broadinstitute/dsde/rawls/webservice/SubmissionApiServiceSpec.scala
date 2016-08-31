@@ -112,7 +112,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
-  val z1 = Entity("z1", "Sample", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
+  val z1 = Entity("z1", "Sample", Map(DefaultAttributeName("foo") -> AttributeString("x"), DefaultAttributeName("bar") -> AttributeNumber(3), DefaultAttributeName("splat") -> attributeList))
   val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")
   val workspace2Request = WorkspaceRequest(
     workspace2Name.namespace,
