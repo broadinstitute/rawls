@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
@@ -539,7 +540,7 @@ trait EntityComponent {
       EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity))
     }
 
-    def unmarshalEntity(entityRecord: EntityRecord, attributes: Map[AttributeName, Attribute]) = {
+    def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap) = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
     }
 

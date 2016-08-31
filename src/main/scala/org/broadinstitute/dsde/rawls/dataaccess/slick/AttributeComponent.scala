@@ -3,14 +3,16 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.ast.TypedType
 import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import spray.http.StatusCodes
+
 import reflect.runtime.universe._
 
 /**
@@ -318,7 +320,7 @@ trait AttributeComponent {
       }
     }
 
-    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, Map[AttributeName, Attribute]] = {
+    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
         id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => IntDefaultAttributeName(attrRec.namespace, attrRec.name) }.map {
           case (attrName, attributeRecsWithRefForNameWithDupes) =>

@@ -19,6 +19,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import akka.pattern._
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -315,7 +317,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[AttributeName, Attribute]): (Option[Entity], Option[Workspace]) = {
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: AttributeMap): (Option[Entity], Option[Workspace]) = {
     //Partition outputs by whether their attributes are entity attributes (begin with "this.") or workspace ones (implicitly; begin with "workspace.")
     //This assumption (that it's either "this." or "workspace.") will be guaranteed by checking of the method config when it's imported; see DSDEEPB-1603.
     val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.name.startsWith("this.") })

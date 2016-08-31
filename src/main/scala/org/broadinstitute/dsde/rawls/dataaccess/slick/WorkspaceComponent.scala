@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -9,6 +10,7 @@ import slick.dbio.Effect.{Read, Write}
 import slick.driver.JdbcDriver
 import slick.profile.FixedSqlAction
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
 /**
  * Created by dvoet on 2/4/16.
@@ -386,7 +388,7 @@ trait WorkspaceComponent {
       WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value), 0)
     }
 
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: Map[AttributeName, Attribute], accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
+    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
       val realm = workspaceRec.realmGroupName.map(name => RawlsGroupRef(RawlsGroupName(name)))
       Workspace(workspaceRec.namespace, workspaceRec.name, realm, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, realmACLs, workspaceRec.isLocked)
     }

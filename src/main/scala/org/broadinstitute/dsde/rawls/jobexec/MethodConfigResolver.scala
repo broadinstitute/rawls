@@ -2,19 +2,21 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio
-import slick.dbio.{NoStream, DBIOAction}
+import slick.dbio.{DBIOAction, NoStream}
 import slick.dbio.Effect.Read
-import wdl4s.{FullyQualifiedName, WorkflowInput, NamespaceWithWorkflow}
-import wdl4s.types.{WdlArrayType}
-import org.broadinstitute.dsde.rawls.{model, RawlsException}
+import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
+import wdl4s.types.WdlArrayType
+import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
+
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -104,7 +106,7 @@ object MethodConfigResolver {
    * Convert result of resolveInputs to WDL input format, ignoring AttributeNulls.
    * @return serialized JSON to send to Cromwell
    */
-  def propertiesToWdlInputs(inputs: Map[AttributeName, Attribute]): String = JsObject(
+  def propertiesToWdlInputs(inputs: AttributeMap): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
       case (key, notNullValue) => Some((AttributeName.toDelimitedName(key), notNullValue.toJson))   // TODO can Cromwell handle colons?

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
@@ -10,10 +11,11 @@ import spray.json._
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
   val reservedAttributeNames = Set("name", "entityType")
+  type AttributeMap = Map[AttributeName, Attribute]
 }
 
 trait Attributable {
-  def attributes: Map[AttributeName, Attribute]
+  def attributes: AttributeMap
   def briefName: String
 }
 
@@ -66,7 +68,7 @@ case class WorkspaceRequest (
                       namespace: String,
                       name: String,
                       realm: Option[RawlsGroupRef],
-                      attributes: Map[AttributeName, Attribute]
+                      attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
@@ -81,7 +83,7 @@ case class Workspace(
                       createdDate: DateTime,
                       lastModified: DateTime,
                       createdBy: String,
-                      attributes: Map[AttributeName, Attribute],
+                      attributes: AttributeMap,
                       accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
@@ -101,7 +103,7 @@ case class EntityName(
 case class Entity(
                    name: String,
                    entityType: String,
-                   attributes: Map[AttributeName, Attribute]
+                   attributes: AttributeMap
                    ) extends Attributable {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
