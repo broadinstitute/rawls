@@ -154,6 +154,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
+    val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
+    val wsName4 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSuccessfulSubmission")
+    val wsName5 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsFailedSubmission")
+    val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
+    val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
     val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
@@ -182,6 +187,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter))
     val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader))
 
+    val realm2 = makeRawlsGroup(s"Test-Realm2", Set.empty)
     val realmWs2Name = wsName2.name + "withRealm"
     val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner))
     val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter))
@@ -189,6 +195,51 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner))
     val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter))
     val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
+
+    val realm3 = makeRawlsGroup(s"Test-Realm3", Set.empty)
+    val realmWs3Name = wsName3.name + "withRealm"
+    val realmOwnerIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG READER", Set(userReader))
+    val realmOwnerGroup3 = makeRawlsGroup(s"${realmWs3Name} OWNER", Set(userOwner))
+    val realmWriterGroup3 = makeRawlsGroup(s"${realmWs3Name} WRITER", Set(userWriter))
+    val realmReaderGroup3 = makeRawlsGroup(s"${realmWs3Name} READER", Set(userReader))
+
+    val realm4 = makeRawlsGroup(s"Test-Realm4", Set.empty)
+    val realmWs4Name = wsName4.name + "withRealm"
+    val realmOwnerIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG READER", Set(userReader))
+    val realmOwnerGroup4 = makeRawlsGroup(s"${realmWs4Name} OWNER", Set(userOwner))
+    val realmWriterGroup4 = makeRawlsGroup(s"${realmWs4Name} WRITER", Set(userWriter))
+    val realmReaderGroup4 = makeRawlsGroup(s"${realmWs4Name} READER", Set(userReader))
+
+    val realm5 = makeRawlsGroup(s"Test-Realm5", Set.empty)
+    val realmWs5Name = wsName5.name + "withRealm"
+    val realmOwnerIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG READER", Set(userReader))
+    val realmOwnerGroup5 = makeRawlsGroup(s"${realmWs5Name} OWNER", Set(userOwner))
+    val realmWriterGroup5 = makeRawlsGroup(s"${realmWs5Name} WRITER", Set(userWriter))
+    val realmReaderGroup5 = makeRawlsGroup(s"${realmWs5Name} READER", Set(userReader))
+
+    val realm6 = makeRawlsGroup(s"Test-Realm6", Set.empty)
+    val realmWs6Name = wsName6.name + "withRealm"
+    val realmOwnerIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG READER", Set(userReader))
+    val realmOwnerGroup6 = makeRawlsGroup(s"${realmWs6Name} OWNER", Set(userOwner))
+    val realmWriterGroup6 = makeRawlsGroup(s"${realmWs6Name} WRITER", Set(userWriter))
+    val realmReaderGroup6 = makeRawlsGroup(s"${realmWs6Name} READER", Set(userReader))
+
+    val realm7 = makeRawlsGroup(s"Test-Realm7", Set.empty)
+    val realmWs7Name = wsName7.name + "withRealm"
+    val realmOwnerIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG READER", Set(userReader))
+    val realmOwnerGroup7 = makeRawlsGroup(s"${realmWs7Name} OWNER", Set(userOwner))
+    val realmWriterGroup7 = makeRawlsGroup(s"${realmWs7Name} WRITER", Set(userWriter))
+    val realmReaderGroup7 = makeRawlsGroup(s"${realmWs7Name} READER", Set(userReader))
 
     val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
@@ -209,6 +260,62 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup2,
         WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup2,
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup2))
+
+    // Workspace with realms, without submissions
+    val workspaceNoSubmissions = Workspace(wsName3.namespace, realmWs3Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup3,
+        WorkspaceAccessLevels.Write -> realmWriterGroup3,
+        WorkspaceAccessLevels.Read -> realmReaderGroup3),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup3,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup3,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup3))
+
+    // Workspace with realms, with successful submission
+    val workspaceSuccessfulSubmission = Workspace(wsName4.namespace, realmWs4Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup4,
+        WorkspaceAccessLevels.Write -> realmWriterGroup4,
+        WorkspaceAccessLevels.Read -> realmReaderGroup4),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup4,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup4,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup4))
+
+    // Workspace with realms, with failed submission
+    val workspaceFailedSubmission = Workspace(wsName5.namespace, realmWs5Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup5,
+        WorkspaceAccessLevels.Write -> realmWriterGroup5,
+        WorkspaceAccessLevels.Read -> realmReaderGroup5),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup5,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup5,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup5))
+
+    // Workspace with realms, with submitted submission
+    val workspaceSubmittedSubmission = Workspace(wsName6.namespace, realmWs6Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup6,
+        WorkspaceAccessLevels.Write -> realmWriterGroup6,
+        WorkspaceAccessLevels.Read -> realmReaderGroup6),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup6,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup6,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup6))
+
+    // Workspace with realms with aborted submission
+    val workspaceMixedSubmissions = Workspace(wsName7.namespace, realmWs7Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerGroup7,
+        WorkspaceAccessLevels.Write -> realmWriterGroup7,
+        WorkspaceAccessLevels.Read -> realmReaderGroup7),
+      Map(
+        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup7,
+        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup7,
+        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup7))
+
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -342,6 +449,32 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,sample3.toReference, inputResolutions),
         Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted)
 
+    //a submission with a succeeeded workflow
+    val submissionSuccessful = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+
+    //a submission with a failed workflow
+    val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+
+    //a submission with a submitted workflow
+    val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted)
+
+    //a submission with an aborted workflow
+    val submissionAborted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+
+    //a submission with multiple failed and succeeded workflows
+    val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
+        Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
+        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions),
+        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
+        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions),
+        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample4.toReference, inputResolutions)
+      ), SubmissionStatuses.Done)
+
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.save(RawlsUser(userInfo)),
@@ -365,10 +498,45 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsGroupQuery.save(realmOwnerGroup2),
         rawlsGroupQuery.save(realmWriterGroup2),
         rawlsGroupQuery.save(realmReaderGroup2),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup3),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup3),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup3),
+        rawlsGroupQuery.save(realmOwnerGroup3),
+        rawlsGroupQuery.save(realmWriterGroup3),
+        rawlsGroupQuery.save(realmReaderGroup3),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup4),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup4),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup4),
+        rawlsGroupQuery.save(realmOwnerGroup4),
+        rawlsGroupQuery.save(realmWriterGroup4),
+        rawlsGroupQuery.save(realmReaderGroup4),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup5),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup5),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup5),
+        rawlsGroupQuery.save(realmOwnerGroup5),
+        rawlsGroupQuery.save(realmWriterGroup5),
+        rawlsGroupQuery.save(realmReaderGroup5),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup6),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup6),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup6),
+        rawlsGroupQuery.save(realmOwnerGroup6),
+        rawlsGroupQuery.save(realmWriterGroup6),
+        rawlsGroupQuery.save(realmReaderGroup6),
+        rawlsGroupQuery.save(realmOwnerIntersectionGroup7),
+        rawlsGroupQuery.save(realmWriterIntersectionGroup7),
+        rawlsGroupQuery.save(realmReaderIntersectionGroup7),
+        rawlsGroupQuery.save(realmOwnerGroup7),
+        rawlsGroupQuery.save(realmWriterGroup7),
+        rawlsGroupQuery.save(realmReaderGroup7),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspaceNoGroups),
         workspaceQuery.save(workspaceWithRealm),
         workspaceQuery.save(otherWorkspaceWithRealm),
+        workspaceQuery.save(workspaceNoSubmissions),
+        workspaceQuery.save(workspaceSuccessfulSubmission),
+        workspaceQuery.save(workspaceFailedSubmission),
+        workspaceQuery.save(workspaceSubmittedSubmission),
+        workspaceQuery.save(workspaceMixedSubmissions),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, aliquot1),
@@ -413,9 +581,188 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
-        withWorkspaceContext(workspaceWithRealm)({ context =>
+        withWorkspaceContext(workspaceNoSubmissions)({ context =>
           DBIO.seq(
-            entityQuery.save(context, extraSample)
+            entityQuery.save(context, aliquot1),
+            entityQuery.save(context, aliquot2),
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            entityQuery.save(context, sample3),
+            entityQuery.save(context, sample4),
+            entityQuery.save(context, sample5),
+            entityQuery.save(context, sample6),
+            entityQuery.save(context, sample7),
+            entityQuery.save(context, sample8),
+            entityQuery.save(context, pair1),
+            entityQuery.save(context, pair2),
+            entityQuery.save(context, ps1),
+            entityQuery.save(context, sset1),
+            entityQuery.save(context, sset2),
+            entityQuery.save(context, sset3),
+            entityQuery.save(context, sset4),
+            entityQuery.save(context, sset_empty),
+            entityQuery.save(context, indiv1),
+            entityQuery.save(context, indiv2),
+
+            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.save(context, methodConfig3),
+            methodConfigurationQuery.save(context, methodConfigValid),
+            methodConfigurationQuery.save(context, methodConfigUnparseable),
+            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+            methodConfigurationQuery.save(context, methodConfigArrayType),
+            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
+        withWorkspaceContext(workspaceSuccessfulSubmission)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, aliquot1),
+            entityQuery.save(context, aliquot2),
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            entityQuery.save(context, sample3),
+            entityQuery.save(context, sample4),
+            entityQuery.save(context, sample5),
+            entityQuery.save(context, sample6),
+            entityQuery.save(context, sample7),
+            entityQuery.save(context, sample8),
+            entityQuery.save(context, pair1),
+            entityQuery.save(context, pair2),
+            entityQuery.save(context, ps1),
+            entityQuery.save(context, sset1),
+            entityQuery.save(context, sset2),
+            entityQuery.save(context, sset3),
+            entityQuery.save(context, sset4),
+            entityQuery.save(context, sset_empty),
+            entityQuery.save(context, indiv1),
+            entityQuery.save(context, indiv2),
+
+            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.save(context, methodConfig3),
+            methodConfigurationQuery.save(context, methodConfigValid),
+            methodConfigurationQuery.save(context, methodConfigUnparseable),
+            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+            methodConfigurationQuery.save(context, methodConfigArrayType),
+            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+
+            submissionQuery.create(context, submissionSuccessful),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
+        withWorkspaceContext(workspaceFailedSubmission)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, aliquot1),
+            entityQuery.save(context, aliquot2),
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            entityQuery.save(context, sample3),
+            entityQuery.save(context, sample4),
+            entityQuery.save(context, sample5),
+            entityQuery.save(context, sample6),
+            entityQuery.save(context, sample7),
+            entityQuery.save(context, sample8),
+            entityQuery.save(context, pair1),
+            entityQuery.save(context, pair2),
+            entityQuery.save(context, ps1),
+            entityQuery.save(context, sset1),
+            entityQuery.save(context, sset2),
+            entityQuery.save(context, sset3),
+            entityQuery.save(context, sset4),
+            entityQuery.save(context, sset_empty),
+            entityQuery.save(context, indiv1),
+            entityQuery.save(context, indiv2),
+
+            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.save(context, methodConfig3),
+            methodConfigurationQuery.save(context, methodConfigValid),
+            methodConfigurationQuery.save(context, methodConfigUnparseable),
+            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+            methodConfigurationQuery.save(context, methodConfigArrayType),
+            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+
+            submissionQuery.create(context, submissionFailed),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
+        withWorkspaceContext(workspaceSubmittedSubmission)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, aliquot1),
+            entityQuery.save(context, aliquot2),
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            entityQuery.save(context, sample3),
+            entityQuery.save(context, sample4),
+            entityQuery.save(context, sample5),
+            entityQuery.save(context, sample6),
+            entityQuery.save(context, sample7),
+            entityQuery.save(context, sample8),
+            entityQuery.save(context, pair1),
+            entityQuery.save(context, pair2),
+            entityQuery.save(context, ps1),
+            entityQuery.save(context, sset1),
+            entityQuery.save(context, sset2),
+            entityQuery.save(context, sset3),
+            entityQuery.save(context, sset4),
+            entityQuery.save(context, sset_empty),
+            entityQuery.save(context, indiv1),
+            entityQuery.save(context, indiv2),
+
+            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.save(context, methodConfig3),
+            methodConfigurationQuery.save(context, methodConfigValid),
+            methodConfigurationQuery.save(context, methodConfigUnparseable),
+            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+            methodConfigurationQuery.save(context, methodConfigArrayType),
+            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+
+            submissionQuery.create(context, submissionSubmitted),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
+        withWorkspaceContext(workspaceMixedSubmissions)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, aliquot1),
+            entityQuery.save(context, aliquot2),
+            entityQuery.save(context, sample1),
+            entityQuery.save(context, sample2),
+            entityQuery.save(context, sample3),
+            entityQuery.save(context, sample4),
+            entityQuery.save(context, sample5),
+            entityQuery.save(context, sample6),
+            entityQuery.save(context, sample7),
+            entityQuery.save(context, sample8),
+            entityQuery.save(context, pair1),
+            entityQuery.save(context, pair2),
+            entityQuery.save(context, ps1),
+            entityQuery.save(context, sset1),
+            entityQuery.save(context, sset2),
+            entityQuery.save(context, sset3),
+            entityQuery.save(context, sset4),
+            entityQuery.save(context, sset_empty),
+            entityQuery.save(context, indiv1),
+            entityQuery.save(context, indiv2),
+
+            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.save(context, methodConfig3),
+            methodConfigurationQuery.save(context, methodConfigValid),
+            methodConfigurationQuery.save(context, methodConfigUnparseable),
+            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
+            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
+            methodConfigurationQuery.save(context, methodConfigArrayType),
+            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+
+            submissionQuery.create(context, submissionMixed),
+            submissionQuery.create(context, submissionSuccessful),
+            updateWorkflowExecutionServiceKey("unittestdefault")
           )
         })
       )
