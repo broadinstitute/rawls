@@ -404,4 +404,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       vErrorReport.statusCode.get
     }
   }
+
+
 }

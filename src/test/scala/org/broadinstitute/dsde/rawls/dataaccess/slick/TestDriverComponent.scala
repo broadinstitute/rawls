@@ -469,10 +469,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
         Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
-        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions),
-        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
-        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions),
-        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample4.toReference, inputResolutions)
+        Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
+        Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample4.toReference, inputResolutions),
+        Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample5.toReference, inputResolutions),
+        Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample6.toReference, inputResolutions)
       ), SubmissionStatuses.Done)
 
     override def save() = {
@@ -761,7 +761,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
             submissionQuery.create(context, submissionMixed),
-            submissionQuery.create(context, submissionSuccessful),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         })
