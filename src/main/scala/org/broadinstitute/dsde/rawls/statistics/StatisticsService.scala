@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.model.StatisticsJsonSupport._
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService._
-import org.broadinstitute.dsde.rawls.util.{AdminSupport, FutureSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.joda.time.DateTime
 import spray.http.StatusCodes
@@ -33,7 +33,7 @@ object StatisticsService {
   case class GetStatistics(startDate: String, endDate: String) extends StatisticsServiceMessage
 }
 
-class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with AdminSupport with FutureSupport with UserWiths {
+class StatisticsService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
