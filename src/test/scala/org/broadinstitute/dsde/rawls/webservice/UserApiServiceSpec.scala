@@ -15,7 +15,7 @@ import scala.concurrent.{Await, ExecutionContext}
 class UserApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, user: String = "test_token")(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -90,7 +90,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       assertUserMissing(services, user)
 
@@ -137,41 +137,44 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "list a user's billing projects" in withTestDataApiServices { services =>
+  it should "list a user's billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
 
-    // first add the project and user to the DB
+      // first add the project and user to the DB
 
-    val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl")
+      val billingUser = testData.userOwner
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
 
-    runAndWait(rawlsUserQuery.save(billingUser))
+      runAndWait(rawlsUserQuery.save(billingUser))
 
-    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+
+      Put(s"/admin/billing/register/${project1.projectName.value}") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
         }
-      }
-    Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
         }
-      }
 
-    Get("/user/billing") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
         }
-        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User))) {
-          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-          responseAs[Seq[RawlsBillingProjectMembership]].toSet
-        }
-      }
+    }
   }
 
   it should "get details of a group a user is a member of" in withTestDataApiServices { services =>

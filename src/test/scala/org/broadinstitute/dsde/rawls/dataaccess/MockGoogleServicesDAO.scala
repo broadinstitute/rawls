@@ -71,7 +71,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
     "test@broadinstitute.org" -> WorkspaceAccessLevels.Owner,
-    "test_token" -> WorkspaceAccessLevels.Owner,
     "owner-access" -> WorkspaceAccessLevels.Owner,
     "write-access" -> WorkspaceAccessLevels.Write,
     "read-access" -> WorkspaceAccessLevels.Read,
@@ -126,7 +125,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
-  val adminList = scala.collection.mutable.Set("test_token")
+  val adminList = scala.collection.mutable.Set("owner-access")
   val curatorList = scala.collection.mutable.Set("test_token")
 
   val googleGroups = Map(

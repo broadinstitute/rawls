@@ -54,7 +54,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   val database = databaseConfig.db
 
   val testDate = currentTime()
-  val userInfo = UserInfo("test_token", OAuth2BearerToken("token"), 123, "123456789876543212345")
+  val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
 
   // NOTE: we previously truncated millis here for DB compatibility reasons, but this is is no longer necessary.
   // now only serves to encapsulate a Java-ism

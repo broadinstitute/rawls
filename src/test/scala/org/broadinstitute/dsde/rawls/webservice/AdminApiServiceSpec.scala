@@ -507,7 +507,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -535,7 +535,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -587,7 +587,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -648,7 +648,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Await.result(services.gcsDAO.createGoogleGroup(testWorkspace.readerGroup), 10.seconds)
 
       // values from MockUserInfoDirectives
-      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val testUser = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -692,7 +692,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
