@@ -3,11 +3,15 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.util.{Failure, Try}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -148,10 +152,10 @@ class UserApiServiceSpec extends ApiServiceSpec {
       runAndWait(rawlsUserQuery.save(billingUser))
 
 
-      Put(s"/admin/billing/register/${project1.projectName.value}") ~>
+      Put(s"/admin/billing/${project1.projectName.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.Created) {
+          assertResult(StatusCodes.Created, response.entity.asString) {
             status
           }
         }
@@ -169,11 +173,87 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User))) {
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, ProjectStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
         }
+    }
+  }
+
+  it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // first add the project and user to the DB
+
+      val billingUser = testData.userOwner
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
+
+      runAndWait(rawlsUserQuery.save(billingUser))
+
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+      Post(s"/billing", httpJson(createRequest)) ~>
+        sealRoute(services.billingRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Creating))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
+        }
+
+      val billingProjectMonitorNotDone = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val gcsDAO = new MockGoogleServicesDAO("foo") {
+          override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
+        }
+      }
+
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitorNotDone.checkCreatingProjects(), Duration.Inf) }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Creating))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
+        }
+
+      val billingProjectMonitorDone = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val gcsDAO = services.gcsDAO
+      }
+
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitorDone.checkCreatingProjects(), Duration.Inf) }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Ready))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
+        }
+
     }
   }
 
