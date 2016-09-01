@@ -2,18 +2,22 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import java.util.UUID
 
-import akka.actor.{PoisonPill, ActorSystem}
+import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkflowRecord, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
+import org.mockserver.model.{Body, HttpRequest, StringBody}
+import org.mockserver.verify.VerificationTimes
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.StatusCodes
-import spray.json.{JsString, JsObject, JsValue}
+import spray.http.{FormData, StatusCodes}
+import spray.httpx.marshalling._
+import spray.json._
+import DefaultJsonProtocol._
 
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
@@ -305,5 +309,71 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
     awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result).forall(_ == WorkflowStatuses.Failed.toString), 10 seconds)
     workflowSubmissionActor ! PoisonPill
+  }
+
+  it should "not truncate array inputs" in withDefaultTestDatabase {
+
+    val workflowSubmission = new TestWorkflowSubmission(slickDataSource)
+
+    withWorkspaceContext(testData.workspace) { ctx =>
+
+      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+
+      val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
+        Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
+        Seq.empty, Map.empty)
+
+      runAndWait(submissionQuery.create(ctx, submissionList))
+
+      val workflowIds = runAndWait(workflowQuery.findWorkflowsBySubmissionId(UUID.fromString(submissionList.submissionId)).result.map(_.map(_.id)))
+      Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
+
+      val arrayWdl = """task aggregate_data {
+                       |	Array[String] input_array
+                       |
+                       |	command {
+                       |    echo "foo"
+                       |
+                       |	}
+                       |
+                       |	output {
+                       |		Array[String] output_array = input_array
+                       |	}
+                       |
+                       |	runtime {
+                       |		docker : "broadinstitute/aaaa:31"
+                       |	}
+                       |
+                       |	meta {
+                       |		author : "Barack Obama"
+                       |		email : "barryo@whitehouse.gov"
+                       |	}
+                       |
+                       |}
+                       |
+                       |workflow aggregate_data_workflow {
+                       |	call aggregate_data
+                       |}""".stripMargin
+
+      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
+      marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]"))) match {
+        case Left(err) => assert(false)
+        case Right(thing) => {
+          val encodedStringWithHeader = thing.asString
+          val index = encodedStringWithHeader.indexOf("wdlSource")
+          val encodedStringNoHeader = encodedStringWithHeader.substring(index)
+          val regexStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
+
+          mockServer.mockServer.verify(
+            HttpRequest.request()
+              .withMethod("POST")
+              .withPath("/workflows/v1/batch")
+              .withBody(regexStringBody),
+            VerificationTimes.atLeast(1)
+          )
+        }
+      }
+    }
   }
 }
