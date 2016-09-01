@@ -661,12 +661,6 @@ class HttpGoogleServicesDAO(
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       })
-
-      // set usage export bucket on project, it may take up to 5 minutes for the project to be ready for this but google is working to fix that
-      _ <- retryUntilSuccessOrTimeout(always)(5 seconds, 6 minutes)(() => {
-        Future(blocking(executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(bucket.getName).setReportNamePrefix("usage")))))
-      })
-
     } yield {
       // nothing
     }
@@ -703,7 +697,7 @@ class HttpGoogleServicesDAO(
     val credential = getBillingServiceAccountCredential
     val computeManager = getComputeManager(credential)
 
-    toFutureTry(Future(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")).execute()))
+    toFutureTry(Future(blocking(executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage"))))))
   }
 
   def getComputeManager(credential: Credential): Compute = {
