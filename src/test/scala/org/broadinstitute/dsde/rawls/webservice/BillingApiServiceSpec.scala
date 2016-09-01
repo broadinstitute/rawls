@@ -34,7 +34,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl")
+  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
 
   private def createProject(services: TestApiService, project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     Put(s"/admin/billing/register/${project.projectName.value}") ~>

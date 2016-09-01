@@ -15,7 +15,7 @@ case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
-case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole)
+case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, status: ProjectStatuses.ProjectStatus)
 case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
@@ -112,6 +112,15 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
+  implicit object ProjectStatusFormat extends RootJsonFormat[ProjectStatuses.ProjectStatus] {
+    override def write(obj: ProjectStatuses.ProjectStatus): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): ProjectStatuses.ProjectStatus = json match {
+      case JsString(name) => ProjectStatuses.withName(name)
+      case _ => throw new DeserializationException("could not deserialize project status")
+    }
+  }
+
   implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
@@ -146,16 +155,7 @@ object UserAuthJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object ProjectStatusFormat extends RootJsonFormat[ProjectStatuses.ProjectStatus] {
-    override def write(obj: ProjectStatuses.ProjectStatus): JsValue = JsString(obj.toString)
-
-    override def read(json: JsValue): ProjectStatuses.ProjectStatus = json match {
-      case JsString(name) => ProjectStatuses.withName(name)
-      case _ => throw new DeserializationException("could not deserialize project status")
-    }
-  }
-
-  implicit val RawlsBillingProjectMembershipFormat = jsonFormat2(RawlsBillingProjectMembership)
+  implicit val RawlsBillingProjectMembershipFormat = jsonFormat3(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 }

@@ -1345,7 +1345,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServices { services =>
-    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, Set.empty, "mockBucketUrl")))
+    runAndWait(rawlsBillingProjectQuery.save(RawlsBillingProject(RawlsBillingProjectName("foobar"), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)))
     val newWorkspace = WorkspaceRequest(
       namespace = "foobar",
       name = "newWorkspace",

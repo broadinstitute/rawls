@@ -108,9 +108,15 @@ trait RawlsBillingProjectComponent {
     }
 
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {
-      findProjectsByUserSubjectId(rawlsUser.userSubjectId.value).result.map { projects =>
-        projects.map { rec => RawlsBillingProjectMembership(RawlsBillingProjectName(rec.projectName), ProjectRoles.withName(rec.role)) }
+      val query = for {
+        user <- projectUsersQuery if user.userSubjectId === rawlsUser.userSubjectId.value
+        project <- rawlsBillingProjectQuery if project.projectName === user.projectName
+      } yield {
+        (user.role, project.projectName, project.status)
       }
+      query.result.map { _.map {
+        case (role, projectName, projectStatus) => RawlsBillingProjectMembership(RawlsBillingProjectName(projectName), ProjectRoles.withName(role), ProjectStatuses.withName(projectStatus))
+      }}
     }
 
     def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {

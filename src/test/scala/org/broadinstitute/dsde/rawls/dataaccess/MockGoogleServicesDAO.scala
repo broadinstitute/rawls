@@ -16,6 +16,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.Try
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
@@ -235,4 +236,5 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
+  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(Try(Unit))
 }

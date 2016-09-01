@@ -45,7 +45,7 @@ trait CreatingBillingProjectMonitor {
   val datasource: SlickDataSource
   val gcsDAO: GoogleServicesDAO
 
-  def checkCreatingProjects(): Future[CheckDone] = {
+  def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
       creatingProjects <- datasource.inTransaction { _.rawlsBillingProjectQuery.listProjectsWithStatus(ProjectStatuses.Creating) }
       readyProjects <- setUsageExportBuckets(creatingProjects)
@@ -56,7 +56,7 @@ trait CreatingBillingProjectMonitor {
 
   }
 
-  def setUsageExportBuckets(projects: Seq[RawlsBillingProjectRecord]): Future[Seq[RawlsBillingProjectRecord]] = {
+  def setUsageExportBuckets(projects: Seq[RawlsBillingProjectRecord])(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingProjectRecord]] = {
     Future.traverse(projects) { project =>
       gcsDAO.setProjectUsageExportBucket(RawlsBillingProjectName(project.projectName)).map((project, _))
     } map {
