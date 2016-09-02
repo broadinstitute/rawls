@@ -49,7 +49,7 @@ trait CreatingBillingProjectMonitor {
     for {
       creatingProjects <- datasource.inTransaction { _.rawlsBillingProjectQuery.listProjectsWithStatus(ProjectStatuses.Creating) }
       readyProjects <- setUsageExportBuckets(creatingProjects)
-      updatedProjectCount <- datasource.inTransaction { _.rawlsBillingProjectQuery.updatesStatus(readyProjects.map(project => RawlsBillingProjectName(project.projectName)), ProjectStatuses.Ready) }
+      updatedProjectCount <- datasource.inTransaction { _.rawlsBillingProjectQuery.updateStatus(readyProjects.map(project => RawlsBillingProjectName(project.projectName)), ProjectStatuses.Ready) }
     } yield {
       CheckDone(creatingProjects.size - updatedProjectCount)
     }

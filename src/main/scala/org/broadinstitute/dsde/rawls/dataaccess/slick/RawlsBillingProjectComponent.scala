@@ -50,7 +50,7 @@ trait RawlsBillingProjectComponent {
       projectInsert andThen findUsersByProjectName(billingProject.projectName.value).delete andThen userInsert map { _ => billingProject }
     }
 
-    def updatesStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: ProjectStatuses.ProjectStatus): WriteAction[Int] = {
+    def updateStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: ProjectStatuses.ProjectStatus): WriteAction[Int] = {
       filter(_.projectName inSetBind(projectNames.map(_.value))).map(_.status).update(newStatus.toString)
     }
 
