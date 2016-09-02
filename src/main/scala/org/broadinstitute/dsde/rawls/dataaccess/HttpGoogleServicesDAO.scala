@@ -680,14 +680,15 @@ class HttpGoogleServicesDAO(
     val projectNameString = projectName.value
     for {
       _ <- retryWhen500orGoogleError(() => {
-      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
       - <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest (resMgr.projects ().delete (projectNameString))
+        executeGoogleRequest(resMgr.projects().delete(projectNameString))
       })
     } yield {
       // nothing
     }
+  }
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName): String = {
     s"${projectName.value}-usage-export"

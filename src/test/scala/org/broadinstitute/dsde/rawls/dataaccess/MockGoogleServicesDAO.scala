@@ -126,7 +126,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
-  val curatorList = scala.collection.mutable.Set("test_token")
+  val curatorList = scala.collection.mutable.Set("owner-access")
 
   val googleGroups = Map(
     "fc-ADMINS@dev.test.firecloud.org" -> adminList,

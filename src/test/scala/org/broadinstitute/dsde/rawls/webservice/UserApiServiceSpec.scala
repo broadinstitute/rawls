@@ -152,7 +152,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       runAndWait(rawlsUserQuery.save(billingUser))
 
 
-      Put(s"/admin/billing/${project1.projectName.value}") ~>
+      Put(s"/admin/billing/register/${project1.projectName.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
           assertResult(StatusCodes.Created, response.entity.asString) {
@@ -336,7 +336,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return Not Found for a user who is not a curator" in withTestDataApiServices { services =>
-    Delete(s"/admin/user/role/curator/test_token") ~>
+    Delete(s"/admin/user/role/curator/owner-access") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
