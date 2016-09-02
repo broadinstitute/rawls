@@ -690,9 +690,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def projectUsageExportBucketName(projectName: RawlsBillingProjectName): String = {
-    s"${projectName.value}-usage-export"
-  }
+  def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
 
   override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = {
     val credential = getBillingServiceAccountCredential
