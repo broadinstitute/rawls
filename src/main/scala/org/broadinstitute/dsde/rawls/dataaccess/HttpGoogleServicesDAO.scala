@@ -696,7 +696,14 @@ class HttpGoogleServicesDAO(
     val credential = getBillingServiceAccountCredential
     val computeManager = getComputeManager(credential)
 
-    toFutureTry(Future(blocking(executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage"))))))
+    toFutureTry {
+      Future {
+        blocking {
+          val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
+          executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
+        }
+      }
+    }
   }
 
   def getComputeManager(credential: Credential): Compute = {
