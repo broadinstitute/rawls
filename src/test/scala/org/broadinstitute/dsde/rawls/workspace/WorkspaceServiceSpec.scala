@@ -688,7 +688,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if submissions on workspace exist
-    assertResult(List(testData.submissionMixed)) {
+    assertResult(List(testData.submissionMixed, testData.submissionAborted)) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 

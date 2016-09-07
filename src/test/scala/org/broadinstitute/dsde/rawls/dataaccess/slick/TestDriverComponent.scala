@@ -300,7 +300,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup6,
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup6))
 
-    // Workspace with realms with aborted submission
+    // Workspace with realms with aborted workflows
     val workspaceMixedSubmissions = Workspace(wsName7.namespace, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup7,
@@ -694,6 +694,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
             methodConfigurationQuery.save(context, methodConfig),
 
+            submissionQuery.create(context, submissionAborted),
             submissionQuery.create(context, submissionMixed),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
