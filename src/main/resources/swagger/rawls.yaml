@@ -4601,6 +4601,7 @@ definitions:
     required:
       - projectName
       - role
+      - status
     properties:
       projectName:
         type: string
@@ -4608,6 +4609,9 @@ definitions:
       role:
         type: string
         description: the role of the current user in the project
+      status:
+        type: string
+        enum: ["Creating", "Ready"]
   RawlsBillingProjectMember:
     description: an element of a list of project users and their role
     required:
