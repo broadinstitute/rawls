@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.concurrent.TimeUnit
-
-import _root_.slick.dbio.DBIO
+import java.util.UUID
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -26,6 +26,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
+  import driver.api._
+
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
   val workspace = Workspace(
@@ -420,7 +422,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(workspaceQuery.findByName(testData.wsName3))
     }
 
-    //check if method configs have been deleted
 
   }
 
@@ -446,23 +447,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if entities on workspace exist
-    assertResult(Vector(testData.indiv1, testData.indiv2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Individual"))
-    }
-    assertResult(Vector(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Sample"))
-    }
-    assertResult(Vector(testData.aliquot1, testData.aliquot2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Aliquot"))
-    }
-    assertResult(Vector(testData.pair1, testData.pair2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Pair"))
-    }
-    assertResult(Vector(testData.ps1)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "PairSet"))
-    }
-    assertResult(Vector(testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "SampleSet"))
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
     }
 
     //delete the workspace
@@ -489,22 +475,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if entities on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Individual"))
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
     }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Sample"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Aliquot"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "Pair"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission), "SampleSet"))
-    }
-
   }
 
   it should "delete a workspace with failed submission" in withTestDataServices { services =>
@@ -529,23 +502,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if entities on workspace exist
-    assertResult(Vector(testData.indiv1, testData.indiv2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Individual"))
-    }
-    assertResult(Vector(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Sample"))
-    }
-    assertResult(Vector(testData.aliquot1, testData.aliquot2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Aliquot"))
-    }
-    assertResult(Vector(testData.pair1, testData.pair2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Pair"))
-    }
-    assertResult(Vector(testData.ps1)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "PairSet"))
-    }
-    assertResult(Vector(testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "SampleSet"))
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
     }
 
     //delete the workspace
@@ -571,21 +529,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
-    //Check if entities on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Individual"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Sample"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Aliquot"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "Pair"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission), "SampleSet"))
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
     }
   }
 
@@ -611,23 +558,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if entities on workspace exist
-    assertResult(Vector(testData.indiv1, testData.indiv2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Individual"))
-    }
-    assertResult(Vector(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Sample"))
-    }
-    assertResult(Vector(testData.aliquot1, testData.aliquot2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Aliquot"))
-    }
-    assertResult(Vector(testData.pair1, testData.pair2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Pair"))
-    }
-    assertResult(Vector(testData.ps1)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "PairSet"))
-    }
-    assertResult(Vector(testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "SampleSet"))
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
     }
 
     //delete the workspace
@@ -653,21 +585,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
-    //Check if entities on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Individual"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Sample"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Aliquot"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Pair"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "SampleSet"))
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
     }
   }
 
@@ -693,23 +613,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if entities on workspace exist
-    assertResult(Vector(testData.indiv1, testData.indiv2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission), "Individual"))
-    }
-    assertResult(Vector(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sample8)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Sample"))
-    }
-    assertResult(Vector(testData.aliquot1, testData.aliquot2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Aliquot"))
-    }
-    assertResult(Vector(testData.pair1, testData.pair2)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Pair"))
-    }
-    assertResult(Vector(testData.ps1)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "PairSet"))
-    }
-    assertResult(Vector(testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty)) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "SampleSet"))
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
     }
 
     //delete the workspace
@@ -735,21 +640,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 
-    //Check if entities on workspace have been deleted
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Individual"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Sample"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Aliquot"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "Pair"))
-    }
-    assertResult(Vector()) {
-      runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions), "SampleSet"))
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
     }
 
   }

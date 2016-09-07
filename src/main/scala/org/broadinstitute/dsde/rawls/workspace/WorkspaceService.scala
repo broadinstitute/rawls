@@ -264,7 +264,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
     //ExecutionContext run the futures whenever
-    val deletionFuture: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess => {
+    val deletionFuture: Future[(Seq[WorkflowRecord], String, Seq[Option[RawlsGroup]])] = dataSource.inTransaction { dataAccess =>
       for {
         // Gather any active workflows with external ids
         workflowsToAbort <- dataAccess.workflowQuery.findActiveWorkflowsWithExternalIds(workspaceContext)
@@ -293,7 +293,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       } yield {
         (workflowsToAbort, workspaceContext.workspace.bucketName, groupsToRemove)
       }
-    }}
+    }
     for {
       (workflowsToAbort, bucketName, groupsToRemove) <- deletionFuture
 
