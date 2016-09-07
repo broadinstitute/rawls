@@ -197,49 +197,44 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
 
     val realm3 = makeRawlsGroup(s"Test-Realm3", Set.empty)
-    val realmWs3Name = wsName3.name + "withRealm"
-    val realmOwnerIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup3 = makeRawlsGroup(s"${realmWs3Name} IG READER", Set(userReader))
-    val realmOwnerGroup3 = makeRawlsGroup(s"${realmWs3Name} OWNER", Set(userOwner))
-    val realmWriterGroup3 = makeRawlsGroup(s"${realmWs3Name} WRITER", Set(userWriter))
-    val realmReaderGroup3 = makeRawlsGroup(s"${realmWs3Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG READER", Set(userReader))
+    val realmOwnerGroup3 = makeRawlsGroup(s"${wsName3.name} OWNER", Set(userOwner))
+    val realmWriterGroup3 = makeRawlsGroup(s"${wsName3.name} WRITER", Set(userWriter))
+    val realmReaderGroup3 = makeRawlsGroup(s"${wsName3.name} READER", Set(userReader))
 
     val realm4 = makeRawlsGroup(s"Test-Realm4", Set.empty)
-    val realmWs4Name = wsName4.name + "withRealm"
-    val realmOwnerIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup4 = makeRawlsGroup(s"${realmWs4Name} IG READER", Set(userReader))
-    val realmOwnerGroup4 = makeRawlsGroup(s"${realmWs4Name} OWNER", Set(userOwner))
-    val realmWriterGroup4 = makeRawlsGroup(s"${realmWs4Name} WRITER", Set(userWriter))
-    val realmReaderGroup4 = makeRawlsGroup(s"${realmWs4Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG READER", Set(userReader))
+    val realmOwnerGroup4 = makeRawlsGroup(s"${wsName4.name} OWNER", Set(userOwner))
+    val realmWriterGroup4 = makeRawlsGroup(s"${wsName4.name} WRITER", Set(userWriter))
+    val realmReaderGroup4 = makeRawlsGroup(s"${wsName4.name} READER", Set(userReader))
 
     val realm5 = makeRawlsGroup(s"Test-Realm5", Set.empty)
-    val realmWs5Name = wsName5.name + "withRealm"
-    val realmOwnerIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup5 = makeRawlsGroup(s"${realmWs5Name} IG READER", Set(userReader))
-    val realmOwnerGroup5 = makeRawlsGroup(s"${realmWs5Name} OWNER", Set(userOwner))
-    val realmWriterGroup5 = makeRawlsGroup(s"${realmWs5Name} WRITER", Set(userWriter))
-    val realmReaderGroup5 = makeRawlsGroup(s"${realmWs5Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG READER", Set(userReader))
+    val realmOwnerGroup5 = makeRawlsGroup(s"${wsName5.name} OWNER", Set(userOwner))
+    val realmWriterGroup5 = makeRawlsGroup(s"${wsName5.name} WRITER", Set(userWriter))
+    val realmReaderGroup5 = makeRawlsGroup(s"${wsName5.name} READER", Set(userReader))
 
     val realm6 = makeRawlsGroup(s"Test-Realm6", Set.empty)
-    val realmWs6Name = wsName6.name + "withRealm"
-    val realmOwnerIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup6 = makeRawlsGroup(s"${realmWs6Name} IG READER", Set(userReader))
-    val realmOwnerGroup6 = makeRawlsGroup(s"${realmWs6Name} OWNER", Set(userOwner))
-    val realmWriterGroup6 = makeRawlsGroup(s"${realmWs6Name} WRITER", Set(userWriter))
-    val realmReaderGroup6 = makeRawlsGroup(s"${realmWs6Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG READER", Set(userReader))
+    val realmOwnerGroup6 = makeRawlsGroup(s"${wsName6.name} OWNER", Set(userOwner))
+    val realmWriterGroup6 = makeRawlsGroup(s"${wsName6.name} WRITER", Set(userWriter))
+    val realmReaderGroup6 = makeRawlsGroup(s"${wsName6.name} READER", Set(userReader))
 
     val realm7 = makeRawlsGroup(s"Test-Realm7", Set.empty)
-    val realmWs7Name = wsName7.name + "withRealm"
-    val realmOwnerIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup7 = makeRawlsGroup(s"${realmWs7Name} IG READER", Set(userReader))
-    val realmOwnerGroup7 = makeRawlsGroup(s"${realmWs7Name} OWNER", Set(userOwner))
-    val realmWriterGroup7 = makeRawlsGroup(s"${realmWs7Name} WRITER", Set(userWriter))
-    val realmReaderGroup7 = makeRawlsGroup(s"${realmWs7Name} READER", Set(userReader))
+    val realmOwnerIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG OWNER", Set(userOwner))
+    val realmWriterIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG WRITER", Set(userWriter))
+    val realmReaderIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG READER", Set(userReader))
+    val realmOwnerGroup7 = makeRawlsGroup(s"${wsName7.name} OWNER", Set(userOwner))
+    val realmWriterGroup7 = makeRawlsGroup(s"${wsName7.name} WRITER", Set(userWriter))
+    val realmReaderGroup7 = makeRawlsGroup(s"${wsName7.name} READER", Set(userReader))
 
     val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
@@ -262,7 +257,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup2))
 
     // Workspace with realms, without submissions
-    val workspaceNoSubmissions = Workspace(wsName3.namespace, realmWs3Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspaceNoSubmissions = Workspace(wsName3.namespace, wsName3.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup3,
         WorkspaceAccessLevels.Write -> realmWriterGroup3,
@@ -273,7 +268,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup3))
 
     // Workspace with realms, with successful submission
-    val workspaceSuccessfulSubmission = Workspace(wsName4.namespace, realmWs4Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspaceSuccessfulSubmission = Workspace(wsName4.namespace, wsName4.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup4,
         WorkspaceAccessLevels.Write -> realmWriterGroup4,
@@ -284,7 +279,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup4))
 
     // Workspace with realms, with failed submission
-    val workspaceFailedSubmission = Workspace(wsName5.namespace, realmWs5Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspaceFailedSubmission = Workspace(wsName5.namespace, wsName5.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup5,
         WorkspaceAccessLevels.Write -> realmWriterGroup5,
@@ -295,7 +290,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup5))
 
     // Workspace with realms, with submitted submission
-    val workspaceSubmittedSubmission = Workspace(wsName6.namespace, realmWs6Name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspaceSubmittedSubmission = Workspace(wsName6.namespace, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup6,
         WorkspaceAccessLevels.Write -> realmWriterGroup6,
@@ -306,7 +301,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup6))
 
     // Workspace with realms with aborted submission
-    val workspaceMixedSubmissions = Workspace(wsName7.namespace, realmWs7Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
+    val workspaceMixedSubmissions = Workspace(wsName7.namespace, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
       Map(
         WorkspaceAccessLevels.Owner -> realmOwnerGroup7,
         WorkspaceAccessLevels.Write -> realmWriterGroup7,
@@ -583,36 +578,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         }),
         withWorkspaceContext(workspaceNoSubmissions)({ context =>
           DBIO.seq(
-            entityQuery.save(context, aliquot1),
-            entityQuery.save(context, aliquot2),
-            entityQuery.save(context, sample1),
-            entityQuery.save(context, sample2),
-            entityQuery.save(context, sample3),
-            entityQuery.save(context, sample4),
-            entityQuery.save(context, sample5),
-            entityQuery.save(context, sample6),
-            entityQuery.save(context, sample7),
-            entityQuery.save(context, sample8),
-            entityQuery.save(context, pair1),
-            entityQuery.save(context, pair2),
-            entityQuery.save(context, ps1),
-            entityQuery.save(context, sset1),
-            entityQuery.save(context, sset2),
-            entityQuery.save(context, sset3),
-            entityQuery.save(context, sset4),
-            entityQuery.save(context, sset_empty),
-            entityQuery.save(context, indiv1),
-            entityQuery.save(context, indiv2),
-
-            methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigArrayType),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
@@ -641,13 +606,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
             methodConfigurationQuery.save(context, methodConfig),
             methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigArrayType),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
             submissionQuery.create(context, submissionSuccessful),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -677,14 +635,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             entityQuery.save(context, indiv2),
 
             methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigArrayType),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
             submissionQuery.create(context, submissionFailed),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -714,14 +664,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             entityQuery.save(context, indiv2),
 
             methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigArrayType),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
             submissionQuery.create(context, submissionSubmitted),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -751,14 +693,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             entityQuery.save(context, indiv2),
 
             methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigArrayType),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
 
             submissionQuery.create(context, submissionMixed),
             updateWorkflowExecutionServiceKey("unittestdefault")
