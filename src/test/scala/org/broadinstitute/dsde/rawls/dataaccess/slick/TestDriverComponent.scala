@@ -576,6 +576,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
+        withWorkspaceContext(workspaceWithRealm)({ context =>
+          DBIO.seq(
+            entityQuery.save(context, extraSample)
+          )
+        }),
         withWorkspaceContext(workspaceNoSubmissions)({ context =>
           DBIO.seq(
             updateWorkflowExecutionServiceKey("unittestdefault")
