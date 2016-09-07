@@ -227,7 +227,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def adminGetWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
+  def getWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         DBIO.successful(workspaceContext)
@@ -235,22 +235,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def getWorkspaceContext(workspaceName: WorkspaceName): Future[SlickWorkspaceContext] = {
+  def getWorkspaceContextAndPermissions(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel): Future[SlickWorkspaceContext] = {
     dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
+      withWorkspaceContextAndPermissions(workspaceName, accessLevel, dataAccess) { workspaceContext =>
         DBIO.successful(workspaceContext)
       }
     }
   }
 
   def adminDeleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] = asFCAdmin {
-    adminGetWorkspaceContext(workspaceName) flatMap { ctx =>
+    getWorkspaceContext(workspaceName) flatMap { ctx =>
       deleteWorkspace(workspaceName, ctx)
     }
   }
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
-     getWorkspaceContext(workspaceName) flatMap { ctx =>
+     getWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner) flatMap { ctx =>
       deleteWorkspace(workspaceName, ctx)
     }
   }
