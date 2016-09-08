@@ -207,7 +207,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     // also insert a dummy audit record with a different workflow id to attempt to confuse the code
     runAndWait( workflowAuditStatusQuery.save( WorkflowAuditStatusRecord(0, 42, WorkflowStatuses.Queued.toString, new java.sql.Timestamp(queuedTime-6000)) ) )
 
-    val existingSubmittedWorkflowCount = 12
+    val existingSubmittedWorkflowCount = 15
     val existingWorkflowCounts = Map("Submitted" -> existingSubmittedWorkflowCount)
 
     val resp = getQueueStatus(services.submissionRoutes)

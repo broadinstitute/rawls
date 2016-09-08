@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.concurrent.TimeUnit
-
-import _root_.slick.dbio.DBIO
+import java.util.UUID
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -24,7 +24,10 @@ import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.{FiniteDuration, Duration}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
+
 class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
+  import driver.api._
+
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val s1 = Entity("s1", "samples", Map("foo" -> AttributeString("x"), "bar" -> AttributeNumber(3), "splat" -> attributeList))
   val workspace = Workspace(
@@ -403,5 +406,244 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult(StatusCodes.NotFound) {
       vErrorReport.statusCode.get
     }
+  }
+
+  it should "delete a workspace with no submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertResult(Option(testData.workspaceNoSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName3))
+    }
+
+
+  }
+
+  it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertResult(Option(testData.workspaceSuccessfulSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"), MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if access levels on workspace exist
+    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSuccessful)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName4), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName4))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if access levels have been deleted
+    assertResult(Vector()) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
+    }
+
+    //Check if entities on workspace have been deleted
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSuccessfulSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with failed submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertResult(Option(testData.workspaceFailedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if access levels on workspace exist
+    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionFailed)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName5), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName5))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if access levels have been deleted
+    assertResult(Vector()) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
+    }
+
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceFailedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with submitted submission" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertResult(Option(testData.workspaceSubmittedSubmission)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if access levels on workspace exist
+    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(List(testData.submissionSubmitted)) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName6), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName6))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if access levels have been deleted
+    assertResult(Vector()) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceSubmittedSubmission.workspaceId)).length.result)
+    }
+  }
+
+  it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
+    //check that the workspace to be deleted exists
+    assertResult(Option(testData.workspaceMixedSubmissions)) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //Check method configs to be deleted exist
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if access levels on workspace exist
+    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if submissions on workspace exist
+    assertResult(2) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).length
+    }
+
+    //Check if entities on workspace exist
+    assertResult(20) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
+    //delete the workspace
+    Await.result(services.workspaceService.deleteWorkspace(testData.wsName7), Duration.Inf)
+
+    //check that the workspace has been deleted
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(testData.wsName7))
+    }
+
+    //check if method configs have been deleted
+    assertResult(Vector()) {
+      runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if access levels have been deleted
+    assertResult(Vector()) {
+      runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if submissions on workspace have been deleted
+    assertResult(Vector()) {
+      runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
+    }
+
+    //Check if entities on workspace exist
+    assertResult(0) {
+      runAndWait(entityQuery.findEntityByWorkspace(UUID.fromString(testData.workspaceMixedSubmissions.workspaceId)).length.result)
+    }
+
   }
 }
