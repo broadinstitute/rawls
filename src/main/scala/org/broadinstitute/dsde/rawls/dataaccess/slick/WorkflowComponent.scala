@@ -232,13 +232,6 @@ trait WorkflowComponent {
       UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
     }
 
-    def findActiveWorkflowsWithoutExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsByWorkspace(workspaceContext).filter(!_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {st => st.toString})).result
-    }
-
-    def findActiveWorkflowsWithExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsByWorkspace(workspaceContext).filter(_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {st => st.toString})).result
-    }
 
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
@@ -246,6 +239,13 @@ trait WorkflowComponent {
         findWorkflowById(id).delete
     }
 
+    def findActiveWorkflowsWithoutExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
+      findWorkflowsByWorkspace(workspaceContext).filter(!_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {_.toString})).result
+    }
+
+    def findActiveWorkflowsWithExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
+      findWorkflowsByWorkspace(workspaceContext).filter(_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {_.toString})).result
+    }
 
     def deleteWorkflowAttributes(id: Long) = {
       findInputResolutionsByWorkflowId(id).result flatMap { validations =>
