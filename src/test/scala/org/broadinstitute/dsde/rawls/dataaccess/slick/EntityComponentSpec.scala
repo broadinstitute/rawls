@@ -223,7 +223,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "update an entity's attributes many times concurrently" in withDefaultTestDatabase {
+  // TODO: re-enable as part of GAWB-925
+  it should "update an entity's attributes many times concurrently" ignore withDefaultTestDatabase {
     val pair2 = Entity("pair2", "Pair",
       Map(
         defaultAttributeName("case") -> AttributeEntityReference("Sample", "sample3"),
