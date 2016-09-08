@@ -240,11 +240,15 @@ trait WorkflowComponent {
     }
 
     def findActiveWorkflowsWithoutExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsByWorkspace(workspaceContext).filter(!_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {_.toString})).result
+      findActiveWorkflows(workspaceContext).filter(!_.externalId.isDefined).result
     }
 
     def findActiveWorkflowsWithExternalIds(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsByWorkspace(workspaceContext).filter(_.externalId.isDefined).filter(_.status inSetBind(WorkflowStatuses.terminalStatuses map {_.toString})).result
+      findActiveWorkflows(workspaceContext).filter(_.externalId.isDefined).result
+    }
+
+    def findActiveWorkflows(workspaceContext: SlickWorkspaceContext): WorkflowQueryType = {
+      findWorkflowsByWorkspace(workspaceContext).filter(_.status inSetBind((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map {_.toString}))
     }
 
     def deleteWorkflowAttributes(id: Long) = {
