@@ -22,4 +22,5 @@
     <include file="changesets/20160728_billing_role.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160817_workflow_failure_migration_v2.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160829_add_billing_project_status.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20160914_create_temp_tables_proc.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

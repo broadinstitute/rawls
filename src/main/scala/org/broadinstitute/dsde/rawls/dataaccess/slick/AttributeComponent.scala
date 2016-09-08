@@ -16,8 +16,9 @@ import reflect.runtime.universe._
 /**
  * Created by dvoet on 2/4/16.
  */
-trait AttributeRecord {
+trait AttributeRecord[OWNER_ID] {
   val id: Long
+  val ownerId: OWNER_ID
   val name: String
   val valueString: Option[String]
   val valueNumber: Option[Double]
@@ -27,35 +28,62 @@ trait AttributeRecord {
   val listLength: Option[Int]
 }
 
+trait AttributeTempRecord[OWNER_ID] extends AttributeRecord[OWNER_ID] {
+  val transactionId: String
+}
+
 case class EntityAttributeRecord(id: Long,
-                                 entityId: Long,
+                                 ownerId: Long, // entity id
                                  name: String,
                                  valueString: Option[String],
                                  valueNumber: Option[Double],
                                  valueBoolean: Option[Boolean],
                                  valueEntityRef: Option[Long],
                                  listIndex: Option[Int],
-                                 listLength: Option[Int]) extends AttributeRecord
+                                 listLength: Option[Int]) extends AttributeRecord[Long]
 
-case class WorkspaceAttributeRecord(id: Long,
-                                    workspaceId: UUID,
-                                    name: String,
-                                    valueString: Option[String],
-                                    valueNumber: Option[Double],
-                                    valueBoolean: Option[Boolean],
-                                    valueEntityRef: Option[Long],
-                                    listIndex: Option[Int],
-                                    listLength: Option[Int]) extends AttributeRecord
-
-case class SubmissionAttributeRecord(id: Long,
-                                     validationId: Long,
+case class EntityAttributeTempRecord(id: Long,
+                                     ownerId: Long, // entity id
                                      name: String,
                                      valueString: Option[String],
                                      valueNumber: Option[Double],
                                      valueBoolean: Option[Boolean],
                                      valueEntityRef: Option[Long],
                                      listIndex: Option[Int],
-                                     listLength: Option[Int]) extends AttributeRecord
+                                     listLength: Option[Int],
+                                     transactionId: String) extends AttributeTempRecord[Long] {
+}
+
+case class WorkspaceAttributeRecord(id: Long,
+                                    ownerId: UUID, // workspace id
+                                    name: String,
+                                    valueString: Option[String],
+                                    valueNumber: Option[Double],
+                                    valueBoolean: Option[Boolean],
+                                    valueEntityRef: Option[Long],
+                                    listIndex: Option[Int],
+                                    listLength: Option[Int]) extends AttributeRecord[UUID]
+
+case class WorkspaceAttributeTempRecord(id: Long,
+                                        ownerId: UUID, // workspace id
+                                        name: String,
+                                        valueString: Option[String],
+                                        valueNumber: Option[Double],
+                                        valueBoolean: Option[Boolean],
+                                        valueEntityRef: Option[Long],
+                                        listIndex: Option[Int],
+                                        listLength: Option[Int],
+                                        transactionId: String) extends AttributeTempRecord[UUID]
+
+case class SubmissionAttributeRecord(id: Long,
+                                     ownerId: Long, // validation id
+                                     name: String,
+                                     valueString: Option[String],
+                                     valueNumber: Option[Double],
+                                     valueBoolean: Option[Boolean],
+                                     valueEntityRef: Option[Long],
+                                     listIndex: Option[Int],
+                                     listLength: Option[Int]) extends AttributeRecord[Long]
 
 trait AttributeComponent {
   this: DriverComponent
@@ -65,7 +93,7 @@ trait AttributeComponent {
 
   import driver.api._
 
-  abstract class AttributeTable[OWNER_ID: TypedType, RECORD <: AttributeRecord](tag: Tag, tableName: String) extends Table[RECORD](tag, tableName) {
+  abstract class AttributeTable[OWNER_ID: TypedType, RECORD <: AttributeRecord[OWNER_ID]](tag: Tag, tableName: String) extends Table[RECORD](tag, tableName) {
     final type OwnerIdType = OWNER_ID
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
@@ -77,6 +105,10 @@ trait AttributeComponent {
     def valueEntityRef = column[Option[Long]]("value_entity_ref")
     def listIndex = column[Option[Int]]("list_index")
     def listLength = column[Option[Int]]("list_length")
+  }
+
+  abstract class AttributeTempTable[OWNER_ID: TypedType, RECORD <: AttributeTempRecord[OWNER_ID]](tag: Tag, tableName: String) extends AttributeTable[OWNER_ID, RECORD](tag, tableName) {
+    def transactionId = column[String]("transaction_id")
   }
 
   class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
@@ -100,12 +132,12 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeTempTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+  class EntityAttributeTempTable(tag: Tag) extends AttributeTempTable[Long, EntityAttributeTempRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
   }
 
-  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTempTable[UUID, WorkspaceAttributeTempRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
+    def * = (id, ownerId, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
@@ -114,16 +146,23 @@ trait AttributeComponent {
 
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
-  protected object entityAttributeTempQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeRecord)
+  protected abstract class AttributeTempQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeTempRecord[OWNER_ID], T <: AttributeTempTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int], String) => TEMP_RECORD) extends TableQuery[T](cons) {
+    def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
+      insertInBatches(this, attributes.map { case rec =>
+        createRecord(rec.id, rec.ownerId, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueEntityRef, rec.listIndex, rec.listLength, transactionId)
+      })
+    }
+  }
 
-  protected object workspaceAttributeTempQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeRecord)
+  protected object entityAttributeTempQuery extends AttributeTempQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
+  protected object workspaceAttributeTempQuery extends AttributeTempQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeTempRecord)
 
   /**
    * @param createRecord function to create a RECORD object, parameters: id, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength
    * @tparam OWNER_ID the type of the ownerId field
    * @tparam RECORD the record class
    */
-  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord, T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
 
     /**
      * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
@@ -252,56 +291,35 @@ trait AttributeComponent {
       //MySQL seems to handle null safe operators inefficiently. the solution to this
       //is to use ifnull and default to -2 if the list_index is null. list_index of -2
       //is never used otherwise
-      def deleteFromMasterAction(ownerIds: Seq[OWNER_ID]) =
+      def deleteFromMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
                 left join #${baseTableRow.tableName}_TEMP ta
-                on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
+                on ta.transaction_id = $transactionId and (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
                 where ta.owner_id is null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
-      def updateInMasterAction(ownerIds: Seq[OWNER_ID]) =
+      def updateInMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_TEMP ta
-                on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2))
+                on (a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
                 set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
-      def insertIntoMasterAction(ownerIds: Seq[OWNER_ID]) =
+      def insertIntoMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         concatSqlActions(sql"""insert into #${baseTableRow.tableName}(name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
                 select ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
                 from #${baseTableRow.tableName}_TEMP ta
                 left join #${baseTableRow.tableName} a
                 on (a.name,a.owner_id,a.list_index)<=>(ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
-                sql""" where a.owner_id is null""").as[Int]
+                sql""" where ta.transaction_id = $transactionId and a.owner_id is null""").as[Int]
 
-      def createAttributeTempTableAction() = {
-        val prefix = sql"""create temporary table #${baseTableRow.tableName}_TEMP (
-              id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
-              name text NOT NULL,
-              value_string text,
-              value_number double DEFAULT NULL,
-              value_boolean bit(1) DEFAULT NULL,
-              value_entity_ref bigint(20) unsigned DEFAULT NULL,
-              list_index int(11) DEFAULT NULL,
-              list_length int(11) DEFAULT NULL, """
-
-        val suffix = if(typeOf[OWNER_ID] =:= typeOf[Long]) {
-          sql"""owner_id bigint(20) unsigned NOT NULL)"""
-        } else if(typeOf[OWNER_ID] =:= typeOf[UUID]) {
-          sql"""owner_id binary(16) NOT NULL)"""
-        } else throw new RawlsException("Owner ID was of an unexpected type")
-
-        concatSqlActions(prefix, suffix).as[Int]
+      def clearAttributeTempTableAction(transactionId: String) = {
+        sqlu"""delete from #${baseTableRow.tableName}_TEMP where transaction_id = $transactionId"""
       }
 
-      def dropAttributeTempTableAction() = {
-        sql"""drop temporary table if exists #${baseTableRow.tableName}_TEMP""".as[Int]
-      }
-
-      def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: () => ReadWriteAction[Unit]) = {
-        dropAttributeTempTableAction() andThen
-          createAttributeTempTableAction() andThen
-          insertFunction() andThen
-          deleteFromMasterAction(ownerIds) andThen
-          updateInMasterAction(ownerIds) andThen
-          insertIntoMasterAction(ownerIds) andFinally
-          dropAttributeTempTableAction()
+      def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: String => ReadWriteAction[Unit]) = {
+        val transactionId = UUID.randomUUID().toString
+        insertFunction(transactionId) andThen
+          deleteFromMasterAction(ownerIds, transactionId) andThen
+          updateInMasterAction(ownerIds, transactionId) andThen
+          insertIntoMasterAction(ownerIds, transactionId) andFinally
+          clearAttributeTempTableAction(transactionId)
       }
     }
 

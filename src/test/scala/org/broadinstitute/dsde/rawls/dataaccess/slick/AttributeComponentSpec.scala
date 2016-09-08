@@ -3,8 +3,12 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 
 /**
  * Created by dvoet on 2/9/16.
@@ -211,6 +215,94 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     intercept[RawlsException] {
       val x = workspaceAttributeQuery.unmarshalAttributes(attributeRecs)
       println(x) // test fails without this, compiler optimization maybe?
+    }
+  }
+
+  it should "extra data in workspace attribute temp table should not mess things up" in withEmptyTestDatabase {
+    val workspaceId: UUID = UUID.randomUUID()
+    val workspace = Workspace(
+      "test_namespace",
+      "test_name",
+      None,
+      workspaceId.toString,
+      "bucketname",
+      currentTime(),
+      currentTime(),
+      "me",
+      Map("attributeString" -> AttributeString("value"),
+        "attributeBool" -> AttributeBoolean(true),
+        "attributeNum" -> AttributeNumber(3.14159)),
+      Map.empty,
+      Map.empty,
+      false)
+
+
+    val updatedWorkspace = workspace.copy(attributes = Map("attributeString" -> AttributeString(UUID.randomUUID().toString)))
+
+    def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
+
+    def updateWorkspace = {
+      DbResource.dataSource.database.run(
+        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")) andThen
+          this.workspaceQuery.save(updatedWorkspace).transactionally andThen
+          this.workspaceAttributeTempQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
+      )
+    }
+
+    assertResult(Vector(("attributeString", Some("foo")))) {
+      Await.result(saveWorkspace flatMap { _ => updateWorkspace }, Duration.Inf)
+    }
+
+    assertResult(Option(updatedWorkspace)) {
+      runAndWait(this.workspaceQuery.findById(workspaceId.toString))
+    }
+  }
+
+  it should "extra data in entity attribute temp table should not mess things up" in withEmptyTestDatabase {
+    val workspaceId: UUID = UUID.randomUUID()
+    val workspace = Workspace(
+      "test_namespace",
+      "test_name",
+      None,
+      workspaceId.toString,
+      "bucketname",
+      currentTime(),
+      currentTime(),
+      "me",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      false)
+
+    val entity = Entity("e", "et", Map("attributeString" -> AttributeString("value"),
+      "attributeBool" -> AttributeBoolean(true),
+      "attributeNum" -> AttributeNumber(3.14159)))
+
+    val updatedEntity = entity.copy(attributes = Map("attributeString" -> AttributeString(UUID.randomUUID().toString)))
+
+    def saveWorkspace = DbResource.dataSource.inTransaction(d => d.workspaceQuery.save(workspace))
+    def saveEntity = DbResource.dataSource.inTransaction(d => d.entityQuery.save(SlickWorkspaceContext(workspace), entity))
+
+    val updateAction = for {
+      entityRec <- this.entityQuery.findEntityByName(workspaceId, entity.entityType, entity.name).result
+      _ <- this.entityAttributeTempQuery += EntityAttributeTempRecord(0, entityRec.head.id, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")
+      _ <- this.entityQuery.save(SlickWorkspaceContext(workspace), updatedEntity).transactionally
+      result <- this.entityAttributeTempQuery.map { r => (r.name, r.valueString) }.result
+    } yield {
+      result
+    }
+
+    assertResult(Vector(("attributeString", Some("foo")))) {
+      val doIt = for {
+        _ <- saveWorkspace
+        _ <- saveEntity
+        result <- DbResource.dataSource.database.run(updateAction.withPinnedSession)
+      } yield result
+      Await.result(doIt, Duration.Inf)
+    }
+
+    assertResult(Option(updatedEntity)) {
+      runAndWait(this.entityQuery.get(SlickWorkspaceContext(workspace), entity.entityType, entity.name))
     }
   }
 }

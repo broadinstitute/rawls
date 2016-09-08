@@ -18,7 +18,7 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Try, Failure, Success}
 import scala.util.parsing.combinator.JavaTokenParsers
 
-case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Seq[EntityRecord])
+case class SlickExpressionContext(workspaceContext: SlickWorkspaceContext, rootEntities: Seq[EntityRecord], transactionId: String)
 
 trait SlickExpressionParser extends JavaTokenParsers {
   this: DriverComponent with EntityComponent with WorkspaceComponent with AttributeComponent =>
@@ -173,7 +173,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // the root function starts the pipeline at some root entity type in the workspace
   private def entityRootFunc(context: SlickExpressionContext): PipeType = {
     for {
-      rootEntities <- exprEvalQuery
+      rootEntities <- exprEvalQuery if rootEntities.transactionId === context.transactionId
       entity <- entityQuery if rootEntities.id === entity.id
     } yield (entity.name, entity)
   }
@@ -203,7 +203,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // root func that gets an entity reference off a workspace
   private def workspaceEntityRefRootFunc(entityRefName: String)(context: SlickExpressionContext): PipeType = {
     for {
-      rootEntity <- exprEvalQuery
+      rootEntity <- exprEvalQuery if rootEntity.transactionId === context.transactionId
       workspace <- workspaceQuery.findByIdQuery(context.workspaceContext.workspaceId)
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === entityRefName
       nextEntity <- entityQuery if attribute.valueEntityRef === nextEntity.id
@@ -319,10 +319,9 @@ object SlickExpressionEvaluator {
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
     val evaluator = new SlickExpressionEvaluator(parser, rootEntities)
 
-    evaluator.dropExprEvalTempTable() andThen
-      evaluator.populateExprEvalTempTable()
-        .andThen({ op(evaluator) })
-        .andFinally(evaluator.dropExprEvalTempTable())
+    evaluator.populateExprEvalTempTable() andThen
+      op(evaluator) andFinally
+      evaluator.clearExprEvalTempTable()
   }
 
   def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
@@ -347,24 +346,23 @@ object SlickExpressionEvaluator {
 class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntities: Seq[EntityRecord])(implicit executionContext: ExecutionContext) {
   import parser.driver.api._
 
+  val transactionId = UUID.randomUUID().toString
+
   def populateExprEvalTempTable() = {
-    val exprEvalBatches = rootEntities.map( e => parser.ExprEvalRecord(e.id, e.name) ).grouped(parser.batchSize)
+    val exprEvalBatches = rootEntities.map( e => parser.ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
 
-    val createTempTableAction = sql"""create temporary table EXPREVAL_TEMP (id bigint(20) unsigned NOT NULL, name VARCHAR(254) NOT NULL)""".as[Int]
-
-    createTempTableAction andThen
-      DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
+    DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }
 
-  def dropExprEvalTempTable() = {
-    sql"""drop temporary table if exists EXPREVAL_TEMP""".as[Int]
+  def clearExprEvalTempTable() = {
+    parser.exprEvalQuery.filter(_.transactionId === transactionId).delete
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, expression: String): ReadWriteAction[Map[String, Try[Iterable[AttributeValue]]]] = {
     parser.parseAttributeExpr(expression) match {
       case Failure(regret) => DBIO.failed(new RawlsException(regret.getMessage))
       case Success(expr) =>
-        runPipe(SlickExpressionContext(workspaceContext, rootEntities), expr) map { exprResults =>
+        runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr) map { exprResults =>
           val results = exprResults map { case (key, attrVals) =>
             key -> Try(attrVals.collect {
               case AttributeNull => Seq.empty
@@ -395,7 +393,7 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
           case Failure(regret) => DBIO.failed(regret)
           case Success(expr) =>
             //If parsing succeeded, evaluate the expression using the given root entities and retype back to EntityRecord
-            runPipe(SlickExpressionContext(workspaceContext, rootEntities), expr).map({ resultMap =>
+            runPipe(SlickExpressionContext(workspaceContext, rootEntities, transactionId), expr).map({ resultMap =>
               //NOTE: As per the DBIO.failed a few lines up, resultMap should only have one key, the same root elem.
               val (rootElem, elems) = resultMap.head
               elems.collect { case e: EntityRecord => e }
