@@ -403,11 +403,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
-        createBillingProjectInternal(dataAccess, projectName, Set.empty, Set.empty, ProjectStatuses.Ready) map (_ => RequestComplete(StatusCodes.Created))
+        createBillingProjectInternal(dataAccess, projectName, Set.empty, Set.empty, CreationStatuses.Ready) map (_ => RequestComplete(StatusCodes.Created))
     }
   }
 
-  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], status: ProjectStatuses.ProjectStatus): WriteAction[RawlsBillingProject] = {
+  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], status: CreationStatuses.CreationStatus): WriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
       dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, owners, users, bucketUrl, status))
@@ -736,7 +736,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             case None =>
               for {
                 _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate))
-                _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty, ProjectStatuses.Creating)
+                _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty, CreationStatuses.Creating)
               } yield {
                 RequestComplete(StatusCodes.Created)
               }

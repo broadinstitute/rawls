@@ -42,7 +42,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
 
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
@@ -394,7 +394,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, ProjectStatuses.Ready))) {
+        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
           responseAs[Seq[RawlsBillingProjectMembership]].toSet
         }
       }
@@ -609,7 +609,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set.empty, Set(testUser, user2), "mock cromwell URL", ProjectStatuses.Ready)
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set.empty, Set(testUser, user2), "mock cromwell URL", CreationStatuses.Ready)
       runAndWait(rawlsBillingProjectQuery.save(project))
 
       assertResult(Some(project)) {

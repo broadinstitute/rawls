@@ -15,7 +15,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val ownerRef = RawlsUserRef(ownerSubjId)
 
     val projectName = RawlsBillingProjectName("arbitrary")
-    val project = RawlsBillingProject(projectName, Set(owner), Set(userRef), "http://cromwell-auth-url.example.com", ProjectStatuses.Ready)
+    val project = RawlsBillingProject(projectName, Set(owner), Set(userRef), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     runAndWait(rawlsUserQuery.save(user))
     runAndWait(rawlsUserQuery.save(owner))
@@ -89,8 +89,8 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val projectName1 = RawlsBillingProjectName("project1")
     val projectName2 = RawlsBillingProjectName("project2")
 
-    val project1 = RawlsBillingProject(projectName1, Set(owner), Set(userRef1), "http://cromwell-auth-url.example.com", ProjectStatuses.Ready)
-    val project2 = RawlsBillingProject(projectName2, Set(owner), Set(userRef2, userRef3), "http://cromwell-auth-url.example.com", ProjectStatuses.Ready)
+    val project1 = RawlsBillingProject(projectName1, Set(owner), Set(userRef1), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val project2 = RawlsBillingProject(projectName2, Set(owner), Set(userRef2, userRef3), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     runAndWait(rawlsBillingProjectQuery.save(project1))
     runAndWait(rawlsBillingProjectQuery.save(project2))
@@ -114,15 +114,15 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef2, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, CreationStatuses.Ready))) {
      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef2))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef3))
     }
 
@@ -130,7 +130,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef4))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.Owner, ProjectStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.Owner, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.Owner, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(owner))
     }
 
@@ -158,7 +158,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, ProjectStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.User, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, CreationStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.User, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 
@@ -174,7 +174,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, ProjectStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
     }
 

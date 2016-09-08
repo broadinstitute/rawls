@@ -147,7 +147,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
 
       runAndWait(rawlsUserQuery.save(billingUser))
 
@@ -173,7 +173,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, ProjectStatuses.Ready))) {
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
@@ -187,7 +187,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", ProjectStatuses.Ready)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
 
       runAndWait(rawlsUserQuery.save(billingUser))
 
@@ -208,7 +208,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Creating))) {
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
@@ -229,7 +229,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Creating))) {
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
@@ -248,7 +248,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, ProjectStatuses.Ready))) {
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }

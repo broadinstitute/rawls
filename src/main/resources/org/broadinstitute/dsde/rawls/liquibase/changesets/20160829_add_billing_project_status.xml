@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="dmohs" id="add_billing_project_status">
         <addColumn tableName="BILLING_PROJECT">
-            <column name="STATUS" defaultValue="Ready" type="varchar(20)">
+            <column name="CREATION_STATUS" defaultValue="Ready" type="varchar(20)">
               <constraints nullable="false"/>
             </column>
         </addColumn>

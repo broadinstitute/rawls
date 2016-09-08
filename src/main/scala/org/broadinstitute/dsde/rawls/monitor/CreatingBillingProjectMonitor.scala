@@ -6,7 +6,7 @@ import akka.pattern._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectRecord
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, ProjectStatuses}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, CreationStatuses}
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.{CheckDone, CheckNow}
 import scala.concurrent.duration._
 
@@ -47,9 +47,9 @@ trait CreatingBillingProjectMonitor {
 
   def checkCreatingProjects()(implicit executionContext: ExecutionContext): Future[CheckDone] = {
     for {
-      creatingProjects <- datasource.inTransaction { _.rawlsBillingProjectQuery.listProjectsWithStatus(ProjectStatuses.Creating) }
+      creatingProjects <- datasource.inTransaction { _.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating) }
       readyProjects <- setUsageExportBuckets(creatingProjects)
-      updatedProjectCount <- datasource.inTransaction { _.rawlsBillingProjectQuery.updateStatus(readyProjects.map(project => RawlsBillingProjectName(project.projectName)), ProjectStatuses.Ready) }
+      updatedProjectCount <- datasource.inTransaction { _.rawlsBillingProjectQuery.updateCreationStatus(readyProjects.map(project => RawlsBillingProjectName(project.projectName)), CreationStatuses.Ready) }
     } yield {
       CheckDone(creatingProjects.size - updatedProjectCount)
     }
