@@ -189,6 +189,8 @@ trait AttributeComponent {
 
     def marshalAttribute(ownerId: OWNER_ID, namespace: Long, name: String, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
+      if (namespace != 1) println (s"Marshalling attribute $name")
+
       def marshalEmpty : Seq[T#TableElementType] = {
         //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
         Seq(marshalAttributeValue(ownerId, namespace, name, AttributeNull, Option(-1), Option(0)))
@@ -222,6 +224,7 @@ trait AttributeComponent {
     }
 
     def marshalAttributeValue(ownerId: OWNER_ID, namespace: Long, name: String, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
+      if (namespace != 1) println (s"marshalAttributeValue: $name")
       val valueBoolean = value match {
         case AttributeBoolean(b) => Option(b)
         case _ => None

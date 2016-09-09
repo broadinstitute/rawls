@@ -218,6 +218,10 @@ trait EntityComponent {
       if (entities.isEmpty) {
         DBIO.successful(Seq.empty)
       } else {
+
+        if (entities.exists(_.entityName == "sampleWithLibraryNamespaceAttribute"))
+          println(s"lookupEntitiesByNames: entities = $entities")
+
         // slick can't do a query with '(entityType, entityName) in ((?, ?), (?, ?), ...)' so we need raw sql
         EntityRecordRawSqlQuery.action(workspaceId, entities)
       }
@@ -284,6 +288,12 @@ trait EntityComponent {
     def save(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
       entities.foreach(validateEntity)
 
+      val allAttrsMap: AttributeMap = entities.flatMap(_.attributes).toMap
+      if (allAttrsMap.exists(_._1.namespace != "default")) {
+        println(s"EntityComponent.save: entities = $entities")
+        println(s"EntityComponent.save: allAttrsMap = $allAttrsMap")
+      }
+
       for {
         preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference)).map(updateEntityRecords(_, entities))
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
@@ -294,6 +304,11 @@ trait EntityComponent {
     }
 
     def updateEntityRecords(entityRecs: Seq[EntityRecord], entities: Traversable[Entity]): Seq[EntityRecord] = {
+      if (entities.exists(_.name == "sampleWithLibraryNamespaceAttribute")) {
+        println(s"updateEntityRecords: entities = $entities")
+        println(s"updateEntityRecords: entityRecs = $entityRecs")
+      }
+
       val entitiesByRef = entities.map(e => e.toReference -> e).toMap
       entityRecs.map { rec =>
         rec.copy(allAttributeValues = createAllAttributesString(entitiesByRef(AttributeEntityReference(rec.entityType, rec.name))))
@@ -309,6 +324,12 @@ trait EntityComponent {
 
     private def upsertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord], referencedAndSavingEntityRecs: Traversable[EntityRecord]) = {
       val entityIds = entityRecs.map(_.id).toSeq
+
+      val allAttrsMap: AttributeMap = entities.flatMap(_.attributes).toMap
+      //if (allAttrsMap.exists(_._1.namespace != "default"))
+      //if (allAttrsMap.exists(_._1.name == "book"))
+      if (entities.exists {e => e.name == "sampleWithLibraryNamespaceAttribute"} )
+        println(s"upsertAttributes: allAttrsMap = $allAttrsMap")
 
       def insertTempAttributes(): ReadWriteAction[Unit] = {
         attributeNamespaceQuery.getMap.flatMap { namespaceMap =>
@@ -350,9 +371,11 @@ trait EntityComponent {
     }
 
     private def insertNewEntities(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], preExistingEntityRecs: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
+      if (entities.exists(_.name == "sampleWithLibraryNamespaceAttribute")) {
+        println(s"insertNewEntities: entities = $entities")
+      }
       val existingEntityTypeNames = preExistingEntityRecs.map(rec => (rec.entityType, rec.name))
       val newEntities = entities.filterNot(e => existingEntityTypeNames.exists(_ ==(e.entityType, e.name)))
-
       val newEntityRecs = newEntities.map(e => marshalNewEntity(e, workspaceContext.workspaceId))
       batchInsertEntities(workspaceContext, newEntityRecs.toSeq)
     }
