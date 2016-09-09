@@ -15,7 +15,7 @@ case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
-case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole)
+case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus)
 case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
@@ -41,7 +41,7 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -60,6 +60,25 @@ object ProjectRoles {
   case object User extends ProjectRole
 
   val all: Set[ProjectRole] = Set(Owner, User)
+}
+
+object CreationStatuses {
+  sealed trait CreationStatus extends RawlsEnumeration[CreationStatus] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): CreationStatus = CreationStatuses.withName(name)
+  }
+
+  def withName(name: String): CreationStatus = name.toLowerCase match {
+    case "creating" => Creating
+    case "ready" => Ready
+    case _ => throw new RawlsException(s"invalid CreationStatus [${name}]")
+  }
+
+  case object Creating extends CreationStatus
+  case object Ready extends CreationStatus
+
+  val all: Set[CreationStatus] = Set(Creating, Ready)
 }
 
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
@@ -93,7 +112,16 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat4(RawlsBillingProject)
+  implicit object ProjectStatusFormat extends RootJsonFormat[CreationStatuses.CreationStatus] {
+    override def write(obj: CreationStatuses.CreationStatus): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): CreationStatuses.CreationStatus = json match {
+      case JsString(name) => CreationStatuses.withName(name)
+      case _ => throw new DeserializationException("could not deserialize project status")
+    }
+  }
+
+  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -127,7 +155,7 @@ object UserAuthJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val RawlsBillingProjectMembershipFormat = jsonFormat2(RawlsBillingProjectMembership)
+  implicit val RawlsBillingProjectMembershipFormat = jsonFormat3(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 }

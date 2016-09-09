@@ -16,6 +16,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.Try
 
 class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(groupsPrefix) {
 
@@ -70,7 +71,6 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
     "test@broadinstitute.org" -> WorkspaceAccessLevels.Owner,
-    "test_token" -> WorkspaceAccessLevels.Owner,
     "owner-access" -> WorkspaceAccessLevels.Owner,
     "write-access" -> WorkspaceAccessLevels.Write,
     "read-access" -> WorkspaceAccessLevels.Read,
@@ -125,8 +125,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def diagnosticBucketRead(userInfo: UserInfo, bucketName: String) = Future.successful(None)
 
-  val adminList = scala.collection.mutable.Set("test_token")
-  val curatorList = scala.collection.mutable.Set("test_token")
+  val adminList = scala.collection.mutable.Set("owner-access")
+  val curatorList = scala.collection.mutable.Set("owner-access")
 
   val googleGroups = Map(
     "fc-ADMINS@dev.test.firecloud.org" -> adminList,
@@ -235,4 +235,5 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
+  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(Try(Unit))
 }

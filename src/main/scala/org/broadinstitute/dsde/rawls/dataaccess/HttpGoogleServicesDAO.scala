@@ -658,15 +658,9 @@ class HttpGoogleServicesDAO(
 
       // create project usage export bucket
       bucket <- retryWhen500orGoogleError(() => {
-        val bucket = new Bucket().setName(s"${projectName.value}-usage-export")
+        val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       })
-
-      // set usage export bucket on project, it may take up to 5 minutes for the project to be ready for this but google is working to fix that
-      _ <- retryUntilSuccessOrTimeout(always)(5 seconds, 6 minutes)(() => {
-        Future(blocking(executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, new UsageExportLocation().setBucketName(bucket.getName).setReportNamePrefix("usage")))))
-      })
-
     } yield {
       // nothing
     }
@@ -686,13 +680,29 @@ class HttpGoogleServicesDAO(
     val projectNameString = projectName.value
     for {
       _ <- retryWhen500orGoogleError(() => {
-      executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
       - <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest (resMgr.projects ().delete (projectNameString))
+        executeGoogleRequest(resMgr.projects().delete(projectNameString))
       })
     } yield {
       // nothing
+    }
+  }
+
+  def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
+
+  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = {
+    val credential = getBillingServiceAccountCredential
+    val computeManager = getComputeManager(credential)
+
+    toFutureTry {
+      Future {
+        blocking {
+          val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
+          executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
+        }
+      }
     }
   }
 

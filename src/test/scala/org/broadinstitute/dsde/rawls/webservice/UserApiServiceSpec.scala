@@ -3,11 +3,15 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Future, Await, ExecutionContext}
+import scala.util.{Failure, Try}
 
 /**
  * Created by dvoet on 4/24/15.
@@ -15,7 +19,7 @@ import scala.concurrent.{Await, ExecutionContext}
 class UserApiServiceSpec extends ApiServiceSpec {
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, user: String = "test_token")(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -90,7 +94,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives
-      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("test_token"))
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
 
       assertUserMissing(services, user)
 
@@ -137,41 +141,120 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "list a user's billing projects" in withTestDataApiServices { services =>
+  it should "list a user's billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
 
-    // first add the project and user to the DB
+      // first add the project and user to the DB
 
-    val billingUser = RawlsUser(RawlsUserSubjectId("nothing"), RawlsUserEmail("test_token"))
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl")
+      val billingUser = testData.userOwner
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
 
-    runAndWait(rawlsUserQuery.save(billingUser))
+      runAndWait(rawlsUserQuery.save(billingUser))
 
-    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
+
+      Put(s"/admin/billing/register/${project1.projectName.value}") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, response.entity.asString) {
+            status
+          }
+        }
+      Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+        }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
+        }
+    }
+  }
+
+  it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
+
+      // first add the project and user to the DB
+
+      val billingUser = testData.userOwner
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
+
+      runAndWait(rawlsUserQuery.save(billingUser))
+
+      val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+      import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+      Post(s"/billing", httpJson(createRequest)) ~>
+        sealRoute(services.billingRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
+        }
+
+      val billingProjectMonitorNotDone = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val gcsDAO = new MockGoogleServicesDAO("foo") {
+          override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
         }
       }
-    Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitorNotDone.checkCreatingProjects(), Duration.Inf) }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Creating))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
         }
+
+      val billingProjectMonitorDone = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val gcsDAO = services.gcsDAO
       }
 
-    Get("/user/billing") ~>
-      sealRoute(services.userRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitorDone.checkCreatingProjects(), Duration.Inf) }
+
+      Get("/user/billing") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
+            import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
+            responseAs[Seq[RawlsBillingProjectMembership]].toSet
+          }
         }
-        assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User))) {
-          import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
-          responseAs[Seq[RawlsBillingProjectMembership]].toSet
-        }
-      }
+
+    }
   }
 
   it should "get details of a group a user is a member of" in withTestDataApiServices { services =>
@@ -253,7 +336,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return Not Found for a user who is not a curator" in withTestDataApiServices { services =>
-    Delete(s"/admin/user/role/curator/test_token") ~>
+    Delete(s"/admin/user/role/curator/owner-access") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
