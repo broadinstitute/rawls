@@ -31,6 +31,15 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, 1, "test", Option("test"), None, None, None, None, None))
   }
 
+  it should "insert library-namespace attribute" in withEmptyTestDatabase {
+    val testAttribute = AttributeString("test")
+    runAndWait(workspaceQuery.save(workspace))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName("library", "test"), testAttribute, workspaceId).map(x => runAndWait(x))
+    assertResult(1) { numRows.head }
+
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, 2, "test", Option("test"), None, None, None, None, None))
+  }
+
   it should "insert number attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeNumber(3.14159)
     runAndWait(workspaceQuery.save(workspace))
@@ -172,6 +181,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "unmarshall attribute records" in withEmptyTestDatabase {
     val attributeRecs = Seq(
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, 1, "string", Some("value"), None, None, None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, 2, "string", Some("lib-value"), None, None, None, None, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, 1, "num", None, Some(1), None, None, None, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, 1, "bool", None, None, Some(true), None, None, None)), None),
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, 1, "ref", None, None, None, Some(1), None, None)), Some(EntityRecord(0, "name", "type", workspaceId, 0, None))),
@@ -189,6 +199,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Map(
         1 -> Map(
           defaultAttributeName("string") -> AttributeString("value"),
+          AttributeName("library", "string") -> AttributeString("lib-value"),
           defaultAttributeName("num") -> AttributeNumber(1),
           defaultAttributeName("bool") -> AttributeBoolean(true),
           defaultAttributeName("ref") -> AttributeEntityReference("type", "name"),
@@ -197,7 +208,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
           defaultAttributeName("null") -> AttributeNull),
         2 -> Map(defaultAttributeName("valList") -> AttributeValueList(Seq(AttributeNumber(3), AttributeNumber(2), AttributeNumber(1))))
       )) {
-      runAndWait(workspaceAttributeQuery.unmarshalAttributes(attributeRecs))
+      val action = attributeNamespaceQuery.getMap map { namespaceMap =>
+        workspaceAttributeQuery.unmarshalAttributes(namespaceMap, attributeRecs)
+      }
+      runAndWait(action)
     }
   }
 
@@ -209,8 +223,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     )
 
     intercept[RawlsException] {
-      val x = runAndWait(workspaceAttributeQuery.unmarshalAttributes(attributeRecs))
-      println(x) // test fails without this, compiler optimization maybe?
+      val action = attributeNamespaceQuery.getMap map { namespaceMap =>
+        workspaceAttributeQuery.unmarshalAttributes(namespaceMap, attributeRecs)
+      }
+      runAndWait(action)
     }
   }
 }

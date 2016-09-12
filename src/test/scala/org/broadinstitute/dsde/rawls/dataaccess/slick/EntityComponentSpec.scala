@@ -319,6 +319,15 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
+  it should "throw an exception if trying to save attributes with invalid namespaces" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val baz = Entity("splat", "quux", Map(AttributeName("none", "nothing") -> AttributeString("bad")))
+      intercept[RawlsException] {
+        runAndWait(entityQuery.save(context, baz))
+      }
+    }
+  }
+
   it should "list entities" in withDefaultTestDatabase {
     
       withWorkspaceContext(testData.workspace) { context =>
@@ -410,33 +419,31 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   )
 
   it should "copy entities without a conflict" in withDefaultTestDatabase {
+    runAndWait(workspaceQuery.save(workspace2))
+    withWorkspaceContext(testData.workspace) { context1 =>
+      withWorkspaceContext(workspace2) { context2 =>
+        runAndWait(entityQuery.save(context2, x2))
+        runAndWait(entityQuery.save(context2, x1))
+        val x2_updated = Entity("x2", "SampleSet", Map(AttributeName("library", "child") -> AttributeEntityReference("SampleSet", "x1")))
+        runAndWait(entityQuery.save(context2, x2_updated))
 
-      runAndWait(workspaceQuery.save(workspace2))
-      withWorkspaceContext(testData.workspace) { context1 =>
-        withWorkspaceContext(workspace2) { context2 =>
-          runAndWait(entityQuery.save(context2, x2))
-          runAndWait(entityQuery.save(context2, x1))
-          val x2_updated = Entity("x2", "SampleSet", Map(defaultAttributeName("child") -> AttributeEntityReference("SampleSet", "x1")))
-          runAndWait(entityQuery.save(context2, x2_updated))
+        assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x1))
+        assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x2_updated))
 
-          assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x1))
-          assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x2_updated))
-
-          // note: we're copying FROM workspace2 INTO workspace
-          assertResult(Seq.empty) {
-            runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated)))
-          }
-
-          assertResult(Seq.empty) {
-            runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2")))
-          }
-
-          //verify it was actually copied into the workspace
-          assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
-          assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x2_updated))
+        // note: we're copying FROM workspace2 INTO workspace
+        assertResult(Seq.empty) {
+          runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated)))
         }
-      }
 
+        assertResult(Seq.empty) {
+          runAndWait(entityQuery.copyEntities(context2, context1, "SampleSet", Seq("x2")))
+        }
+
+        //verify it was actually copied into the workspace
+        assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x1))
+        assert(runAndWait(entityQuery.list(context1, "SampleSet")).toList.contains(x2_updated))
+      }
+    }
   }
 
   it should "copy entities without a conflict with a cycle" in withDefaultTestDatabase {
@@ -503,23 +510,29 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     val dottyName = Entity("dotty.name", "Sample", Map.empty)
     val dottyType = Entity("dottyType", "Sam.ple", Map.empty)
     val dottyAttr = Entity("dottyAttr", "Sample", Map(defaultAttributeName("foo.bar") -> AttributeBoolean(true)))
+    val dottyAttr2 = Entity("dottyAttr", "Sample", Map(AttributeName("library", "foo.bar") -> AttributeBoolean(true)))
 
       withWorkspaceContext(testData.workspace) { context =>
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyName)) }
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyType)) }
         intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyAttr)) }
+        intercept[RawlsException] { runAndWait(entityQuery.save(context, dottyAttr2)) }
       }
 
   }
 
   Attributable.reservedAttributeNames.foreach { reserved =>
-    it should "fail using reserved attribute name " + reserved in withDefaultTestDatabase { 
-      val e = Entity("test_sample", "Sample", Map(defaultAttributeName(reserved) -> AttributeString("foo")))
+    Seq("default", "library").foreach { namespace =>
+      it should s"fail using reserved attribute name $reserved in namespace $namespace" in withDefaultTestDatabase {
+        val e = Entity("test_sample", "Sample", Map(AttributeName(namespace, reserved) -> AttributeString("foo")))
 
         withWorkspaceContext(testData.workspace) { context =>
-          intercept[RawlsException] { runAndWait(entityQuery.save(context, e)) }
+          intercept[RawlsException] {
+            runAndWait(entityQuery.save(context, e))
+          }
         }
-
+      }
     }
   }
-}
+
+ }

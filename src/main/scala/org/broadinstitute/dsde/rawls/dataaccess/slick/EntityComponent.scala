@@ -234,9 +234,12 @@ trait EntityComponent {
     def unmarshalEntities(entityAndAttributesQuery: EntityQueryWithAttributesAndRefs): ReadAction[Iterable[Entity]] = {
       entityAndAttributesQuery.result flatMap { entityAttributeRecords =>
         val entityRecords = entityAttributeRecords.map(_._1).toSet
-        val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(entityAttributeRecords.collect {
+        val attributeRecords = entityAttributeRecords.collect {
           case (entityRec, Some((attributeRec, referenceOption))) => ((entityRec.id, attributeRec), referenceOption)
-        })
+        }
+        val attributesByEntityId = attributeNamespaceQuery.getMap map { namespaceMap =>
+          entityAttributeQuery.unmarshalAttributes(namespaceMap, attributeRecords)
+        }
 
         attributesByEntityId.map { attributes =>
           entityRecords.map { entityRec =>
@@ -262,7 +265,9 @@ trait EntityComponent {
         case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) => ((entityRec.id, attributeRec), refEntityRecOption)
       }
 
-      val attributesByEntityId = entityAttributeQuery.unmarshalAttributes[Long](entitiesWithAttributes)
+      val attributesByEntityId = attributeNamespaceQuery.getMap map { namespaceMap =>
+        entityAttributeQuery.unmarshalAttributes(namespaceMap, entitiesWithAttributes)
+      }
 
       attributesByEntityId.map { attributes =>
         allEntityRecords.map { entityRec =>
@@ -306,12 +311,12 @@ trait EntityComponent {
       val entityIds = entityRecs.map(_.id).toSeq
 
       def insertTempAttributes(): ReadWriteAction[Unit] = {
-        attributeNamespaceQuery.getMap.flatMap { attributeNamespaceMap =>
+        attributeNamespaceQuery.getMap.flatMap { namespaceMap =>
           val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
           val attributeRecsToEntityId = for {
             entity <- entities
             (attributeName, attribute) <- entity.attributes
-            attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeNamespaceMap(attributeName.namespace), attributeName.name, attribute, entityIdsByName)
+            attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeNamespaceQuery.marshalNamespace(namespaceMap, attributeName.namespace), attributeName.name, attribute, entityIdsByName)
           } yield attributeRec
 
           entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq)
@@ -462,10 +467,10 @@ trait EntityComponent {
         val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
         val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap
 
-        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+        attributeNamespaceQuery.getMap flatMap { namespaceMap =>
           val attributeRecords = entityIdByEntity flatMap { case (entityId, entity) =>
             entity.attributes.flatMap { case (attributeName, attr) =>
-              val namespaceId = attributeNamespaceMapping(attributeName.namespace)
+              val namespaceId = attributeNamespaceQuery.marshalNamespace(namespaceMap, attributeName.namespace)
               entityAttributeQuery.marshalAttribute(entityId, namespaceId, attributeName.name, attr, entityIdsByRef)
             }
           }

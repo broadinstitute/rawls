@@ -505,6 +505,50 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 on update workspace library-namespace attributes" in withTestDataApiServices { services =>
+    val name = AttributeName("library", "whatever")
+    val attr: Attribute = AttributeString("something")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(attr)) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
+      }
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
+      }
+  }
+
+  it should "return 400 on update workspace attributes when using an invalid namespace" in withTestDataApiServices { services =>
+    val name = AttributeName("invalid", "nope")
+    val attr: Attribute = AttributeString("nothing")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(s"Attribute namespace ${name.namespace} not found"))
+      }
+  }
+
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(defaultAttributeName("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
@@ -1036,8 +1080,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val newAtts = Map(
-      defaultAttributeName("number") -> AttributeNumber(11),    // replaces an existing attribute
-      defaultAttributeName("another") -> AttributeNumber(12)    // adds a new attribute
+      AttributeName("default", "number") -> AttributeNumber(11),    // replaces an existing attribute
+      AttributeName("library", "another") -> AttributeNumber(12)    // adds a new attribute
     )
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", None, newAtts)

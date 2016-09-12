@@ -558,7 +558,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val entityType = "page_entity"
     val entities = Random.shuffle(for (i <- 1 to numEntities) yield Entity(s"entity_$i", entityType, Map(
       defaultAttributeName("number") -> AttributeNumber(Math.random()),
-      defaultAttributeName("random") -> AttributeString(UUID.randomUUID().toString),
+      AttributeName("library", "random") -> AttributeString(UUID.randomUUID().toString),
       defaultAttributeName("sparse") -> (if (i % 2 == 0) AttributeNull else AttributeNumber(i.toDouble)),
       defaultAttributeName("vocab1") -> AttributeString(vocab1Strings(i % vocab1Strings.size)),
       defaultAttributeName("vocab2") -> AttributeString(vocab2Strings(i % vocab2Strings.size)),
@@ -802,7 +802,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "random"),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
-          paginationTestData.entities.sortBy(_.attributes(defaultAttributeName("random")).asInstanceOf[AttributeString].value).take(defaultQuery.pageSize))) {
+          paginationTestData.entities.sortBy(_.attributes(AttributeName("library", "random")).asInstanceOf[AttributeString].value).take(defaultQuery.pageSize))) {
 
           responseAs[EntityQueryResponse]
         }
@@ -891,7 +891,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "random", sortDirection = Descending),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
-          paginationTestData.entities.sortBy(_.attributes(defaultAttributeName("random")).asInstanceOf[AttributeString].value).reverse.take(defaultQuery.pageSize))) {
+          paginationTestData.entities.sortBy(_.attributes(AttributeName("library", "random")).asInstanceOf[AttributeString].value).reverse.take(defaultQuery.pageSize))) {
 
           responseAs[EntityQueryResponse]
         }

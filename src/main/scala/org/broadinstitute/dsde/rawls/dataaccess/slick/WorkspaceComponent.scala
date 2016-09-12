@@ -6,9 +6,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.{Read, Write}
-import slick.driver.JdbcDriver
-import slick.profile.FixedSqlAction
+import slick.dbio.Effect.Read
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
@@ -119,11 +117,12 @@ trait WorkspaceComponent {
         val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
         val entitiesToLookup = (entityRefs ++ entityRefListMembers)
 
-        attributeNamespaceQuery.getMap flatMap { attributeNamespaceMapping =>
+        attributeNamespaceQuery.getMap flatMap { namespaceMap =>
           entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
             val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
             val workspaceAttrRecs = workspace.attributes.toSeq.flatMap { case (attributeName, attribute) =>
-              workspaceAttributeTempQuery.marshalAttribute(workspaceId, attributeNamespaceMapping(attributeName.namespace), attributeName.name, attribute, entityIdsByRef)
+              val namespaceId = attributeNamespaceQuery.marshalNamespace(namespaceMap, attributeName.namespace)
+              workspaceAttributeTempQuery.marshalAttribute(workspaceId, namespaceId, attributeName.name, attribute, entityIdsByRef)
             }
             workspaceAttributeTempQuery.batchInsertAttributes(workspaceAttrRecs)
           }
@@ -374,12 +373,13 @@ trait WorkspaceComponent {
         workspaceRecs <- lookup.result
         workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result
         workspaceAccessGroupRecs <- workspaceAccessQuery.filter(_.workspaceId.in(lookup.map(_.id))).result
-        attributeMap <- workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
+        namespaceMap <- attributeNamespaceQuery.getMap
       } yield {
+        val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(namespaceMap, workspaceAttributeRecs)
         val workspaceGroupsByWsId = workspaceAccessGroupRecs.groupBy(_.workspaceId).map{ case(workspaceId, accessRecords) => (workspaceId, unmarshalRawlsGroupRefs(accessRecords)) }
         workspaceRecs.map { workspaceRec =>
           val workspaceGroups = workspaceGroupsByWsId.getOrElse(workspaceRec.id, WorkspaceGroups(Map.empty[WorkspaceAccessLevel, RawlsGroupRef], Map.empty[WorkspaceAccessLevel, RawlsGroupRef]))
-          unmarshalWorkspace(workspaceRec, attributeMap.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.realmAcls)
+          unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.realmAcls)
         }
       }
     }

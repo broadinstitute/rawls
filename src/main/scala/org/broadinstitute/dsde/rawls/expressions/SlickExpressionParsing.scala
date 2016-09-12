@@ -201,13 +201,13 @@ trait SlickExpressionParser extends JavaTokenParsers {
       attribute <- workspaceAttributeQuery if attribute.ownerId === workspace.id && attribute.name === attrName.name && attribute.namespace === namespace.id
     } yield (workspace.id, attribute)
 
-    attributeNamespaceQuery.getMap flatMap { namespaces =>
+    attributeNamespaceQuery.getMap flatMap { namespaceMap =>
       wsIdAndAttributeQuery.result.map { wsIdAndAttributes =>
         // the query restricts all results to have workspace id === context.workspaceContext.workspaceId
         // unmarshalAttributes requires a structure of ((ws id, attribute rec), option[entity rec]) where
         // the optional entity rec is used for references. Since we know we are not dealing with a reference here
         // as this is the attribute final func, we can pass in None.
-        val attributesOption = workspaceAttributeQuery.unmarshalAttributes(namespaces, wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
+        val attributesOption = workspaceAttributeQuery.unmarshalAttributes(namespaceMap, wsIdAndAttributes.map((_, None))).get(context.workspaceContext.workspaceId)
         val wsExprResult = attributesOption.map { attributes => Seq(attributes.getOrElse(attrName, AttributeNull)) }.getOrElse(Seq.empty)
 
         //Return the value of the expression once for each entity we wanted to evaluate this expression against!
@@ -250,7 +250,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === namespace.id
     } yield (rootEntityName, entity.name, attribute)).result
 
-    attributeNamespaceQuery.getMap flatMap { namespaces =>
+    attributeNamespaceQuery.getMap flatMap { namespaceMap =>
       attributeForNameQuery.map { entityWithAttributeRecs =>
         val byRootEnt: Map[String, Seq[(String, String, EntityAttributeRecord)]] = entityWithAttributeRecs groupBy { case (rootEntity, lastEntity, attribRecord) => rootEntity }
 
@@ -258,7 +258,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
           // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where
           // the optional entity rec is used for references. Since we know we are not dealing with a reference here
           // as this is the attribute final func, we can pass in None.
-          val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(namespaces, attrs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
+          val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(namespaceMap, attrs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
 
           val namedAttributesOnlyByEntityId = attributesByEntityId.map({ case (k, v) => k -> v.getOrElse(attrName, AttributeNull) }).toSeq
           // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query

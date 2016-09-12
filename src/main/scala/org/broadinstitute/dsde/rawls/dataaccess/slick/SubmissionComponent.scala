@@ -248,7 +248,7 @@ trait SubmissionComponent {
       // are both one-to-many, this would cause a cartesian product
       val inputResolutions = WorkflowAndInputResolutionRawSqlQuery.action(submissionId)
 
-      attributeNamespaceQuery.getMap flatMap { namespaces =>
+      attributeNamespaceQuery.getMap flatMap { namespaceMap =>
         inputResolutions.flatMap { resolutions =>
           workflows.map { recs =>
 
@@ -278,7 +278,7 @@ trait SubmissionComponent {
                   case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
                     (resolution, attribute)
                 }
-                workflowQuery.unmarshalOneWorkflowInputs(namespaces, resolutions, workflowId)
+                workflowQuery.unmarshalOneWorkflowInputs(namespaceMap, resolutions, workflowId)
 
               }.getOrElse(Seq.empty)
 

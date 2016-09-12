@@ -323,15 +323,12 @@ trait AttributeComponent {
       }
     }
 
-    def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): ReadAction[Map[ID, AttributeMap]] = {
-      attributeNamespaceQuery.getMap map { namespaceMap =>
-        unmarshalAttributes(namespaceMap, allAttributeRecsWithRef)
-      }
-    }
-
-    def unmarshalAttributes[ID](attributeNamespaces: Map[String, Long], allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
+    def unmarshalAttributes[ID](namespaceMap: Map[String, Long], allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
-        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attributeNamespaces.map(_.swap).get(attrRec.namespace).get, attrRec.name) }.map {
+        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) =>
+          val namespaceId = attributeNamespaceQuery.unmarshalNamespace(namespaceMap, attrRec.namespace)
+          AttributeName(namespaceId, attrRec.name)
+        }.map {
           case (attrName, attributeRecsWithRefForNameWithDupes) =>
             val attributeRecsWithRefForName: Set[(RECORD, Option[EntityRecord])] = attributeRecsWithRefForNameWithDupes.map {
               case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec)
@@ -346,7 +343,7 @@ trait AttributeComponent {
               unmarshalValue(attributeRecsWithRefForName.head._1)
             }
             attrName -> unmarshalled
-          }
+        }
       }
     }
 
