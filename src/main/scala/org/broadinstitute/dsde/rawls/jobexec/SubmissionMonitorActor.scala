@@ -19,6 +19,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import akka.pattern._
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -296,12 +298,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
 
-      val attributes = outputExpressions.map { case (outputName, attributeName) =>
+      val attributes = outputExpressions.map { case (outputName, delimitedAttributeName) =>
         Try {
           outputs.get(outputName) match {
             case None => throw new RawlsException(s"output named ${outputName} does not exist")
             case Some(Right(uot: UnsupportedOutputType)) => throw new RawlsException(s"output named ${outputName} is not a supported type, received json u${uot.json.compactPrint}")
-            case Some(Left(output)) => attributeName.value -> output
+            case Some(Left(output)) => AttributeName.fromDelimitedName(delimitedAttributeName) -> output
           }
         }
       }
@@ -315,12 +317,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
     }
   }
 
-  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: Map[String, Attribute]): (Option[Entity], Option[Workspace]) = {
+  def updateEntityAndWorkspace(entity: Entity, workspace: Workspace, workflowOutputs: AttributeMap): (Option[Entity], Option[Workspace]) = {
     //Partition outputs by whether their attributes are entity attributes (begin with "this.") or workspace ones (implicitly; begin with "workspace.")
     //This assumption (that it's either "this." or "workspace.") will be guaranteed by checking of the method config when it's imported; see DSDEEPB-1603.
-    val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.startsWith("this.") })
-    val entityAttributes = partitionEntity.map({ case (k, v) => (k.stripPrefix("this."), v) })
-    val workspaceAttributes = partitionWorkspace.map({ case (k, v) => (k.stripPrefix("workspace."), v) })
+    val (partitionEntity, partitionWorkspace) = workflowOutputs.partition({ case (k, v) => k.name.startsWith("this.") })
+    val entityAttributes = partitionEntity.map({ case (k, v) => (k.copy(name = k.name.stripPrefix("this.")), v) })
+    val workspaceAttributes = partitionWorkspace.map({ case (k, v) => (k.copy(name = k.name.stripPrefix("workspace.")), v) })
 
     val updatedEntity = if (entityAttributes.isEmpty) None else Option(entity.copy(attributes = entity.attributes ++ entityAttributes))
     val updatedWorkspace = if (workspaceAttributes.isEmpty) None else Option(workspace.copy(attributes = workspace.attributes ++ workspaceAttributes))

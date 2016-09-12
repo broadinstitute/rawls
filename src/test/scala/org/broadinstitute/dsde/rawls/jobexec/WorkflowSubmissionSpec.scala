@@ -190,7 +190,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
       val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
       Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
 
-      assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
+      assertResult(workflowIds.map(_ => s"""{"${testData.inputResolutions.head.inputName.name}":"${testData.inputResolutions.head.value.get.asInstanceOf[AttributeString].value}"}""")) {
         mockExecCluster.getDefaultMember.asInstanceOf[MockExecutionServiceDAO].submitInput
       }
 
@@ -225,12 +225,12 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         AttributeEntityReference("Sample", "sample4"),
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6"))
-      val sset = Entity("testset6", "SampleSet", Map( "samples" -> AttributeEntityReferenceList(samples)))
+      val sset = Entity("testset6", "SampleSet", Map(defaultAttributeName("samples") -> AttributeEntityReferenceList(samples)))
 
       runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
 
       def inputResolutions(sampleName: String) = {
-        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), "three_step.cgrep.pattern"))
+        Seq(SubmissionValidationValue(Option(AttributeString(sampleName)), Option("message"), defaultAttributeName("three_step.cgrep.pattern")))
       }
 
       val thisSubmission = createTestSubmission(testData.workspace, testData.methodConfigValid, sset, testData.userOwner,
@@ -319,7 +319,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     withWorkspaceContext(testData.workspace) { ctx =>
 
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
-        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), defaultAttributeName("test_input_name3")))
 
       val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
         Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),

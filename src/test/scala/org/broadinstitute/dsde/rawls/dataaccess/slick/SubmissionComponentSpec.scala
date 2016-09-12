@@ -16,9 +16,15 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
   private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
     Seq(testData.sample1, testData.sample2, testData.sample3), Map(
-      testData.sample1 -> Seq(SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value1b")), Option("message1b"), "test_input_name2")),
-      testData.sample2 -> Seq(SubmissionValidationValue(Option(AttributeString("value2a")), Option("message2a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value2b")), Option("message2b"), "test_input_name2")),
-      testData.sample3 -> Seq(SubmissionValidationValue(Option(AttributeString("value3a")), Option("message3a"), "test_input_name"), SubmissionValidationValue(Option(AttributeString("value3b")), Option("message3b"), "test_input_name2"))),
+      testData.sample1 -> Seq(
+        SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), defaultAttributeName("test_input_name")),
+        SubmissionValidationValue(Option(AttributeString("value1b")), Option("message1b"), defaultAttributeName("test_input_name2"))),
+      testData.sample2 -> Seq(
+        SubmissionValidationValue(Option(AttributeString("value2a")), Option("message2a"), defaultAttributeName("test_input_name")),
+        SubmissionValidationValue(Option(AttributeString("value2b")), Option("message2b"), defaultAttributeName("test_input_name2"))),
+      testData.sample3 -> Seq(
+        SubmissionValidationValue(Option(AttributeString("value3a")), Option("message3a"), defaultAttributeName("test_input_name")),
+        SubmissionValidationValue(Option(AttributeString("value3b")), Option("message3b"), defaultAttributeName("test_input_name2")))),
     Seq(testData.sample4, testData.sample5, testData.sample6), Map(
       testData.sample4 -> testData.inputResolutions2,
       testData.sample5 -> testData.inputResolutions2,
@@ -34,18 +40,18 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       testData.sample6 -> testData.inputResolutions2))
 
   val inputResolutionsList = Seq(SubmissionValidationValue(Option(
-    AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+    AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), defaultAttributeName("test_input_name3")))
   private val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
     Seq.empty, Map.empty)
 
   val inputResolutionsListEmpty = Seq(SubmissionValidationValue(Option(
-    AttributeValueList(Seq())), Option("message4"), "test_input_name4"))
+    AttributeValueList(Seq())), Option("message4"), defaultAttributeName("test_input_name4")))
   private val submissionListEmpty = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsListEmpty),
     Seq.empty, Map.empty)
 
-  val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeEmptyList), Option("message4"), "test_input_name4"))
+  val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeEmptyList), Option("message4"), defaultAttributeName("test_input_name4")))
   private val submissionAttrEmptyList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsAttrEmptyList),
     Seq.empty, Map.empty)
@@ -216,7 +222,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     withWorkspaceContext(testData.workspace) { ctx =>
 
       val inputResolutionsList = Seq(SubmissionValidationValue(Option(
-        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
+        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), defaultAttributeName("test_input_name3")))
 
       val submissionList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
         Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsList),
