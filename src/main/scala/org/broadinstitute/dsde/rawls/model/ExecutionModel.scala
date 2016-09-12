@@ -64,6 +64,7 @@ case class ExecutionServiceWorkflowOptions(
   account_name: String,
   refresh_token: String,
   auth_bucket: String,
+  workflow_log_dir: String,
   defaultRuntimeOptions: Option[JsValue]
 )
 
@@ -258,7 +259,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat6(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat7(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
