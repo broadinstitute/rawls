@@ -3914,7 +3914,7 @@ definitions:
         description: The type of the entity
       attributes:
         type: ''
-        description: AttributeMap
+        description: Map[String,Attribute]
 
   AttributeEntityReference:
     description: ''
@@ -4236,7 +4236,7 @@ definitions:
         description: The user who created the workspace
       attributes:
         $ref: ''
-        description: AttributeMap
+        description: Map[String, Attribute]
       accessLevels:
          $ref: ''
          description: Map[String, RawlsGroupRef]
