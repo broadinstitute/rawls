@@ -53,4 +53,84 @@
         </sql>
     </changeSet>
 
+    <!--
+    the goal here is only to modify the unique indices
+    however, we need to drop ALL foreign keys involving column X before dropping ANY index involving column X
+    -->
+
+    <changeSet id="unique_entity_attribute_namespace" author="thibault" logicalFilePath="dummy">
+        <dropAllForeignKeyConstraints baseTableName="ENTITY_ATTRIBUTE" />
+
+        <dropIndex tableName="ENTITY_ATTRIBUTE" indexName="UNQ_ENTITY_ATTRIBUTE" />
+
+        <addForeignKeyConstraint constraintName="FK_ENT_ATTRIBUTE_ENTITY_REF"
+                                 baseTableName="ENTITY_ATTRIBUTE" baseColumnNames="value_entity_ref"
+                                 referencedTableName="ENTITY" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_ATTRIBUTE_PARENT_ENTITY"
+                                 baseTableName="ENTITY_ATTRIBUTE" baseColumnNames="owner_id"
+                                 referencedTableName="ENTITY" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_ENT_ATTRIBUTE_NAMESPACE_ID"
+                                 baseTableName="ENTITY_ATTRIBUTE" baseColumnNames="namespace"
+                                 referencedTableName="ATTRIBUTE_NAMESPACE" referencedColumnNames="ID" />
+
+        <createIndex tableName="ENTITY_ATTRIBUTE" indexName="UNQ_ENTITY_ATTRIBUTE">
+            <column name="owner_id" />
+            <column name="namespace" />
+            <column name="name" />
+            <column name="list_index" />
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="unique_workspace_attribute_namespace_2" author="thibault" logicalFilePath="dummy">
+        <dropAllForeignKeyConstraints baseTableName="WORKSPACE_ATTRIBUTE" />
+
+        <dropIndex tableName="WORKSPACE_ATTRIBUTE" indexName="UNQ_WORKSPACE_ATTRIBUTE" />
+
+        <addForeignKeyConstraint constraintName="FK_WS_ATTRIBUTE_ENTITY_REF"
+                                 baseTableName="WORKSPACE_ATTRIBUTE" baseColumnNames="value_entity_ref"
+                                 referencedTableName="ENTITY" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_ATTRIBUTE_PARENT_WORKSPACE"
+                                 baseTableName="WORKSPACE_ATTRIBUTE" baseColumnNames="owner_id"
+                                 referencedTableName="WORKSPACE" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_WS_ATTRIBUTE_NAMESPACE_ID"
+                                 baseTableName="WORKSPACE_ATTRIBUTE" baseColumnNames="namespace"
+                                 referencedTableName="ATTRIBUTE_NAMESPACE" referencedColumnNames="ID" />
+
+        <createIndex tableName="WORKSPACE_ATTRIBUTE" indexName="UNQ_WORKSPACE_ATTRIBUTE">
+            <column name="owner_id" />
+            <column name="namespace" />
+            <column name="name" />
+            <column name="list_index" />
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="unique_submission_attribute_namespace" author="thibault" logicalFilePath="dummy">
+        <dropAllForeignKeyConstraints baseTableName="SUBMISSION_ATTRIBUTE" />
+
+        <dropIndex tableName="SUBMISSION_ATTRIBUTE" indexName="UNQ_SUBMISSION_ATTRIBUTE" />
+
+        <addForeignKeyConstraint constraintName="FK_SUB_ATTRIBUTE_ENTITY_REF"
+                                 baseTableName="SUBMISSION_ATTRIBUTE" baseColumnNames="value_entity_ref"
+                                 referencedTableName="ENTITY" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_ATTRIBUTE_PARENT_SUB_VALIDATION"
+                                 baseTableName="SUBMISSION_ATTRIBUTE" baseColumnNames="owner_id"
+                                 referencedTableName="SUBMISSION_VALIDATION" referencedColumnNames="id" />
+
+        <addForeignKeyConstraint constraintName="FK_SUB_ATTRIBUTE_NAMESPACE_ID"
+                                 baseTableName="SUBMISSION_ATTRIBUTE" baseColumnNames="namespace"
+                                 referencedTableName="ATTRIBUTE_NAMESPACE" referencedColumnNames="ID" />
+
+        <createIndex tableName="SUBMISSION_ATTRIBUTE" indexName="UNQ_SUBMISSION_ATTRIBUTE">
+            <column name="owner_id" />
+            <column name="namespace" />
+            <column name="name" />
+            <column name="list_index" />
+        </createIndex>
+    </changeSet>
+
 </databaseChangeLog>

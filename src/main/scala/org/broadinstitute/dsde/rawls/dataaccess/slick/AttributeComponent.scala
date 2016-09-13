@@ -90,7 +90,7 @@ trait AttributeComponent {
   class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
-    def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, name, listIndex), unique = true)
+    def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
     def entityRef = foreignKey("FK_ENT_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def parentEntity = foreignKey("FK_ATTRIBUTE_PARENT_ENTITY", ownerId, entityQuery)(_.id)
@@ -100,7 +100,7 @@ trait AttributeComponent {
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
 
-    def uniqueIdx = index("UNQ_WORKSPACE_ATTRIBUTE", (ownerId, name, listIndex), unique = true)
+    def uniqueIdx = index("UNQ_WORKSPACE_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
     def entityRef = foreignKey("FK_WS_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def workspace = foreignKey("FK_ATTRIBUTE_PARENT_WORKSPACE", ownerId, workspaceQuery)(_.id)
@@ -110,7 +110,7 @@ trait AttributeComponent {
   class SubmissionAttributeTable(tag: Tag) extends AttributeTable[Long, SubmissionAttributeRecord](tag, "SUBMISSION_ATTRIBUTE") {
     def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
 
-    def uniqueIdx = index("UNQ_SUBMISSION_ATTRIBUTE", (ownerId, name, listIndex), unique = true)
+    def uniqueIdx = index("UNQ_SUBMISSION_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
     def entityRef = foreignKey("FK_SUB_ATTRIBUTE_ENTITY_REF", valueEntityRef, entityQuery)(_.id.?)
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
