@@ -489,7 +489,10 @@ trait WorkflowComponent {
           //recast to option
           case (valRec, attrRec) => (valRec, Option(attrRec))
         }
-        unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
+        if(!submissionRecs.isEmpty) {
+          unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
+        }
+        else Seq.empty
       }
     }
 
