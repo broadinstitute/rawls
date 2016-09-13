@@ -14,7 +14,8 @@ case class MethodConfigurationRecord(id: Long,
                                      rootEntityType: String,
                                      methodNamespace: String,
                                      methodName: String,
-                                     methodVersion: Int)
+                                     methodVersion: Int,
+                                     deleted: Boolean)
 
 case class MethodConfigurationInputRecord(methodConfigId: Long, id: Long, key: String, value: String)
 
@@ -36,8 +37,9 @@ trait MethodConfigurationComponent {
     def methodNamespace = column[String]("METHOD_NAMESPACE")
     def methodName = column[String]("METHOD_NAME")
     def methodVersion = column[Int]("METHOD_VERSION")
+    def deleted = column[Boolean]("DELETED")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, deleted) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name), unique = true)
@@ -240,7 +242,7 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion)
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, false)
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
