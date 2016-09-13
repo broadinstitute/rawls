@@ -40,7 +40,7 @@ trait MethodConfigurationComponent {
     def methodVersion = column[Int]("METHOD_VERSION")
     def deleted = column[Option[Boolean]]("DELETED")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, deleted) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name), unique = true)
@@ -151,20 +151,11 @@ trait MethodConfigurationComponent {
         findById(id).delete
     }
 
-    /*
-        def hideMethodConfigurationAction(id: Long): ReadWriteAction[Int] = {
-          findById(id).map(_.deleted).update(Option(true)) andThen
-          findById(id).map(_.methodName).update(_.methodName + "-DELETED-")
-        }
-
-        def deleteMethodConfig(id)
-        */
-
     object HideMethodConfigurationQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver
 
       def hideAction(methodConfigId: Long) = {
-       val now = DateTime.now().toString
+       val now = DateTime.now.toString("yyyy-MM-dd HH:mm:ss")
 
         sql"""UPDATE METHOD_CONFIG mc
                 SET mc.DELETED = 1, mc.NAMESPACE = mcNAMESPACE + "-DELETED-" + $now
