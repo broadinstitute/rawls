@@ -80,19 +80,29 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "deleting method configs should hide them" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    assertResult(Option(testData.methodConfig3.name)) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name)).map(_.name)
+    //get the to-be-deleted method config record
+    val method = runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+
+    //assert that the result is unique (only one method config was returned)
+    assertResult(1) {
+      method.length
     }
 
-    //delete the method config
+    //assert that the name is what we think it is
+    assertResult(Option(testData.methodConfig3.name)) {
+      method.map(_.name)
+    }
+
+    //delete (or hide) the method config
     runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
 
-    val deletedMethod = runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+    //load the deleted/hidden method config
+    val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
-    //Check that the hidden method has an updated name
+    //Check that the deleted method has an updated name
     assert(deletedMethod.map(_.name).contains(testData.methodConfig3.name + "-deleted-"))
 
-    //Check that the hidden method has the deleted field set to true
+    //Check that the deleted method has the deleted field set to true
     assertResult(1) {
       deletedMethod.map(_.deleted)
     }
