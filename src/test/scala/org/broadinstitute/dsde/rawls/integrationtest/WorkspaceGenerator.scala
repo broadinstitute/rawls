@@ -148,7 +148,7 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
       generateMethodConfigParameters(nParamsEachType),
-      MethodRepoMethod("bar-config", "baz", 1)) // don't care about method config details
+      MethodRepoMethod("bar-config", "baz", 1), false) // don't care about method config details
   }
 
   def updateParameterSet(params: Map[String, AttributeString], nDelete: Int, nModify: Int, nCreate: Int) = {
@@ -169,7 +169,7 @@ class WorkspaceGenerator(workspaceNamespace: String, workspaceName: String) {
       updateParameterSet(config.prerequisites, nDelete, nModify, nCreate),
       updateParameterSet(config.inputs, nDelete, nModify, nCreate),
       updateParameterSet(config.outputs, nDelete, nModify, nCreate),
-      config.methodRepoMethod
+      config.methodRepoMethod, false
     )
   }
 

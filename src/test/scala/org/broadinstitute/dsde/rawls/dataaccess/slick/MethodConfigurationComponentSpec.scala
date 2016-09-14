@@ -25,7 +25,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2)
+      MethodRepoMethod("ns-config", "meth2", 2),
+      false
     )
 
     runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfig2))
@@ -75,34 +76,23 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  /*
-   * test disabled until we decide what to do with submissions that reference deleted configs
 
   it should "deleting method configs should hide them" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    assertResult(Option("testConfig1")) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1")).map(_.name)
-    }
-
-    runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
-
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
-    }
-  }
-  */
-  it should "delete method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     assertResult(Option(testData.methodConfig3.name)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name)).map(_.name)
     }
 
+    //delete the method config
     runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
 
     val deletedMethod = runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+
+    //Check that the hidden method has an updated name
     assert(deletedMethod.map(_.name).contains(testData.methodConfig3.name + "-deleted-"))
+
+    //Check that the hidden method has the deleted field set to true
     assertResult(1) {
       deletedMethod.map(_.deleted)
     }

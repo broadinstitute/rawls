@@ -36,7 +36,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      MethodRepoMethod(testData.wsName.namespace, "method-a", 1), false)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -56,7 +56,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), inputs, outputs,
-      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+      MethodRepoMethod(testData.wsName.namespace, "method-a", 1), false)
 
     val expectedSuccessInputs = Seq("good_in")
     val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: string matching regex `^\\\".*\\\"$' expected but `d' found")
@@ -84,8 +84,8 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   // DSDEEPB-1433
   it should "successfully create two method configs with the same name but different namespaces" in withTestDataApiServices { services =>
-    val mc1 = MethodConfiguration("ws1", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    val mc2 = MethodConfiguration("ws2", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+    val mc1 = MethodConfiguration("ws1", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1), false)
+    val mc2 = MethodConfiguration("ws2", "testConfig", "samples", Map(), Map(), Map(), MethodRepoMethod(testData.wsName.namespace, "method-a", 1), false)
 
     create(mc1)
     create(mc2)
@@ -403,7 +403,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       check {
         val methodConfiguration = MethodConfiguration("namespace","name","rootEntityType",Map(), Map("three_step.cgrep.pattern" -> AttributeString("expression")),
           Map("three_step.ps.procs"->AttributeString("expression"),"three_step.cgrep.count"->AttributeString("expression"), "three_step.wc.count"->AttributeString("expression")),
-          MethodRepoMethod("dsde","three_step",1))
+          MethodRepoMethod("dsde","three_step",1), false)
         assertResult(methodConfiguration) { responseAs[MethodConfiguration] }
         assertResult(StatusCodes.OK) { status }
       }
