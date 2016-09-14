@@ -173,18 +173,6 @@ trait WorkflowComponent {
       } yield workflows
     }
 
-    def saveInputResolutions(workspaceContext: SlickWorkspaceContext, values: Seq[SubmissionValidationValue], parentId: WorkflowId) = {
-        DBIO.seq(values.map { case (v) =>
-          v.value match {
-            case None => (submissionValidationQuery += marshalInputResolution(v, parentId.id))
-            case Some(attr) =>
-              ((submissionValidationQuery returning submissionValidationQuery.map(_.id)) += marshalInputResolution(v, parentId.id)) flatMap { validationId =>
-                DBIO.sequence(submissionAttributeQuery.insertAttributeRecords(validationId, v.inputName, attr, workspaceContext.workspaceId))
-              }
-          }
-        }: _*)
-    }
-
     def saveMessages(messages: Seq[AttributeString], workflowId: Long) = {
       workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
     }
@@ -489,7 +477,10 @@ trait WorkflowComponent {
           //recast to option
           case (valRec, attrRec) => (valRec, Option(attrRec))
         }
-        unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
+        if(!submissionRecs.isEmpty) {
+          unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
+        }
+        else Seq.empty
       }
     }
 
