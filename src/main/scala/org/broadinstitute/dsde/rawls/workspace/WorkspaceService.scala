@@ -977,7 +977,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.methodConfigurationQuery.list(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
+        dataAccess.methodConfigurationQuery.listActive(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
       }
     }
 

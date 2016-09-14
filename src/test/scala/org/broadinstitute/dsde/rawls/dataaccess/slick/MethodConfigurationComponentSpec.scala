@@ -104,7 +104,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
     assert(deletedMethod.map(_.name).contains(testData.methodConfig3.name + "-deleted-"))
     assertResult(1) {
-      deletedMethod.map(_.name)
+      deletedMethod.map(_.deleted)
     }
   }
 }
