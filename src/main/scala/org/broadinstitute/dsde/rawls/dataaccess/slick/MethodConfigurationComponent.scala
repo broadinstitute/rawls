@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
+import org.joda.time.DateTime
 
 case class MethodConfigurationRecord(id: Long,
                                      namespace: String,
@@ -135,12 +136,13 @@ trait MethodConfigurationComponent {
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) => {
-          deleteMethodConfigurationAction(methodConfigRec.id)
+          DeleteMethodConfigurationQuery.hideAction(methodConfigRec.id)
         } map { count =>
           count > 0
         }
       }
     }
+
 
     object DeleteMethodConfigurationQuery extends RawSqlQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver
@@ -153,6 +155,14 @@ trait MethodConfigurationComponent {
                 inner join METHOD_CONFIG as mc on mc.id=t.method_config_id
                 where mc.workspace_id=$workspaceId"""
         })
+      }
+
+      def hideAction(methodId: Long) = {
+        val now = DateTime.now.toString("yyyy-MM-dd_HH:mm:ss")
+        sqlu"""UPDATE METHOD_CONFIG mc
+            SET mc.DELETED = 1, mc.NAMESPACE = mcNAMESPACE + "-DELETED-" + $now
+            WHERE mc.ID = $methodId AND mc.DELETE = 0;"""
+
       }
     }
 

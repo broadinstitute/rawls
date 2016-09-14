@@ -77,8 +77,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   /*
    * test disabled until we decide what to do with submissions that reference deleted configs
-   */
-  ignore should "*DISABLED* delete method configs" in withDefaultTestDatabase {
+
+  it should "deleting method configs should hide them" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     assertResult(Option("testConfig1")) {
@@ -91,7 +91,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
     }
   }
-
+  */
   it should "delete method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
@@ -101,8 +101,10 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
 
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+    val deletedMethod = runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+    assert(deletedMethod.map(_.name).contains(testData.methodConfig3.name + "-deleted-"))
+    assertResult(1) {
+      deletedMethod.map(_.name)
     }
   }
 }
