@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
+import org.joda.time.DateTime
 
 case class MethodConfigurationRecord(id: Long,
                                      namespace: String,
@@ -14,7 +15,8 @@ case class MethodConfigurationRecord(id: Long,
                                      rootEntityType: String,
                                      methodNamespace: String,
                                      methodName: String,
-                                     methodVersion: Int)
+                                     methodVersion: Int,
+                                     deleted: Boolean)
 
 case class MethodConfigurationInputRecord(methodConfigId: Long, id: Long, key: String, value: String)
 
@@ -36,8 +38,9 @@ trait MethodConfigurationComponent {
     def methodNamespace = column[String]("METHOD_NAMESPACE")
     def methodName = column[String]("METHOD_NAME")
     def methodVersion = column[Int]("METHOD_VERSION")
+    def deleted = column[Option[Boolean]]("DELETED")
 
-    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
+    def * = (id, namespace, name, workspaceId, rootEntityType, methodNamespace, methodName, methodVersion, deleted) <> (MethodConfigurationRecord.tupled, MethodConfigurationRecord.unapply)
 
     def workspace = foreignKey("FK_MC_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def namespaceNameIdx = index("IDX_CONFIG", (workspaceId, namespace, name), unique = true)
@@ -129,6 +132,7 @@ trait MethodConfigurationComponent {
       findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
     }
 
+    // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
@@ -140,6 +144,26 @@ trait MethodConfigurationComponent {
       }
     }
 
+    def deleteMethodConfigurationAction(id: Long): ReadWriteAction[Int] = {
+      findInputsByConfigId(id).delete andThen
+        findOutputsByConfigId(id).delete andThen
+        findPrereqsByConfigId(id).delete andThen
+        findById(id).delete
+    }
+
+    object HideMethodConfigurationQuery {
+      val driver: JdbcDriver = MethodConfigurationComponent.this.driver
+
+      def hideAction(methodConfigId: Long) = {
+       val now = DateTime.now.toString("yyyy-MM-dd HH:mm:ss")
+
+        sql"""UPDATE METHOD_CONFIG mc
+                SET mc.DELETED = 1, mc.NAMESPACE = mcNAMESPACE + "-DELETED-" + $now
+                WHERE mc.ID = $methodConfigId AND (mc.DELETED = 0 OR mc.DELETE IS NULL);"""
+      }
+    }
+
+    // Delete a Method completely from the DB - used when deleting a workspace
     object DeleteMethodConfigurationQuery extends RawSqlQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver
 
@@ -154,16 +178,8 @@ trait MethodConfigurationComponent {
       }
     }
 
-
     def list(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
       findByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
-    }
-
-    def deleteMethodConfigurationAction(id: Long): ReadWriteAction[Int] = {
-      findInputsByConfigId(id).delete andThen
-        findOutputsByConfigId(id).delete andThen
-        findPrereqsByConfigId(id).delete andThen
-        findById(id).delete
     }
 
     /*
@@ -240,7 +256,7 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion)
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, false)
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
