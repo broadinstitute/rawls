@@ -160,7 +160,7 @@ trait MethodConfigurationComponent {
       def hideAction(methodId: Long) = {
         val now = DateTime.now.toString("yyyy-MM-dd_HH:mm:ss")
         sqlu"""UPDATE METHOD_CONFIG mc
-            SET mc.DELETED = 1, mc.NAMESPACE = mcNAMESPACE + "-DELETED-" + $now
+            SET mc.DELETED = 1, mc.NAME = mc.NAME + "-DELETED-" + $now
             WHERE mc.ID = $methodId AND mc.DELETED = 0;"""
 
       }
