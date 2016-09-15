@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import java.lang.String
 
 /**
  * Created by mbemis on 2/17/16.
@@ -78,6 +79,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
 
   it should "deleting method configs should hide them" in withDefaultTestDatabase {
+
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     //get the to-be-deleted method config record
@@ -100,7 +102,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
     //Check that the deleted method has an updated name
-    assert(deletedMethod.map(_.name).contains(testData.methodConfig3.name + "-deleted-"))
+    assertResult(testData.methodConfig3.name + "-deleted-") {
+      deletedMethod.map(_.name).get.substring(0, 18)
+    }
 
     //Check that the deleted method has the deleted field set to true
     assertResult(1) {

@@ -174,17 +174,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 method configuration delete" in withTestDataApiServices { services =>
+  it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig3.namespace}/${testData.methodConfig3.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.NoContent) {
           status
         }
-        assertResult(None) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig3.namespace, testData.methodConfig3.name))
-        }
-        //CHANGE THIS SO IT TESTS THE NEW DELETED METHOD  - USE FINDBYNAME TO GET THE ID BEFORE THE DELETE ACTION ON LINE 178
         assertResult(None) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig3.namespace, testData.methodConfig3.name))
         }
