@@ -107,7 +107,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
 
     //Check that the deleted method has the deleted field set to true
-    assertResult(1) {
+    assertResult(true) {
       deletedMethod.map(_.deleted)
     }
   }
