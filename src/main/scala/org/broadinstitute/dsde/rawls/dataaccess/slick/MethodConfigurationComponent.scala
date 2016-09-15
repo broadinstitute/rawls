@@ -148,7 +148,9 @@ trait MethodConfigurationComponent {
     }
 
     def hideMethodConfigurationAction(id: Long, name: String): ReadWriteAction[Int] = {
-      findById(id).map(rec => (rec.deleted, rec.methodName)).update(true, name + "-deleted-" + DateTime.now.toString("yyyy-MM-dd HH:mm:ss"))
+      val newName = name + "-deleted-" + DateTime.now.toString("yyyy-MM-dd HH:mm:ss")
+      findById(id).map(rec => (rec.deleted, rec.methodName)).update(true, newName)
+
     }
 
 
@@ -166,14 +168,14 @@ trait MethodConfigurationComponent {
         })
       }
 
-      def hideAction(methodId: Long) = {
+     /* def hideAction(methodId: Long) = {
         val now = DateTime.now.toString("yyyy-MM-dd_HH:mm:ss")
         val id = methodId.toString()
         sqlu"""UPDATE METHOD_CONFIG mc
             SET mc.DELETED = 1, mc.NAME = CONCAT(mc.NAME,'-deleted-', $now)
             WHERE mc.ID = $id AND mc.DELETED = 0;"""
 
-      }
+      }*/
     }
 
 

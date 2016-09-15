@@ -194,7 +194,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) {
           status
         }
-
         assertResult(true) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
         }
@@ -346,9 +345,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post(copyFromMethodRepo, httpJson(testData.methodRepoGood)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        /*assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created) {
           status
-        }*/
+        }
         assertResult("testConfig1") {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
         }
