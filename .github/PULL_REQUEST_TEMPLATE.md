@@ -10,7 +10,11 @@
 - [ ] **Submitter**: Database checks:
   * If PR includes new or changed db queries, include the explain plans in the description
   * Make sure liquibase is updated if appropriate
-  * If doing a migration, take a backup of the dev and alpha DBs in Google Cloud Console
+  * If doing a migration, take a backup of the
+  [dev](https://console.cloud.google.com/sql/instances/terraform-qfarbdq3lrexxck5htofjs5z6m/backups?project=broad-dsde-dev&organizationId=548622027621)
+  and
+  [alpha](https://console.cloud.google.com/sql/instances/terraform-r4caezzc35c4tb7pgdhwkmme4y/backups?project=broad-dsde-alpha&organizationId=548622027621)
+  DBs in Google Cloud Console
 - [ ] **Submitter**: Update FISMA documentation if changes to:
   * Authentication
   * Authorization
