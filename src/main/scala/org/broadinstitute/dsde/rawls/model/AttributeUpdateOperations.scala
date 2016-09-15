@@ -7,7 +7,15 @@ import spray.json._
  * Created by mbemis on 7/23/15.
  */
 object AttributeUpdateOperations {
-  sealed trait AttributeUpdateOperation
+  sealed trait AttributeUpdateOperation {
+    def name: AttributeName = this match {
+      case AddUpdateAttribute(attributeName, _) => attributeName
+      case RemoveAttribute(attributeName) => attributeName
+      case AddListMember(attributeListName, _) => attributeListName
+      case RemoveListMember(attributeListName, _) => attributeListName
+    }
+  }
+
   case class AddUpdateAttribute(attributeName: AttributeName, addUpdateAttribute: Attribute) extends AttributeUpdateOperation
   case class RemoveAttribute(attributeName: AttributeName) extends AttributeUpdateOperation
   case class AddListMember(attributeListName: AttributeName, newMember: Attribute) extends AttributeUpdateOperation

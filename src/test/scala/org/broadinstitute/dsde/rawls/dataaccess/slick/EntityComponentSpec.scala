@@ -415,7 +415,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       withWorkspaceContext(workspace2) { context2 =>
         runAndWait(entityQuery.save(context2, x2))
         runAndWait(entityQuery.save(context2, x1))
-        val x2_updated = Entity("x2", "SampleSet", Map(AttributeName("library", "child") -> AttributeEntityReference("SampleSet", "x1")))
+        val x2_updated = Entity("x2", "SampleSet", Map(AttributeName.withDefaultNS("child") -> AttributeEntityReference("SampleSet", "x1")))
         runAndWait(entityQuery.save(context2, x2_updated))
 
         assert(runAndWait(entityQuery.list(context2, "SampleSet")).toList.contains(x1))
@@ -513,7 +513,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
   }
 
   Attributable.reservedAttributeNames.foreach { reserved =>
-    Seq(AttributeName.defaultNamespace, "library").foreach { namespace =>
+    AttributeName.validNamespaces.foreach { namespace =>
       it should s"fail using reserved attribute name $reserved in namespace $namespace" in withDefaultTestDatabase {
         val e = Entity("test_sample", "Sample", Map(AttributeName(namespace, reserved) -> AttributeString("foo")))
 

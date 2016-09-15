@@ -10,14 +10,14 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
-import org.scalatest.{Suite, FlatSpec, Matchers}
+import org.scalatest.{FlatSpec, Matchers, Suite}
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
 import _root_.slick.driver.MySQLDriver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._
-import scala.concurrent.{Future, Await}
+import scala.concurrent.{Await, Future}
 
 // initialize database tables and connection pool only once
 object DbResource {

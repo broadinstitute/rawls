@@ -1893,6 +1893,10 @@ paths:
               type: string
           schema:
             $ref: '#/definitions/Entity'
+        '403':
+          description: User does not have permission to update attributes in the namespace
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace not found
           schema:
@@ -2028,7 +2032,11 @@ paths:
           schema:
             $ref: '#/definitions/Entity'
         '400':
-          description: Attribute does not exist or is of an unexpected type
+          description: Attribute does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: User does not have permission to update attributes in the namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -2171,6 +2179,10 @@ paths:
           description: Invalid attribute update operation
           schema:
             $ref: '#/definitions/ErrorReport'
+        '403':
+          description: User does not have permission to update attributes in the namespace
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace not found
           schema:
@@ -2215,6 +2227,10 @@ paths:
           description: Entities updated
         '400':
           description: Invalid attribute update operation
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '403':
+          description: User does not have permission to update attributes in the namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':
@@ -2975,8 +2991,12 @@ paths:
             Location:
               description: The path to the newly created workspace
               type: string
+        '400':
+          description: Workspace namespace does not exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '403':
-          description: User does not have access to create workspace in namespace
+          description: User does not have access to create workspace in namespace or user does not have permission to set attributes in the namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '409':
@@ -3160,11 +3180,11 @@ paths:
               description: The path to the newly cloned workspace
               type: string
         '400':
-          description: Namespace does not exist
+          description: Workspace namespace does not exist
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
-          description: User does not have access to create workspace in namespace
+          description: User does not have access to create workspace in namespace or user does not have permission to set attributes in the namespace
           schema:
             $ref: '#/definitions/ErrorReport'
         '404':

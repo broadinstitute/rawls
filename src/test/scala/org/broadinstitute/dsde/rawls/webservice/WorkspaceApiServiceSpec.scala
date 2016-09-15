@@ -273,6 +273,78 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 403 on create workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val invalidAttrNamespace = "invalid"
+
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      None,
+      Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(invalidAttrNamespace))
+      }
+  }
+
+  it should "return 201 on create workspace with library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      None,
+      Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo"))
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+        assertResult(newWorkspace) {
+          val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+        }
+        assertResult(newWorkspace) {
+          val ws = responseAs[Workspace]
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+        }
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 on create workspace with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      None,
+      Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo"))
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(AttributeName.libraryNamespace))
+      }
+  }
+
   it should "concurrently create workspaces" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
       val newWorkspace = WorkspaceRequest(
@@ -505,8 +577,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 on update workspace library-namespace attributes" in withTestDataApiServices { services =>
-    val name = AttributeName("library", "whatever")
+  it should "return 403 on update workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val name = AttributeName("invalid", "misc")
+    val attr = AttributeString("foo")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
+      }
+  }
+
+  it should "return 200 on update with workspace library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val name = AttributeName(AttributeName.libraryNamespace, "whatever")
     val attr: Attribute = AttributeString("something")
 
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
@@ -530,6 +618,57 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
         }
+      }
+  }
+
+  it should "return 403 on update (add) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val name = AttributeName(AttributeName.libraryNamespace, "whatever")
+    val attr: Attribute = AttributeString("something")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
+      }
+  }
+
+  it should "return 403 on update (remove) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    val name = AttributeName(AttributeName.libraryNamespace, "whatever")
+    val attr: Attribute = AttributeString("something")
+
+    // first add as curator
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(attr)) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
+      }
+
+    // then remove as non-curator
+
+    revokeCuratorRole(services)
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
       }
   }
 
@@ -559,6 +698,122 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
           val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
           assert(copiedWorkspace.attributes == testData.workspace.attributes)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            }
+          }
+        }
+
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 on clone workspace when adding invalid-namespace attributes" in withTestDataApiServices { services =>
+    val invalidAttrNamespace = "invalid"
+
+    val workspaceCopy = WorkspaceRequest(
+      namespace = testData.workspace.namespace,
+      name = "test_copy",
+      None, Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
+    )
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(invalidAttrNamespace))
+      }
+  }
+
+  it should "return 201 on clone workspace when adding library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val newAttr = AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")
+
+    val workspaceCopy = WorkspaceRequest(
+      namespace = testData.workspace.namespace,
+      name = "test_copy",
+      None, Map(newAttr)
+    )
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == testData.workspace.attributes + newAttr)
+
+          withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
+            //Name, namespace, creation date, and owner might change, so this is all that remains.
+            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            }
+            assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
+              runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
+            }
+          }
+        }
+
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 on clone workspace when adding library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val workspaceCopy = WorkspaceRequest(
+      namespace = testData.workspace.namespace,
+      name = "test_copy",
+      None, Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo"))
+    )
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(AttributeName.libraryNamespace))
+      }
+  }
+
+  it should "return 201 on clone workspace with existing library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+
+    // first update Workspace as curator
+
+    val updatedWorkspace = testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
+    runAndWait(workspaceQuery.save(updatedWorkspace))
+
+    revokeCuratorRole(services)
+
+    // then clone as non-curator
+
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+
+        withWorkspaceContext(testData.workspace) { sourceWorkspaceContext =>
+          val copiedWorkspace = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
+          assert(copiedWorkspace.attributes == updatedWorkspace.attributes)
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
@@ -1065,7 +1320,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val newAtts = Map(
       AttributeName.withDefaultNS("number") -> AttributeNumber(11),    // replaces an existing attribute
-      AttributeName("library", "another") -> AttributeNumber(12)    // adds a new attribute
+      AttributeName.withDefaultNS("another") -> AttributeNumber(12)    // adds a new attribute
     )
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", None, newAtts)

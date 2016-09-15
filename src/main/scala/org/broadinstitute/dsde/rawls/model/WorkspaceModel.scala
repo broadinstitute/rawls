@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{AttributeRecord, SubmissionValidationRecord}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
@@ -40,6 +39,9 @@ case class AttributeName(
 
 object AttributeName {
   val defaultNamespace = "default"
+  val libraryNamespace = "library"
+  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace)
+
   val delimiter = ':'
 
   def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
