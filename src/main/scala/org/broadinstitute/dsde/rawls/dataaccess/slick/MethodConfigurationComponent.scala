@@ -140,12 +140,17 @@ trait MethodConfigurationComponent {
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) => {
-          DeleteMethodConfigurationQuery.hideAction(methodConfigRec.id)
+          hideMethodConfigurationAction(methodConfigRec.id, methodConfigurationName)
         } map { count =>
           count > 0
         }
       }
     }
+
+    def hideMethodConfigurationAction(id: Long, name: String): ReadWriteAction[Int] = {
+      findById(id).map(rec => (rec.deleted, rec.methodName)).update(true, name + "-deleted-" + DateTime.now.toString("yyyy-MM-dd HH:mm:ss"))
+    }
+
 
 
     object DeleteMethodConfigurationQuery extends RawSqlQuery {
@@ -165,7 +170,7 @@ trait MethodConfigurationComponent {
         val now = DateTime.now.toString("yyyy-MM-dd_HH:mm:ss")
         val id = methodId.toString()
         sqlu"""UPDATE METHOD_CONFIG mc
-            SET mc.DELETED = 1, mc.NAME = CONCAT(mc.NAME,'-DELETED-', $now)
+            SET mc.DELETED = 1, mc.NAME = CONCAT(mc.NAME,'-deleted-', $now)
             WHERE mc.ID = $id AND mc.DELETED = 0;"""
 
       }
@@ -265,7 +270,7 @@ trait MethodConfigurationComponent {
      */
 
     private def marshalMethodConfig(workspaceId: UUID, methodConfig: MethodConfiguration) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, false)
+      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, methodConfig.deleted)
     }
 
     def unmarshalMethodConfig(methodConfigRec: MethodConfigurationRecord, inputs: Map[String, AttributeString], outputs: Map[String, AttributeString], prereqs: Map[String, AttributeString]): MethodConfiguration = {
