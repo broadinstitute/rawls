@@ -148,12 +148,9 @@ trait MethodConfigurationComponent {
     }
 
     def hideMethodConfigurationAction(id: Long, name: String): ReadWriteAction[Int] = {
-      val newName = name + "-deleted-" + DateTime.now.toString("yyyy-MM-dd HH:mm:ss")
+      val newName = name + "-deleted-" + DateTime.now().toString("yyyy-MM-dd_HH:mm:ss")
       findById(id).map(rec => (rec.deleted, rec.methodName)).update(true, newName)
-
     }
-
-
 
     object DeleteMethodConfigurationQuery extends RawSqlQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver

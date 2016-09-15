@@ -162,6 +162,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
+    val method =
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
