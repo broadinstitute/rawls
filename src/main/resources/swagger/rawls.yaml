@@ -3317,7 +3317,9 @@ paths:
      get:
        responses:
          '200':
-           description: Successful Request
+           description: User is a curator
+         '404':
+           description: User is not a curator
          '500':
            description: Rawls Internal Error
            schema:
