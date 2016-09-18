@@ -26,8 +26,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       Map("prereq.expression" -> AttributeString("prereq.expr")),
-      MethodRepoMethod("ns-config", "meth2", 2),
-      false
+      MethodRepoMethod("ns-config", "meth2", 2)
     )
 
     runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfig2))

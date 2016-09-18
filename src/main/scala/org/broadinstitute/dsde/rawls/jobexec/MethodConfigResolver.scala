@@ -116,7 +116,7 @@ object MethodConfigResolver {
     val nothing = AttributeString("expression")
     val inputs = for ( (fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs ) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o =>  o.fullyQualifiedName.toString -> nothing)
-    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs.toMap,methodRepoMethod,false)
+    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs.toMap,methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String) = {

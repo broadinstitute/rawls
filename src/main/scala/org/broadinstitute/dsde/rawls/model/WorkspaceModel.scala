@@ -142,7 +142,7 @@ case class MethodConfiguration(
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
                    methodRepoMethod:MethodRepoMethod,
-                   deleted: Boolean = false
+                   deleted: Option[Boolean] = Option(false)
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"

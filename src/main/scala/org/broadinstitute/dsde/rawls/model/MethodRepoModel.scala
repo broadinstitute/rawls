@@ -21,8 +21,7 @@ case class AgoraEntity(
                         createDate: Option[DateTime] = None,
                         payload: Option[String] = None,
                         url: Option[String] = None,
-                        entityType: Option[AgoraEntityType.EntityType] = None,
-                        deleted: Boolean = false)
+                        entityType: Option[AgoraEntityType.EntityType] = None)
 
 object MethodRepoJsonSupport extends JsonSupport {
 

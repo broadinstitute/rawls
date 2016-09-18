@@ -73,23 +73,23 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
   val configGood = new MethodConfiguration("config_namespace", "configGood", "Sample",
     Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1), false)
+    MethodRepoMethod( "method_namespace", "test_method", 1))
 
   val configEvenBetter = new MethodConfiguration("config_namespace", "configGood", "Sample",
     Map.empty, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1), false)
+    MethodRepoMethod( "method_namespace", "test_method", 1))
 
   val configMissingExpr = new MethodConfiguration("config_namespace", "configMissingExpr", "Sample",
     Map.empty, Map.empty, Map.empty,
-   MethodRepoMethod( "method_namespace", "test_method", 1), false)
+   MethodRepoMethod( "method_namespace", "test_method", 1))
 
   val configSampleSet = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
     Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1), false)
+    MethodRepoMethod( "method_namespace", "test_method", 1))
 
   val configEmptyArray = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
     Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1), false)
+    MethodRepoMethod( "method_namespace", "test_method", 1))
 
   class ConfigData extends TestData {
     override def save() = {
