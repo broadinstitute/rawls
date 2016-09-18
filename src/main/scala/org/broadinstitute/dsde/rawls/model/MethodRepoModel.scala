@@ -50,6 +50,6 @@ object MethodRepoJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val AgoraEntityFormat = jsonFormat11(AgoraEntity)
+  implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
 
 }
