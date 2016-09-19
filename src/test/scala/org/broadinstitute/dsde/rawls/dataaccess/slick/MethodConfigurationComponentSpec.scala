@@ -99,7 +99,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     //assert that the name is what we think it is
     assertResult(Vector(testData.methodConfig3.name)) {
-      method.map(_.name)
+      method.map(_.name)git 
     }
 
     //delete (or hide) the method config
@@ -109,10 +109,6 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
     //Check that the deleted method has an updated name
-    assertResult(testData.methodConfig3.name) {
-      Option(deletedMethod.get.toJson.toString).map(JsonParser(_).convertTo[MethodConfiguration])
-    }
-
     assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
 
     //Check that the deleted method has the deleted field set to true

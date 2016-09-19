@@ -935,9 +935,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case Some(entity) =>
               try {
                 // if JSON parsing fails, catch below
-                val methodConfig = Option(entity.payload.get.dropRight(2).concat(""", "deleted":Option(false)}""")).map(JsonParser(_).convertTo[MethodConfiguration])
-                methodConfig match {
-                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
+                val methodConfig = entity.payload.map(JsonParser(_).convertTo[AgoraMethodConfiguration])
+                match {
+                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(convertToMethodConfiguration(targetMethodConfig), methodRepoQuery.destination, destContext, dataAccess)
                   case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
                 }
               }
@@ -949,6 +949,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+  private def convertToMethodConfiguration(agoraMethodConfig: AgoraMethodConfiguration): MethodConfiguration = {
+    MethodConfiguration(agoraMethodConfig.namespace, agoraMethodConfig.name, agoraMethodConfig.rootEntityType, agoraMethodConfig.prerequisites, agoraMethodConfig.inputs, agoraMethodConfig.outputs, agoraMethodConfig.methodRepoMethod)
+  }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>

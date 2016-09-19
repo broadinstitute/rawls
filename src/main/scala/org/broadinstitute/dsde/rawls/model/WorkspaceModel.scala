@@ -142,11 +142,19 @@ case class MethodConfiguration(
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
                    methodRepoMethod:MethodRepoMethod,
-                   deleted: Option[Boolean] = Option(false)
+                   deleted: Boolean = false
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
   def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
 }
+
+case class AgoraMethodConfiguration(namespace: String,
+                                    name: String,
+                                    rootEntityType: String,
+                                    prerequisites: Map[String, AttributeString],
+                                    inputs: Map[String, AttributeString],
+                                    outputs: Map[String, AttributeString],
+                                    methodRepoMethod: MethodRepoMethod)
 
 case class MethodConfigurationShort(
                                 name: String,
