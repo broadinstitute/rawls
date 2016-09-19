@@ -110,7 +110,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     //Check that the deleted method has an updated name
     assertResult(testData.methodConfig3.name + "-deleted-") {
-      deletedMethod.map(_.name).get.toJson.toString
+      deletedMethod.get.toJson.toString
     }
 
     assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
