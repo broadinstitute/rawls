@@ -194,7 +194,6 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) {
           status
         }
-
         assertResult(true) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).isDefined
         }

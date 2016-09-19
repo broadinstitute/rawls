@@ -7,6 +7,15 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
+import java.lang.String
+
+
+import akka.actor.{Props, ActorContext, ActorRef, ActorSystem}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
+import scala.concurrent.{Future, Await}
+import scala.util.{Success,Failure,Try}
+import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 /**
  * Created by mbemis on 2/17/16.
@@ -75,34 +84,36 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  /*
-   * test disabled until we decide what to do with submissions that reference deleted configs
-   */
-  ignore should "*DISABLED* delete method configs" in withDefaultTestDatabase {
+
+  it should "deleting method configs should hide them" in withDefaultTestDatabase {
+
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    assertResult(Option("testConfig1")) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1")).map(_.name)
+    //get the to-be-deleted method config record
+    val method = runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+
+    //assert that the result is unique (only one method config was returned)
+    assertResult(1) {
+      method.length
     }
 
-    runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
-
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, "testConfig1"))
-    }
-  }
-
-  it should "delete method configs" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    assertResult(Option(testData.methodConfig3.name)) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name)).map(_.name)
+    //assert that the name is what we think it is
+    assertResult(Vector(testData.methodConfig3.name)) {
+      method.map(_.name)
     }
 
+    //delete (or hide) the method config
     runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
 
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+    //load the deleted/hidden method config
+    val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
+
+    //Check that the deleted method has an updated name
+    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
+
+    //Check that the deleted method has the deleted field set to true
+    assertResult(Some(true)) {
+      deletedMethod.map(_.deleted)
     }
   }
 }
