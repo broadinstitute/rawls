@@ -99,7 +99,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     //assert that the name is what we think it is
     assertResult(Vector(testData.methodConfig3.name)) {
-      method.map(_.name)git 
+      method.map(_.name)
     }
 
     //delete (or hide) the method config

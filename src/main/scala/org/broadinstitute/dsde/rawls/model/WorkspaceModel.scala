@@ -300,6 +300,8 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
 
+  implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
+
   implicit val MethodConfigurationShortFormat = jsonFormat4(MethodConfigurationShort)
 
   implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
