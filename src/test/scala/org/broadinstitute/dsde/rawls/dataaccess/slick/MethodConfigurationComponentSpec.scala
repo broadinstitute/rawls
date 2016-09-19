@@ -9,6 +9,14 @@ import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 import java.lang.String
 
+
+import akka.actor.{Props, ActorContext, ActorRef, ActorSystem}
+import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
+import scala.concurrent.{Future, Await}
+import scala.util.{Success,Failure,Try}
+import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+
 /**
  * Created by mbemis on 2/17/16.
  */
@@ -102,7 +110,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     //Check that the deleted method has an updated name
     assertResult(testData.methodConfig3.name + "-deleted-") {
-      deletedMethod.map(_.name).get
+      deletedMethod.map(_.name).get.toJson.toString
     }
 
     assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
