@@ -935,7 +935,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case Some(entity) =>
               try {
                 // if JSON parsing fails, catch below
-                val methodConfig = Option(entity.payload.get.dropRight(2).concat(", \"deleted\": Option(false)}}")).map(JsonParser(_).convertTo[MethodConfiguration])
+                val methodConfig = Option(entity.payload.get.dropRight(1).concat(", \"deleted\": Option(false)}")).map(JsonParser(_).convertTo[MethodConfiguration])
                 methodConfig match {
                   case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
                   case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
