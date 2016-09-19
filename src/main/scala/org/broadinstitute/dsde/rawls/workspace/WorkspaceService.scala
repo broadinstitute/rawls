@@ -936,7 +936,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
               try {
                 // if JSON parsing fails, catch below
                 val methodConfig = entity.payload.map(JsonParser(_).convertTo[AgoraMethodConfiguration])
-                match {
+                methodConfig match {
                   case Some(targetMethodConfig) => saveCopiedMethodConfiguration(convertToMethodConfiguration(targetMethodConfig), methodRepoQuery.destination, destContext, dataAccess)
                   case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
                 }
