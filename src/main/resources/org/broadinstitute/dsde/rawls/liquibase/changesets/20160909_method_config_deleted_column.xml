@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummmy" author="ansingh" id="method_config_deleted_column_1">
         <sql stripComments="true">
-            ALTER TABLE METHOD_CONFIG ADD COLUMN DELETED BIT(1);
+            ALTER TABLE METHOD_CONFIG ADD COLUMN DELETED BIT(1) DEFAULT 0;
         </sql>
     </changeSet>
 
