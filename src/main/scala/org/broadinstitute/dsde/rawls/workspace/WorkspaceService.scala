@@ -936,9 +936,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case Some(entity) =>
               try {
                 // if JSON parsing fails, catch below
-                val methodConfig = entity.payload.map(JsonParser(_).convertTo[MethodConfiguration])
+                val methodConfig = entity.payload.map(JsonParser(_).convertTo[AgoraMethodConfiguration])
                 methodConfig match {
-                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
+                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(convertToMethodConfiguration(targetMethodConfig), methodRepoQuery.destination, destContext, dataAccess)
                   case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
                 }
               }
@@ -950,6 +950,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+  private def convertToMethodConfiguration(agoraMethodConfig: AgoraMethodConfiguration): MethodConfiguration = {
+    MethodConfiguration(agoraMethodConfig.namespace, agoraMethodConfig.name, agoraMethodConfig.rootEntityType, agoraMethodConfig.prerequisites, agoraMethodConfig.inputs, agoraMethodConfig.outputs, agoraMethodConfig.methodRepoMethod)
+  }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
@@ -978,7 +982,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
-        dataAccess.methodConfigurationQuery.list(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
+        dataAccess.methodConfigurationQuery.listActive(workspaceContext).map(r => RequestComplete(StatusCodes.OK, r.toList))
       }
     }
 
