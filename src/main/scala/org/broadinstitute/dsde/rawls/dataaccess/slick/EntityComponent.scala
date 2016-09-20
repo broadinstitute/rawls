@@ -294,7 +294,7 @@ trait EntityComponent {
     private def upsertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord], referencedAndSavingEntityRecs: Traversable[EntityRecord]) = {
       val entityIds = entityRecs.map(_.id).toSeq
 
-      def insertTempAttributes(): ReadWriteAction[Unit] = {
+      def insertTempAttributes(transactionId: String): ReadWriteAction[Unit] = {
         val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
         val attributeRecsToEntityId = (for {
           entity <- entities
@@ -302,7 +302,7 @@ trait EntityComponent {
           attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeName, attribute, entityIdsByName)
         } yield attributeRec)
 
-        entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq)
+        entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq, transactionId)
       }
 
       entityAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(entityIds, insertTempAttributes)
@@ -557,15 +557,16 @@ trait EntityComponent {
     }
   }
 
-  case class ExprEvalRecord(id: Long, name: String)
+  case class ExprEvalRecord(id: Long, name: String, transactionId: String)
   class ExprEvalTemp(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_TEMP") {
     def id = column[Long]("id")
     def name = column[String]("name", O.Length(254))
+    def transactionId = column[String]("transaction_id")
 
     //No foreign key constraint here because MySQL won't allow them on temp tables :(
     //def entityId = foreignKey("FK_EXPREVAL_ENTITY", id, entityQuery)(_.id)
 
-    def * = (id, name) <> (ExprEvalRecord.tupled, ExprEvalRecord.unapply)
+    def * = (id, name, transactionId) <> (ExprEvalRecord.tupled, ExprEvalRecord.unapply)
   }
   val exprEvalQuery = TableQuery[ExprEvalTemp]
 }

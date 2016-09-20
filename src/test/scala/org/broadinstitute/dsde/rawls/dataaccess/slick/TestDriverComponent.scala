@@ -13,7 +13,7 @@ import org.joda.time.DateTime
 import org.scalatest.{Suite, FlatSpec, Matchers}
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
-import _root_.slick.driver.H2Driver.api._
+import _root_.slick.driver.MySQLDriver.api._
 import spray.http.OAuth2BearerToken
 
 import scala.concurrent.duration._
@@ -29,13 +29,9 @@ object DbResource {
 
   private val liquibaseConf = ConfigFactory.load().getConfig("liquibase")
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
-  private val useLiquibase = liquibaseConf.getBoolean("useForTests")
 
   val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
-  if (useLiquibase)
-    dataSource.initWithLiquibase(liquibaseChangeLog)
-  else
-    dataSource.initWithSlick()
+  dataSource.initWithLiquibase(liquibaseChangeLog)
 }
 
 /**
@@ -51,7 +47,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   override val driver: JdbcDriver = databaseConfig.driver
   override val batchSize: Int = databaseConfig.config.getInt("batchSize")
-  val database = databaseConfig.db
 
   val testDate = currentTime()
   val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -61,7 +56,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def currentTime() = new DateTime()
 
   protected def runAndWait[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect], duration: Duration = 1 minutes): R = {
-    Await.result(database.run(action.transactionally), duration)
+    Await.result(DbResource.dataSource.inTransaction { _ => action.asInstanceOf[ReadWriteAction[R]] }, duration)
   }
 
   protected def runMultipleAndWait[R](count: Int, duration: Duration = 1 minutes)(actionGenerator: Int => DBIOAction[R, _ <: NoStream, _ <: Effect]): R = {
@@ -70,7 +65,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   }
 
   private def retryConcurrentModificationException[R](action: DBIOAction[R, _ <: NoStream, _ <: Effect]): Future[R] = {
-    database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith {
+    DbResource.dataSource.database.run(action.map{ x => Thread.sleep((Math.random() * 500).toLong); x }).recoverWith {
       case e: RawlsConcurrentModificationException => retryConcurrentModificationException(action)
       case rollbackException: MySQLTransactionRollbackException if rollbackException.getMessage.contains("try restarting transaction") => retryConcurrentModificationException(action)
     }

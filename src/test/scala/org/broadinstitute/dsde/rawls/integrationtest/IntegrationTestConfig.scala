@@ -35,4 +35,6 @@ trait IntegrationTestConfig {
   val ldapUserObjectClasses = ldapConfig.getStringList("userObjectClasses").toList
   val ldapUserAttributes = ldapConfig.getStringList("userAttributes").toList
   val ldapUserDnFormat = ldapConfig.getString("userDnFormat")
+
+  val liquibaseChangeLog = etcConf.getString("liquibase.changelog")
 }
