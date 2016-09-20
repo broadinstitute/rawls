@@ -220,7 +220,6 @@ trait WorkflowComponent {
       UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus)
     }
 
-
     def deleteWorkflowAction(id: Long) = {
       deleteWorkflowAttributes(id) andThen
         deleteMessagesAndInputs(id) andThen

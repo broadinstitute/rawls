@@ -51,6 +51,6 @@ object BootMonitors extends LazyLogging {
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
     Await.result(dataSource.inTransaction { dataAccess =>
       dataAccess.workflowQuery.batchUpdateStatus(WorkflowStatuses.Launching, WorkflowStatuses.Queued)
-    }, 10 seconds)
+    }, 20 seconds)
   }
 }
