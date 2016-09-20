@@ -2,19 +2,21 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio
-import slick.dbio.{NoStream, DBIOAction}
+import slick.dbio.{DBIOAction, NoStream}
 import slick.dbio.Effect.Read
-import wdl4s.{FullyQualifiedName, WorkflowInput, NamespaceWithWorkflow}
-import wdl4s.types.{WdlArrayType}
-import org.broadinstitute.dsde.rawls.{model, RawlsException}
+import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
+import wdl4s.types.WdlArrayType
+import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
+
 import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -33,12 +35,9 @@ object MethodConfigResolver {
   }
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
-    val filterSeq = seq.filter(v => v != null && v != AttributeNull).toSeq
-    if(filterSeq.isEmpty) {
-      SubmissionValidationValue(Some(AttributeEmptyList), None, inputName)
-    } else {
-      SubmissionValidationValue(Some(AttributeValueList(filterSeq)), None, inputName)
-    }
+    val notNull = seq.filter(v => v != null && v != AttributeNull)
+    val attr = if (notNull.isEmpty) Option(AttributeEmptyList) else Option(AttributeValueList(notNull.toSeq))
+    SubmissionValidationValue(attr, None, inputName)
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: WorkflowInput): SubmissionValidationValue = wfInput.wdlType match {
@@ -107,7 +106,7 @@ object MethodConfigResolver {
   def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
-      case (key, notNullValue) => Some((key, notNullValue.toJson))
+      case (key, notNullValue) => Some(key, notNullValue.toJson)
     }
   ) toString
 

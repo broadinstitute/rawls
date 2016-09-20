@@ -38,13 +38,16 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       currentTime(),
       currentTime(),
       "me",
-      Map("attributeString" -> AttributeString("value"),
-        "attributeBool" -> AttributeBoolean(true),
-        "attributeNum" -> AttributeNumber(3.14159)),
-      Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
+      Map(
+        AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
+        AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
+        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
+      Map(
+        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
         WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
         WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
-      Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
+      Map(
+        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader")),
         WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer")),
         WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner"))),
       false)
@@ -74,9 +77,11 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     val updatedWorkspace = workspace.copy(
-      attributes = Map("attributeString" -> AttributeString("value2"),
-      "attributeBool" -> AttributeBoolean(false)),
-      accessLevels = Map(WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader2")),
+      attributes = Map(
+        AttributeName("default", "attributeString") -> AttributeString("value2"),
+        AttributeName("library", "attributeBool") -> AttributeBoolean(false)),
+      accessLevels = Map(
+        WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName("reader2")),
         WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName("writer2")),
         WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner2")))
     )

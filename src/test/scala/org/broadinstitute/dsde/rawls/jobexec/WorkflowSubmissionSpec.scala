@@ -225,7 +225,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
         AttributeEntityReference("Sample", "sample4"),
         AttributeEntityReference("Sample", "sample5"),
         AttributeEntityReference("Sample", "sample6"))
-      val sset = Entity("testset6", "SampleSet", Map( "samples" -> AttributeEntityReferenceList(samples)))
+      val sset = Entity("testset6", "SampleSet", Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(samples)))
 
       runAndWait(entityQuery.save(SlickWorkspaceContext(testData.workspace), sset))
 

@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import UserAuthJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
+import UserAuthJsonSupport.RawlsUserRefFormat
 
 import spray.json._
 import org.joda.time.DateTime

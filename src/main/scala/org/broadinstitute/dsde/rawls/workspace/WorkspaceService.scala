@@ -21,10 +21,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
-import spray.http.Uri
-import spray.http.StatusCodes
 import spray.http.{StatusCodes, Uri}
-import spray.httpx.UnsuccessfulResponseException
 import scala.collection.immutable.Iterable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -35,6 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, ExecutionServiceValidationFormat}
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import scala.concurrent.Await
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 /**
@@ -767,7 +765,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
   }
 
-  private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): Map[String, Attribute] = {
+  private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): AttributeMap = {
     operations.foldLeft(attributable.attributes) { (startingAttributes, operation) =>
       operation match {
         case AddUpdateAttribute(attributeName, attribute) => startingAttributes + (attributeName -> attribute)
