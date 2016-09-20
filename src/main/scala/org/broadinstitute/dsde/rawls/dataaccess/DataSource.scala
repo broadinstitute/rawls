@@ -7,6 +7,7 @@ import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
 import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
+import com.typesafe.config.ConfigValueFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, DataAccess, DataAccessComponent}
 import sun.security.provider.certpath.SunCertPathBuilderException
@@ -26,8 +27,12 @@ object DataSource {
   }
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
-  private val database = databaseConfig.db
+class SlickDataSource(initialDatabaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
+  val dataAccess = new DataAccessComponent(initialDatabaseConfig.driver, initialDatabaseConfig.config.getInt("batchSize"))
+  val databaseConfig = DatabaseConfig.forConfig[JdbcDriver]("", initialDatabaseConfig.config.withValue("db.connectionInitSql", ConfigValueFactory.fromAnyRef("call createTempTables()")))
+
+  val database = databaseConfig.db
+
 
   /**
    * Create a special execution context, a fixed thread pool, to run each of our composite database actions. Running
@@ -53,7 +58,6 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
   private val actionExecutionContext: ExecutionContext = ExecutionContext.fromExecutor(
     actionThreadPool, database.executor.executionContext.reportFailure)
 
-  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"))
   import dataAccess.driver.api._
 
   def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {
@@ -62,8 +66,18 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
   }
 
   def initWithLiquibase(liquibaseChangeLog: String) = {
-    val dbConnection = try {
-      database.source.createConnection()
+    // use a database specified with the initialDatabaseConfig because the regular databaseConfig assumes
+    // a procedure called createTempTables exists but it is liquibase that creates that procedure
+    // need to create a new config because each config instance has its own db and closing it is a problem if it is shared
+    val initDatabase = DatabaseConfig.forConfig[JdbcDriver]("", initialDatabaseConfig.config).db
+    try {
+      val dbConnection = initDatabase.source.createConnection()
+
+      val liquibaseConnection = new JdbcConnection(dbConnection)
+      val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
+      val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
+      liquibase.update(new Contexts())
+
     } catch {
       case e: SQLTimeoutException =>
         val isCertProblem = Throwables.getRootCause(e).isInstanceOf[SunCertPathBuilderException]
@@ -79,32 +93,8 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
           }
         }
         throw e
-    }
-    val liquibaseConnection = new JdbcConnection(dbConnection)
-
-    try {
-      val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
-      val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
-      liquibase.update(new Contexts())
     } finally {
-      liquibaseConnection.close()
-      dbConnection.close()
+      initDatabase.close()
     }
   }
-
-  // For testing/migration.  Not for production code!
-  def initWithSlick(): Unit = {
-    import dataAccess.driver.api._
-    import scala.concurrent.duration._
-
-    val tablesExist: Boolean = Await.result(database.run(MTable.getTables).map(_.nonEmpty), 1.minute)
-
-    val createOrTruncateAction = if (tablesExist)
-      dataAccess.truncateAll
-    else
-      dataAccess.allSchemas.create
-
-    Await.result(database.run(createOrTruncateAction), 1.minute)
-  }
-
  }

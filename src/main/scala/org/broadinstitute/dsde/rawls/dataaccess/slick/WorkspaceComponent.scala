@@ -111,14 +111,14 @@ trait WorkspaceComponent {
     private def upsertAttributes(workspace: Workspace) = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
-      def insertTempAttributes(): ReadWriteAction[Unit] = {
+      def insertTempAttributes(transactionId: String): ReadWriteAction[Unit] = {
         val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
         val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
         val entitiesToLookup = (entityRefs ++ entityRefListMembers)
 
         entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
           val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-          workspaceAttributeTempQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeTempQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq)
+          workspaceAttributeTempQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq, transactionId)
         }
       }
 

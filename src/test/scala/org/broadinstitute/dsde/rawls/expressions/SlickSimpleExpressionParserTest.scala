@@ -67,12 +67,12 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     }
   }
 
-  test("ensure root entity temp table was dropped") {
+  test("ensure root entity temp table was cleared") {
     withTestWorkspace { workspaceContext =>
-      intercept[MySQLSyntaxErrorException] {
+      assertResult(0) {
         runAndWait({
-          evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type")
-          exprEvalQuery.result
+          evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type") andThen
+            sql"select count(*) from EXPREVAL_TEMP".as[Int].head
         })
       }
     }
@@ -381,6 +381,24 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       assert(parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
       
       assert(parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
+    }
+  }
+
+  test("extra data in entity attribute temp table should not mess things up") {
+    withTestWorkspace { workspaceContext =>
+      val action = for {
+        entityRecs <- this.entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).result
+        extraTempRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
+        _ <- this.exprEvalQuery += extraTempRecord
+        result <- evalFinalAttribute(workspaceContext, entityRecs.head.entityType, entityRecs.head.name, "this.name").transactionally
+        residual <- this.exprEvalQuery.result
+      } yield {
+        (extraTempRecord, result, residual)
+      }
+
+      val (extraTempRecord, result, residual) = runAndWait(action.withPinnedSession)
+      assertResult(Seq(extraTempRecord)) { residual }
+      assert(result.size == 1 && result.get(extraTempRecord.name).isEmpty)
     }
   }
 }

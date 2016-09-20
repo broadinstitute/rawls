@@ -23,31 +23,6 @@ trait DataAccess
   
   import driver.api._
 
-  lazy val allSchemas =
-    pendingBucketDeletionQuery.schema ++
-      rawlsUserQuery.schema ++
-      rawlsGroupQuery.schema ++
-      rawlsBillingProjectQuery.schema ++
-      groupUsersQuery.schema ++
-      groupSubgroupsQuery.schema ++
-      projectUsersQuery.schema ++
-      workspaceQuery.schema ++
-      workspaceAccessQuery.schema ++
-      workspaceAttributeQuery.schema ++
-      entityQuery.schema ++
-      entityAttributeQuery.schema ++
-      methodConfigurationQuery.schema ++
-      methodConfigurationInputQuery.schema ++
-      methodConfigurationOutputQuery.schema ++
-      methodConfigurationPrereqQuery.schema ++
-      submissionQuery.schema ++
-      submissionAttributeQuery.schema ++
-      submissionValidationQuery.schema ++
-      workflowQuery.schema ++
-      workflowMessageQuery.schema ++
-      workflowAuditStatusQuery.schema ++
-      submissionAuditStatusQuery.schema
-
   def truncateAll: WriteAction[Int] = {
     // important to keep the right order for referential integrity !
 
