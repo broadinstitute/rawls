@@ -252,16 +252,18 @@ trait SubmissionComponent {
 
           // group the workflow/entity/message records by workflowId, which creates a map keyed by workflowId
           val recordsByWorkflowId = recs.groupBy { _.workflowRecord.id }
+
           // now that we're grouped, process each workflow's records, translating into a Workflow object
-          recordsByWorkflowId.map{ case (workflowId, record) =>
+          recordsByWorkflowId.map { case (workflowId, record) =>
             // because we are grouped by workflow id, and because workflow:entity is an inner join, we know that the
             // workflow and entity records are the same throughout this sequence. We can safely take the head
             // for each of them.
             val wr: WorkflowRecord = record.head.workflowRecord // first in the record
             val er: EntityRecord = record.head.entityRecord // second in the record
+
             // but, the workflow messages are all different - and may not exist (i.e. be None) due to the outer join.
             // translate any/all messages that exist into a Seq[AttributeString]
-            val messages: Seq[AttributeString] = record.map {_.messageRecord}.collect { case Some(wm) => AttributeString(wm.message) }
+            val messages: Seq[AttributeString] = record.map { _.messageRecord }.collect { case Some(wm) => AttributeString(wm.message) }
 
             // attach the input resolutions to the workflow object
             val workflowResolutions: Seq[SubmissionValidationValue] = groupedResolutions.get(wr.id).map { seq =>
@@ -269,7 +271,8 @@ trait SubmissionComponent {
               //collect up the workflow resolution results
               val resolutions = seq.collect {
                 case WorkflowAndInputResolutionRawSqlQuery.WorkflowInputResolutionListResult(workflow, Some(resolution), attribute) =>
-                  (resolution, attribute) }
+                  (resolution, attribute)
+              }
               workflowQuery.unmarshalOneWorkflowInputs(resolutions, workflowId)
 
             }.getOrElse(Seq.empty)
@@ -383,14 +386,16 @@ trait SubmissionComponent {
         val (submissionValidation, attribute) = r.nextLongOption() match {
           case Some(submissionValidationId) =>
             ( Option(SubmissionValidationRecord(submissionValidationId, workflowRec.id, r.<<, r.<<)),
-              r.nextLongOption().map(SubmissionAttributeRecord(_, submissionValidationId, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)) )
+              r.nextLongOption().map(SubmissionAttributeRecord(_, submissionValidationId, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)) )
           case None => (None, None)
         }
         WorkflowInputResolutionListResult(workflowRec, submissionValidation, attribute)
       }
 
       def action(submissionId: UUID) = {
-        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY, sv.id, sv.ERROR_TEXT, sv.INPUT_NAME, sa.id, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
+        sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY,
+              sv.id, sv.ERROR_TEXT, sv.INPUT_NAME,
+              sa.id, sa.namespace, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
         from WORKFLOW w
         left outer join SUBMISSION_VALIDATION sv on sv.workflow_id = w.id
         left outer join SUBMISSION_ATTRIBUTE sa on sa.owner_id = sv.id

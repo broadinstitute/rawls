@@ -4,13 +4,11 @@ package org.broadinstitute.dsde.rawls.expressions
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.RawlsException
-
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import com.mysql.jdbc.exceptions.jdbc4.MySQLSyntaxErrorException
-
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
-
 import org.scalatest.FunSuite
 
 import scala.collection.immutable.IndexedSeq
@@ -106,6 +104,57 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     }
   }
 
+  test("library entity attribute expression") {
+    withTestWorkspace { workspaceContext =>
+      val libraryAttribute = Map(AttributeName("library", "book") -> AttributeString("arbitrary"))
+      runAndWait(entityQuery.save(workspaceContext, Entity("sampleWithLibraryNamespaceAttribute", "Sample", libraryAttribute)))
+
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq(AttributeString("arbitrary"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", "this.library:book"))
+      }
+
+      assertResult(Map("sampleWithLibraryNamespaceAttribute" -> TrySuccess(Seq()))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sampleWithLibraryNamespaceAttribute", "this.library:checked_out_book"))
+      }
+
+      (1 to 3).foreach { num =>
+        val ent = runAndWait(entityQuery.get(workspaceContext, "Sample", s"sample$num")).get
+        val libraryAttribute = Map(AttributeName("library", "chapter") -> AttributeNumber(num))
+        runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = libraryAttribute)))
+      }
+
+      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.library:chapter"))
+      }
+
+      val resultsByType = runAndWait(entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
+        SlickExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
+        }
+      })
+
+      (1 to 3).foreach { num =>
+        assertResult(TrySuccess(Seq(AttributeNumber(num)))) {
+          resultsByType(s"sample$num")
+        }
+      }
+
+      // reserved attribute "name" works the same as it does in the default namespace
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.library:name"))
+      }
+    }
+  }
+
+  test("attribute names with two colons") {
+    withTestWorkspace { workspaceContext =>
+      intercept[RawlsException] {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.a:b:c"))
+      }
+    }
+  }
+
   test("the same expression on multiple inputs") {
 
     withTestWorkspace { workspaceContext =>
@@ -177,7 +226,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       assertResult(wsNameResults) { Map( "2" -> TrySuccess( wsEntityResults.map(e => AttributeString(e.name)))) }
     }
 
-    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, Map[String, Attribute])], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
+    def createEntities(entityType: String, entitiesNameAndAttributes: IndexedSeq[(String, AttributeMap)], wsc: SlickWorkspaceContext): IndexedSeq[AttributeEntityReference] = {
       val saveActions = for ((nameAndAttributes, index) <- entitiesNameAndAttributes.zipWithIndex) yield {
         entityQuery.save(wsc, Entity(nameAndAttributes._1, entityType, nameAndAttributes._2))
       }
@@ -193,18 +242,18 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         val bAttributes = for (b <- 0 until 5) yield {
           val cAttributes = for (c <- (0 until 20)) yield {
 
-            (s"${a}_${b}_${c}", Map("attr" -> AttributeString(s"${a}_${b}_${c}")))
+            (s"${a}_${b}_${c}", Map(AttributeName.withDefaultNS("attr") -> AttributeString(s"${a}_${b}_${c}")))
           }
 
-          (s"${a}_${b}", Map("cs" -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
+          (s"${a}_${b}", Map(AttributeName.withDefaultNS("cs") -> AttributeEntityReferenceList(createEntities("c", cAttributes, wsc))))
         }
 
-        (s"$a", Map("bs" -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
+        (s"$a", Map(AttributeName.withDefaultNS("bs") -> AttributeEntityReferenceList(createEntities("b", bAttributes, wsc))))
       }
 
       val as = createEntities("a", aAttributes, wsc)
 
-      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + ("as" -> AttributeEntityReferenceList(as)))))
+      runAndWait(workspaceQuery.save(wsc.workspace.copy(attributes = wsc.workspace.attributes + (AttributeName.withDefaultNS("as") -> AttributeEntityReferenceList(as)))))
     }
   }
 
@@ -284,16 +333,16 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
   test("workspace attribute expression") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get("string").get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("string")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.string"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get("number").get)))) {
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.wsAttrs.get(AttributeName.withDefaultNS("number")).get)))) {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.number"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get("type").get)))) {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+      assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get(AttributeName.withDefaultNS("type")).get)))) {
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref.type"))
@@ -319,16 +368,51 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace."))
       }
 
-// https://broadinstitute.atlassian.net/browse/GAWB-349 figure out how to add this back in one day
-//      assert {
-//        evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.missing.also_missing").isFailure
-//      }
+      // https://broadinstitute.atlassian.net/browse/GAWB-349 figure out how to add this back in one day
+      //      assert {
+      //        evalFinalAttribute(workspaceContext, "dummy text", "dummy text", "workspace.missing.also_missing").isFailure
+      //      }
 
       intercept[RawlsException] {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref."))
+      }
+    }
+  }
+
+  test("workspace library attribute expression") {
+    withTestWorkspace { workspaceContext =>
+
+      val series = Seq(
+        AttributeString("The Fellowship of the Ring"),
+        AttributeString("The Two Towers"),
+        AttributeString("The Return of the King")
+      )
+
+      val libraryAttributes = Map(
+        AttributeName("library", "author") -> AttributeString("L. Ron Hubbard"),
+        AttributeName("library", "nothing") -> AttributeEmptyList,
+        AttributeName("library", "series") -> AttributeValueList(series)
+      )
+
+      runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = testData.workspace.attributes ++ libraryAttributes)))
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("L. Ron Hubbard"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:author"))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:nothing"))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(series))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:series"))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(Seq()))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.library:not_here"))
       }
     }
   }
@@ -350,11 +434,32 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     }
   }
 
+  test("library entity expression") {
+    withTestWorkspace { workspaceContext =>
+
+      assertResult(Set("sample2")) {
+        val ent = runAndWait(entityQuery.get(workspaceContext, "Pair", "pair1")).get
+        val libraryAttribute = AttributeName("library", "lib_case") -> AttributeEntityReference("Sample", "sample2")
+        runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = ent.attributes + libraryAttribute)))
+
+        runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "this.library:lib_case")).map(_.name).toSet
+      }
+
+      assertResult(Set("sample1", "sample2", "sample3")) {
+        val ent = runAndWait(entityQuery.get(workspaceContext, "Individual", "indiv1")).get
+        val libraryAttribute = AttributeName("library", "lib_set") -> AttributeEntityReference("SampleSet", "sset1")
+        runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = ent.attributes + libraryAttribute)))
+
+        runAndWait(evalFinalEntity(workspaceContext, "Individual", "indiv1", "this.library:lib_set.samples")).map(_.name).toSet
+      }
+    }
+  }
+
   test("workspace entity expression") {
     withTestWorkspace { workspaceContext =>
 
       assertResult(Set("sample1")) {
-        val attributesPlusReference = testData.workspace.attributes + ("sample1ref" -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.sample1ref")).map(_.name).toSet
@@ -362,10 +467,30 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       assertResult(Set("sample2")) {
         val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
-        val attributesPlusReference = testData.workspace.attributes + ("samplerefs" -> reflist)
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("samplerefs") -> reflist)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.samplerefs")).map(_.name).toSet
+      }
+    }
+  }
+
+  test("library workspace entity expression") {
+    withTestWorkspace { workspaceContext =>
+
+      assertResult(Set("sample1")) {
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "s1ref") -> AttributeEntityReference("Sample", "sample1"))
+        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+
+        runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.library:s1ref")).map(_.name).toSet
+      }
+
+      assertResult(Set("sample2")) {
+        val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "srefs") -> reflist)
+        runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
+
+        runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.library:srefs")).map(_.name).toSet
       }
     }
   }
@@ -379,8 +504,24 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       assert(parseOutputExpr("workspace.attribute").isSuccess, "workspace.attribute should parse correctly" )
       assert(parseOutputExpr("workspace..attribute").isFailure, "workspace..attribute should not parse correctly" )
       assert(parseOutputExpr("workspace.chained.expression").isFailure, "workspace.chained.expression should not parse correctly" )
-      
+
       assert(parseOutputExpr("bonk.attribute").isFailure, "bonk.attribute should not parse correctly" )
+    }
+  }
+
+  test("library output expressions") {
+    withTestWorkspace { workspaceContext =>
+      assert(parseOutputExpr("this.library:attribute").isSuccess, "this.library:attribute should parse correctly" )
+      assert(parseOutputExpr("this..library:attribute").isFailure, "this..library:attribute should not parse correctly" )
+      assert(parseOutputExpr("this.library:chained.expression").isFailure, "this.library:chained.expression should not parse correctly" )
+      assert(parseOutputExpr("this.chained.library:expression").isFailure, "this.chained.library:expression should not parse correctly" )
+
+      assert(parseOutputExpr("workspace.library:attribute").isSuccess, "workspace.library:attribute should parse correctly" )
+      assert(parseOutputExpr("workspace..library:attribute").isFailure, "workspace..library:attribute should not parse correctly" )
+      assert(parseOutputExpr("workspace.library:chained.expression").isFailure, "workspace.library:chained.expression should not parse correctly" )
+      assert(parseOutputExpr("workspace.chained.library:expression").isFailure, "workspace.chained.library:expression should not parse correctly" )
+
+      assert(parseOutputExpr("bonk.library:attribute").isFailure, "bonk.library:attribute should not parse correctly" )
     }
   }
 

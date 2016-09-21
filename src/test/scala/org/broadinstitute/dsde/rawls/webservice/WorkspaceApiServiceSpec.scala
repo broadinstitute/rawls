@@ -94,7 +94,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map("a" -> AttributeString("x")),
+    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")),
       Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
         WorkspaceAccessLevels.Write -> workspaceWriterGroup,
         WorkspaceAccessLevels.Read -> workspaceReaderGroup),
@@ -103,7 +103,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         WorkspaceAccessLevels.Read -> workspaceReaderGroup))
 
     val workspace2Id = UUID.randomUUID().toString
-    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map("b" -> AttributeString("y")),
+    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")),
       Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace2WriterGroup,
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
@@ -112,7 +112,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
 
     val workspace3Id = UUID.randomUUID().toString
-    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map("c" -> AttributeString("z")),
+    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")),
       Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
         WorkspaceAccessLevels.Write -> workspace3WriterGroup,
         WorkspaceAccessLevels.Read -> workspace3ReaderGroup),
@@ -126,7 +126,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val sample4 = Entity("sample4", "sample", Map.empty)
     val sample5 = Entity("sample5", "sample", Map.empty)
     val sample6 = Entity("sample6", "sample", Map.empty)
-    val sampleSet = Entity("sampleset", "sample_set", Map("samples" -> AttributeEntityReferenceList(Seq(
+    val sampleSet = Entity("sampleset", "sample_set", Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
       sample1.toReference,
       sample2.toReference,
       sample3.toReference
@@ -463,7 +463,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -481,18 +481,18 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString("bang")): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
         assertResult(Option(AttributeString("bang"))) {
-          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(AttributeName.withDefaultNS("boo"))
         }
       }
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -500,14 +500,42 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
 
         assertResult(None) {
-          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get("boo")
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(AttributeName.withDefaultNS("boo"))
+        }
+      }
+  }
+
+  it should "return 200 on update workspace library-namespace attributes" in withTestDataApiServices { services =>
+    val name = AttributeName("library", "whatever")
+    val attr: Attribute = AttributeString("something")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(attr)) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
+      }
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
         }
       }
   }
 
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute("boo", AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
         sealRoute(services.workspaceRoutes) ~> check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
@@ -1036,8 +1064,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val newAtts = Map(
-      "number" -> AttributeNumber(11),    // replaces an existing attribute
-      "another" -> AttributeNumber(12)    // adds a new attribute
+      AttributeName.withDefaultNS("number") -> AttributeNumber(11),    // replaces an existing attribute
+      AttributeName("library", "another") -> AttributeNumber(12)    // adds a new attribute
     )
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", None, newAtts)
@@ -1142,7 +1170,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
   it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1152,7 +1180,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1162,7 +1190,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser("reader-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -1172,7 +1200,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute("boo"): AttributeUpdateOperation))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -1452,7 +1480,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(realm),
       Map.empty
     )
-    val newSample = Entity("sampleNew", "sample", Map("type" -> AttributeString("tumor")))
+    val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     // called both where success and failure are expected to ensure that there are not just typos on the URLs
     def checkWorkspaceAccess(services: TestApiService, expectSuccess: Boolean): Unit = {

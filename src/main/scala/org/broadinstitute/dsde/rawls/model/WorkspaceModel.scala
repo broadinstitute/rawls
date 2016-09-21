@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{AttributeRecord, SubmissionValidationRecord}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.joda.time.DateTime
@@ -10,10 +12,11 @@ import spray.json._
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
   val reservedAttributeNames = Set("name", "entityType")
+  type AttributeMap = Map[AttributeName, Attribute]
 }
 
 trait Attributable {
-  def attributes: Map[String, Attribute]
+  def attributes: AttributeMap
   def briefName: String
 }
 
@@ -27,11 +30,39 @@ case class WorkspaceName(
   def path = s"/workspaces/${namespace}/${name}"
 }
 
+case class AttributeName(
+                          namespace: String,
+                          name: String) extends Ordered[AttributeName] {
+  // enable implicit ordering for sorting
+  import scala.math.Ordered.orderingToOrdered
+  def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
+}
+
+object AttributeName {
+  val defaultNamespace = "default"
+  val delimiter = ':'
+
+  def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
+
+  def toDelimitedName(aName: AttributeName): String = {
+    if (aName.namespace == defaultNamespace) aName.name
+    else aName.namespace + delimiter + aName.name
+  }
+
+  def fromDelimitedName(dName: String): AttributeName = {
+    dName.split(delimiter).toList match {
+      case sName :: Nil => AttributeName.withDefaultNS(sName)
+      case sNamespace :: sName :: Nil => AttributeName(sNamespace, sName)
+      case _ => throw new RawlsException(s"Attribute string $dName has too many '$delimiter' delimiters")
+    }
+  }
+}
+
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
                       realm: Option[RawlsGroupRef],
-                      attributes: Map[String, Attribute]
+                      attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
   def briefName = toWorkspaceName.toString
@@ -46,7 +77,7 @@ case class Workspace(
                       createdDate: DateTime,
                       lastModified: DateTime,
                       createdBy: String,
-                      attributes: Map[String, Attribute],
+                      attributes: AttributeMap,
                       accessLevels: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef],
                       isLocked: Boolean = false
@@ -66,7 +97,7 @@ case class EntityName(
 case class Entity(
                    name: String,
                    entityType: String,
-                   attributes: Map[String, Attribute]
+                   attributes: AttributeMap
                    ) extends Attributable {
   def briefName = name
   def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
@@ -263,6 +294,15 @@ object WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): SortDirection = json match {
       case JsString(dir) => SortDirections.fromString(dir)
+      case _ => throw new DeserializationException("unexpected json type")
+    }
+  }
+
+  implicit object AttributeNameFormat extends JsonFormat[AttributeName] {
+    override def write(an: AttributeName): JsValue = JsString(AttributeName.toDelimitedName(an))
+
+    override def read(json: JsValue): AttributeName = json match {
+      case JsString(name) => AttributeName.fromDelimitedName(name)
       case _ => throw new DeserializationException("unexpected json type")
     }
   }
