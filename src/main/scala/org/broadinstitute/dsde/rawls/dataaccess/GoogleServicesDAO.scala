@@ -2,13 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import spray.http.StatusCodes
 import spray.json.JsObject
 import scala.concurrent.Future
 import scala.util.Try
@@ -27,15 +25,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"
 
-  def isAdmin(userId: String): Future[Boolean]
+  def isAdmin(userEmail: String): Future[Boolean]
 
-  def isLibraryCurator(userId: String): Future[Boolean]
+  def isLibraryCurator(userEmail: String): Future[Boolean]
 
   def addLibraryCurator(userEmail: String): Future[Unit]
 
   def removeLibraryCurator(userEmail: String): Future[Unit]
 
-  def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean]
+  def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean]
 
   /**
    *
