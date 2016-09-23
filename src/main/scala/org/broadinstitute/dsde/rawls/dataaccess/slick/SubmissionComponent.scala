@@ -124,23 +124,12 @@ trait SubmissionComponent {
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
           val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
 
-          getSubmissionWorkflowStatusCounts(submissionRec.id) map { stats =>
-            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty,stats) //placeholder
+          getSubmissionWorkflowStatusCounts(submissionRec.id) map { workflowStats =>
+            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty, workflowStats)
             new SubmissionListResponse(sub, user)
           }
       })
       }
-
-//      query.result.map{recs => recs.map {
-//          case (submissionRec, userRec, methodConfigRec, entityRec) =>
-//            val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
-//            val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
-//            val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
-//            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty, Map[String, Int]("foo" -> 1)) //placeholder
-//            println(sub)
-//            new SubmissionListResponse(sub, user)
-//        }
-//      }
     }
 
     def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
@@ -330,8 +319,8 @@ trait SubmissionComponent {
 
     def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {
       val query = for {
-        workflows <- workflowQuery if workflows.submissionId === submissionId
-      } yield (workflows.status)
+        workflow <- workflowQuery if workflow.submissionId === submissionId
+      } yield (workflow.status)
 
       query.result.map(wfs => wfs.groupBy(identity).mapValues(_.size))
     }

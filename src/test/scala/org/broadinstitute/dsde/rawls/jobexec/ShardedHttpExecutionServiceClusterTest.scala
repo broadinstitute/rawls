@@ -55,7 +55,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val sample1 = Entity("sample1", "Sample", Map("type" -> AttributeString("normal")))
 
     val submissionWithExecutionKeys = Submission(subWithExecutionKeys.toString, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
+      Seq(Workflow(Some(workflowExternalIdWithExecutionKey.toString),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
 
     override def save() = {
       DBIO.seq(
