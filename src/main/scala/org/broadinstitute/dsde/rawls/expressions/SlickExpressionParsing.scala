@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.ExecutionContext
@@ -239,12 +240,33 @@ trait SlickExpressionParser extends JavaTokenParsers {
       val byRootEnt: Map[String, Seq[(String, String, EntityAttributeRecord)]] = entityWithAttributeRecs groupBy { case (rootEntity, lastEntity, attribRecord) => rootEntity }
 
       byRootEnt.map { case (rootEnt, attrs) =>
-        // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where
-        // the optional entity rec is used for references. Since we know we are not dealing with a reference here
-        // as this is the attribute final func, we can pass in None.
-        val attributesByEntityId = entityAttributeQuery.unmarshalAttributes(attrs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
+        // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where the optional entity rec is used for entity references.
+        // We're evaluating an attribute expression here, so this final attribute is NOT allowed to be an entity reference.
 
-        val namedAttributesOnlyByEntityId = attributesByEntityId.map({ case (k, v) => k -> v.getOrElse(attrName, AttributeNull) }).toSeq
+        // Only problem is: it might be an entity reference anyway, because we can't stop the user typing "this.participant" into a method config input
+        // and then running it on a sample. In this case, we have the attribute record with valueEntityRef defined and pointing to the record ID of the referenced entity,
+        // but we didn't do the extra JOIN in the SQL query to find out _which_ entity it is.
+
+        // The upshot of all this is we have to handle these dangling and unwanted entity references separately. So first we filter out the well-behaved value attributes.
+        def isEntityRefAttr( rootEntityName: String, lastEntityName: String, attrRec: EntityAttributeRecord ): Boolean = { attrRec.valueEntityRef.isDefined }
+        val (refAttrRecs, valueAttrRecs) = attrs.partition { case (root, attrEnt, attrRec) => isEntityRefAttr(root, attrEnt, attrRec) }
+
+        //Unmarshal the good ones. This is what the user actually meant.
+        val attributesByEntityId: Map[String, AttributeMap] = entityAttributeQuery.unmarshalAttributes(valueAttrRecs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })
+
+        // These are the bad ones. We gather together the dangling references and make dummy EntityRef or RefList attributes for them.
+        val refAttributesByEntityId: Map[String, AttributeMap] = refAttrRecs.groupBy { case (root, attrEnt, attrRec) => attrEnt } map { case (attrEnt, groupSeq: Seq[(String, String, EntityAttributeRecord)]) =>
+          val (_, _, attrRec) = groupSeq.head
+          if( groupSeq.size == 1 ) {
+            attrEnt -> Map(AttributeName(attrRec.namespace, attrRec.name) -> AttributeEntityReference(entityType = "BAD REFERENCE", entityName = "BAD REFERENCE"))
+          } else {
+            attrEnt -> Map(AttributeName(attrRec.namespace, attrRec.name) -> AttributeEntityReferenceList( Seq.fill(groupSeq.size)(AttributeEntityReference(entityType = "BAD REFERENCE", entityName = "BAD REFERENCE"))) )
+          }
+        }
+
+        // The only piece of good news in all this nonsense is we know the IDs won't clash when we ++ the two maps together,
+        // because we enforce consistent value/ref typing when we append list members.
+        val namedAttributesOnlyByEntityId = (attributesByEntityId ++ refAttributesByEntityId).map({ case (k, v) => k -> v.getOrElse(attrName, AttributeNull) }).toSeq
         // need to sort here because some of the manipulations above don't preserve order so we can't sort in the query
         val orderedEntityNameAndAttributes = namedAttributesOnlyByEntityId.sortWith { case ((entityName1, _), (entityName2, _)) =>
           entityName1 < entityName2
