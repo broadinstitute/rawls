@@ -262,12 +262,12 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def isAdmin(userId: String): Future[Boolean] = {
-    hasGoogleRole(adminGroupName, userId)
+  override def isAdmin(userEmail: String): Future[Boolean] = {
+    hasGoogleRole(adminGroupName, userEmail)
   }
 
-  override def isLibraryCurator(userId: String): Future[Boolean] = {
-    hasGoogleRole(curatorGroupName, userId)
+  override def isLibraryCurator(userEmail: String): Future[Boolean] = {
+    hasGoogleRole(curatorGroupName, userEmail)
   }
 
   override def addLibraryCurator(userEmail: String): Future[Unit] = {
@@ -278,8 +278,8 @@ class HttpGoogleServicesDAO(
     removeEmailFromGoogleGroup(curatorGroupName, userEmail)
   }
 
-  override def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean] = {
-    val query = getGroupDirectory.members.get(roleGroupName, userId)
+  override def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean] = {
+    val query = getGroupDirectory.members.get(roleGroupName, userEmail)
     retryWithRecoverWhen500orGoogleError(() => {
       executeGoogleRequest(query)
       true

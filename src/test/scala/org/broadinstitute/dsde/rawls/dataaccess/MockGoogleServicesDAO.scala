@@ -4,7 +4,6 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
-import com.google.api.services.cloudbilling.model.BillingAccount
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
@@ -133,11 +132,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     "fc-CURATORS@dev.test.firecloud.org" -> curatorList
   )
 
-  override def isAdmin(userId: String): Future[Boolean] = hasGoogleRole("fc-ADMINS@dev.test.firecloud.org", userId)
+  override def isAdmin(userEmail: String): Future[Boolean] = hasGoogleRole("fc-ADMINS@dev.test.firecloud.org", userEmail)
 
-  override def isLibraryCurator(userId: String): Future[Boolean] = hasGoogleRole("fc-CURATORS@dev.test.firecloud.org", userId)
+  override def isLibraryCurator(userEmail: String): Future[Boolean] = hasGoogleRole("fc-CURATORS@dev.test.firecloud.org", userEmail)
 
-  override def hasGoogleRole(roleGroupName: String, userId: String): Future[Boolean] = Future.successful(googleGroups(roleGroupName).contains(userId))
+  override def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean] = Future.successful(googleGroups(roleGroupName).contains(userEmail))
 
   override def addLibraryCurator(userEmail: String): Future[Unit] = {
     curatorList += userEmail
