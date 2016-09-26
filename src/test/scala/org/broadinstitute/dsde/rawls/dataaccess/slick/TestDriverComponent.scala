@@ -84,7 +84,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
-      workflows, SubmissionStatuses.Submitted, Map[String, Int]())
+      workflows, SubmissionStatuses.Submitted, Map(WorkflowStatuses.Submitted.toString -> workflows.size))
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
@@ -441,19 +441,19 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     //a submission with a succeeeded workflow
     val submissionSuccessful = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, Map[String, Int]())
+      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, Map("Succeeded" -> 1))
 
     //a submission with a failed workflow
     val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, Map[String, Int]())
+      Seq(Workflow(Option("worklowFailed"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done, Map("Failed" -> 1))
 
     //a submission with a submitted workflow
     val submissionSubmitted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+      Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted, Map("Submitted" -> 1))
 
     //a submission with an aborted workflow
     val submissionAborted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, Map[String, Int]())
+      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted, Map("Aborted" -> 1))
 
     //a submission with multiple failed and succeeded workflows
     val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
