@@ -106,9 +106,8 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
   test("attribute expression that refers to an entity should except") {
     withTestWorkspace { workspaceContext =>
-      intercept[RawlsException] {
-        runAndWait(evalFinalAttribute(workspaceContext, "Pair", "pair1", "this.case"))
-      }
+      val exprResult = runAndWait(evalFinalAttribute(workspaceContext, "Pair", "pair1", "this.case"))
+      assert(exprResult("pair1").isFailure)
     }
   }
 
