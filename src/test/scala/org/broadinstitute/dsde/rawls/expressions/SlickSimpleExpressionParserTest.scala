@@ -400,7 +400,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       val libraryAttributes = Map(
         AttributeName("library", "author") -> AttributeString("L. Ron Hubbard"),
-        AttributeName("library", "nothing") -> AttributeEmptyList,
+        AttributeName("library", "nothing") -> AttributeValueEmptyList,
         AttributeName("library", "series") -> AttributeValueList(series)
       )
 

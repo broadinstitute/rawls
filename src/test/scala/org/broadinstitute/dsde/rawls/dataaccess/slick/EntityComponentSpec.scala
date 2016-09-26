@@ -49,7 +49,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     assertResult(entity) { runAndWait(entityQuery.save(workspaceContext, entity)) }
     assertResult(Some(entity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
-    val emptyListAttributeEntity = entity.copy(name = "emptyListy", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeEmptyList))
+    val emptyListAttributeEntity = entity.copy(name = "emptyListy", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList))
     runAndWait(entityQuery.save(workspaceContext, emptyListAttributeEntity))
     assertResult(Some(emptyListAttributeEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyListy")) }
 

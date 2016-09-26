@@ -51,7 +51,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsListEmpty),
     Seq.empty, Map.empty)
 
-  val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeEmptyList), Option("message4"), "test_input_name4"))
+  val inputResolutionsAttrEmptyList = Seq(SubmissionValidationValue(Option(AttributeValueEmptyList), Option("message4"), "test_input_name4"))
   private val submissionAttrEmptyList = createTestSubmission(testData.workspace, testData.methodConfigArrayType, testData.sset1, testData.userOwner,
     Seq(testData.sset1), Map(testData.sset1 -> inputResolutionsAttrEmptyList),
     Seq.empty, Map.empty)

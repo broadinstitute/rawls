@@ -98,6 +98,9 @@ trait AttributeComponent {
 
   import driver.api._
 
+  //Magic const we put in listIndex to indicate the dummy row is a list type.
+  val EMPTY_LIST_INDEX_MAGIC = -1
+
   abstract class AttributeTable[OWNER_ID: TypedType, RECORD <: AttributeRecord[OWNER_ID]](tag: Tag, tableName: String) extends Table[RECORD](tag, tableName) {
     final type OwnerIdType = OWNER_ID
 
@@ -188,16 +191,22 @@ trait AttributeComponent {
      */
     def insertAttributeRecords(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
 
-      def insertEmpty: Seq[ReadWriteAction[Int]] = {
+      def insertEmptyVal: Seq[ReadWriteAction[Int]] = {
+        Seq(insertAttributeValue(ownerId, attributeName, AttributeNumber(-1), Option(EMPTY_LIST_INDEX_MAGIC), Option(0)))
+      }
+
+      def insertEmptyRef: Seq[ReadWriteAction[Int]] = {
         //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
-        Seq(insertAttributeValue(ownerId, attributeName, AttributeNull, Option(-1), Option(0)))
+        val dummyRef = AttributeEntityReference(entityType="dummy", entityName="dummy")
+        Seq(this += marshalAttributeEntityReference(ownerId, attributeName, Option(EMPTY_LIST_INDEX_MAGIC), dummyRef, Map(dummyRef -> 0), Option(0)))
       }
 
       attribute match {
-        case AttributeEmptyList => insertEmpty
+        case AttributeEntityReferenceEmptyList => insertEmptyRef
+        case AttributeValueEmptyList => insertEmptyVal
         //convert empty AttributeList types to AttributeEmptyList on save
-        case AttributeEntityReferenceList(refs) if refs.isEmpty => insertEmpty
-        case AttributeValueList(values) if values.isEmpty => insertEmpty
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => insertEmptyRef
+        case AttributeValueList(values) if values.isEmpty => insertEmptyVal
 
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
@@ -224,15 +233,21 @@ trait AttributeComponent {
 
     def marshalAttribute(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
-      def marshalEmpty : Seq[T#TableElementType] = {
-        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
-        Seq(marshalAttributeValue(ownerId, attributeName, AttributeNull, Option(-1), Option(0)))
+      def marshalEmptyVal : Seq[T#TableElementType] = {
+        Seq(marshalAttributeValue(ownerId, attributeName, AttributeNumber(-1), Option(EMPTY_LIST_INDEX_MAGIC), Option(0)))
       }
+
+      def marshalEmptyRef : Seq[T#TableElementType] = {
+        val dummyRef = AttributeEntityReference(entityType="dummy", entityName="dummy")
+        Seq(marshalAttributeEntityReference(ownerId, attributeName, Option(EMPTY_LIST_INDEX_MAGIC), dummyRef, Map(dummyRef -> 0), Option(0)))
+      }
+
       attribute match {
-        case AttributeEmptyList => marshalEmpty
+        case AttributeEntityReferenceEmptyList => marshalEmptyRef
+        case AttributeValueEmptyList => marshalEmptyVal
         //convert empty AttributeList types to AttributeEmptyList on save
-        case AttributeEntityReferenceList(refs) if refs.isEmpty => marshalEmpty
-        case AttributeValueList(values) if values.isEmpty => marshalEmpty
+        case AttributeEntityReferenceList(refs) if refs.isEmpty => marshalEmptyRef
+        case AttributeValueList(values) if values.isEmpty => marshalEmptyVal
 
         case AttributeEntityReferenceList(refs) =>
           assertConsistentReferenceListMembers(refs)
@@ -357,8 +372,12 @@ trait AttributeComponent {
     private def unmarshalList(attributeRecsWithRef: Set[(RECORD, Option[EntityRecord])]) = {
       val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
       //NOTE: listIndex of -1 means "empty list"
-      if (sortedRecs.head._1.listIndex.get == -1) {
-        AttributeEmptyList
+      if (sortedRecs.head._1.listIndex.get == EMPTY_LIST_INDEX_MAGIC) {
+        if( sortedRecs.head._1.valueNumber.isDefined ) {
+          AttributeValueEmptyList
+        } else {
+          AttributeEntityReferenceEmptyList
+        }
       } else if (sortedRecs.head._2.isDefined) {
         AttributeEntityReferenceList(sortedRecs.map { case (attributeRec, entityRecOption) =>
           entityRecOption.getOrElse(throw new RawlsException(s"missing entity reference for attribute ${attributeRec}"))

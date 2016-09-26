@@ -19,7 +19,8 @@ trait JsonSupport extends DefaultJsonProtocol {
       case AttributeValueList(l) => JsArray(l.map(write(_)):_*)
       case AttributeEntityReferenceList(l) => JsArray(l.map(write(_)).toSeq:_*)
       case AttributeEntityReference(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
-      case AttributeEmptyList => JsArray()
+      case AttributeValueEmptyList => JsArray()
+      case AttributeEntityReferenceEmptyList => JsArray()
     }
 
     override def read(json: JsValue): Attribute = json match {
@@ -33,7 +34,8 @@ trait JsonSupport extends DefaultJsonProtocol {
     }
 
     def getAttributeList(s: Seq[Attribute]) = s match {
-      case e: Seq[_] if e.isEmpty => AttributeEmptyList
+      case e: Seq[_] if e.isEmpty => AttributeValueEmptyList
+        //TODO: What to do about AttributeEntityReferenceEmptyList?
       case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
       case r: Seq[AttributeEntityReference @unchecked] if (s.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_)) => AttributeEntityReferenceList(r)
       case _ => throw new DeserializationException("illegal array type")

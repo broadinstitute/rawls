@@ -162,7 +162,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       val context = SlickWorkspaceContext(workspace)
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
-        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeEmptyList), None, intArrayName)))
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayName)))
     }
   }
 }

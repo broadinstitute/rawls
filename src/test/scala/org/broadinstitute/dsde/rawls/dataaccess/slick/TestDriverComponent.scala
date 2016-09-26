@@ -163,7 +163,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
       AttributeName.withDefaultNS("number") -> AttributeNumber(10),
-      AttributeName.withDefaultNS("empty") -> AttributeEmptyList,
+      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
@@ -352,7 +352,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         AttributeEntityReference("Sample", "sample7")))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map(AttributeName.withDefaultNS("samples") -> AttributeEmptyList ))
+      Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
       Map(AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),
@@ -631,7 +631,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
       AttributeName.withDefaultNS("number") -> AttributeNumber(10),
-      AttributeName.withDefaultNS("empty") -> AttributeEmptyList,
+      AttributeName.withDefaultNS("empty") -> AttributeValueEmptyList,
       AttributeName.withDefaultNS("values") -> AttributeValueList(Seq(AttributeString("another string"), AttributeString("true")))
     )
 
@@ -684,7 +684,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         AttributeEntityReference("Sample", "sample7")))))
 
     val sset_empty = Entity("sset_empty", "SampleSet",
-      Map(AttributeName.withDefaultNS("samples") -> AttributeEmptyList ))
+      Map(AttributeName.withDefaultNS("samples") -> AttributeValueEmptyList ))
 
     val ps1 = Entity("ps1", "PairSet",
       Map(AttributeName.withDefaultNS("pairs") -> AttributeEntityReferenceList( Seq(AttributeEntityReference("Pair", "pair1"),

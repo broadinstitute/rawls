@@ -796,14 +796,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         case AddListMember(attributeListName, newMember) =>
           startingAttributes.get(attributeListName) match {
-            case Some(AttributeEmptyList) =>
+            case Some(AttributeValueEmptyList) =>
               newMember match {
                 case AttributeNull =>
                   startingAttributes
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
+                  throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+                case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
+              }
+
+            case Some(AttributeEntityReferenceEmptyList) =>
+              newMember match {
+                case AttributeNull =>
+                  startingAttributes
+                case newMember: AttributeEntityReference =>
                   startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
+                case newMember: AttributeValue =>
+                  throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
@@ -828,7 +839,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case None =>
               newMember match {
                 case AttributeNull =>
-                  startingAttributes + (attributeListName -> AttributeEmptyList)
+                  startingAttributes + (attributeListName -> AttributeValueEmptyList)
+                //TODO: How do we load in an empty reflist?
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>

@@ -127,7 +127,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "create an empty list when inserting null via AddListMember" in withTestDataServices { services =>
-    assertResult(Some(AttributeEmptyList)) {
+    assertResult(Some(AttributeValueEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(AddListMember(AttributeName.withDefaultNS("nolisthere"), AttributeNull))).attributes.get(AttributeName.withDefaultNS("nolisthere"))
     }
   }

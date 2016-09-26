@@ -36,7 +36,7 @@ object MethodConfigResolver {
 
   private def getArrayResult(inputName: String, seq: Iterable[AttributeValue]): SubmissionValidationValue = {
     val notNull = seq.filter(v => v != null && v != AttributeNull)
-    val attr = if (notNull.isEmpty) Option(AttributeEmptyList) else Option(AttributeValueList(notNull.toSeq))
+    val attr = if (notNull.isEmpty) Option(AttributeValueEmptyList) else Option(AttributeValueList(notNull.toSeq))
     SubmissionValidationValue(attr, None, inputName)
   }
 

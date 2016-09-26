@@ -394,7 +394,7 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
           val results = exprResults map { case (key, attrVals) =>
             key -> Try(attrVals.collect {
               case AttributeNull => Seq.empty
-              case AttributeEmptyList => Seq.empty
+              case AttributeValueEmptyList => Seq.empty
               case av: AttributeValue => Seq(av)
               case avl: AttributeValueList => avl.list
               case badType => throw new RawlsException(s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}")

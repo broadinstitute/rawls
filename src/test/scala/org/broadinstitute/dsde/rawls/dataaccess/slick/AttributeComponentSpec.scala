@@ -76,7 +76,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   }
 
   it should "insert empty list" in withEmptyTestDatabase {
-    val testAttribute = AttributeEmptyList
+    val testAttribute = AttributeValueEmptyList
     runAndWait(workspaceQuery.save(workspace))
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
@@ -208,7 +208,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
           AttributeName.withDefaultNS("bool") -> AttributeBoolean(true),
           AttributeName.withDefaultNS("ref") -> AttributeEntityReference("type", "name"),
           AttributeName.withDefaultNS("refList") -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name3"), AttributeEntityReference("type", "name2"), AttributeEntityReference("type", "name1"))),
-          AttributeName.withDefaultNS("emptyList") -> AttributeEmptyList,
+          AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList,
           AttributeName.withDefaultNS("null") -> AttributeNull),
         2 -> Map(AttributeName.withDefaultNS("valList") -> AttributeValueList(Seq(AttributeNumber(3), AttributeNumber(2), AttributeNumber(1))))
       )) {
