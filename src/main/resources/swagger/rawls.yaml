@@ -2279,6 +2279,10 @@ paths:
             Location:
               description: The path to the newly created method configuration
               type: string
+        '403':
+          description: Invalid attribute namespace(s) in outputs
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace not found
           schema:
@@ -2496,6 +2500,10 @@ paths:
           description: Successful Request
           schema:
             $ref: '#/definitions/ValidatedMethodConfiguration'
+        '403':
+          description: Invalid attribute namespace(s) in outputs
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace or method configuration not found
           schema:
@@ -2606,6 +2614,10 @@ paths:
             Location:
               description: The path to the copied method configuration
               type: string
+        '403':
+          description: Invalid attribute namespace(s) in outputs
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Source workspace or method configuration not found
           schema:
@@ -2646,6 +2658,10 @@ paths:
             Location:
               description: The path to the newly created method configuration
               type: string
+        '403':
+          description: Invalid attribute namespace(s) in outputs
+          schema:
+            $ref: '#/definitions/ErrorReport'
         '404':
           description: Source method configuration not found in method repo
           schema:

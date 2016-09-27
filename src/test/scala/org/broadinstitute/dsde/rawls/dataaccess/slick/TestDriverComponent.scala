@@ -379,6 +379,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val methodConfigEntityUpdate = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1" -> AttributeString("this.foo")), MethodRepoMethod("ns-config", "meth1", 1))
     val methodConfigWorkspaceUpdate = MethodConfiguration("ns", "testConfig1", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.foo")), MethodRepoMethod("ns-config", "meth1", 1))
+    val methodConfigWorkspaceLibraryUpdate = MethodConfiguration("ns", "testConfigLib", "Sample", Map(), Map(), Map("o1" -> AttributeString("workspace.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val methodConfigValid = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this.name")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
     val methodConfigUnparseable = MethodConfiguration("dsde", "UnparseableMethodConfig", "Sample", prerequisites=Map.empty, inputs=Map("three_step.cgrep.pattern" -> AttributeString("this..wont.parse")), outputs=Map.empty, MethodRepoMethod("dsde", "three_step", 1))
@@ -403,15 +404,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)
     val methodConfigName2 = methodConfigName.copy(name="novelName")
     val methodConfigName3 = methodConfigName.copy(name="noSuchName")
+    val methodConfigName4 = methodConfigName.copy(name=methodConfigWorkspaceLibraryUpdate.name)
     val methodConfigNamePairCreated = MethodConfigurationNamePair(methodConfigName,methodConfigName2)
     val methodConfigNamePairConflict = MethodConfigurationNamePair(methodConfigName,methodConfigName)
     val methodConfigNamePairNotFound = MethodConfigurationNamePair(methodConfigName3,methodConfigName2)
+    val methodConfigNamePairFromLibrary = MethodConfigurationNamePair(methodConfigName4,methodConfigName2)
     val uniqueMethodConfigName = UUID.randomUUID.toString
     val newMethodConfigName = MethodConfigurationName(uniqueMethodConfigName, methodConfig.namespace, wsName)
     val methodRepoGood = MethodRepoConfigurationImport("workspace_test", "rawls_test_good", 1, newMethodConfigName)
     val methodRepoMissing = MethodRepoConfigurationImport("workspace_test", "rawls_test_missing", 1, methodConfigName)
     val methodRepoEmptyPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_empty_payload", 1, methodConfigName)
     val methodRepoBadPayload = MethodRepoConfigurationImport("workspace_test", "rawls_test_bad_payload", 1, methodConfigName)
+    val methodRepoLibrary = MethodRepoConfigurationImport("workspace_test", "rawls_test_library", 1, newMethodConfigName)
 
     val inputResolutions = Seq(SubmissionValidationValue(Option(AttributeString("value")), Option("message"), "test_input_name"))
     val inputResolutions2 = Seq(SubmissionValidationValue(Option(AttributeString("value2")), Option("message2"), "test_input_name2"))
@@ -559,6 +563,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                 methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
                 methodConfigurationQuery.save(context, methodConfigArrayType),
                 methodConfigurationQuery.save(context, methodConfigEntityUpdate),
+                methodConfigurationQuery.save(context, methodConfigWorkspaceLibraryUpdate),
 
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submissionNoWorkflows),

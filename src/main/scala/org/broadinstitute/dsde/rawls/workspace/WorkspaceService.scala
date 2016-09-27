@@ -881,17 +881,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
-          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
-          case None => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
-        } map { validatedMethodConfiguration =>
-          RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
+  def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
+    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+            case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
+            case None => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+          } map { validatedMethodConfiguration =>
+            RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
+          }
         }
       }
     }
+  }
 
   def deleteMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -916,14 +919,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
-          case Some(_) => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
-          case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
-        } map(RequestComplete(StatusCodes.OK, _))
+    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+            case Some(_) => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+          } map (RequestComplete(StatusCodes.OK, _))
+        }
       }
     }
+
 
   def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -935,41 +941,60 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
+    // split into two transactions because we need to call out to Google after retrieving the source MC
+
+    val transaction1Result = dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(mcnp.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
         withWorkspaceContextAndPermissions(mcnp.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceContext =>
           dataAccess.methodConfigurationQuery.get(sourceContext, mcnp.source.namespace, mcnp.source.name) flatMap {
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${mcnp.source.namespace}/${mcnp.source.name} in ${mcnp.source.workspaceName}.")))
-            case Some(methodConfig) => saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
+            case None =>
+              val err = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${mcnp.source.namespace}/${mcnp.source.name} in ${mcnp.source.workspaceName}.")
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = err))
+            case Some(methodConfig) => DBIO.successful((methodConfig, destContext))
           }
+        }
+      }
+    }
+
+    transaction1Result flatMap { case (methodConfig, destContext) =>
+      withAttributeNamespaceCheck(userInfo, methodConfig) {
+        dataSource.inTransaction { dataAccess =>
+          saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
         }
       }
     }
   }
 
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions( methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
-        DBIO.from(methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo)) flatMap { agoraEntityOption =>
-          agoraEntityOption match {
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,s"There is no method configuration named ${methodRepoQuery.methodRepoNamespace}/${methodRepoQuery.methodRepoName}/${methodRepoQuery.methodRepoSnapshotId} in the repository.")))
-            case Some(entity) =>
-              try {
-                // if JSON parsing fails, catch below
-                val methodConfig = entity.payload.map(JsonParser(_).convertTo[AgoraMethodConfiguration])
-                methodConfig match {
-                  case Some(targetMethodConfig) => saveCopiedMethodConfiguration(convertToMethodConfiguration(targetMethodConfig), methodRepoQuery.destination, destContext, dataAccess)
-                  case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
-                }
-              }
-              catch {
-                case e: Exception =>
-                  DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Error parsing Method Repo response message.", ErrorReport(e))))
-              }
+    methodRepoDAO.getMethodConfig(methodRepoQuery.methodRepoNamespace, methodRepoQuery.methodRepoName, methodRepoQuery.methodRepoSnapshotId, userInfo) flatMap {
+      case None =>
+        val name = s"${methodRepoQuery.methodRepoNamespace}/${methodRepoQuery.methodRepoName}/${methodRepoQuery.methodRepoSnapshotId}"
+        val err = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named $name in the repository.")
+        Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
+      case Some(agoraEntity) => Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
+        withAttributeNamespaceCheck(userInfo, targetMethodConfig) {
+          dataSource.inTransaction { dataAccess =>
+            withWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
+              saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
+            }
           }
         }
       }
     }
+
+  private def parseAgoraEntity(agoraEntity: AgoraEntity): Try[MethodConfiguration] = {
+    val parsed = Try {
+      agoraEntity.payload.map(JsonParser(_).convertTo[AgoraMethodConfiguration])
+    } recoverWith {
+      case e: Exception =>
+        Failure(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Error parsing Method Repo response message.", ErrorReport(e))))
+    }
+
+    parsed flatMap {
+      case Some(agoraMC) => Success(convertToMethodConfiguration(agoraMC))
+      case None => Failure(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.UnprocessableEntity, "Method Repo missing configuration payload")))
+    }
+  }
 
   private def convertToMethodConfiguration(agoraMethodConfig: AgoraMethodConfiguration): MethodConfiguration = {
     MethodConfiguration(agoraMethodConfig.namespace, agoraMethodConfig.name, agoraMethodConfig.rootEntityType, agoraMethodConfig.prerequisites, agoraMethodConfig.inputs, agoraMethodConfig.outputs, agoraMethodConfig.methodRepoMethod)
@@ -1455,6 +1480,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def withAttributeNamespaceCheck[T](userInfo: UserInfo, hasAttributes: Attributable)(op: => Future[T]): Future[T] =
     withAttributeNamespaceCheck(userInfo, hasAttributes.attributes.keys)(op)
+
+  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, methodConfiguration: MethodConfiguration)(op: => Future[T]): Future[T] = {
+    // TODO: this duplicates expression parsing, the canonical way to do this.  Use that instead?
+    // valid method configuration outputs are either in the format this.attrname or workspace.attrname
+    // invalid (unparseable) will be caught by expression parsing instead
+    val attrNames = methodConfiguration.outputs map { case (_, attr) => AttributeName.fromDelimitedName(attr.value.split('.').last) }
+    withAttributeNamespaceCheck(userInfo, attrNames)(op)
+  }
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
