@@ -77,26 +77,26 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     
     
     val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+      Seq(Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+      Seq(Workflow(Option("malformed_workflow"),WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+      Seq(Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
-      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+      Seq(Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+        Workflow(nonExistingWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
-        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+        Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(

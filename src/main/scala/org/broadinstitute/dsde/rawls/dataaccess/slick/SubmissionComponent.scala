@@ -124,9 +124,9 @@ trait SubmissionComponent {
           val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
           val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
 
-          getSubmissionWorkflowStatusCounts(submissionRec.id) map { workflowStats =>
-            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty, workflowStats)
-            new SubmissionListResponse(sub, user)
+          getSubmissionWorkflowStatusCounts(submissionRec.id) map { workflowStatuses =>
+            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty)
+            new SubmissionListResponse(sub, user, workflowStatuses)
           }
       })
       }
@@ -224,8 +224,7 @@ trait SubmissionComponent {
             config <- methodConfigurationQuery.loadMethodConfigurationById(submissionRec.methodConfigurationId)
             workflows <- loadSubmissionWorkflows(submissionRec.id)
             entity <- loadSubmissionEntity(submissionRec.submissionEntityId)
-            workflowStatuses <- getSubmissionWorkflowStatusCounts(submissionRec.id)
-          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows, workflowStatuses))
+          } yield Option(unmarshalSubmission(submissionRec, config.get, entity, workflows))
       }
     }
 
@@ -236,8 +235,7 @@ trait SubmissionComponent {
           workflows <- loadSubmissionWorkflows(rec.get.id)
           entity <- loadSubmissionEntity(rec.get.submissionEntityId)
           workspace <- workspaceQuery.findById(rec.get.workspaceId.toString)
-          workflowStatuses <- getSubmissionWorkflowStatusCounts(rec.get.id)
-        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows, workflowStatuses)
+        } yield unmarshalActiveSubmission(rec.get, workspace.get, config.get, entity, workflows)
       }
     }
 
@@ -340,7 +338,7 @@ trait SubmissionComponent {
         submission.status.toString)
     }
 
-    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], workflowStatuses: Map[String, Int]): Submission = {
+    private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): Submission = {
       Submission(
         submissionRec.id.toString,
         new DateTime(submissionRec.submissionDate.getTime),
@@ -349,18 +347,16 @@ trait SubmissionComponent {
         config.name,
         entity,
         workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
-        SubmissionStatuses.withName(submissionRec.status),
-        workflowStatuses)
+        SubmissionStatuses.withName(submissionRec.status))
     }
 
-    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow], workflowStatuses: Map[String, Int]): ActiveSubmission = {
+    private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): ActiveSubmission = {
       ActiveSubmission(workspace.namespace, workspace.name,
         unmarshalSubmission(
           submissionRec,
           config,
           entity,
-          workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
-          workflowStatuses)
+          workflows.toList.sortBy(wf => wf.workflowEntity.entityName))
       )
     }
 

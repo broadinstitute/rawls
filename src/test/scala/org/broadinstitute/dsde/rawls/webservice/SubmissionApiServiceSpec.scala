@@ -149,12 +149,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(Set(
-          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner),
-          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner),
-          new SubmissionListResponse(testData.submission1, testData.userOwner),
-          new SubmissionListResponse(testData.submission2, testData.userOwner),
-          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner),
-          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
+          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, Map[String, Int]("Submitted" -> 4)),
+          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, Map[String, Int]()),
+          new SubmissionListResponse(testData.submission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
+          new SubmissionListResponse(testData.submission2, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
+          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, Map[String, Int]("Submitted" -> 1)),
+          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, Map[String, Int]("Submitted" -> 1)))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }
@@ -321,7 +321,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, Map("Succeeded" -> 1))
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
