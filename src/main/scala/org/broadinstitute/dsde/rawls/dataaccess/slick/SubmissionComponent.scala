@@ -131,7 +131,6 @@ trait SubmissionComponent {
         }
         }
       }
-
     }
 
     def countByStatus(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
