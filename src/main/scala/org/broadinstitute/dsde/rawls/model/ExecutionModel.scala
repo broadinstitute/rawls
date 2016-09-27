@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -211,6 +213,11 @@ case class WorkflowQueueStatusResponse
   workflowsBeforeNextUserWorkflow: Int,
   workflowCountsByStatus: Map[String, Int]
 )
+
+case class SubmissionWorkflowStatusResponse(
+  submissionId: UUID,
+  workflowStatus: String,
+  count: Int)
 
 object ExecutionJsonSupport extends JsonSupport {
   type OutputType = Either[Attribute, UnsupportedOutputType]
