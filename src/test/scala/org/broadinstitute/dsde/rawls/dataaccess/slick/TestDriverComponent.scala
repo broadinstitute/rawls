@@ -83,8 +83,13 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Workflow(uuid, status, testDate, ref.toReference, inputResolutions(ref))
     }
 
-    Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
-      workflows, SubmissionStatuses.Submitted, Map(WorkflowStatuses.Submitted.toString -> workflows.size))
+    val foo = UUID.randomUUID.toString
+
+    println(foo)
+    println(workflows.size)
+
+    Submission(foo, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
+      workflows, SubmissionStatuses.Submitted, Map(WorkflowStatuses.Submitted.toString -> 0))
   }
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
@@ -437,7 +442,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(Workflow(Option("workflowA"),WorkflowStatuses.Submitted,testDate,sample1.toReference, inputResolutions),
         Workflow(Option("workflowB"),WorkflowStatuses.Submitted,testDate,sample2.toReference, inputResolutions),
         Workflow(Option("workflowC"),WorkflowStatuses.Submitted,testDate,sample3.toReference, inputResolutions),
-        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted, Map[String, Int]())
+        Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted, Map("Submitted" -> 4))
 
     //a submission with a succeeeded workflow
     val submissionSuccessful = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,

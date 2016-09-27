@@ -321,7 +321,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, Map[String, Int]())
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, Map("Succeeded" -> 1))
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
