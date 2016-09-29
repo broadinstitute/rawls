@@ -34,8 +34,7 @@ trait JsonSupport extends DefaultJsonProtocol {
     }
 
     def getAttributeList(s: Seq[Attribute]) = s match {
-      case e: Seq[_] if e.isEmpty => AttributeValueEmptyList
-        //TODO: What to do about AttributeEntityReferenceEmptyList?
+      case e: Seq[_] if e.isEmpty => throw new DeserializationException("can't infer type from empty array")
       case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
       case r: Seq[AttributeEntityReference @unchecked] if (s.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_)) => AttributeEntityReferenceList(r)
       case _ => throw new DeserializationException("illegal array type")

@@ -794,6 +794,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         case RemoveAttribute(attributeName) => startingAttributes - attributeName
 
+        case CreateAttributeEntityReferenceList(attributeName) => startingAttributes + (attributeName -> AttributeEntityReferenceEmptyList)
+        case CreateAttributeValueList(attributeName) => startingAttributes + (attributeName -> AttributeValueEmptyList)
+
         case AddListMember(attributeListName, newMember) =>
           startingAttributes.get(attributeListName) match {
             case Some(AttributeValueEmptyList) =>
@@ -839,8 +842,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case None =>
               newMember match {
                 case AttributeNull =>
-                  startingAttributes + (attributeListName -> AttributeValueEmptyList)
-                //TODO: How do we load in an empty reflist?
+                  throw new AttributeUpdateOperationException("Cannot use AttributeNull to create empty list. Use CreateEmpty[Ref|Val]List instead.")
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>

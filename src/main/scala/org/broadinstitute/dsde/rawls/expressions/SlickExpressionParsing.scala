@@ -248,8 +248,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
         // but we didn't do the extra JOIN in the SQL query to find out _which_ entity it is.
 
         // The upshot of all this is we have to handle these dangling and unwanted entity references separately. So first we filter out the well-behaved value attributes.
-        def isEntityRefAttr( rootEntityName: String, lastEntityName: String, attrRec: EntityAttributeRecord ): Boolean = { attrRec.valueEntityRef.isDefined }
-        val (refAttrRecs, valueAttrRecs) = attrs.partition { case (root, attrEnt, attrRec) => isEntityRefAttr(root, attrEnt, attrRec) }
+        val (refAttrRecs, valueAttrRecs) = attrs.partition { case (root, attrEnt, attrRec) => isEntityRefRecord(attrRec) }
 
         //Unmarshal the good ones. This is what the user actually meant.
         val attributesByEntityId: Map[String, AttributeMap] = entityAttributeQuery.unmarshalAttributes(valueAttrRecs.map { case (root, attrEnt, attrRec) => ((attrEnt, attrRec), None) })

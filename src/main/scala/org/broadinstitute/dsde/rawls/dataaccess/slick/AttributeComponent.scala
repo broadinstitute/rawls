@@ -101,6 +101,11 @@ trait AttributeComponent {
   //Magic const we put in listIndex to indicate the dummy row is a list type.
   val EMPTY_LIST_INDEX_MAGIC = -1
 
+  def isEntityRefRecord[T](rec: AttributeRecord[T]): Boolean = {
+    val isEmptyRefListDummyRecord = rec.listIndex.isDefined && rec.listIndex.get == -1 && rec.valueNumber.isEmpty
+    rec.valueEntityRef.isDefined || isEmptyRefListDummyRecord
+  }
+
   abstract class AttributeTable[OWNER_ID: TypedType, RECORD <: AttributeRecord[OWNER_ID]](tag: Tag, tableName: String) extends Table[RECORD](tag, tableName) {
     final type OwnerIdType = OWNER_ID
 
@@ -196,9 +201,7 @@ trait AttributeComponent {
       }
 
       def insertEmptyRef: Seq[ReadWriteAction[Int]] = {
-        //NOTE: listIndex of -1 is the magic number for "empty list". see unmarshalList
-        val dummyRef = AttributeEntityReference(entityType="dummy", entityName="dummy")
-        Seq(this += marshalAttributeEntityReference(ownerId, attributeName, Option(EMPTY_LIST_INDEX_MAGIC), dummyRef, Map(dummyRef -> 0), Option(0)))
+        Seq(this += marshalAttributeEmptyEntityReferenceList(ownerId, attributeName))
       }
 
       attribute match {
@@ -238,8 +241,7 @@ trait AttributeComponent {
       }
 
       def marshalEmptyRef : Seq[T#TableElementType] = {
-        val dummyRef = AttributeEntityReference(entityType="dummy", entityName="dummy")
-        Seq(marshalAttributeEntityReference(ownerId, attributeName, Option(EMPTY_LIST_INDEX_MAGIC), dummyRef, Map(dummyRef -> 0), Option(0)))
+        Seq(marshalAttributeEmptyEntityReferenceList(ownerId, attributeName))
       }
 
       attribute match {
@@ -264,6 +266,10 @@ trait AttributeComponent {
 
     def batchInsertAttributes(attributes: Seq[RECORD]) = {
       insertInBatches(this, attributes)
+    }
+
+    def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
+      createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, Option(EMPTY_LIST_INDEX_MAGIC), Option(0))
     }
 
     def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
@@ -373,10 +379,10 @@ trait AttributeComponent {
       val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
       //NOTE: listIndex of -1 means "empty list"
       if (sortedRecs.head._1.listIndex.get == EMPTY_LIST_INDEX_MAGIC) {
-        if( sortedRecs.head._1.valueNumber.isDefined ) {
-          AttributeValueEmptyList
-        } else {
+        if( isEntityRefRecord(sortedRecs.head._1) ) {
           AttributeEntityReferenceEmptyList
+        } else {
+          AttributeValueEmptyList
         }
       } else if (sortedRecs.head._2.isDefined) {
         AttributeEntityReferenceList(sortedRecs.map { case (attributeRec, entityRecOption) =>
