@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
+import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -121,9 +123,10 @@ case class SubmissionListResponse(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
-  status: SubmissionStatus
+  status: SubmissionStatus,
+  workflowStatuses: Map[String, Int]
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -212,6 +215,11 @@ case class WorkflowQueueStatusResponse
   workflowCountsByStatus: Map[String, Int]
 )
 
+case class SubmissionWorkflowStatusResponse(
+  submissionId: UUID,
+  workflowStatus: String,
+  count: Int)
+
 object ExecutionJsonSupport extends JsonSupport {
   type OutputType = Either[Attribute, UnsupportedOutputType]
 
@@ -284,7 +292,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusResponseFormat = jsonFormat8(SubmissionStatusResponse)
 
-  implicit val SubmissionListResponseFormat = jsonFormat7(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat8(SubmissionListResponse)
 
   implicit val CallMetadataFormat = jsonFormat13(CallMetadata)
 

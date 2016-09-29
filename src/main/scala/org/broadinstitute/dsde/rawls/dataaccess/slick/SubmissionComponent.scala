@@ -117,13 +117,18 @@ trait SubmissionComponent {
         entityRec <- entityQuery if (submissionRec.submissionEntityId === entityRec.id)
       } yield (submissionRec, userRec, methodConfigRec, entityRec)
 
-      query.result.map{recs => recs.map {
+      GatherStatusesForWorkspaceSubmissionsQuery.gatherWorkflowStatuses(workspaceContext.workspaceId) flatMap { workflowStates =>
+        val states = workflowStates.groupBy(_.submissionId)
+        query.result.map { recs => recs.map {
           case (submissionRec, userRec, methodConfigRec, entityRec) =>
             val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
             val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
             val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
-            val sub = unmarshalSubmission(submissionRec, config, entity, Seq.empty)
-            new SubmissionListResponse(sub, user)
+
+            val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
+
+            new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entity, Seq.empty), user, subStatuses)
+        }
         }
       }
     }
@@ -314,6 +319,14 @@ trait SubmissionComponent {
       query.result.map(_.toMap)
     }
 
+    def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {
+      val query = for {
+        workflow <- workflowQuery if workflow.submissionId === submissionId
+      } yield (workflow.status)
+
+      query.result.map(wfs => wfs.groupBy(identity).mapValues(_.size))
+    }
+
     /*
       the marshal/unmarshal methods
      */
@@ -469,6 +482,22 @@ trait SubmissionComponent {
       def countUsersWhoSubmittedInWindow(startDate: String, endDate: String) = {
         sql"""select count(distinct SUBMITTER) from SUBMISSION
                 where DATE_SUBMITTED between $startDate and $endDate""".as[SingleStatistic].head
+      }
+    }
+
+    object GatherStatusesForWorkspaceSubmissionsQuery extends RawSqlQuery {
+      val driver: JdbcDriver = SubmissionComponent.this.driver
+
+      implicit val getSubmissionWorkflowStatusResponse = GetResult { r =>
+        SubmissionWorkflowStatusResponse(r.<<, r.<<, r.<<)
+      }
+
+      def gatherWorkflowStatuses(workspaceId: UUID) = {
+        sql"""select s.id, w.status, count(*) from SUBMISSION s
+                join WORKFLOW w
+                on s.id = w.submission_id
+                where s.workspace_id = $workspaceId
+                group by s.id, w.status""".as[SubmissionWorkflowStatusResponse]
       }
     }
   }

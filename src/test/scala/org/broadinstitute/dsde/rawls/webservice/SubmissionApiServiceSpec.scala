@@ -149,12 +149,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) {status}
         assertResult(Set(
-          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner),
-          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner),
-          new SubmissionListResponse(testData.submission1, testData.userOwner),
-          new SubmissionListResponse(testData.submission2, testData.userOwner),
-          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner),
-          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner))) {
+          new SubmissionListResponse(testData.submissionTerminateTest, testData.userOwner, Map[String, Int]("Submitted" -> 4)),
+          new SubmissionListResponse(testData.submissionNoWorkflows, testData.userOwner, Map[String, Int]()),
+          new SubmissionListResponse(testData.submission1, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
+          new SubmissionListResponse(testData.submission2, testData.userOwner, Map[String, Int]("Submitted" -> 3)),
+          new SubmissionListResponse(testData.submissionUpdateEntity, testData.userOwner, Map[String, Int]("Submitted" -> 1)),
+          new SubmissionListResponse(testData.submissionUpdateWorkspace, testData.userOwner, Map[String, Int]("Submitted" -> 1)))) {
           responseAs[Seq[SubmissionListResponse]].toSet
         }
       }

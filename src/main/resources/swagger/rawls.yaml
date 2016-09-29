@@ -3549,11 +3549,6 @@ definitions:
         description: Status of Workflow(s)
         items:
           $ref: '#/definitions/Workflow'
-      notstarted:
-        type: array
-        description: Workflows that failed to start
-        items:
-          $ref: '#/definitions/WorkflowFailure'
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
@@ -3583,6 +3578,10 @@ definitions:
       status:
         $ref: '#/definitions/SubmissionStatus'
         description: Status
+      workflowStatuses:
+        type: object
+        description: Map[String,Int]
+        description: a count of the workflow statuses in the submission
 
   ActiveSubmission:
     description: a submission that's still a going concern
@@ -3603,26 +3602,6 @@ definitions:
       name:
         type: string
         description: submission status
-
-  WorkflowFailure:
-    description: ''
-    properties:
-      entityName:
-        type: string
-        description: Entity name
-      entityType:
-        type: string
-        description: Entity type
-      errors:
-        type: array
-        description: List of errors starting this workflow
-        items:
-          type: string
-      inputResolutions:
-        type: array
-        items:
-          $ref: '#/definitions/SubmissionValidationValue'
-        description: The evaluation of each input
 
   Workflow:
     description: ''
@@ -3795,7 +3774,6 @@ definitions:
       - status
       - header
       - workflows
-      - notstarted
     properties:
       request:
         $ref: '#/definitions/SubmissionRequest'
@@ -3819,11 +3797,6 @@ definitions:
       workflows:
         type: array
         description: workflows initiated by this submission
-        items:
-          $ref: '#/definitions/SubmissionValidationEntityInputs'
-      notstarted:
-        type: array
-        description: workflows that could not be used to start workflows
         items:
           $ref: '#/definitions/SubmissionValidationEntityInputs'
 
