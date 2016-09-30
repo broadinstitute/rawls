@@ -15,6 +15,9 @@
         </encoder>
     </appender>
 
+    <!-- Thanks but no thanks on the giant block of log configuration status. -->
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener"/>
+
     <root level="info">
         <appender-ref ref="FILE"/>
         <appender-ref ref="console"/>

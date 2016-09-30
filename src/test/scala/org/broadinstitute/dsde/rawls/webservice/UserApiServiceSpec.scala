@@ -124,62 +124,31 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
 
   it should "get a users own status" in withTestDataApiServices { services =>
-
-    val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
-
-    runAndWait(rawlsUserQuery.save(user))
-
     Get("/user") ~>
       sealRoute(services.getUserStatusRoute) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(UserStatus(user, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> false))) {
+        assertResult(UserStatus(testData.userOwner, Map("google" -> false, "ldap" -> false, "allUsersGroup" -> false))) {
           responseAs[UserStatus]
         }
       }
   }
 
-  it should "list a user's billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
-    withApiServices(dataSource) { services =>
-
-      // first add the project and user to the DB
-
-      val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
-
-      runAndWait(rawlsUserQuery.save(billingUser))
-
-
-      Put(s"/admin/billing/register/${project1.projectName.value}") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created, response.entity.asString) {
-            status
-          }
-        }
-      Put(s"/admin/billing/${project1.projectName.value}/user/${billingUser.userEmail.value}") ~>
-        sealRoute(services.adminRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {
-            status
-          }
-        }
-
+  it should "list a user's billing projects" in withTestDataApiServices { services =>
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(project1.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
+          assertResult(Set(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
         }
     }
-  }
 
   it should "create a billing project" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
