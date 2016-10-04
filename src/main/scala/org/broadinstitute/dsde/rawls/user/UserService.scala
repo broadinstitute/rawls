@@ -80,6 +80,7 @@ object UserService {
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 
+  case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AdminAddLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -135,6 +136,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
     case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
 
+    case IsAdmin(userEmail) => { isAdmin(userEmail) } pipeTo sender
     case IsLibraryCurator(userEmail) => { isLibraryCurator(userEmail) } pipeTo sender
     case AdminAddLibraryCurator(userEmail) => asFCAdmin { addLibraryCurator(userEmail) } pipeTo sender
     case AdminRemoveLibraryCurator(userEmail) => asFCAdmin { removeLibraryCurator(userEmail) } pipeTo sender
@@ -343,6 +345,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     userDirectoryDAO.disableUser(userSubjectId) flatMap { _ =>
       userDirectoryDAO.removeUser(userSubjectId) map { _ =>
         RequestComplete(StatusCodes.NoContent)
+      }
+    }
+  }
+
+  def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    toFutureTry(tryIsFCAdmin(userEmail.value)) map {
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Success(b) => b match {
+        case true => RequestComplete(StatusCodes.OK)
+        case false => RequestComplete(StatusCodes.NotFound)
       }
     }
   }

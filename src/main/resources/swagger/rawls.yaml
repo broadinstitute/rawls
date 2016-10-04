@@ -3313,6 +3313,27 @@ paths:
             - openid
             - email
             - profile
+  '/api/user/role/admin':
+     get:
+       responses:
+         '200':
+           description: User is an admin
+         '404':
+           description: User is not an admin
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: "gets the admin status of a user"
+       tags:
+         - users
+       summary: Query to see if you're an admin
+       operationId: isAdmin
+       security:
+         - authorization:
+            - openid
+            - email
+            - profile
   '/api/user/role/curator':
      get:
        responses:

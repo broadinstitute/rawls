@@ -134,6 +134,14 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def isAdmin(userEmail: String): Future[Boolean] = hasGoogleRole("fc-ADMINS@dev.test.firecloud.org", userEmail)
 
+  def removeAdmin(userEmail: String): Future[Unit] = {
+    if(adminList.contains(userEmail)) {
+      adminList -= userEmail
+      Future.successful(())
+    }
+    else Future.failed(new RawlsException("Unable to remove user"))
+  }
+
   override def isLibraryCurator(userEmail: String): Future[Boolean] = hasGoogleRole("fc-CURATORS@dev.test.firecloud.org", userEmail)
 
   override def hasGoogleRole(roleGroupName: String, userEmail: String): Future[Boolean] = Future.successful(googleGroups(roleGroupName).contains(userEmail))
