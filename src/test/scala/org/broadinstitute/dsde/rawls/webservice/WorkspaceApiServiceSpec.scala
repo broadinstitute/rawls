@@ -521,7 +521,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(testData.workspace)) ~>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent", None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
