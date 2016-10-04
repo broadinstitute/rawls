@@ -325,6 +325,27 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return OK for a user who is an admin" in withTestDataApiServices { services =>
+    Get("/user/role/admin") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "return Not Found for a user who is not an admin" in withTestDataApiServices { services =>
+    assertResult(()) {Await.result(services.gcsDAO.removeAdmin(services.user), Duration.Inf)}
+    Get("/user/role/admin") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
   it should "return OK for a user who is a curator" in withTestDataApiServices { services =>
     Get("/user/role/curator") ~>
       sealRoute(services.userRoutes) ~>
