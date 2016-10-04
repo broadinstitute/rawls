@@ -11,13 +11,15 @@ import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.http.{ContentTypes, HttpEntity}
+import spray.http.{ContentTypes, HttpEntity, StatusCodes}
 import spray.httpx.SprayJsonSupport
 import spray.json._
 import spray.routing._
 import spray.testkit.ScalatestRouteTest
+
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
+import org.broadinstitute.dsde.rawls.model.RawlsUser
 
 // common trait to be inherited by API service tests
 trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport {
@@ -40,6 +42,32 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
   }
 
   def httpJson[T](obj: T)(implicit writer: JsonWriter[T]) = HttpEntity(ContentTypes.`application/json`, obj.toJson.toString())
+
+  def revokeCuratorRole(services: ApiServices, user: RawlsUser = testData.userOwner): Unit = {
+    Get("/user/role/curator") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+
+    Delete(s"/admin/user/role/curator/${user.userEmail.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+
+    Get("/user/role/curator") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
 
   trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService {
     val dataSource: SlickDataSource

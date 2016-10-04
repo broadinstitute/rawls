@@ -81,6 +81,66 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 403 on create entity with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val invalidAttrNamespace = "invalid"
+
+    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newSample = Entity("sampleNew", "sample", Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo")))
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(invalidAttrNamespace))
+      }
+  }
+
+  it should "return 201 on create entity with library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newSample = Entity("sampleNew", "sample", Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assertResult(newSample) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), newSample.entityType, newSample.name)).get
+        }
+        assertResult(newSample) {
+          responseAs[Entity]
+        }
+
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(wsName)))))) {
+          header("Location")
+        }
+      }
+  }
+
+  it should "return 403 on create entity with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val newSample = Entity("sampleNew", "sample", Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo")))
+
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(AttributeName.libraryNamespace))
+      }
+  }
+
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1))) ~>
@@ -162,6 +222,52 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 403 when batch upserting an entity with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val invalidAttrNamespace = "invalid"
+
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute1"), AttributeString("smee"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute2"), AttributeString("blee"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 when batch upserting an entity with library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute1"), AttributeString("wang"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute2"), AttributeString("chung"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent, response.entity.asString) {
+          status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute1") -> AttributeString("wang"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute2") -> AttributeString("chung"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
+        }
+      }
+  }
+
+  it should "return 403 when batch upserting an entity with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute1"), AttributeString("wang"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute2"), AttributeString("chung"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+          status
+        }
+      }
+  }
+
   it should "return 400 when batch updating an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a"))))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
@@ -200,6 +306,52 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
         assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+      }
+  }
+
+  it should "return 403 when batch updating an entity with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val invalidAttrNamespace = "invalid"
+
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute1"), AttributeString("smee"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(invalidAttrNamespace, "newAttribute2"), AttributeString("blee"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+          status
+        }
+      }
+  }
+
+  it should "return 204 when batch updating an entity with library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute1"), AttributeString("wang"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute2"), AttributeString("chung"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent, response.entity.asString) {
+          status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute1") -> AttributeString("wang"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute2") -> AttributeString("chung"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
+        }
+      }
+  }
+
+  it should "return 403 when batch updating an entity with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute1"), AttributeString("wang"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName(AttributeName.libraryNamespace, "newAttribute2"), AttributeString("chung"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+          status
         }
       }
   }
@@ -293,6 +445,89 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.NotFound) {
           status
         }
+      }
+  }
+
+  it should "return 403 on updating entity with invalid-namespace attributes" in withTestDataApiServices { services =>
+    val name = AttributeName("invalid", "misc")
+    val attr = AttributeString("meh")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
+      }
+  }
+
+  it should "return 200 on updating entity with library-namespace attributes as curator" in withTestDataApiServices { services =>
+    val name = AttributeName(AttributeName.libraryNamespace, "reader")
+    val attr = AttributeString("me")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(attr)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(name)
+        }
+      }
+  }
+
+  it should "return 403 on updating entity (add) with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    revokeCuratorRole(services)
+
+    val name = AttributeName(AttributeName.libraryNamespace, "reader")
+    val attr = AttributeString("me")
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
+      }
+  }
+
+  it should "return 403 on updating entity (remove) with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    val name = AttributeName(AttributeName.libraryNamespace, "reader")
+    val attr = AttributeString("me")
+
+    // first add as curator
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+        assertResult(Option(attr)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name)).get.attributes.get(name)
+        }
+      }
+
+    // then remove as non-curator
+
+    revokeCuratorRole(services)
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
       }
   }
 
@@ -457,6 +692,53 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 201 for copying entities with existing library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+    Post("/workspaces", httpJson(workspace2Request)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(workspace2Request) {
+          val ws = runAndWait(workspaceQuery.findByName(workspace2Request.toWorkspaceName)).get
+          WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
+        }
+
+        // first add Entity as curator
+
+        val libraryEnt = z1.copy(attributes = z1.attributes + (AttributeName(AttributeName.libraryNamespace, "whatever") -> AttributeNumber(1.23456)))
+
+        Post(s"/workspaces/${workspace2Request.namespace}/${workspace2Request.name}/entities", httpJson(libraryEnt)) ~>
+          sealRoute(services.entityRoutes) ~>
+          check {
+            assertResult(StatusCodes.Created, response.entity.asString) {
+              status
+            }
+            assertResult(libraryEnt) {
+              val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
+              runAndWait(entityQuery.get(SlickWorkspaceContext(ws2), libraryEnt.entityType, libraryEnt.name)).get
+            }
+
+            // then copy Entity as non-curator
+
+            revokeCuratorRole(services)
+
+            val sourceWorkspace = WorkspaceName(workspace2Request.namespace, workspace2Request.name)
+            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, libraryEnt.entityType, Seq(libraryEnt.name))
+            Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
+              sealRoute(services.entityRoutes) ~>
+              check {
+                assertResult(StatusCodes.Created, response.entity.asString) {
+                  status
+                }
+                assertResult(libraryEnt) {
+                  runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), libraryEnt.entityType, libraryEnt.name)).get
+                }
+              }
+          }
+      }
+  }
+
   it should "return 409 for copying entities into a workspace with conflicts" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("sample1"))
@@ -558,7 +840,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val entityType = "page_entity"
     val entities = Random.shuffle(for (i <- 1 to numEntities) yield Entity(s"entity_$i", entityType, Map(
       AttributeName.withDefaultNS("number") -> AttributeNumber(Math.random()),
-      AttributeName("library", "random") -> AttributeString(UUID.randomUUID().toString),
+      AttributeName.withDefaultNS("random") -> AttributeString(UUID.randomUUID().toString),
       AttributeName.withDefaultNS("sparse") -> (if (i % 2 == 0) AttributeNull else AttributeNumber(i.toDouble)),
       AttributeName.withDefaultNS("vocab1") -> AttributeString(vocab1Strings(i % vocab1Strings.size)),
       AttributeName.withDefaultNS("vocab2") -> AttributeString(vocab2Strings(i % vocab2Strings.size)),
@@ -802,7 +1084,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "random"),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
-          paginationTestData.entities.sortBy(_.attributes(AttributeName("library", "random")).asInstanceOf[AttributeString].value).take(defaultQuery.pageSize))) {
+          paginationTestData.entities.sortBy(_.attributes(AttributeName.withDefaultNS("random")).asInstanceOf[AttributeString].value).take(defaultQuery.pageSize))) {
 
           responseAs[EntityQueryResponse]
         }
@@ -843,8 +1125,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           defaultQuery.copy(sortField = "mixed", pageSize = paginationTestData.numEntities),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, 1),
           paginationTestData.entities.sortWith(entityLessThan("mixed")))) {
-            responseAs[EntityQueryResponse]
-          }
+          responseAs[EntityQueryResponse]
+        }
       }
   }
 
@@ -891,7 +1173,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(EntityQueryResponse(
           defaultQuery.copy(sortField = "random", sortDirection = Descending),
           EntityQueryResultMetadata(paginationTestData.numEntities, paginationTestData.numEntities, calculateNumPages(paginationTestData.numEntities, defaultQuery.pageSize)),
-          paginationTestData.entities.sortBy(_.attributes(AttributeName("library", "random")).asInstanceOf[AttributeString].value).reverse.take(defaultQuery.pageSize))) {
+          paginationTestData.entities.sortBy(_.attributes(AttributeName.withDefaultNS("random")).asInstanceOf[AttributeString].value).reverse.take(defaultQuery.pageSize))) {
 
           responseAs[EntityQueryResponse]
         }

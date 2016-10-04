@@ -32,16 +32,16 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", Option("test"), None, None, None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", Option("test"), None, None, None, None, None))
   }
 
   it should "insert library-namespace attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
     runAndWait(workspaceQuery.save(workspace))
-    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName("library", "test"), testAttribute, workspaceId).map(x => runAndWait(x))
+    val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName(AttributeName.libraryNamespace, "test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "library", "test", Option("test"), None, None, None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.libraryNamespace, "test", Option("test"), None, None, None, None, None))
   }
 
   it should "insert number attribute" in withEmptyTestDatabase {
@@ -50,7 +50,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, Option(3.14159), None, None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(3.14159), None, None, None, None))
   }
 
   it should "insert boolean attribute" in withEmptyTestDatabase {
@@ -59,7 +59,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, Option(true), None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, Option(true), None, None, None))
   }
 
   it should "insert attribute value list" in withEmptyTestDatabase {
@@ -69,10 +69,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
     assertExpectedRecords(
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, Option(9), None, None, Option(0), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, Option(8), None, None, Option(1), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, Option(7), None, None, Option(2), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, Option(6), None, None, Option(3), Option(4)))
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(9), None, None, Option(0), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(8), None, None, Option(1), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(7), None, None, Option(2), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, Option(6), None, None, Option(3), Option(4)))
   }
 
   it should "insert empty list" in withEmptyTestDatabase {
@@ -82,7 +82,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(1) { numRows.head }
 
     //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, None, Option(-1), Option(0)))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
   it should "save empty AttributeValueLists as AttributeEmptyList" in withEmptyTestDatabase {
@@ -92,7 +92,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(1) { numRows.head }
 
     //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, None, Option(-1), Option(0)))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
   it should "save empty AttributeEntityReferenceLists as AttributeEmptyList" in withEmptyTestDatabase {
@@ -102,7 +102,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(1) { numRows.head }
 
     //NOTE: listIndex of -1 is the magic number for "empty list". see AttributeComponent.unmarshalList
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, None, Option(-1), Option(0)))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, Option(-1), Option(0)))
   }
 
   it should "insert null attribute" in withEmptyTestDatabase {
@@ -111,7 +111,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, None, None, None))
   }
 
   it should "insert entity reference attribute" in withEmptyTestDatabase {
@@ -121,7 +121,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val numRows = workspaceAttributeQuery.insertAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute, workspaceId).map(x => runAndWait(x))
     assertResult(1) { numRows.head }
 
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, Option(entityId), None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option(entityId), None, None))
   }
 
   it should "insert entity reference attribute list" in withEmptyTestDatabase {
@@ -136,10 +136,10 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(Seq(1, 1, 1, 1)) { numRows }
 
     assertExpectedRecords(
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, Option(entityId1), Option(0), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, Option(entityId2), Option(1), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, Option(entityId3), Option(2), Option(4)),
-      WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test", None, None, None, Option(entityId4), Option(3), Option(4)))
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option(entityId1), Option(0), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option(entityId2), Option(1), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option(entityId3), Option(2), Option(4)),
+      WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option(entityId4), Option(3), Option(4)))
 
   }
 
@@ -168,9 +168,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   it should "delete attribute records" in withEmptyTestDatabase {
     runAndWait(workspaceQuery.save(workspace))
     val inserts = Seq(
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test1", None, Some(1), None, None, None, None),
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test2", None, Some(2), None, None, None, None),
-      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "test3", None, Some(3), None, None, None, None)) map { insert =>
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test1", None, Some(1), None, None, None, None),
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test2", None, Some(2), None, None, None, None),
+      (workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test3", None, Some(3), None, None, None, None)) map { insert =>
 
       runAndWait(insert)
     }
@@ -184,26 +184,26 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "unmarshall attribute records" in withEmptyTestDatabase {
     val attributeRecs = Seq(
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "string", Some("value"), None, None, None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "library", "string", Some("lib-value"), None, None, None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "num", None, Some(1), None, None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "bool", None, None, Some(true), None, None, None)), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "ref", None, None, None, Some(1), None, None)), Some(EntityRecord(0, "name", "type", workspaceId, 0, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "null", None, None, None, None, None, None)), None),
-      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(1), None, None, Some(2), Some(3))), None),
-      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(2), None, None, Some(1), Some(3))), None),
-      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(3), None, None, Some(0), Some(3))), None),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "refList", None, None, None, Some(1), Some(2), Some(3))), Some(EntityRecord(0, "name1", "type", workspaceId, 0, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "refList", None, None, None, Some(2), Some(1), Some(3))), Some(EntityRecord(0, "name2", "type", workspaceId, 0, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "refList", None, None, None, Some(3), Some(0), Some(3))), Some(EntityRecord(0, "name3", "type", workspaceId, 0, None))),
-      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "emptyList", None, Some(1), None, None, Some(-1), Some(0))), None)
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "string", Some("value"), None, None, None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.libraryNamespace, "string", Some("lib-value"), None, None, None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "num", None, Some(1), None, None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "bool", None, None, Some(true), None, None, None)), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "ref", None, None, None, Some(1), None, None)), Some(EntityRecord(0, "name", "type", workspaceId, 0, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "null", None, None, None, None, None, None)), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(1), None, None, Some(2), Some(3))), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(2), None, None, Some(1), Some(3))), None),
+      ((2, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(3), None, None, Some(0), Some(3))), None),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, Some(1), Some(2), Some(3))), Some(EntityRecord(0, "name1", "type", workspaceId, 0, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, Some(2), Some(1), Some(3))), Some(EntityRecord(0, "name2", "type", workspaceId, 0, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "refList", None, None, None, Some(3), Some(0), Some(3))), Some(EntityRecord(0, "name3", "type", workspaceId, 0, None))),
+      ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "emptyList", None, Some(1), None, None, Some(-1), Some(0))), None)
     )
 
     assertResult(
       Map(
         1 -> Map(
           AttributeName.withDefaultNS("string") -> AttributeString("value"),
-          AttributeName("library", "string") -> AttributeString("lib-value"),
+          AttributeName(AttributeName.libraryNamespace, "string") -> AttributeString("lib-value"),
           AttributeName.withDefaultNS("num") -> AttributeNumber(1),
           AttributeName.withDefaultNS("bool") -> AttributeBoolean(true),
           AttributeName.withDefaultNS("ref") -> AttributeEntityReference("type", "name"),
@@ -219,9 +219,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
     val attributeRecs = Seq(
-      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(1), None, None, Some(2), Some(3))), None),
-      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(2), None, None, None, Some(3))), None),
-      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, "default", "valList", None, Some(3), None, None, Some(0), Some(3))), None)
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(1), None, None, Some(2), Some(3))), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(2), None, None, None, Some(3))), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(3), None, None, Some(0), Some(3))), None)
     )
 
     intercept[RawlsException] {
@@ -255,7 +255,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     def updateWorkspace = {
       DbResource.dataSource.database.run(
-        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, "default", "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")) andThen
+        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")) andThen
           this.workspaceQuery.save(updatedWorkspace).transactionally andThen
           this.workspaceAttributeTempQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
       )
@@ -298,7 +298,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     val updateAction = for {
       entityRec <- this.entityQuery.findEntityByName(workspaceId, entity.entityType, entity.name).result
-      _ <- this.entityAttributeTempQuery += EntityAttributeTempRecord(0, entityRec.head.id, "default", "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")
+      _ <- this.entityAttributeTempQuery += EntityAttributeTempRecord(0, entityRec.head.id, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")
       _ <- this.entityQuery.save(SlickWorkspaceContext(workspace), updatedEntity).transactionally
       result <- this.entityAttributeTempQuery.map { r => (r.name, r.valueString) }.result
     } yield {

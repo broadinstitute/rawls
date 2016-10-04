@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.UUID
+
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -15,26 +15,29 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.{UserWiths, MethodWiths, FutureSupport, RoleSupport}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.joda.time.DateTime
 import spray.http.{StatusCodes, Uri}
-import scala.collection.immutable.Iterable
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spray.json._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, SubmissionFormat, SubmissionReportFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat, ExecutionServiceValidationFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionMetadataFormat, ExecutionServiceValidationFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
+
 import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+
 import scala.concurrent.Await
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
+
 /**
  * Created by dvoet on 4/27/15.
  */
@@ -173,9 +176,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
-        DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
+    withAttributeNamespaceCheck(userInfo, workspaceRequest) {
+      dataSource.inTransaction { dataAccess =>
+        withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
+          DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
+        }
       }
     }
 
@@ -315,19 +320,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        val updateAction = Try {
-          val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
-          dataAccess.workspaceQuery.save(updatedWorkspace)
-        } match {
-          case Success(result) => result
-          case Failure(e: AttributeUpdateOperationException) =>
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
-          case Failure(regrets) => DBIO.failed(regrets)
-        }
-        updateAction.map { savedWorkspace =>
-          RequestComplete(StatusCodes.OK, savedWorkspace)
+    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          val updateAction = Try {
+            val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
+            dataAccess.workspaceQuery.save(updatedWorkspace)
+          } match {
+            case Success(result) => result
+            case Failure(e: AttributeUpdateOperationException) =>
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
+            case Failure(regrets) => DBIO.failed(regrets)
+          }
+          updateAction.map { savedWorkspace =>
+            RequestComplete(StatusCodes.OK, savedWorkspace)
+          }
         }
       }
     }
@@ -383,23 +390,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(sourceWorkspaceName,WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
-        withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
+    withAttributeNamespaceCheck(userInfo, destWorkspaceRequest) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
+          withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
 
-          // add to or replace current attributes, on an individual basis
-          val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
+            // add to or replace current attributes, on an individual basis
+            val newAttrs = sourceWorkspaceContext.workspace.attributes ++ destWorkspaceRequest.attributes
 
-          withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
-            dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
-              dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
-                val inserts = methodConfigShorts.map { methodConfigShort => dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
-                  dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
-                }
-                }
-                DBIO.seq(inserts: _*)
-              } andThen {
-              DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+            withNewWorkspaceContext(destWorkspaceRequest.copy(realm = newRealm, attributes = newAttrs), dataAccess) { destWorkspaceContext =>
+              dataAccess.entityQuery.cloneAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                dataAccess.methodConfigurationQuery.list(sourceWorkspaceContext).flatMap { methodConfigShorts =>
+                  val inserts = methodConfigShorts.map { methodConfigShort =>
+                    dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
+                      dataAccess.methodConfigurationQuery.save(destWorkspaceContext, methodConfig.get)
+                    }
+                  }
+                  DBIO.seq(inserts: _*)
+                } andThen {
+                DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, destWorkspaceContext.workspace), destWorkspaceRequest.toWorkspaceName.path))
+              }
             }
           }
         }
@@ -581,52 +591,61 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-
-
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
-          case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
-          case None => dataAccess.entityQuery.save(workspaceContext, entity).map(e => RequestCompleteWithLocation((StatusCodes.Created, e), entity.path(workspaceName)))
+    withAttributeNamespaceCheck(userInfo, entity) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
+            case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceName}")))
+            case None => dataAccess.entityQuery.save(workspaceContext, entity).map(e => RequestCompleteWithLocation((StatusCodes.Created, e), entity.path(workspaceName)))
+          }
         }
       }
     }
 
-  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
-          val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
-          entityUpdates.map { entityUpdate =>
-            entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
-              case Some(e) =>
-                Try(applyOperationsToEntity(e, entityUpdate.operations))
-              case None =>
-                if (upsert) {
-                  Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
-                } else {
-                  Failure(new RuntimeException("Entity does not exist"))
-                }
-            })
-          }
-        }
+  def batchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean = false): Future[PerRequestMessage] = {
+    val namesToCheck = for {
+      update <- entityUpdates
+      operation <- update.operations
+    } yield operation.name
 
-        val saveAction = updateTrialsAction flatMap { updateTrials =>
-          val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
-            ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+    withAttributeNamespaceCheck(userInfo, namesToCheck) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
+            val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
+            entityUpdates.map { entityUpdate =>
+              entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
+                case Some(e) =>
+                  Try(applyOperationsToEntity(e, entityUpdate.operations))
+                case None =>
+                  if (upsert) {
+                    Try(applyOperationsToEntity(Entity(entityUpdate.name, entityUpdate.entityType, Map.empty), entityUpdate.operations))
+                  } else {
+                    Failure(new RuntimeException("Entity does not exist"))
+                  }
+              })
+            }
           }
-          if (!errorReports.isEmpty) {
-            DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
-          } else {
-            val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
-            dataAccess.entityQuery.save(workspaceContext, t )
-          }
-        }
 
-        saveAction.map(_ => RequestComplete(StatusCodes.NoContent))
+          val saveAction = updateTrialsAction flatMap { updateTrials =>
+            val errorReports = updateTrials.collect { case (entityUpdate, Failure(regrets)) =>
+              ErrorReport(s"Could not update ${entityUpdate.entityType} ${entityUpdate.name}", ErrorReport(regrets))
+            }
+            if (!errorReports.isEmpty) {
+              DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Some entities could not be updated.", errorReports)))
+            } else {
+              val t = updateTrials.collect { case (entityUpdate, Success(entity)) => entity }
+
+              dataAccess.entityQuery.save(workspaceContext, t)
+            }
+          }
+
+          saveAction.map(_ => RequestComplete(StatusCodes.NoContent))
+        }
       }
     }
+  }
 
   def entityTypeMetadata(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -674,19 +693,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          val updateAction = Try {
-            val updatedEntity = applyOperationsToEntity(entity, operations)
-            dataAccess.entityQuery.save(workspaceContext, updatedEntity)
-          } match {
-            case Success(result) => result
-            case Failure(e: AttributeUpdateOperationException) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}", ErrorReport(e))))
-            case Failure(regrets) => DBIO.failed(regrets)
+    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
+          withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
+            val updateAction = Try {
+              val updatedEntity = applyOperationsToEntity(entity, operations)
+              dataAccess.entityQuery.save(workspaceContext, updatedEntity)
+            } match {
+              case Success(result) => result
+              case Failure(e: AttributeUpdateOperationException) =>
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update entity ${entityType}/${entityName} in ${workspaceName}", ErrorReport(e))))
+              case Failure(regrets) => DBIO.failed(regrets)
+            }
+            updateAction.map(RequestComplete(StatusCodes.OK, _))
           }
-          updateAction.map(RequestComplete(StatusCodes.OK, _))
         }
       }
     }
@@ -767,6 +788,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def applyAttributeUpdateOperations(attributable: Attributable, operations: Seq[AttributeUpdateOperation]): AttributeMap = {
     operations.foldLeft(attributable.attributes) { (startingAttributes, operation) =>
+
       operation match {
         case AddUpdateAttribute(attributeName, attribute) => startingAttributes + (attributeName -> attribute)
 
@@ -1395,6 +1417,44 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   // helper methods
+
+  // note: success is indicated by a Future.successful(Map.empty)
+  private def attributeNamespaceCheck(userInfo: UserInfo, attributeNames: Iterable[AttributeName]): Future[Map[String, String]] = {
+    val namespaces = attributeNames.map(_.namespace).toSet
+
+    // anyone can modify attributes in the default namespace
+    if (namespaces == Set(AttributeName.defaultNamespace)) Future.successful(Map.empty)
+    else {
+      // only curators can modify attributes in the library namespace
+      val libraryErrors = if (namespaces.contains(AttributeName.libraryNamespace)) {
+        tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
+          if (isCurator) Future.successful(Map.empty)
+          else Future.successful(Map(AttributeName.libraryNamespace -> "Must be library curator"))
+        }
+      }
+      else Future.successful(Map.empty)
+
+      // no one can modify attributes with invalid namespaces
+      val invalidNamespaces = namespaces -- AttributeName.validNamespaces
+      val invalidErrors = invalidNamespaces.map { ns => ns -> s"Invalid attribute namespace $ns" }.toMap
+
+      // add the invalid errors to the Future
+      libraryErrors map { _ ++ invalidErrors }
+    }
+  }
+
+  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, attributeNames: Iterable[AttributeName])(op: => Future[T]): Future[T] =
+    attributeNamespaceCheck(userInfo, attributeNames) flatMap { errors =>
+      if (errors.isEmpty) op
+      else {
+        val reasons = errors.values.mkString(", ")
+        val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
+        Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
+      }
+    }
+
+  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, hasAttributes: Attributable)(op: => Future[T]): Future[T] =
+    withAttributeNamespaceCheck(userInfo, hasAttributes.attributes.keys)(op)
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
