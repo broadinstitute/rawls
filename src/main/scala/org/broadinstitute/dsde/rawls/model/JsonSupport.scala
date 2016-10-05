@@ -46,8 +46,10 @@ trait JsonSupport extends DefaultJsonProtocol {
       case AttributeString(s) => JsString(s)
       //ref
       case AttributeEntityReference(entityType, entityName) => JsObject(Map(ENTITY_TYPE_KEY -> JsString(entityType), ENTITY_NAME_KEY -> JsString(entityName)))
+      //list types
+      case x: AttributeList[_] => writeListType(x)
 
-      case _ => writeListType(obj)
+      case _ => throw new SerializationException("AttributeFormat doesn't know how to write JSON for type " + obj.getClass.getSimpleName)
     }
 
     override def read(json: JsValue): Attribute = json match {
@@ -67,12 +69,12 @@ trait JsonSupport extends DefaultJsonProtocol {
     }
 
     def readAttributeList(jsMap: Map[String, JsValue]) = {
-      val attrList: Seq[Attribute] = jsMap(LIST_ITEMS_TYPE_KEY) match {
+      val attrList: Seq[Attribute] = jsMap(LIST_ITEMS_KEY) match {
         case JsArray(elems) => elems.map(AttributeFormat.read(_))
         case _ => throw new DeserializationException(s"the value of %s should be an array".format(LIST_ITEMS_KEY))
       }
 
-      (jsMap(LIST_ITEMS_KEY), attrList) match {
+      (jsMap(LIST_ITEMS_TYPE_KEY), attrList) match {
         case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.isEmpty => AttributeValueEmptyList
         case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => AttributeValueList(vals)
 

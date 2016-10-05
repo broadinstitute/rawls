@@ -192,6 +192,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val referenceList = AttributeEntityReferenceList(Seq(testData.sample2.toReference, newEntity.toReference))
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), referenceList)))
     val update2 = EntityUpdateDefinition(newEntity.name, newEntity.entityType, Seq.empty)
+    val blep = httpJson(Seq(update1, update2))
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
