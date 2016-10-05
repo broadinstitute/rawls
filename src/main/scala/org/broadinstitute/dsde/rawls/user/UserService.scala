@@ -449,7 +449,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.removeUserFromProject(user, project) map(_ => RequestComplete(StatusCodes.OK))
+          dataAccess.rawlsBillingProjectQuery.removeUserFromProject(Left(user), project.projectName) map(_ => RequestComplete(StatusCodes.OK)) //todo: left for now. need to give it subject id anyway
         }
       }
     }

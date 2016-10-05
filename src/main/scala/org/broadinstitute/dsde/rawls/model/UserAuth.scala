@@ -121,10 +121,6 @@ object UserAuthJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
-
-  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
-
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
 
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
@@ -132,6 +128,10 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
+
+  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
+
+  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
 
