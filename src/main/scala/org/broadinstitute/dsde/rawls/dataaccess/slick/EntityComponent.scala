@@ -296,7 +296,7 @@ trait EntityComponent {
     private def upsertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord], referencedAndSavingEntityRecs: Traversable[EntityRecord]) = {
       val entityIds = entityRecs.map(_.id).toSeq
 
-      def insertTempAttributes(transactionId: String): ReadWriteAction[Unit] = {
+      def insertScratchAttributes(transactionId: String): ReadWriteAction[Unit] = {
         val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
         val attributeRecsToEntityId = for {
           entity <- entities
@@ -304,10 +304,10 @@ trait EntityComponent {
           attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeName, attribute, entityIdsByName)
         } yield attributeRec
 
-        entityAttributeTempQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq, transactionId)
+        entityAttributeScratchQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq, transactionId)
       }
 
-      entityAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(entityIds, insertTempAttributes)
+      entityAttributeQuery.AlterAttributesUsingScratchTableQueries.upsertAction(entityIds, insertScratchAttributes)
     }
 
     private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
@@ -556,7 +556,7 @@ trait EntityComponent {
   }
 
   case class ExprEvalRecord(id: Long, name: String, transactionId: String)
-  class ExprEvalTemp(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_TEMP") {
+  class ExprEvalScratch(tag: Tag) extends Table[ExprEvalRecord](tag, "EXPREVAL_SCRATCH") {
     def id = column[Long]("id")
     def name = column[String]("name", O.Length(254))
     def transactionId = column[String]("transaction_id")
@@ -566,5 +566,5 @@ trait EntityComponent {
 
     def * = (id, name, transactionId) <> (ExprEvalRecord.tupled, ExprEvalRecord.unapply)
   }
-  val exprEvalQuery = TableQuery[ExprEvalTemp]
+  val exprEvalQuery = TableQuery[ExprEvalScratch]
 }

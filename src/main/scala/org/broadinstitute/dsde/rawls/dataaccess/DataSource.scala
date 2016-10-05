@@ -67,7 +67,7 @@ class SlickDataSource(initialDatabaseConfig: DatabaseConfig[JdbcDriver])(implici
 
   def initWithLiquibase(liquibaseChangeLog: String) = {
     // use a database specified with the initialDatabaseConfig because the regular databaseConfig assumes
-    // a procedure called createTempTables exists but it is liquibase that creates that procedure
+    // a procedure called createScratchTables exists but it is liquibase that creates that procedure
     // need to create a new config because each config instance has its own db and closing it is a problem if it is shared
     val initDatabase = DatabaseConfig.forConfig[JdbcDriver]("", initialDatabaseConfig.config).db
     try {

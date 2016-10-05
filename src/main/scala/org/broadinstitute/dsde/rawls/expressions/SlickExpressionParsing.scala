@@ -325,9 +325,9 @@ object SlickExpressionEvaluator {
                                    (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
     val evaluator = new SlickExpressionEvaluator(parser, rootEntities)
 
-    evaluator.populateExprEvalTempTable() andThen
+    evaluator.populateExprEvalScratchTable() andThen
       op(evaluator) andFinally
-      evaluator.clearExprEvalTempTable()
+      evaluator.clearExprEvalScratchTable()
   }
 
   def withNewExpressionEvaluator[R](parser: DataAccess, workspaceContext: SlickWorkspaceContext, rootType: String, rootName: String)
@@ -354,13 +354,13 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
 
   val transactionId = UUID.randomUUID().toString
 
-  def populateExprEvalTempTable() = {
+  def populateExprEvalScratchTable() = {
     val exprEvalBatches = rootEntities.map( e => parser.ExprEvalRecord(e.id, e.name, transactionId) ).grouped(parser.batchSize)
 
     DBIO.sequence(exprEvalBatches.toSeq.map(batch => parser.exprEvalQuery ++= batch))
   }
 
-  def clearExprEvalTempTable() = {
+  def clearExprEvalScratchTable() = {
     parser.exprEvalQuery.filter(_.transactionId === transactionId).delete
   }
 

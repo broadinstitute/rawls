@@ -255,9 +255,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     def updateWorkspace = {
       DbResource.dataSource.database.run(
-        (this.workspaceAttributeTempQuery += WorkspaceAttributeTempRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")) andThen
+        (this.workspaceAttributeScratchQuery += WorkspaceAttributeScratchRecord(0, workspaceId, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")) andThen
           this.workspaceQuery.save(updatedWorkspace).transactionally andThen
-          this.workspaceAttributeTempQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
+          this.workspaceAttributeScratchQuery.map { r => (r.name, r.valueString) }.result.withPinnedSession
       )
     }
 
@@ -298,9 +298,9 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     val updateAction = for {
       entityRec <- this.entityQuery.findEntityByName(workspaceId, entity.entityType, entity.name).result
-      _ <- this.entityAttributeTempQuery += EntityAttributeTempRecord(0, entityRec.head.id, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")
+      _ <- this.entityAttributeScratchQuery += EntityAttributeScratchRecord(0, entityRec.head.id, AttributeName.defaultNamespace, "attributeString", Option("foo"), None, None, None, None, None, "not a transaction id")
       _ <- this.entityQuery.save(SlickWorkspaceContext(workspace), updatedEntity).transactionally
-      result <- this.entityAttributeTempQuery.map { r => (r.name, r.valueString) }.result
+      result <- this.entityAttributeScratchQuery.map { r => (r.name, r.valueString) }.result
     } yield {
       result
     }

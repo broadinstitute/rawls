@@ -70,7 +70,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       assertResult(0) {
         runAndWait({
           evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type") andThen
-            sql"select count(*) from EXPREVAL_TEMP".as[Int].head
+            sql"select count(*) from EXPREVAL_SCRATCH".as[Int].head
         })
       }
     }
@@ -529,17 +529,17 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
     withTestWorkspace { workspaceContext =>
       val action = for {
         entityRecs <- this.entityQuery.findEntityByWorkspace(workspaceContext.workspaceId).result
-        extraTempRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
-        _ <- this.exprEvalQuery += extraTempRecord
+        extraScratchRecord = ExprEvalRecord(entityRecs.tail.head.id, entityRecs.tail.head.name, "not a transaction id")
+        _ <- this.exprEvalQuery += extraScratchRecord
         result <- evalFinalAttribute(workspaceContext, entityRecs.head.entityType, entityRecs.head.name, "this.name").transactionally
         residual <- this.exprEvalQuery.result
       } yield {
-        (extraTempRecord, result, residual)
+        (extraScratchRecord, result, residual)
       }
 
-      val (extraTempRecord, result, residual) = runAndWait(action.withPinnedSession)
-      assertResult(Seq(extraTempRecord)) { residual }
-      assert(result.size == 1 && result.get(extraTempRecord.name).isEmpty)
+      val (extraScratchRecord, result, residual) = runAndWait(action.withPinnedSession)
+      assertResult(Seq(extraScratchRecord)) { residual }
+      assert(result.size == 1 && result.get(extraScratchRecord.name).isEmpty)
     }
   }
 }
