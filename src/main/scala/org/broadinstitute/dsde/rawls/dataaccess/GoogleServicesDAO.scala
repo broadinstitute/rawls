@@ -17,7 +17,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
 
   // returns bucket and group information
-  def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo]
+  def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo]
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
@@ -89,15 +89,31 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String
   def toUserFromProxy(proxy: String): String
   def toGoogleGroupName(groupName: RawlsGroupName): String
+  def toBillingProjectGroupName(billingProjectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${billingProjectName.value}-${role.toString}"
 
   def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
   def getBucketServiceAccountCredential: Credential
   def getServiceAccountRawlsUser(): Future[RawlsUser]
   def getServiceAccountUserInfo(): Future[UserInfo]
 
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit]
+  /**
+   * creates a google project under the specified billing account
+   * @param projectName
+   * @param billingAccount
+   * @return
+   */
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
-  def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]]
+
+  /**
+   * does all the things to make the specified project usable (security, enabling apis, etc.)
+   * @param project
+   * @param projectTemplate
+   * @param groupEmailsByRef emails of any subgroups of the project owner or user groups
+   *                         (note that this is not required for users because we can infer their proxy group from subject id)
+   * @return
+   */
+  def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])

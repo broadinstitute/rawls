@@ -26,4 +26,6 @@
     <include file="changesets/20160914_create_temp_tables_proc.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20160920_attribute_namespace.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161007_empty_attributevalue_lists.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20161005_refactor_project_users.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20161025_billing_account.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

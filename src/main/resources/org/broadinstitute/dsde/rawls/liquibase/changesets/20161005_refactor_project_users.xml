@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-1">
+        <sql stripComments="true">
+            create table BILLING_PROJECT_GROUP (
+                PROJECT_NAME varchar(254) not null,
+                GROUP_NAME varchar(254) not null,
+                PROJECT_ROLE varchar(254) not null,
+                primary key PK_BILLING_PROJECT_GROUP (PROJECT_NAME, GROUP_NAME),
+                constraint FK_PROJECT_GROUP foreign key (GROUP_NAME) references `GROUP` (NAME),
+                constraint FK_PROJECT_NAME foreign key (PROJECT_NAME) references BILLING_PROJECT (NAME)
+            )
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-2">
+        <sql stripComments="true">
+            create table temp_roles (role varchar(254))
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-3">
+        <sql stripComments="true">
+            insert into temp_roles values ("User"), ("Owner")
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-4">
+        <sql stripComments="true">
+            insert into `GROUP` select concat("PROJECT_",b.NAME,"-",r.role), concat("GROUP_PROJECT_",b.NAME,"-",r.role,"@","${gcs:appsDomain}") from BILLING_PROJECT b join temp_roles r
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-5">
+        <sql stripComments="true">
+            insert into GROUP_USERS select pu.USER_SUBJECT_ID, concat("PROJECT_",bp.NAME,"-",pu.ROLE) from BILLING_PROJECT bp left join PROJECT_USERS pu on bp.NAME=pu.PROJECT_NAME
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-6">
+        <sql stripComments="true">
+            insert into BILLING_PROJECT_GROUP select b.NAME, concat("PROJECT_",b.NAME,"-",r.role), r.role from BILLING_PROJECT b join temp_roles r
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-7">
+        <sql stripComments="true">
+            drop table temp_roles
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

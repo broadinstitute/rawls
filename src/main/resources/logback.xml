@@ -49,6 +49,7 @@
     </logger>
 
     <!-- see https://github.com/slick/slick/blob/master/common-test-resources/logback.xml for more Slick logging -->
+
     <!--
     <logger name="slick.jdbc.JdbcBackend.statement" level="DEBUG" additivity="false">
         <appender-ref ref="file"/>

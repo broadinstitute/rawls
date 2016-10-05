@@ -42,8 +42,6 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
-
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
   def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
@@ -146,7 +144,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     Post("/billing", CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
 
@@ -248,7 +246,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
-          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
         }
 
         Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
@@ -259,7 +257,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
             }
             assert {
               val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              loadedProject.users.contains(testData.userOwner) && !loadedProject.owners.contains(testData.userOwner)
+              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
             }
           }
 
@@ -271,7 +269,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
             }
             assert {
               val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              !loadedProject.users.contains(testData.userOwner) && loadedProject.owners.contains(testData.userOwner)
+              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
             }
           }
       }
@@ -313,7 +311,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
           sealRoute(services.adminRoutes) ~>
           check {
             assert {
-              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
             }
 
             Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
@@ -323,7 +321,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
                   status
                 }
                 assert {
-                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
                 }
               }
           }
@@ -522,7 +520,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${user.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
@@ -550,7 +548,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${user.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
@@ -609,8 +607,13 @@ AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set.empty, Set(testUser, user2), "mock cromwell URL", CreationStatuses.Ready)
-      runAndWait(rawlsBillingProjectQuery.save(project))
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready, None)
+
+      project.groups.map { case (_,g) =>
+        runAndWait(rawlsGroupQuery.save(g))
+      }
+
+      runAndWait(rawlsBillingProjectQuery.create(project))
 
       assertResult(Some(project)) {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))
@@ -619,15 +622,15 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${testUser.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
 
       assertUserMissing(services, testUser)
 
-      assertResult(Some(project.copy(users = Set(user2)))) {
-        runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      assertResult(project.groups(ProjectRoles.Owner).copy(users = Set(user2))) {
+        runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.Owner)
       }
 
       assertResult(Some(group.copy(users = Set(user2)))) {
@@ -822,7 +825,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     Post("/admin/users", httpJson(userInfoList)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
       }
@@ -1061,9 +1064,11 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
         responseStatus.statuses should contain theSameElementsAs
           Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
@@ -1075,6 +1080,8 @@ AdminApiServiceSpec extends ApiServiceSpec {
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"

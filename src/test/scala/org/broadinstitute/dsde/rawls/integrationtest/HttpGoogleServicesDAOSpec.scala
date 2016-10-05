@@ -6,9 +6,11 @@ import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.client.http.HttpResponseException
+import com.google.api.services.admin.directory.model.Member
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.Ready
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
@@ -26,7 +28,7 @@ import spray.http.{OAuth2BearerToken, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 import scala.collection.JavaConversions._
-import scala.util.Try
+import scala.concurrent.duration._
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
 
@@ -51,7 +53,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   )
 
-  slickDataSource.initWithLiquibase(liquibaseChangeLog)
+  slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
   val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
   val testProject = "broad-dsde-dev"
@@ -89,7 +91,11 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   "HttpGoogleServicesDAO" should "do all of the things" in {
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, testProject, testWorkspaceId, testWorkspace, None), Duration.Inf)
+
+    val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
+
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -102,27 +108,32 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val readerGroup = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Read)
     val writerGroup = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Write)
     val ownerGroup = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Owner)
+    val projectOwnerGroup = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.ProjectOwner)
 
     // check that the access level for each group is what we expect
     val readerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val writerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val ownerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerGroup.groupEmail.value)).execute() }), Duration.Inf)
+    val projectOwnerBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val svcAcctBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
 
     readerBAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     writerBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
     ownerBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
+    projectOwnerBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
     svcAcctBAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
 
     // check that the access level for each group is what we expect
     val readerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val writerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val ownerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerGroup.groupEmail.value)).execute() }), Duration.Inf)
+    val projectOwnerDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerGroup.groupEmail.value)).execute() }), Duration.Inf)
     val svcAcctDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
 
     readerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     writerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     ownerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
+    projectOwnerDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     svcAcctDOAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
 
     // check that the groups exist (i.e. that this doesn't throw exceptions)
@@ -130,16 +141,30 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { directory.groups.get(readerGroup.groupEmail.value).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.groups.get(writerGroup.groupEmail.value).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.groups.get(ownerGroup.groupEmail.value).execute() }), Duration.Inf)
+    Await.result(retry(when500)(() => Future { directory.groups.get(projectOwnerGroup.groupEmail.value).execute() }), Duration.Inf)
+
+    val ownerMembers = Await.result(retry(when500)(() => Future { directory.members().list(ownerGroup.groupEmail.value).execute() }), Duration.Inf)
+    ownerMembers.getMembers.map(_.getEmail) should be { Seq(gcsDAO.toProxyFromUser(testCreator)) }
+
+    val projectOwnerMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerGroup.groupEmail.value).execute() }), Duration.Inf)
+    projectOwnerMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
     intercept[GoogleJsonResponseException] { directory.groups.get(readerGroup.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerGroup.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerGroup.groupEmail.value).execute() }
+    intercept[GoogleJsonResponseException] { directory.groups.get(projectOwnerGroup.groupEmail.value).execute() }
+
+    Await.result(gcsDAO.deleteGoogleGroup(projectOwnerGoogleGroup), Duration.Inf)
   }
 
   it should "do all of the things with a realm" in {
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, testProject, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
+    val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
+
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -149,37 +174,45 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val readerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Read)
     val writerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Write)
     val ownerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.Owner)
+    val projectOwnerAG = googleWorkspaceInfo.accessGroupsByLevel(WorkspaceAccessLevels.ProjectOwner)
 
     val readerIG = googleWorkspaceInfo.intersectionGroupsByLevel.get(WorkspaceAccessLevels.Read)
     val writerIG = googleWorkspaceInfo.intersectionGroupsByLevel.get(WorkspaceAccessLevels.Write)
     val ownerIG = googleWorkspaceInfo.intersectionGroupsByLevel.get(WorkspaceAccessLevels.Owner)
+    val projectOwnerIG = googleWorkspaceInfo.intersectionGroupsByLevel.get(WorkspaceAccessLevels.ProjectOwner)
 
     // check that the access level for each group is what we expect
     intercept[GoogleJsonResponseException] { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerAG.groupEmail.value)).execute() }
     intercept[GoogleJsonResponseException] { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerAG.groupEmail.value)).execute() }
     intercept[GoogleJsonResponseException] { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerAG.groupEmail.value)).execute() }
+    intercept[GoogleJsonResponseException] { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerAG.groupEmail.value)).execute() }
     val readerIGBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerIG.groupEmail.value)).execute() }), Duration.Inf)
     val writerIGBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerIG.groupEmail.value)).execute() }), Duration.Inf)
     val ownerIGBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerIG.groupEmail.value)).execute() }), Duration.Inf)
+    val projectOwnerIGBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerIG.groupEmail.value)).execute() }), Duration.Inf)
     val svcAcctBAC = Await.result(retry(when500)(() => Future { storage.bucketAccessControls.get(googleWorkspaceInfo.bucketName, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
 
     readerIGBAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     writerIGBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
     ownerIGBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
+    projectOwnerIGBAC.getRole should be (WorkspaceAccessLevels.Write.toString)
     svcAcctBAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
 
     // check that the access level for each group is what we expect
     intercept[GoogleJsonResponseException] { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerAG.groupEmail.value)).execute() }
     intercept[GoogleJsonResponseException] { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerAG.groupEmail.value)).execute() }
     intercept[GoogleJsonResponseException] { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerAG.groupEmail.value)).execute() }
+    intercept[GoogleJsonResponseException] { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerAG.groupEmail.value)).execute() }
     val readerIGDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(readerIG.groupEmail.value)).execute() }), Duration.Inf)
     val writerIGDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(writerIG.groupEmail.value)).execute() }), Duration.Inf)
     val ownerIGDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(ownerIG.groupEmail.value)).execute() }), Duration.Inf)
+    val projectOwnerIGDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, gcsDAO.makeGroupEntityString(projectOwnerIG.groupEmail.value)).execute() }), Duration.Inf)
     val svcAcctDOAC = Await.result(retry(when500)(() => Future { storage.defaultObjectAccessControls.get(googleWorkspaceInfo.bucketName, "user-" + gcsDAO.serviceAccountClientId).execute() }), Duration.Inf)
 
     readerIGDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     writerIGDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     ownerIGDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
+    projectOwnerIGDOAC.getRole should be (WorkspaceAccessLevels.Read.toString)
     svcAcctDOAC.getRole should be (WorkspaceAccessLevels.Owner.toString)
 
     // check that the groups exist (i.e. that this doesn't throw exceptions)
@@ -190,25 +223,37 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     Await.result(retry(when500)(() => Future { directory.groups.get(readerIG.groupEmail.value).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.groups.get(writerIG.groupEmail.value).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.groups.get(ownerIG.groupEmail.value).execute() }), Duration.Inf)
+    Await.result(retry(when500)(() => Future { directory.groups.get(projectOwnerIG.groupEmail.value).execute() }), Duration.Inf)
 
     //check that the owner is a part of both the access group and the intersection group
     Await.result(retry(when500)(() => Future { directory.members.get(ownerAG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.members.get(ownerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
 
+    val projectOwnerAGMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerAG.groupEmail.value).execute() }), Duration.Inf)
+    projectOwnerAGMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
+    val projectOwnerIGMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerIG.groupEmail.value).execute() }), Duration.Inf)
+    projectOwnerIGMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
+
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
 
     intercept[GoogleJsonResponseException] { directory.groups.get(readerAG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerAG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerAG.groupEmail.value).execute() }
+    intercept[GoogleJsonResponseException] { directory.groups.get(projectOwnerAG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(readerIG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(writerIG.groupEmail.value).execute() }
     intercept[GoogleJsonResponseException] { directory.groups.get(ownerIG.groupEmail.value).execute() }
+    intercept[GoogleJsonResponseException] { directory.groups.get(projectOwnerIG.groupEmail.value).execute() }
+
+    Await.result(gcsDAO.deleteGoogleGroup(projectOwnerGoogleGroup), Duration.Inf)
   }
 
   it should "handle failures setting up workspace" in {
+    val project = RawlsBillingProject(RawlsBillingProjectName("not a project"), Map(ProjectRoles.Owner -> RawlsGroup(RawlsGroupName("foo"), RawlsGroupEmail("foo"), Set.empty, Set.empty)), "", Ready, None)
     intercept[GoogleJsonResponseException] {
-      Await.result(gcsDAO.setupWorkspace(testCreator, "not a project", testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
+      Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
     }
 
     val groups: Seq[RawlsGroup] = groupAccessLevelsAscending flatMap { accessLevel =>
@@ -227,17 +272,21 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "handle failures getting workspace bucket" in {
+    val projectOwnerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGroup), "", Ready, None)
     val random = scala.util.Random
     val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, testProject, testWorkspaceId, testWorkspace, None), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
 
     val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testUser.userSubjectId))
 
     Await.result(gcsDAO.createProxyGroup(user), Duration.Inf)
     assert(! Await.result(gcsDAO.isUserInProxyGroup(user), Duration.Inf)) //quickest way to remove access to a workspace bucket
 
-    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), s"fc-${testWorkspaceId}"), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
+    assert(Await.result(gcsDAO.diagnosticBucketRead(userInfo.copy(userSubjectId = testUser.userSubjectId), googleWorkspaceInfo.bucketName), Duration.Inf).get.statusCode.get == StatusCodes.Unauthorized)
     Await.result(gcsDAO.deleteProxyGroup(user), Duration.Inf)
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)
   }
 
   it should "crud tokens" in {
@@ -316,15 +365,22 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "create a project" in {
+
     val projectName = RawlsBillingProjectName("dsde-test-" + UUID.randomUUID().toString.take(8))
+    val ownerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(s"${projectName.value}_owner"))), Duration.Inf)
     try {
       val billingAccount = RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/0089F0-98A321-679BA7"), true, " This is A test ___-444")
 
       val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
+      val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
       val projectServices = gcsConfig.getStringList("projectTemplate.services")
-
-      Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices)), Duration.Inf)
+      val project = RawlsBillingProject(projectName, Map(ProjectRoles.Owner -> ownerGroup), "", CreationStatuses.Creating, Option(billingAccount.accountName))
+      Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
+      Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
+        gcsDAO.setupProject(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices), Map.empty).map(_.get)
+      }, 6 minutes)
     } finally {
+      gcsDAO.deleteGoogleGroup(ownerGroup)
       gcsDAO.deleteProject(projectName)
     }
   }

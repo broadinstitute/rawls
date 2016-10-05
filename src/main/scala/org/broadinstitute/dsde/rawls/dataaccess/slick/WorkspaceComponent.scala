@@ -344,6 +344,33 @@ trait WorkspaceComponent {
       workspaceRecs.flatMap(recs => loadWorkspaces(findByIdsQuery(recs.map(_.id))))
     }
 
+    def findWorkspaceUsersByAccessLevel(workspaceId: UUID): ReadAction[Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel]] = {
+      val userQuery = for {
+        access <- workspaceAccessQuery if access.workspaceId === workspaceId
+        user <- groupUsersQuery if user.groupName === access.groupName
+      } yield {
+        (user.userSubjectId, access.accessLevel)
+      }
+
+      val subGroupQuery = for {
+        access <- workspaceAccessQuery if access.workspaceId === workspaceId
+        subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === access.groupName
+      } yield {
+        (subGroup.childGroupName, access.accessLevel)
+      }
+
+      for {
+        users <- userQuery.result.map {
+          _.map { case (subjectId, accessLevel) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), WorkspaceAccessLevels.withName(accessLevel)) }
+        }
+        subGroups <- subGroupQuery.result.map {
+          _.map { case (groupName, accessLevel) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), WorkspaceAccessLevels.withName(accessLevel)) }
+        }
+      } yield {
+        (users ++ subGroups).toMap
+      }
+    }
+
     private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
       for {
         workspaceAccess <- workspaceAccessQuery if (workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false)

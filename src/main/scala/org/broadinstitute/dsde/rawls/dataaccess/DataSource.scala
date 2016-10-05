@@ -5,6 +5,7 @@ import java.util.concurrent.{Executors, ExecutorService}
 
 import _root_.slick.backend.DatabaseConfig
 import _root_.slick.driver.JdbcDriver
+import _root_.slick.jdbc.TransactionIsolation
 import _root_.slick.jdbc.meta.MTable
 import com.google.common.base.Throwables
 import com.typesafe.config.ConfigValueFactory
@@ -59,17 +60,19 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
 
   import dataAccess.driver.api._
 
-  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T]): Future[T] = {
+  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
     //database.run(f(dataAccess).transactionally) <-- https://github.com/slick/slick/issues/1274
-    Future(Await.result(database.run(f(dataAccess).transactionally), Duration.Inf))(actionExecutionContext)
+    Future(Await.result(database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)), Duration.Inf))(actionExecutionContext)
   }
 
-  def initWithLiquibase(liquibaseChangeLog: String) = {
+  def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     val dbConnection = database.source.createConnection()
     try {
       val liquibaseConnection = new JdbcConnection(dbConnection)
       val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
       val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
+
+      parameters.map { case (key, value) => liquibase.setChangeLogParameter(key, value) }
       liquibase.update(new Contexts())
 
     } catch {

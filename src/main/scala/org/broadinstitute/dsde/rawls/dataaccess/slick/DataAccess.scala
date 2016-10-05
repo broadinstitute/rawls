@@ -29,6 +29,7 @@ trait DataAccess
     TableQuery[GroupSubgroupsTable].delete andThen                // FK to group
       TableQuery[GroupUsersTable].delete andThen                  // FK to group, users
       TableQuery[WorkspaceAccessTable].delete andThen             // FK to group, workspace
+      TableQuery[RawlsBillingProjectGroupTable].delete andThen    // FK to group, billingproject
       TableQuery[EntityAttributeTable].delete andThen             // FK to entity
       TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
       TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation
@@ -40,7 +41,6 @@ trait DataAccess
       TableQuery[WorkflowTable].delete andThen                    // FK to submission, entity
       TableQuery[SubmissionTable].delete andThen                  // FK to workspace, user, MC, entity
       TableQuery[MethodConfigurationTable].delete andThen         // FK to workspace
-      TableQuery[ProjectUsersTable].delete andThen                // FK to billingproject, user
       TableQuery[EntityTable].delete andThen                      // FK to workspace
       TableQuery[WorkspaceTable].delete andThen                   // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen

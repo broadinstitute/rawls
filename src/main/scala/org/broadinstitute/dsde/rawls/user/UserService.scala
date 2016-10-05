@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.user
 
+import _root_.slick.jdbc.TransactionIsolation
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
@@ -33,8 +34,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, billingProjectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -60,10 +61,10 @@ object UserService {
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
-  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
-  case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
+  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
+  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
+  case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
 
   case class CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) extends UserServiceMessage
@@ -86,7 +87,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
@@ -111,11 +112,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
     case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
     case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
-    case AdminAddUserToBillingProject(projectName, userEmail, role) => asFCAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
-    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, projectAccessUpdate) => asFCAdmin { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, projectAccessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
 
-    case AddUserToBillingProject(projectName, userEmail, role) => asProjectOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
-    case RemoveUserFromBillingProject(projectName, userEmail) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case AddUserToBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
+    case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
@@ -123,7 +124,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
-    case CreateBillingProjectFull(projectName, billingAccount) => createBillingProjectFull(projectName, billingAccount) pipeTo sender
+    case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
 
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
@@ -201,9 +202,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       DBIO.sequence(
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
-            DBIO.seq(u.billingProjects.map(projectName =>
-              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName, ProjectRoles.User)
-            ): _*) map (_ => user)
+            DBIO.seq(u.billingProjects.map { projectName =>
+              dataAccess.rawlsBillingProjectQuery.load(projectName) map {
+                case Some(project) => updateGroupMembersInternal(project.groups(ProjectRoles.User), Set(user), Set.empty, AddGroupMembersOp, dataAccess)
+                case None => throw new RawlsException(s"Project [${projectName.value}] not found")
+              }
+            }: _*) map (_ => user)
           }
         }
       ) flatMap { users =>
@@ -317,7 +321,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       for {
         _ <- verifyNoSubmissions(userRef, dataAccess)
         _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
-        _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
       } yield ()
     }
 
@@ -393,13 +396,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listBillingProjects(userEmail: RawlsUserEmail): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withUser(userEmail, dataAccess) { user =>
-        dataAccess.rawlsBillingProjectQuery.listUserProjects(user)
+        for {
+          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+          memberships <- dataAccess.rawlsBillingProjectQuery.listProjectMembershipsForGroups(groups)
+        } yield memberships
       } map(RequestComplete(_))
     }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.loadProjectUsersWithEmail(projectName).map(RequestComplete(_))
+      dataAccess.rawlsBillingProjectQuery.loadDirectProjectMembersWithEmail(projectName).map(RequestComplete(_))
     }
   }
 
@@ -410,48 +416,102 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way")
   def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
-        createBillingProjectInternal(dataAccess, projectName, Set.empty, Set.empty, CreationStatuses.Ready) map (_ => RequestComplete(StatusCodes.Created))
+        for {
+          groups <- createBillingProjectGroups(dataAccess, projectName)
+          project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, groups) map (_ => RequestComplete(StatusCodes.Created))
+        } yield project
     }
   }
 
-  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], status: CreationStatuses.CreationStatus): WriteAction[RawlsBillingProject] = {
+  @deprecated
+  private def createBillingProjectGroups(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
+    val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
+      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+      createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
+    }.toSeq)
+
+    createGroups flatMap { groups =>
+      val groupMap = groups.toMap
+      DBIO.sequence(creators.map(dataAccess.rawlsUserQuery.load).toSeq) flatMap { owners =>
+        updateGroupMembersInternal(groupMap(ProjectRoles.Owner), owners.flatten.toSet, Set.empty, AddGroupMembersOp, dataAccess).map(_ => groupMap)
+      }
+    }
+  }
+
+  @deprecated
+  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): ReadWriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
-      dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, owners, users, bucketUrl, status))
+
+      val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
+      dataAccess.rawlsBillingProjectQuery.create(billingProject)
     }
   }
 
-  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
-    withBillingProject(projectName, dataAccess) { project =>
-      dataAccess.rawlsBillingProjectQuery.delete(project) map {
-        case true => RequestComplete(StatusCodes.OK)
-        case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+  private def createBillingProjectGroupsNoGoogle(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
+    val groupsByRole = ProjectRoles.all.map { role =>
+      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+      val members: Set[RawlsUserRef] = role match {
+        case ProjectRoles.Owner => creators
+        case _ => Set.empty
       }
-    }
+      role -> RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), members, Set.empty)
+    }.toMap
+
+    val groupSaves = DBIO.sequence(groupsByRole.values.map { dataAccess.rawlsGroupQuery.save })
+
+    groupSaves.map(_ => groupsByRole.toMap)
   }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName, role) map (_ => RequestComplete(StatusCodes.OK))
+  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      groups <- dataSource.inTransaction { dataAccess =>
+        withBillingProject(projectName, dataAccess) { project =>
+          dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
+            case true => project.groups
+            case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+          }
         }
       }
+
+      _ <- Future.sequence(groups.map {case (_, group) => gcsDAO.deleteGoogleGroup(group) })
+
+    } yield {
+      RequestComplete(StatusCodes.OK)
     }
   }
 
-  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+  def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.removeUserFromProject(user, project) map(_ => RequestComplete(StatusCodes.OK))
-        }
+      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
+        case Some(member) => member
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
       }
+    } map {
+      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
+      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+    } flatMap { memberList =>
+      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, AddGroupMembersOp)
+    }
+  }
+
+  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
+        case Some(member) => member
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
+      }
+    } map {
+      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
+      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+    } flatMap { memberList =>
+      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, RemoveGroupMembersOp)
     }
   }
 
@@ -494,7 +554,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction ({ dataAccess =>
       withGroup(groupRef, dataAccess) { group =>
         withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
           val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, dataAccess)
@@ -506,7 +566,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         }
       }
-    }
+    }, TransactionIsolation.ReadCommitted) // read committed required to reduce db locks and allow concurrency
   }
 
   def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
@@ -740,25 +800,31 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
+  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess => dataSource.inTransaction { dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
-            case None =>
-              for {
-                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate))
-                _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty, CreationStatuses.Creating)
-              } yield {
-                RequestComplete(StatusCodes.Created)
+        case Some(billingAccount) if billingAccount.firecloudHasAccess =>
+          for {
+            _ <- gcsDAO.createProject(projectName, billingAccount)
+            result <- dataSource.inTransaction { dataAccess =>
+              dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+                case None =>
+                  for {
+                    groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+
+                  } yield {
+                    RequestComplete(StatusCodes.Created)
+                  }
+
+                case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
               }
-
-            case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
+            }
+          } yield {
+            result
           }
-        }
-
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing adminstrator of ${billingAccountName.value} to create a project with it.")))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
       }
     }
   }

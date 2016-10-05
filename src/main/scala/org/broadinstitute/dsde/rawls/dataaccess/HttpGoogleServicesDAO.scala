@@ -108,7 +108,7 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
     val bucketName = getBucketName(workspaceId)
 
     val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
@@ -137,6 +137,11 @@ class HttpGoogleServicesDAO(
       addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
     }
 
+    def insertProjectOwners: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
+      addMemberToGoogleGroup(projectOwnerGroup, Right(project.groups(ProjectRoles.Owner))).map(_ => groupsByAccess + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroup.copy(subGroups = projectOwnerGroup.subGroups + project.groups(ProjectRoles.Owner))))
+    }
+
     def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
       retryWhen500orGoogleError {
         () => {
@@ -146,16 +151,18 @@ class HttpGoogleServicesDAO(
           val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
 
           // bucket ACLs should be:
+          //   project owner - bucker writer
           //   workspace owner - bucket writer
           //   workspace writer - bucket writer
           //   workspace reader - bucket reader
           //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
+          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
             groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
               newBucketAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           // default object ACLs should be:
+          //   project owner - object reader
           //   workspace owner - object reader
           //   workspace writer - object reader
           //   workspace reader - object reader
@@ -165,7 +172,7 @@ class HttpGoogleServicesDAO(
               newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
-          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(projectId, bucket)
+          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
           GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }
@@ -183,10 +190,10 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember flatMap insertProjectOwners
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember map { Option(_) }
+        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertProjectOwners map { Option(_) }
         case None => Future.successful(None)
       }
       inserted <- insertBucket(accessGroups, intersectionGroups)
@@ -618,7 +625,22 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit] = {
+    val credential = getBillingServiceAccountCredential
+
+    val cloudResManager = getCloudResourceManager(credential)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
+    }).recover {
+      case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
+    } map ( _ => ())
+
+  }
+
+  override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = {
+    val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -626,18 +648,28 @@ class HttpGoogleServicesDAO(
     val computeManager = getComputeManager(credential)
 
     val projectResourceName = s"projects/${projectName.value}"
-    for {
-      // create the project
-      project <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
-      }).recover {
-        case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
+
+    // all of these things should be idempotent
+    toFutureTry(for {
+      _ <- Future.traverse(project.groups.values) { group =>
+        createGoogleGroup(group).recover {
+          case t: HttpResponseException if t.getStatusCode == 409 => group
+        }
+      }
+
+      _ <- Future.traverse(project.groups.values) { group =>
+        val memberEmails: Set[String] = group.users.map(u => toProxyFromUser(u.userSubjectId)) ++ group.subGroups.map(groupEmailsByRef(_).value)
+        Future.traverse(memberEmails) { email =>
+          addEmailToGoogleGroup(group.groupEmail.value, email).recover {
+            case t: HttpResponseException if t.getStatusCode == 409 => ()
+          }
+        }
       }
 
       // set the billing account
       billing <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount.accountName.value)))
+        val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
       })
 
       // get current permissions
@@ -647,7 +679,8 @@ class HttpGoogleServicesDAO(
 
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
-        val updatedPolicy = new Policy().setBindings(updateBindings(bindings, projectTemplate))
+        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.groups(ProjectRoles.Owner).groupEmail.value}")))
+        val updatedPolicy = new Policy().setBindings(updateBindings(bindings, updatedTemplate).toSeq)
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, new SetIamPolicyRequest().setPolicy(updatedPolicy)))
       })
 
@@ -657,13 +690,20 @@ class HttpGoogleServicesDAO(
       })})
 
       // create project usage export bucket
-      bucket <- retryWhen500orGoogleError(() => {
+      exportBucket <- retryWithRecoverWhen500orGoogleError(() => {
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
-      })
+      }) { case t: HttpResponseException if t.getStatusCode == 409 => new Bucket().setName(projectUsageExportBucketName(projectName)) }
+
+      cromwellAuthBucket <- createCromwellAuthBucket(projectName)
+
+      _ <- Future { // don't retry this last step because it may take several minutes for this to happen and this whole process will retry
+        val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
+        executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
+      }
     } yield {
       // nothing
-    }
+    })
   }
 
   def labelSafeString(s: String): String = {
@@ -691,20 +731,6 @@ class HttpGoogleServicesDAO(
   }
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
-
-  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = {
-    val credential = getBillingServiceAccountCredential
-    val computeManager = getComputeManager(credential)
-
-    toFutureTry {
-      Future {
-        blocking {
-          val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
-          executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
-        }
-      }
-    }
-  }
 
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
@@ -742,9 +768,14 @@ class HttpGoogleServicesDAO(
   }
 
   private def updateBindings(bindings: Seq[Binding], template: ProjectTemplate) = {
-    bindings.map { policy =>
-      val newMembers = (template.policies.getOrElse(policy.getRole, Seq.empty) ++ policy.getMembers).distinct
-      new Binding().setRole(policy.getRole).setMembers(newMembers)
+    val templateMembersWithRole = template.policies.toSeq
+    val existingMembersWithRole = bindings.map { policy => policy.getRole -> policy.getMembers.toSeq }
+    val updatedPolicies = (templateMembersWithRole ++ existingMembersWithRole).
+      groupBy { case (role, _) => role }.
+      map { case (role, membersWithRole) => role -> membersWithRole.map { case (_, members) => members }.flatten }
+
+    updatedPolicies.map { case (role, members) =>
+      new Binding().setRole(role).setMembers(members)
     }
   }
 

@@ -33,12 +33,12 @@ trait BillingApiService extends HttpService with PerRequestCreator with UserInfo
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail), ProjectRoles.withName(role)))
+          UserService.AddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
       } ~
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+          UserService.RemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
       }
     } ~
     path("billing") {
