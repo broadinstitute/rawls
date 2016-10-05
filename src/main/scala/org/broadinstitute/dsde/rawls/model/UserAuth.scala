@@ -41,7 +41,7 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: RawlsGroup, users: RawlsGroup, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {

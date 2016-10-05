@@ -618,7 +618,9 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
+  def toBillingProjectGroupName(projectName: RawlsBillingProjectName, projectRole: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${projectRole}" //make this live in only one place
+
+  override def createProject(projectName: RawlsBillingProjectName, creator: RawlsUser, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -661,6 +663,21 @@ class HttpGoogleServicesDAO(
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       })
+
+      // create the owner and user groups
+      groups <- retryWhen500orGoogleError(() => {
+        Future.sequence(ProjectRoles.all.map { level =>
+          createGoogleGroup(RawlsGroupRef(RawlsGroupName(toBillingProjectGroupName(projectName, level))))
+        })
+      })
+
+      //clean up needed, just getting an implementation working...
+
+      // add the creator as an owner on the project
+      insertOwner <- retryWhen500orGoogleError(() => {
+        addMemberToGoogleGroup(RawlsGroup(RawlsGroupName(s"PROJECT_${projectName.value}-OWNER"), RawlsGroupEmail(toGoogleGroupName(RawlsGroupName(s"PROJECT_${projectName.value}-OWNER"))), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), Left(creator))
+      })
+
     } yield {
       // nothing
     }

@@ -415,14 +415,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
-        createBillingProjectInternal(dataAccess, projectName, Set.empty, Set.empty, CreationStatuses.Ready) map (_ => RequestComplete(StatusCodes.Created))
+        createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, Set.empty) map (_ => RequestComplete(StatusCodes.Created))
     }
   }
 
-  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], status: CreationStatuses.CreationStatus): WriteAction[RawlsBillingProject] = {
+  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
-      dataAccess.rawlsBillingProjectQuery.save(RawlsBillingProject(projectName, owners, users, bucketUrl, status))
+      dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, creators)
     }
   }
 
@@ -747,8 +747,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
             case None =>
               for {
-                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate))
-                _ <- createBillingProjectInternal(dataAccess, projectName, Set(RawlsUser(userInfo)), Set.empty, CreationStatuses.Creating)
+                _ <- DBIO.from(gcsDAO.createProject(projectName, RawlsUser(userInfo), billingAccount, billingProjectTemplate))
+                _ <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, Set(RawlsUser(userInfo)))
               } yield {
                 RequestComplete(StatusCodes.Created)
               }
@@ -758,7 +758,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         }
 
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
-        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing adminstrator of ${billingAccountName.value} to create a project with it.")))
+        case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
       }
     }
   }
