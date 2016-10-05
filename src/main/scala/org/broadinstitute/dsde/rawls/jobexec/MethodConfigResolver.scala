@@ -8,7 +8,7 @@ import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
 import wdl4s.types.WdlArrayType
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WDLJsonSupport._
 import spray.json._
 
 import scala.util.{Failure, Success, Try}
@@ -106,7 +106,7 @@ object MethodConfigResolver {
   def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
-      case (key, notNullValue) => Some(key, notNullValue.toJson)
+      case (key, notNullValue) => Some(key, notNullValue.toJson(WDLJsonSupport.AttributeFormat))
     }
   ) toString
 

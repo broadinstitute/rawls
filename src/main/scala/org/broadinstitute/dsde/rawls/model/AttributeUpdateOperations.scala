@@ -13,6 +13,8 @@ object AttributeUpdateOperations {
       case RemoveAttribute(attributeName) => attributeName
       case AddListMember(attributeListName, _) => attributeListName
       case RemoveListMember(attributeListName, _) => attributeListName
+      case CreateAttributeEntityReferenceList(attributeListName) => attributeListName
+      case CreateAttributeValueList(attributeListName) => attributeListName
     }
   }
 

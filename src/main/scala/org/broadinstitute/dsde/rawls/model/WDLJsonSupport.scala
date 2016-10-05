@@ -1,7 +1,6 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.model._
-import spray.json.{DeserializationException, JsArray, JsObject, JsString, JsValue}
+import spray.json.{DeserializationException, JsArray, JsValue}
 
 object WDLJsonSupport extends JsonSupport {
 
