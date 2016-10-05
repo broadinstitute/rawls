@@ -50,6 +50,10 @@ class RemoteServicesMockServer(port:Int) {
       Some("{\n  \"name\": \"invalid\",\n}"),
       None, None)
 
+    val libraryResult = AgoraEntity(Some("workspace_test"), Some("rawls_test_library"), Some(1), None, None, None, None,
+      Some("{\"name\":\"testConfig1\",\"workspaceName\":{\"namespace\":\"myNamespace\",\"name\":\"myWorkspace\"},\"methodRepoMethod\":{\"methodNamespace\":\"ns-config\",\"methodName\":\"meth1\",\"methodVersion\":1},\"methodRepoConfig\":{\"methodConfigNamespace\":\"ns\",\"methodConfigName\":\"meth1\",\"methodConfigVersion\":1},\"outputs\":{\"x1\":\"this.library:attr\"},\"inputs\":{\"o1\":\"output expr\"},\"rootEntityType\":\"Sample\",\"prerequisites\":{\"i1\":\"input expr\"},\"namespace\":\"ns\"}"),
+      None, None)
+
     mockServer.when(
       request()
         .withMethod("POST")
@@ -103,6 +107,17 @@ class RemoteServicesMockServer(port:Int) {
           .withBody(badPayloadResult.toJson.prettyPrint)
           .withStatusCode(StatusCodes.OK.intValue)
       )
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(copyMethodConfigPath + "/workspace_test/rawls_test_library/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(libraryResult.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
 
     val methodPath = "/methods"
     val threeStepWDL =
