@@ -48,7 +48,10 @@ trait DataAccess
       TableQuery[RawlsUserTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen
-      TableQuery[PendingBucketDeletionTable].delete
+      TableQuery[PendingBucketDeletionTable].delete andThen
+      TableQuery[EntityAttributeTempTable].delete andThen
+      TableQuery[WorkspaceAttributeTempTable].delete andThen
+      TableQuery[ExprEvalTemp].delete
   }
 
 }
