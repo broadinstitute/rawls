@@ -8,19 +8,46 @@ import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
  * @author tsharpe
  */
 trait JsonSupport extends DefaultJsonProtocol {
+  //Magic strings we use in JSON serialization
+  //Lists get serialized to e.g. { "itemsType" : "AttributeValue", "items" : [1,2,3] }
+  val LIST_ITEMS_TYPE_KEY = "itemsType"
+  val LIST_ITEMS_KEY = "items"
+  val LIST_OBJECT_KEYS = Set(LIST_ITEMS_TYPE_KEY, LIST_ITEMS_KEY)
+
+  val VALUE_LIST_TYPE = "AttributeValue"
+  val REF_LIST_TYPE = "EntityReference"
+
+  //Entity refs get serialized to e.g. { "entityType" : "sample", "entityName" : "theBestSample" }
+  val ENTITY_TYPE_KEY = "entityType"
+  val ENTITY_NAME_KEY = "entityName"
+  val ENTITY_OBJECT_KEYS = Set(ENTITY_TYPE_KEY, ENTITY_NAME_KEY)
+
+  def writeListType(obj: Attribute): JsValue = obj match {
+    //lists
+    case AttributeValueEmptyList => AttributeFormat.writeAttributeList(VALUE_LIST_TYPE, Seq.empty[AttributeValue])
+    case AttributeValueList(l) => AttributeFormat.writeAttributeList(VALUE_LIST_TYPE, l)
+    case AttributeEntityReferenceEmptyList => AttributeFormat.writeAttributeList(REF_LIST_TYPE, Seq.empty[AttributeEntityReference])
+    case AttributeEntityReferenceList(l) => AttributeFormat.writeAttributeList(REF_LIST_TYPE, l)
+  }
+
+  def readListType(json: JsValue): Attribute = json match {
+    case JsObject(members) if LIST_OBJECT_KEYS subsetOf members.keySet => AttributeFormat.readAttributeList(members)
+
+    case _ => throw new DeserializationException("unexpected json type")
+  }
 
   implicit object AttributeFormat extends RootJsonFormat[Attribute] {
 
-    override def write(obj: Attribute): JsValue = obj match {
+    def write(obj: Attribute): JsValue = obj match {
+      //vals
       case AttributeNull => JsNull
       case AttributeBoolean(b) => JsBoolean(b)
       case AttributeNumber(n) => JsNumber(n)
       case AttributeString(s) => JsString(s)
-      case AttributeValueList(l) => JsArray(l.map(write(_)):_*)
-      case AttributeEntityReferenceList(l) => JsArray(l.map(write(_)).toSeq:_*)
-      case AttributeEntityReference(entityType, entityName) => JsObject(Map("entityType" -> JsString(entityType), "entityName" -> JsString(entityName)))
-      case AttributeValueEmptyList => JsArray()
-      case AttributeEntityReferenceEmptyList => JsArray()
+      //ref
+      case AttributeEntityReference(entityType, entityName) => JsObject(Map(ENTITY_TYPE_KEY -> JsString(entityType), ENTITY_NAME_KEY -> JsString(entityName)))
+
+      case _ => writeListType(obj)
     }
 
     override def read(json: JsValue): Attribute = json match {
@@ -28,16 +55,32 @@ trait JsonSupport extends DefaultJsonProtocol {
       case JsString(s) => AttributeString(s)
       case JsBoolean(b) => AttributeBoolean(b)
       case JsNumber(n) => AttributeNumber(n)
-      case JsArray(a) => getAttributeList(a.map(read(_)))
-      case JsObject(members) => AttributeEntityReference(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
-      case _ => throw new DeserializationException("unexpected json type")
+
+      case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet =>
+        AttributeEntityReference(members(ENTITY_TYPE_KEY).asInstanceOf[JsString].value, members(ENTITY_NAME_KEY).asInstanceOf[JsString].value)
+
+      case _ => readListType(json)
     }
 
-    def getAttributeList(s: Seq[Attribute]) = s match {
-      case e: Seq[_] if e.isEmpty => throw new DeserializationException("can't infer type from empty array")
-      case v: Seq[AttributeValue @unchecked] if (s.map(_.isInstanceOf[AttributeValue]).reduce(_&&_)) => AttributeValueList(v)
-      case r: Seq[AttributeEntityReference @unchecked] if (s.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_)) => AttributeEntityReferenceList(r)
-      case _ => throw new DeserializationException("illegal array type")
+    def writeAttributeList[T <: Attribute](listType: String, list: Seq[T]): JsValue = {
+      JsObject( Map(LIST_ITEMS_TYPE_KEY -> JsString(listType), LIST_ITEMS_KEY -> JsArray(list.map( AttributeFormat.write(_) ).toSeq:_*)) )
+    }
+
+    def readAttributeList(jsMap: Map[String, JsValue]) = {
+      val attrList: Seq[Attribute] = jsMap(LIST_ITEMS_TYPE_KEY) match {
+        case JsArray(elems) => elems.map(AttributeFormat.read(_))
+        case _ => throw new DeserializationException(s"the value of %s should be an array".format(LIST_ITEMS_KEY))
+      }
+
+      (jsMap(LIST_ITEMS_KEY), attrList) match {
+        case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.isEmpty => AttributeValueEmptyList
+        case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => AttributeValueList(vals)
+
+        case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if refs.isEmpty => AttributeEntityReferenceEmptyList
+        case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if refs.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_) => AttributeEntityReferenceList(refs)
+
+        case _ => throw new DeserializationException("illegal array type")
+      }
     }
   }
 
@@ -52,7 +95,7 @@ trait JsonSupport extends DefaultJsonProtocol {
   implicit object AttributeReferenceFormat extends RootJsonFormat[AttributeEntityReference] {
     override def write(obj: AttributeEntityReference): JsValue = AttributeFormat.write(obj)
     override def read(json: JsValue): AttributeEntityReference = json match {
-      case JsObject(members) => AttributeEntityReference(members("entityType").asInstanceOf[JsString].value, members("entityName").asInstanceOf[JsString].value)
+      case JsObject(members) => AttributeEntityReference(members(ENTITY_TYPE_KEY).asInstanceOf[JsString].value, members(ENTITY_NAME_KEY).asInstanceOf[JsString].value)
       case _ => throw new DeserializationException("unexpected json type")
     }
   }
@@ -77,9 +120,12 @@ trait JsonSupport extends DefaultJsonProtocol {
       JsArray(obj.map( AttributeFormat.write ).toVector)
     }
 
-    override def read(json: JsValue): Seq[AttributeValue] = json match {
-      case JsArray(a) if a.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => a.map(AttributeFormat.read(_).asInstanceOf[AttributeValue]).toSeq
-      case _ => throw new DeserializationException("unexpected json type")
+    override def read(json: JsValue): Seq[AttributeValue] = {
+      AttributeFormat.read(json) match {
+        case AttributeValueEmptyList => Seq.empty
+        case AttributeValueList(l) => l
+        case _ => throw new DeserializationException("unexpected json type")
+      }
     }
   }
 }
