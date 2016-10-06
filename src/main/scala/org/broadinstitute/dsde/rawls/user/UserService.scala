@@ -202,7 +202,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.seq(u.billingProjects.map(projectName =>
-              dataAccess.rawlsBillingProjectQuery.addUserToProject(u.user, projectName, ProjectRoles.User)
+              dataAccess.rawlsBillingProjectQuery.addUserToProject(Left(u.user), projectName, ProjectRoles.User)
             ): _*) map (_ => user)
           }
         }
@@ -439,7 +439,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       withBillingProject(projectName, dataAccess) { project =>
         withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.addUserToProject(user, projectName, role) map (_ => RequestComplete(StatusCodes.OK))
+          dataAccess.rawlsBillingProjectQuery.addUserToProject(Left(user), projectName, role) map (_ => RequestComplete(StatusCodes.OK))
         }
       }
     }
