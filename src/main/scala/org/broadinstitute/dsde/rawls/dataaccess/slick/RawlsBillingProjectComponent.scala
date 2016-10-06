@@ -30,7 +30,7 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
-    //save is now create?
+    //save is now create? maybe put back into one method...
     def create(billingProjectName: RawlsBillingProjectName, cromwellBucket: String, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef]): ReadWriteAction[RawlsBillingProject] = {
       uniqueResult(findBillingProjectByName(billingProjectName.value).result) flatMap {
         case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProjectName.value}] in database because it already exists")
@@ -80,20 +80,47 @@ trait RawlsBillingProjectComponent {
     }
 
     def loadProjectUsersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
-//      val name = rawlsProjectName.value
+//      //users and subgroups will never overlap, so using union all is fine here. it's also slightly more efficient
+//      val ownerUsersQuery = rawlsBillingProjectQuery filter(_.projectName === rawlsProjectName.value) join rawlsGroupQuery on (_.ownerGroup === _.groupName) join groupUsersQuery on (_._1.ownerGroup === _.groupName) join rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
+//      //val ownerGroupQuery = rawlsBillingProjectQuery filter(_.projectName === rawlsProjectName.value) join rawlsGroupQuery on (_.ownerGroup === _.groupName) join groupSubgroupsQuery on (_._1.ownerGroup === _.parentGroupName) join rawlsGroupQuery on (_._2.parentGroupName === _.groupEmail)
 //
-//      val query = for {
-//        group <- groupUsersQuery if group.userSubjectId === subjectId
-//        userGroup <- rawlsBillingProjectQuery if user.userGroup === group.groupName
-////        userInGroup <- groupUsersQuery if userGroup.
-//        user <- rawlsUserQuery if user.userSubjectId === projectUser.userSubjectId
-//      } yield (user.userEmail, projectUser.role)
+//      val userUsersQuery = rawlsBillingProjectQuery filter(_.projectName === rawlsProjectName.value) join rawlsGroupQuery on (_.userGroup === _.groupName) join groupUsersQuery on (_._1.userGroup === _.groupName) join rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
+//      //val userGroupQuery = rawlsBillingProjectQuery filter(_.projectName === rawlsProjectName.value) join rawlsGroupQuery on (_.userGroup === _.groupName) join groupSubgroupsQuery on (_._1.userGroup === _.parentGroupName) join rawlsGroupQuery on (_._2.parentGroupName === _.groupEmail)
 //
-//      query.result.map(_.map { case (email, role) =>
-//        RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))
-//      })
 
-      DBIO.successful(Seq[RawlsBillingProjectMember]())
+      //this feels absolutely insane
+      val ownerUsersQuery = for {
+        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
+        ownersGroup <- rawlsGroupQuery if ownersGroup.groupName === project.ownerGroup
+        ownerUser <- groupUsersQuery if ownerUser.groupName === ownersGroup.groupName
+        ownerUserEmail <- rawlsUserQuery if ownerUserEmail.userSubjectId === ownerUser.userSubjectId
+      } yield (ownerUserEmail.userEmail, LiteralColumn(ProjectRoles.Owner.toString))
+
+      val userUsersQuery = for {
+        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
+        usersGroup <- rawlsGroupQuery if usersGroup.groupName === project.userGroup
+        userUser <- groupUsersQuery if userUser.groupName === usersGroup.groupName
+        userUserEmail <- rawlsUserQuery if userUserEmail.userSubjectId === userUser.userSubjectId
+      } yield (userUserEmail.userEmail, LiteralColumn(ProjectRoles.User.toString))
+
+      val ownerSubgroupQuery = for {
+        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
+        ownersGroup <- rawlsGroupQuery if ownersGroup.groupName === project.ownerGroup
+        ownerSubgroup <- groupSubgroupsQuery if ownerSubgroup.parentGroupName === ownersGroup.groupName
+        ownerSubgroupEmail <- rawlsGroupQuery if ownerSubgroupEmail.groupName === ownerSubgroup.parentGroupName
+      } yield (ownerSubgroupEmail.groupEmail, LiteralColumn(ProjectRoles.Owner.toString))
+
+      val userSubgroupQuery = for {
+        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
+        usersGroup <- rawlsGroupQuery if usersGroup.groupName === project.userGroup
+        userSubgroup <- groupSubgroupsQuery if userSubgroup.parentGroupName === usersGroup.groupName
+        userSubgroupEmail <- rawlsGroupQuery if userSubgroupEmail.groupName === userSubgroup.parentGroupName
+      } yield (userSubgroupEmail.groupEmail, LiteralColumn(ProjectRoles.User.toString))
+
+      val owners = ownerUsersQuery union ownerSubgroupQuery
+      val users = userUsersQuery union userSubgroupQuery
+
+      (owners union users).result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))}) //make this use a more general RawlsEmail
     }
 
     def delete(billingProject: RawlsBillingProject): ReadWriteAction[Boolean] = {
@@ -111,6 +138,7 @@ trait RawlsBillingProjectComponent {
 
     def toBillingProjectGroupName(projectName: RawlsBillingProjectName, projectRole: ProjectRole) = s"PROJECT_${projectName.value}-${projectRole}" //todo: make this live in only one place
 
+    //todo: make this handle groups like remove
     def addUserToProject(userRef: RawlsUserRef, billingProjectName: RawlsBillingProjectName, role: ProjectRole): ReadWriteAction[RawlsGroup] = {
       rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(toBillingProjectGroupName(billingProjectName, role)))) flatMap {
         case None => throw new RawlsException(s"Unable to save user ${userRef} as ${role} on project ${billingProjectName}")
@@ -207,6 +235,7 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    // combine these queries?
     private def findProjectGroupsByUserSubjectId(subjectId: String) = {
       val queryForOwnership = for {
         group <- groupUsersQuery if group.userSubjectId === subjectId
