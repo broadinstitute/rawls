@@ -15,7 +15,7 @@ object TestExecutionContext {
   implicit val testExecutionContext = new TestExecutionContext()
 }
 class TestExecutionContext() extends ExecutionContextExecutor {
-  val pool = Executors.newFixedThreadPool(100)
+  val pool = Executors.newCachedThreadPool()
   val count = new AtomicInteger(0)
   override def execute(runnable: Runnable): Unit = {
     pool.execute(runnable)
