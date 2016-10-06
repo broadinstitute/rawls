@@ -106,7 +106,7 @@ object MethodConfigResolver {
   def propertiesToWdlInputs(inputs: Map[String, Attribute]): String = JsObject(
     inputs flatMap {
       case (key, AttributeNull) => None
-      case (key, notNullValue) => Some(key, notNullValue.toJson(WDLJsonSupport.AttributeFormat))
+      case (key, notNullValue) => Some(key, notNullValue.toJson(WDLJsonSupport.attributeFormat))
     }
   ) toString
 

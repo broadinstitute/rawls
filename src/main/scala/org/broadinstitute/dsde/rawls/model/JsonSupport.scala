@@ -125,7 +125,7 @@ class JsonSupport extends DefaultJsonProtocol {
     }
   }
 
-  implicit val attributeFormat = new AttributeFormat with TypedAttributeListSerializer
+  implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
 
   implicit object AttributeStringFormat extends RootJsonFormat[AttributeString] {
     override def write(obj: AttributeString): JsValue = attributeFormat.write(obj)
