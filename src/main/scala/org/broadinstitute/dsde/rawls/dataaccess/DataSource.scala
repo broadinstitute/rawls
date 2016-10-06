@@ -27,9 +27,8 @@ object DataSource {
   }
 }
 
-class SlickDataSource(initialDatabaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
-  val dataAccess = new DataAccessComponent(initialDatabaseConfig.driver, initialDatabaseConfig.config.getInt("batchSize"))
-  val databaseConfig = DatabaseConfig.forConfig[JdbcDriver]("", initialDatabaseConfig.config)
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit executionContext: ExecutionContext) extends LazyLogging {
+  val dataAccess = new DataAccessComponent(databaseConfig.driver, databaseConfig.config.getInt("batchSize"))
 
   val database = databaseConfig.db
 
@@ -66,13 +65,8 @@ class SlickDataSource(initialDatabaseConfig: DatabaseConfig[JdbcDriver])(implici
   }
 
   def initWithLiquibase(liquibaseChangeLog: String) = {
-    // use a database specified with the initialDatabaseConfig because the regular databaseConfig assumes
-    // a procedure called createScratchTables exists but it is liquibase that creates that procedure
-    // need to create a new config because each config instance has its own db and closing it is a problem if it is shared
-    val initDatabase = DatabaseConfig.forConfig[JdbcDriver]("", initialDatabaseConfig.config).db
+    val dbConnection = database.source.createConnection()
     try {
-      val dbConnection = initDatabase.source.createConnection()
-
       val liquibaseConnection = new JdbcConnection(dbConnection)
       val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
       val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
@@ -94,7 +88,7 @@ class SlickDataSource(initialDatabaseConfig: DatabaseConfig[JdbcDriver])(implici
         }
         throw e
     } finally {
-      initDatabase.close()
+      dbConnection.close()
     }
   }
  }

@@ -18,7 +18,6 @@ class TestExecutionContext() extends ExecutionContextExecutor {
   val pool = Executors.newFixedThreadPool(100)
   val count = new AtomicInteger(0)
   override def execute(runnable: Runnable): Unit = {
-//    new Thread(runnable, s"test-thread-${count.incrementAndGet}").start()
     pool.execute(runnable)
   }
 
