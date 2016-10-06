@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
 
-    <changeSet logicalFilePath="dummy" author="dvoet" id="create_temp_tables_proc">
+    <!-- this proc is replaced in change set temp_tables_attribute_namespace and keeping both seems to cause a race condition -->
+    <!--changeSet logicalFilePath="dummy" author="dvoet" id="create_temp_tables_proc">
         <createProcedure>
             CREATE PROCEDURE createTempTables ()
             BEGIN
@@ -11,7 +12,7 @@
                 create temporary table WORKSPACE_ATTRIBUTE_TEMP (id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key, name text NOT NULL, value_string text, value_number double DEFAULT NULL, value_boolean bit(1) DEFAULT NULL, value_entity_ref bigint(20) unsigned DEFAULT NULL, list_index int(11) DEFAULT NULL, list_length int(11) DEFAULT NULL, owner_id binary(16) NOT NULL, transaction_id CHAR(36) NOT NULL);
             END
         </createProcedure>
-    </changeSet>
+    </changeSet-->
 
 
 </databaseChangeLog>

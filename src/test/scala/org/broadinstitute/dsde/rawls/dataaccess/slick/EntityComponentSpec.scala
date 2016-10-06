@@ -237,7 +237,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     }
 
     withWorkspaceContext(testData.workspace) { context =>
-      val count = 100
+      val count = 20
       runMultipleAndWait(count)(_ => entityQuery.save(context, pair2))
       assert {
         runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Pair", "pair2")).isDefined

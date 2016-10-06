@@ -28,7 +28,7 @@ trait AttributeRecord[OWNER_ID] {
   val listLength: Option[Int]
 }
 
-trait AttributeTempRecord[OWNER_ID] extends AttributeRecord[OWNER_ID] {
+trait AttributeScratchRecord[OWNER_ID] extends AttributeRecord[OWNER_ID] {
   val transactionId: String
 }
 
@@ -43,7 +43,7 @@ case class EntityAttributeRecord(id: Long,
                                  listIndex: Option[Int],
                                  listLength: Option[Int]) extends AttributeRecord[Long]
 
-case class EntityAttributeTempRecord(id: Long,
+case class EntityAttributeScratchRecord(id: Long,
                                      ownerId: Long, // entity id
                                      namespace: String,
                                      name: String,
@@ -53,7 +53,7 @@ case class EntityAttributeTempRecord(id: Long,
                                      valueEntityRef: Option[Long],
                                      listIndex: Option[Int],
                                      listLength: Option[Int],
-                                     transactionId: String) extends AttributeTempRecord[Long] {
+                                     transactionId: String) extends AttributeScratchRecord[Long] {
 }
 
 case class WorkspaceAttributeRecord(id: Long,
@@ -67,7 +67,7 @@ case class WorkspaceAttributeRecord(id: Long,
                                     listIndex: Option[Int],
                                     listLength: Option[Int]) extends AttributeRecord[UUID]
 
-case class WorkspaceAttributeTempRecord(id: Long,
+case class WorkspaceAttributeScratchRecord(id: Long,
                                         ownerId: UUID, // workspace id
                                         namespace: String,
                                         name: String,
@@ -77,7 +77,7 @@ case class WorkspaceAttributeTempRecord(id: Long,
                                         valueEntityRef: Option[Long],
                                         listIndex: Option[Int],
                                         listLength: Option[Int],
-                                        transactionId: String) extends AttributeTempRecord[UUID]
+                                        transactionId: String) extends AttributeScratchRecord[UUID]
 
 case class SubmissionAttributeRecord(id: Long,
                                      ownerId: Long, // validation id
@@ -113,7 +113,7 @@ trait AttributeComponent {
     def listLength = column[Option[Int]]("list_length")
   }
 
-  abstract class AttributeTempTable[OWNER_ID: TypedType, RECORD <: AttributeTempRecord[OWNER_ID]](tag: Tag, tableName: String) extends AttributeTable[OWNER_ID, RECORD](tag, tableName) {
+  abstract class AttributeScratchTable[OWNER_ID: TypedType, RECORD <: AttributeScratchRecord[OWNER_ID]](tag: Tag, tableName: String) extends AttributeTable[OWNER_ID, RECORD](tag, tableName) {
     def transactionId = column[String]("transaction_id")
   }
 
@@ -144,12 +144,12 @@ trait AttributeComponent {
     def submissionValidation = foreignKey("FK_ATTRIBUTE_PARENT_SUB_VALIDATION", ownerId, submissionValidationQuery)(_.id)
   }
 
-  class EntityAttributeTempTable(tag: Tag) extends AttributeTempTable[Long, EntityAttributeTempRecord](tag, "ENTITY_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <> (EntityAttributeTempRecord.tupled, EntityAttributeTempRecord.unapply)
+  class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
   }
 
-  class WorkspaceAttributeTempTable(tag: Tag) extends AttributeTempTable[UUID, WorkspaceAttributeTempRecord](tag, "WORKSPACE_ATTRIBUTE_TEMP") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <>(WorkspaceAttributeTempRecord.tupled, WorkspaceAttributeTempRecord.unapply)
+  class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueEntityRef, listIndex, listLength, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
@@ -158,7 +158,7 @@ trait AttributeComponent {
 
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
-  protected abstract class AttributeTempQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeTempRecord[OWNER_ID], T <: AttributeTempTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int], String) => TEMP_RECORD) extends TableQuery[T](cons) {
+  protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int], String) => TEMP_RECORD) extends TableQuery[T](cons) {
     def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
       insertInBatches(this, attributes.map { case rec =>
         createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueEntityRef, rec.listIndex, rec.listLength, transactionId)
@@ -166,8 +166,8 @@ trait AttributeComponent {
     }
   }
 
-  protected object entityAttributeTempQuery extends AttributeTempQuery[Long, EntityAttributeRecord, EntityAttributeTempRecord, EntityAttributeTempTable](new EntityAttributeTempTable(_), EntityAttributeTempRecord)
-  protected object workspaceAttributeTempQuery extends AttributeTempQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTempRecord, WorkspaceAttributeTempTable](new WorkspaceAttributeTempTable(_), WorkspaceAttributeTempRecord)
+  protected object entityAttributeScratchQuery extends AttributeScratchQuery[Long, EntityAttributeRecord, EntityAttributeScratchRecord, EntityAttributeScratchTable](new EntityAttributeScratchTable(_), EntityAttributeScratchRecord)
+  protected object workspaceAttributeScratchQuery extends AttributeScratchQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeScratchRecord, WorkspaceAttributeScratchTable](new WorkspaceAttributeScratchTable(_), WorkspaceAttributeScratchRecord)
 
   /**
    * @param createRecord function to create a RECORD object, parameters: id, ownerId, name, valueString, valueNumber, valueBoolean, None, listIndex, listLength
@@ -277,7 +277,7 @@ trait AttributeComponent {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
-    object AlterAttributesUsingTempTableQueries extends RawSqlQuery {
+    object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
       val driver: JdbcDriver = AttributeComponent.this.driver
       /*!CAUTION! - do not drop the ownerIds clause at the end or it will delete every attribute in the table!
 
@@ -306,24 +306,24 @@ trait AttributeComponent {
       //is never used otherwise
       def deleteFromMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
-                left join #${baseTableRow.tableName}_TEMP ta
+                left join #${baseTableRow.tableName}_SCRATCH ta
                 on ta.transaction_id = $transactionId and (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2))
                 where ta.owner_id is null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
       def updateInMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         sql"""update #${baseTableRow.tableName} a
-                join #${baseTableRow.tableName}_TEMP ta
+                join #${baseTableRow.tableName}_SCRATCH ta
                 on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
                 set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
       def insertIntoMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
         concatSqlActions(sql"""insert into #${baseTableRow.tableName}(namespace,name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
                 select ta.namespace,ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
-                from #${baseTableRow.tableName}_TEMP ta
+                from #${baseTableRow.tableName}_SCRATCH ta
                 left join #${baseTableRow.tableName} a
                 on (a.namespace,a.name,a.owner_id,a.list_index)<=>(ta.namespace,ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
                 sql""" where ta.transaction_id = $transactionId and a.owner_id is null""").as[Int]
 
-      def clearAttributeTempTableAction(transactionId: String) = {
-        sqlu"""delete from #${baseTableRow.tableName}_TEMP where transaction_id = $transactionId"""
+      def clearAttributeScratchTableAction(transactionId: String) = {
+        sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
       }
 
       def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: String => ReadWriteAction[Unit]) = {
@@ -332,7 +332,7 @@ trait AttributeComponent {
           deleteFromMasterAction(ownerIds, transactionId) andThen
           updateInMasterAction(ownerIds, transactionId) andThen
           insertIntoMasterAction(ownerIds, transactionId) andFinally
-          clearAttributeTempTableAction(transactionId)
+          clearAttributeScratchTableAction(transactionId)
       }
     }
 

@@ -111,19 +111,19 @@ trait WorkspaceComponent {
     private def upsertAttributes(workspace: Workspace) = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
-      def insertTempAttributes(transactionId: String): ReadWriteAction[Unit] = {
+      def insertScratchAttributes(transactionId: String): ReadWriteAction[Unit] = {
         val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
         val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
         val entitiesToLookup = (entityRefs ++ entityRefListMembers)
 
         entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
           val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-          workspaceAttributeTempQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq, transactionId)
+          workspaceAttributeScratchQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq, transactionId)
         }
       }
 
       //this is really only ever going to be one id but in order to be generic we pretend it's a list
-      workspaceAttributeQuery.AlterAttributesUsingTempTableQueries.upsertAction(Seq(workspaceId), insertTempAttributes)
+      workspaceAttributeQuery.AlterAttributesUsingScratchTableQueries.upsertAction(Seq(workspaceId), insertScratchAttributes)
     }
 
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
