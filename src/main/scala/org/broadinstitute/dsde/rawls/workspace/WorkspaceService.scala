@@ -794,8 +794,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         case RemoveAttribute(attributeName) => startingAttributes - attributeName
 
-        case CreateAttributeEntityReferenceList(attributeName) => startingAttributes + (attributeName -> AttributeEntityReferenceEmptyList)
-        case CreateAttributeValueList(attributeName) => startingAttributes + (attributeName -> AttributeValueEmptyList)
+        case CreateAttributeEntityReferenceList(attributeName) =>
+          if( startingAttributes.contains(attributeName) ) { //non-destructive
+            startingAttributes
+          } else {
+            startingAttributes + (attributeName -> AttributeEntityReferenceEmptyList)
+          }
+
+        case CreateAttributeValueList(attributeName) =>
+          if( startingAttributes.contains(attributeName) ) { //non-destructive
+            startingAttributes
+          } else {
+            startingAttributes + (attributeName -> AttributeValueEmptyList)
+          }
 
         case AddListMember(attributeListName, newMember) =>
           startingAttributes.get(attributeListName) match {

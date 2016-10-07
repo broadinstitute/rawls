@@ -3988,6 +3988,10 @@ definitions:
         $ref: '#/definitions/AddListMember'
       Example payload for RemoveListMember:
         $ref: '#/definitions/RemoveListMember'
+      Example payload for CreateAttributeEntityReferenceList:
+        $ref: '#/definitions/CreateAttributeEntityReferenceList'
+      Example payload for CreateAttributeValueList:
+        $ref: '#/definitions/CreateAttributeValueList'
 
   AddUpdateAttribute:
     description: ''
@@ -4052,6 +4056,32 @@ definitions:
       removeMember:
         type: string
         description: The attribute to remove
+
+  CreateAttributeEntityReferenceList:
+      description: ''
+      required:
+        - op
+        - attributeListName
+      properties:
+        op:
+          type: string
+          description: The operation to perform on the attribute
+        attributeListName:
+          type: string
+          description: The name of the empty attribute entity reference list to create. This is a non-destructive operation.
+
+  CreateAttributeValueList:
+      description: ''
+      required:
+        - op
+        - attributeListName
+      properties:
+        op:
+          type: string
+          description: The operation to perform on the attribute
+        attributeListName:
+          type: string
+          description: The name of the empty attribute value list to create. This is a non-destructive operation.
 
   EntityUpdateDefinition:
     description: ''
