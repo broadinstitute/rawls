@@ -29,7 +29,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   import driver.api._
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
-  val s1 = Entity("s1", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("splat") -> attributeList))
+  val s1 = Entity("s1", "samples", Map(
+    AttributeName.withDefaultNS("foo") -> AttributeString("x"),
+    AttributeName.withDefaultNS("bar") -> AttributeNumber(3),
+    AttributeName.withDefaultNS("refs") -> AttributeEntityReferenceList(Seq(AttributeEntityReference("participant", "p1"))),
+    AttributeName.withDefaultNS("splat") -> attributeList))
   val workspace = Workspace(
     testData.wsName.namespace,
     testData.wsName.name,
@@ -138,9 +142,21 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "not wipe existing AttributeEntityReferenceList when calling CreateAttributeEntityReferenceList" in withTestDataServices { services =>
+    assertResult(Some(s1.attributes(AttributeName.withDefaultNS("refs")))) {
+      services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeEntityReferenceList(AttributeName.withDefaultNS("refs")))).attributes.get(AttributeName.withDefaultNS("refs"))
+    }
+  }
+
   it should "create empty AttributeValueList" in withTestDataServices { services =>
     assertResult(Some(AttributeValueEmptyList)) {
       services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("emptyValList")))).attributes.get(AttributeName.withDefaultNS("emptyValList"))
+    }
+  }
+
+  it should "not wipe existing AttributeValueList when calling CreateAttributeValueList" in withTestDataServices { services =>
+    assertResult(Some(s1.attributes(AttributeName.withDefaultNS("splat")))) {
+      services.workspaceService.applyOperationsToEntity(s1, Seq(CreateAttributeValueList(AttributeName.withDefaultNS("splat")))).attributes.get(AttributeName.withDefaultNS("splat"))
     }
   }
 
