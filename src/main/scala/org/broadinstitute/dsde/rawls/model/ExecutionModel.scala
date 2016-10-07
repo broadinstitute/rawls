@@ -174,12 +174,12 @@ case class SubmissionReport(
 )
 
 case class CallMetadata(
-  inputs: Map[String, Attribute],
+  inputs: JsObject,
   executionStatus: String,
   backend: Option[String],
   backendStatus: Option[String],
-  backendLogs: Option[Map[String, Attribute]],
-  outputs: Option[Map[String, OutputType]],
+  backendLogs: Option[JsObject],
+  outputs: Option[JsObject],
   start: Option[DateTime],
   end: Option[DateTime],
   jobId: Option[String],
@@ -196,8 +196,8 @@ case class ExecutionMetadata
   submission: DateTime,
   start: Option[DateTime],
   end: Option[DateTime],
-  inputs: Map[String, Attribute],
-  outputs: Option[Map[String, OutputType]],
+  inputs: JsObject,
+  outputs: Option[JsObject],
   calls: Map[String, Seq[CallMetadata]]
 )
 

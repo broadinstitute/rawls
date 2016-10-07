@@ -15,6 +15,7 @@ sealed trait AttributeListSerializer {
 }
 
 //Serializes attribute lists to e.g. [1,2,3]
+//When reading in JSON, assumes that [] is an empty value list, not an empty ref list
 trait PlainArrayAttributeListSerializer extends AttributeListSerializer {
   override def writeListType(obj: Attribute): JsValue = obj match {
     //lists
