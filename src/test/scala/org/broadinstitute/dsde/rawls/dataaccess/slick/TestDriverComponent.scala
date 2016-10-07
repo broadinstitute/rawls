@@ -91,7 +91,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
 
   class EmptyWorkspace() extends TestData {
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
@@ -117,7 +117,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   }
 
   class LockedWorkspace() extends TestData {
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
@@ -144,7 +144,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
@@ -158,7 +158,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), Set.empty, "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(userOwner), Set.empty, "testBucketUrl", CreationStatuses.Ready)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -471,11 +471,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(RawlsUser(userInfo)),
-        rawlsBillingProjectQuery.save(billingProject),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
+        rawlsBillingProjectQuery.save(billingProject),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -617,7 +616,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
    * many of the tests that rely on it. */
   class ConstantTestData() extends TestData {
     // setup workspace objects
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
