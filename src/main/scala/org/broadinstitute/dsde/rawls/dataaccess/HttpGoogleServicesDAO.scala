@@ -912,7 +912,6 @@ class HttpGoogleServicesDAO(
 private case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
 private object GoogleRequestJsonSupport extends JsonSupport {
   import WorkspaceJsonSupport.ErrorReportFormat
-
   val GoogleRequestFormat = jsonFormat6(GoogleRequest)
 }
 
