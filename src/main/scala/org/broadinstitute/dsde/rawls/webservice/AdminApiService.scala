@@ -61,7 +61,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       put {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminAddUserToBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail), ProjectRoles.withName(role)))
+          UserService.AdminAddUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
       } ~
       delete {
         requestContext => perRequest(requestContext,

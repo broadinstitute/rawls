@@ -43,6 +43,8 @@ case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmai
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: RawlsGroup, users: RawlsGroup, cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus)
 
+case class ProjectAccessUpdate(email: String, role: ProjectRole)
+
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
     override def toString = getClass.getSimpleName.stripSuffix("$")
@@ -158,4 +160,6 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectMembershipFormat = jsonFormat3(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
+
+  implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 }

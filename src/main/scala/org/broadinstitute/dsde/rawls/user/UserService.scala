@@ -60,9 +60,9 @@ object UserService {
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
+  case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
-  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole) extends UserServiceMessage
+  case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
 
@@ -111,10 +111,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
     case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
     case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
-    case AdminAddUserToBillingProject(projectName, userEmail, role) => asFCAdmin { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, accessUpdate) => asFCAdmin { addUserToBillingProject(projectName, accessUpdate) } pipeTo sender
     case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
 
-    case AddUserToBillingProject(projectName, userEmail, role) => asProjectOwner(projectName) { addUserToBillingProject(projectName, userEmail, role) } pipeTo sender
+    case AddUserToBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, userEmail) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
@@ -435,23 +435,37 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail, role: ProjectRole): Future[PerRequestMessage] = {
+  def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.addUserToProject(Left(user), projectName, role) map (_ => RequestComplete(StatusCodes.OK))
-        }
+      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
+        case Some(x) => x
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not add user ${projectAccessUpdate.email} to billing project [${projectName.value}]"))
       }
+    } map {
+      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
+      case Right(group) =>
+        RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+    } flatMap { memberList =>
+      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, AddGroupMembersOp)
     }
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withBillingProject(projectName, dataAccess) { project =>
-        withUser(userEmail, dataAccess) { user =>
-          dataAccess.rawlsBillingProjectQuery.removeUserFromProject(Left(user), project.projectName) map(_ => RequestComplete(StatusCodes.OK)) //todo: left for now. need to give it subject id anyway
-        }
+    val member = dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.loadFromEmail(userEmail.value).map {
+        case Some(x) => x
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not remove user ${userEmail.value} from billing project [${projectName.value}]"))
       }
+    }
+
+    member.map {
+      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
+      case Right(group) =>
+        println(group)
+        RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+    } flatMap { memberList =>
+
+      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, ProjectRoles.Owner))), memberList, RemoveGroupMembersOp) //don't hardcode
     }
   }
 
@@ -681,6 +695,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     DBIO.from(Future.sequence(googleUpdateTrials)).flatMap { tries =>
       val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
       val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
+      println(group)
       dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
         val exceptions = tries.collect { case Failure(t) => ErrorReport(t) }
         if (exceptions.isEmpty) {

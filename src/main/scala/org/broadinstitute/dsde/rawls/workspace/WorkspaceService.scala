@@ -254,7 +254,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =  {
      getWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner) flatMap { ctx =>
-      deleteWorkspace(workspaceName, ctx)
+       deleteWorkspace(workspaceName, ctx)
     }
   }
 

@@ -4,7 +4,8 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, ownerGroup: String, userGroup: String) //we can probably derive these so this is possible temp
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String) //we can probably derive these so this is possible temp
+case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
@@ -17,50 +18,50 @@ trait RawlsBillingProjectComponent {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
-    def ownerGroup = column[String]("OWNER_GROUP", O.Length(254))
-    def userGroup = column[String]("USER_GROUP", O.Length(254)) //feel like these should end up being ints (add column to group table?)
 
-    def projectOwners = foreignKey("FK_PROJECT_OWNER_GROUP", ownerGroup, rawlsGroupQuery)(_.groupName)
-    def projectUsers = foreignKey("FK_PROJECT_USER_GROUP", ownerGroup, rawlsGroupQuery)(_.groupName)
-
-    def * = (projectName, cromwellAuthBucketUrl, creationStatus, ownerGroup, userGroup) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
+  class RawlsBillingProjectGroupTable(tag: Tag) extends Table[RawlsBillingProjectGroupRecord](tag, "BILLING_PROJECT_GROUP") {
+    def projectName = column[String]("PROJECT_NAME", O.Length(254))
+    def groupName = column[String]("GROUP_NAME", O.Length(254))
+    def role = column[String]("PROJECT_ROLE", O.Length(20))
+
+    def groupRef = foreignKey("FK_PROJECT_GROUP", groupName, rawlsGroupQuery)(_.groupName)
+    //need fk for project too...
+    def pk = primaryKey("PK_BILLING_PROJECT_GROUP", (projectName, groupName, role))
+
+    def * = (projectName, groupName, role) <> (RawlsBillingProjectGroupRecord.tupled, RawlsBillingProjectGroupRecord.unapply)
+  }
+
+  protected val rawlsBillingProjectGroupQuery = TableQuery[RawlsBillingProjectGroupTable]
+
   private type RawlsBillingProjectQuery = Query[RawlsBillingProjectTable, RawlsBillingProjectRecord, Seq]
+  private type RawlsBillingProjectGroupQuery = Query[RawlsBillingProjectGroupTable, RawlsBillingProjectGroupRecord, Seq]
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
     def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@dev.test.firecloud.org" //todo: get this outta here
 
-    //save is now create? maybe put back into one method...
+    def toBillingProjectGroupName(projectName: RawlsBillingProjectName, projectRole: ProjectRole) = s"PROJECT_${projectName.value}-${projectRole}" //todo: make this live in only one place
+
     def create(billingProjectName: RawlsBillingProjectName, cromwellBucket: String, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef]): ReadWriteAction[RawlsBillingProject] = {
       uniqueResult(findBillingProjectByName(billingProjectName.value).result) flatMap {
         case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProjectName.value}] in database because it already exists")
         case None => //todo: rewrite this as a for-comp?
           val owner = RawlsGroupName(toBillingProjectGroupName(billingProjectName, ProjectRoles.Owner))
           val user = RawlsGroupName(toBillingProjectGroupName(billingProjectName, ProjectRoles.User))
-          rawlsGroupQuery.save(RawlsGroup(owner, RawlsGroupEmail(toGoogleGroupName(owner)), creators, Set.empty)) flatMap { ownerGroup => //todo: real emails
+          rawlsGroupQuery.save(RawlsGroup(owner, RawlsGroupEmail(toGoogleGroupName(owner)), creators, Set.empty)) flatMap { ownerGroup =>
             rawlsGroupQuery.save(RawlsGroup(user, RawlsGroupEmail(toGoogleGroupName(owner)), Set.empty, Set.empty)) flatMap { userGroup =>
-              val billingProject = RawlsBillingProject(billingProjectName, ownerGroup, userGroup, cromwellBucket, status)
-              (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
+              val foo = RawlsBillingProjectGroupRecord(billingProjectName.value, ownerGroup.groupName.value, ProjectRoles.Owner.toString)
+              val bar = RawlsBillingProjectGroupRecord(billingProjectName.value, userGroup.groupName.value, ProjectRoles.User.toString)
+              (rawlsBillingProjectGroupQuery ++= Seq(foo, bar)) flatMap { _ =>
+                val billingProject = RawlsBillingProject(billingProjectName, ownerGroup, userGroup, cromwellBucket, status)
+                (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
+              }
             }
           }
       }
-    }
-
-    //strictly update
-    def save(billingProject: RawlsBillingProject): WriteAction[RawlsBillingProject] = {
-      validateUserDefinedString(billingProject.projectName.value)
-      val projectUpdate = rawlsBillingProjectQuery update marshalBillingProject(billingProject)
-
-      val ownersUpdate = rawlsGroupQuery.save(billingProject.owners)
-
-      // remove any owners that might have been put in the users list cause you can only be in 1
-      val realUsers = (billingProject.users.users -- billingProject.owners.users)
-      val realSubgroups = (billingProject.users.subGroups -- billingProject.owners.subGroups)
-      val usersUpdate = rawlsGroupQuery.save(billingProject.users.copy(users = realUsers, subGroups = realSubgroups))
-
-      projectUpdate andThen ownersUpdate andThen usersUpdate map { _ => billingProject }
     }
 
     def updateCreationStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: CreationStatuses.CreationStatus): WriteAction[Int] = {
@@ -76,102 +77,84 @@ trait RawlsBillingProjectComponent {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(name)).flatMap {
         case None => DBIO.successful(None)
         case Some(projectRec) =>
-          for {
-            ownerGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(projectRec.ownerGroup)))
-            userGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(projectRec.userGroup)))
-          } yield Option(unmarshalBillingProject(projectRec, ownerGroup.get, userGroup.get)) //todo: get rid of these gets
+          val query = for {
+            project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
+            ownerGroup <- (rawlsBillingProjectQuery join rawlsBillingProjectGroupQuery on (_.projectName === _.projectName) join groupUsersQuery on (_._2.groupName === _.groupName)).map(_._2)
+          } yield (project, ownerGroup)
+
+          DBIO.successful(None)
+//        case None => DBIO.successful(None)
+//        case Some(projectRec) =>
+//          for {
+//            findOwnerGroup <- rawlsBillingProjectGroupQuery if findOwnerGroup.projectName === rawlsProjectName.value && if findOwnerGroup.role === ProjectRoles.Owner.toString
+//            ownerGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(findOwnerGroup.groupName)))
+//            userGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(projectRec.userGroup)))
+//          } yield Option(unmarshalBillingProject(projectRec, ownerGroup.get, userGroup.get)) //todo: get rid of these gets
       }
     }
 
     def loadProjectUsersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
-      //this looks absolutely insane but i think it's necessary given how this is structured
-      val ownerUsersQuery = for {
-        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
-        ownersGroup <- rawlsGroupQuery if ownersGroup.groupName === project.ownerGroup
-        ownerUser <- groupUsersQuery if ownerUser.groupName === ownersGroup.groupName
-        ownerUserEmail <- rawlsUserQuery if ownerUserEmail.userSubjectId === ownerUser.userSubjectId
-      } yield (ownerUserEmail.userEmail, LiteralColumn(ProjectRoles.Owner.toString))
+      val ownerUsersQuery = findProjectUsersWithRole(rawlsProjectName, ProjectRoles.Owner)
+      val userUsersQuery = findProjectUsersWithRole(rawlsProjectName, ProjectRoles.User)
 
-      val userUsersQuery = for {
-        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
-        usersGroup <- rawlsGroupQuery if usersGroup.groupName === project.userGroup
-        userUser <- groupUsersQuery if userUser.groupName === usersGroup.groupName
-        userUserEmail <- rawlsUserQuery if userUserEmail.userSubjectId === userUser.userSubjectId
-      } yield (userUserEmail.userEmail, LiteralColumn(ProjectRoles.User.toString))
+      val ownerSubgroupsQuery = findProjectSubgroupsWithRole(rawlsProjectName, ProjectRoles.Owner)
+      val userSubgroupsQuery = findProjectSubgroupsWithRole(rawlsProjectName, ProjectRoles.User)
 
-      val ownerSubgroupQuery = for {
-        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
-        ownersGroup <- rawlsGroupQuery if ownersGroup.groupName === project.ownerGroup
-        ownerSubgroup <- groupSubgroupsQuery if ownerSubgroup.parentGroupName === ownersGroup.groupName
-        ownerSubgroupEmail <- rawlsGroupQuery if ownerSubgroupEmail.groupName === ownerSubgroup.parentGroupName
-      } yield (ownerSubgroupEmail.groupEmail, LiteralColumn(ProjectRoles.Owner.toString))
+      val owners = ownerUsersQuery union ownerSubgroupsQuery
+      val users = userUsersQuery union userSubgroupsQuery
 
-      val userSubgroupQuery = for {
-        project <- rawlsBillingProjectQuery if project.projectName === rawlsProjectName.value
-        usersGroup <- rawlsGroupQuery if usersGroup.groupName === project.userGroup
-        userSubgroup <- groupSubgroupsQuery if userSubgroup.parentGroupName === usersGroup.groupName
-        userSubgroupEmail <- rawlsGroupQuery if userSubgroupEmail.groupName === userSubgroup.parentGroupName
-      } yield (userSubgroupEmail.groupEmail, LiteralColumn(ProjectRoles.User.toString))
-
-      val owners = ownerUsersQuery union ownerSubgroupQuery
-      val users = userUsersQuery union userSubgroupQuery
-
-      (owners union users).result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))}) //make this use a more general RawlsEmail
+      (owners union users).result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))})
     }
 
     def delete(billingProject: RawlsBillingProject): ReadWriteAction[Boolean] = {
-      val name = billingProject.projectName.value
-      val projectQuery = findBillingProjectByName(name)
-
-      uniqueResult[RawlsBillingProjectRecord](projectQuery).flatMap {
-        case None => DBIO.successful(false)
-        case Some(projectRec) =>
-          rawlsGroupQuery.delete(RawlsGroupRef(RawlsGroupName(projectRec.ownerGroup))) andThen
-            rawlsGroupQuery.delete(RawlsGroupRef(RawlsGroupName(projectRec.userGroup))) andThen
-            projectQuery.delete map { count => count > 0 }
-      }
+      rawlsBillingProjectGroupQuery.filter(_.projectName === billingProject.projectName.value).delete andThen
+        rawlsGroupQuery.delete(billingProject.owners) andThen rawlsGroupQuery.delete(billingProject.users) andThen
+        rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName.value).delete map { count => count >0 }
     }
-
-    def toBillingProjectGroupName(projectName: RawlsBillingProjectName, projectRole: ProjectRole) = s"PROJECT_${projectName.value}-${projectRole}" //todo: make this live in only one place
 
     def addUserToProject(thing: Either[RawlsUserRef, RawlsGroupRef], billingProjectName: RawlsBillingProjectName, role: ProjectRole): ReadWriteAction[RawlsGroup] = {
       rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(toBillingProjectGroupName(billingProjectName, role)))) flatMap {
-        case None => throw new RawlsException(s"Unable to save user ${thing} as ${role} on project ${billingProjectName}")
+        case None => throw new RawlsException(s"Unable to save member ${thing} as ${role} on project ${billingProjectName}")
         case Some(group) => thing match {
-          case Left(x) => rawlsGroupQuery.save(group.copy(users = group.users ++ Set(x)))
-          case Right(y) => rawlsGroupQuery.save(group.copy(subGroups = group.subGroups ++ Set(y)))
+          case Left(userToAdd) => rawlsGroupQuery.save(group.copy(users = group.users ++ Set(userToAdd)))
+          case Right(groupToAdd) => rawlsGroupQuery.save(group.copy(subGroups = group.subGroups ++ Set(groupToAdd)))
         }
       }
     }
 
-    //i think it's cheaper to load a billing project and re-save both groups than it is to
-    //load a billing project, load both groups, and re-save the group that's changing
     def removeUserFromProject(thing: Either[RawlsUserRef, RawlsGroupRef], billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
       load(billingProjectName) flatMap {
         case None => throw new RawlsException(s"Unable to remove ${thing} from project ${billingProjectName}")
-        case Some(z) => thing match {
-          case Left(x) => rawlsGroupQuery.save(z.owners.copy(users = z.owners.users -- Set(x))) andThen rawlsGroupQuery.save(z.users.copy(users = z.users.users -- Set(x)))
-          case Right(y) => rawlsGroupQuery.save(z.owners.copy(subGroups = z.owners.subGroups -- Set(y))) andThen rawlsGroupQuery.save(z.users.copy(subGroups = z.users.subGroups -- Set(y)))
+        case Some(ref) => thing match {
+          case Left(user) => rawlsGroupQuery.save(ref.owners.copy(users = ref.owners.users -- Set(user))) andThen rawlsGroupQuery.save(ref.users.copy(users = ref.users.users -- Set(user)))
+          case Right(group) => rawlsGroupQuery.save(ref.owners.copy(subGroups = ref.owners.subGroups -- Set(group))) andThen rawlsGroupQuery.save(ref.users.copy(subGroups = ref.users.subGroups -- Set(group)))
         }
       }
     }.map{ _ => true } //todo: this is kinda BS right now. clean up
+//
+//    def getProjectRoleFromEmail(billingProjectName: RawlsBillingProjectName, email: String): ReadAction[ProjectRoles.ProjectRole] = {
+//      rawlsGroupQuery.loadFromEmail(email) flatMap {
+//        case None => throw new RawlsException(s"Unable to determine status of ${email} on project ${billingProjectName}")
+//        case Some(ref) => ref match {
+//          case Left(user) => rawlsUserQuery.load(user) flatMap {
+//            case None => throw new RawlsException("blah")
+//            case Some(x) => if()
+//          }
+//        }
+//      }
+//    }
 
     def removeUserFromAllProjects(userRef: RawlsUserRef): WriteAction[Boolean] = {
       findProjectGroupsByUserSubjectId(userRef.userSubjectId.value).delete.map { count => count > 0 }
     }
 
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {
-      val queryForOwnership = for {
+      val query = for {
         group <- groupUsersQuery if group.userSubjectId === rawlsUser.userSubjectId.value
-        owner <- rawlsBillingProjectQuery if owner.ownerGroup === group.groupName
-      } yield (ProjectRoles.Owner.toString, owner.projectName, owner.creationStatus)
-
-      val queryForMembership = for {
-        group <- groupUsersQuery if group.userSubjectId === rawlsUser.userSubjectId.value
-        user <- rawlsBillingProjectQuery if user.userGroup === group.groupName
-      } yield (ProjectRoles.User.toString, user.projectName, user.creationStatus)
-
-      (queryForOwnership union queryForMembership).result.map { _.map { //todo: explain plan...
+        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName
+        project <- rawlsBillingProjectQuery if project.projectName === groupsThatAreProjectRelated.projectName
+      } yield (groupsThatAreProjectRelated.role, groupsThatAreProjectRelated.projectName, project.creationStatus)
+      query.result.map { _.map { //todo: explain plan...
         case (role, projectName, creationStatus) => RawlsBillingProjectMembership(RawlsBillingProjectName(projectName), ProjectRoles.withName(role), CreationStatuses.withName(creationStatus))
       }}
     }
@@ -199,12 +182,29 @@ trait RawlsBillingProjectComponent {
     private def findProjectUser(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]) = {
       for {
         group <- groupUsersQuery if group.userSubjectId === user.userSubjectId.value
-        project <- rawlsBillingProjectQuery if (project.userGroup === group.groupName || project.ownerGroup === group.groupName) && project.projectName === projectName.value
+        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName
+        project <- rawlsBillingProjectQuery if groupsThatAreProjectRelated.groupName === group.groupName && project.projectName === projectName.value && groupsThatAreProjectRelated.role.inSet(roles.map(_.toString))
       } yield project
     }
 
+    private def findProjectUsersWithRole(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = {
+      for {
+        group <- rawlsBillingProjectGroupQuery if group.projectName === projectName.value && group.role === role.toString
+        user <- groupUsersQuery if user.groupName === group.groupName
+        email <- rawlsUserQuery if email.userSubjectId === user.userSubjectId
+      } yield (email.userEmail, LiteralColumn(role.toString))
+    }
+
+    private def findProjectSubgroupsWithRole(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = {
+      for {
+        group <- rawlsBillingProjectGroupQuery if group.projectName === projectName.value && group.role === role.toString
+        subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === group.groupName
+        email <- rawlsGroupQuery if email.groupName === subGroup.parentGroupName
+      } yield (email.groupEmail, LiteralColumn(role.toString))
+    }
+
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.owners.groupName.value, billingProject.users.groupName.value)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, ownerGroup: RawlsGroup, userGroup: RawlsGroup): RawlsBillingProject = {
@@ -217,30 +217,32 @@ trait RawlsBillingProjectComponent {
 
     private def findUsersByProjectName(name: String): ReadAction[Map[RawlsUserRef, ProjectRoles.ProjectRole]] = {
       uniqueResult(findBillingProjectByName(name).result) flatMap { bp =>
-        val billingProject = bp.getOrElse(throw new RawlsException(s"Unable to load billing project [${name}]"))
+        bp.getOrElse(throw new RawlsException(s"Unable to load billing project [${name}]"))
 
-        rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(billingProject.ownerGroup))) flatMap { owners =>
-          rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(billingProject.userGroup))) map { users =>
-            (owners.map(owner => owner -> ProjectRoles.Owner) ++ users.map(user => user -> ProjectRoles.User)).toMap
+        val queryForGroups = for {
+          group <- rawlsBillingProjectGroupQuery if group.projectName === name
+        } yield group
+
+        queryForGroups.result.flatMap { groups =>
+          DBIO.sequence(groups.map { group =>
+            for {
+              members <- rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(group.groupName)))
+            } yield (members, ProjectRoles.withName(group.role))
+          }) map { membership =>
+            membership.flatMap { case (users, role) =>
+              users.map(_ -> role)
+            }.toMap
           }
         }
       }
     }
 
     private def findProjectGroupsByUserSubjectId(subjectId: String) = {
-      val queryForOwnership = for {
+      for {
         group <- groupUsersQuery if group.userSubjectId === subjectId
-        owner <- rawlsBillingProjectQuery if owner.ownerGroup === group.groupName
-        userMembership <- groupUsersQuery if userMembership.userSubjectId === subjectId
-      } yield userMembership
-
-      val queryForMembership = for {
-        group <- groupUsersQuery if group.userSubjectId === subjectId
-        user <- rawlsBillingProjectQuery if user.userGroup === group.groupName
-        userMembership <- groupUsersQuery if userMembership.userSubjectId === subjectId
-      } yield userMembership
-
-      (queryForOwnership union queryForMembership)
+        billingGroup <- rawlsBillingProjectGroupQuery if billingGroup.groupName === group.groupName
+        billingProject <- rawlsBillingProjectQuery if billingProject.projectName === billingGroup.projectName
+      } yield billingProject
     }
   }
 }

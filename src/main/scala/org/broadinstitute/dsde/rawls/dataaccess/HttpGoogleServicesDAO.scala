@@ -618,8 +618,6 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def toBillingProjectGroupName(projectName: RawlsBillingProjectName, projectRole: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${projectRole}" //make this live in only one place
-
   override def createProject(projectName: RawlsBillingProjectName, creator: RawlsUser, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
     val credential = getBillingServiceAccountCredential
 
@@ -851,6 +849,7 @@ class HttpGoogleServicesDAO(
   def toProxyFromUserSubjectId(subjectId: String) = s"PROXY_${subjectId}@${appsDomain}"
   def toUserFromProxy(proxy: String) = executeGoogleRequest(getGroupDirectory.groups().get(proxy)).getName
   def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@${appsDomain}"
+  def toBillingProjectGroupName(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${role.toString}"
 
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def curatorGroupName = s"${groupsPrefix}-CURATORS@${appsDomain}"
