@@ -111,8 +111,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
     case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
     case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
-    case AdminAddUserToBillingProject(projectName, accessUpdate) => asFCAdmin { addUserToBillingProject(projectName, accessUpdate) } pipeTo sender
-    case AdminRemoveUserFromBillingProject(projectName, accessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, accessUpdate) } pipeTo sender
+    case AdminAddUserToBillingProject(projectName, projectAccessUpdate) => asFCAdmin { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, projectAccessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
@@ -693,7 +693,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     DBIO.from(Future.sequence(googleUpdateTrials)).flatMap { tries =>
       val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
       val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
-      println(group)
       dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
         val exceptions = tries.collect { case Failure(t) => ErrorReport(t) }
         if (exceptions.isEmpty) {

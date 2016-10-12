@@ -669,11 +669,10 @@ class HttpGoogleServicesDAO(
         })
       })
 
-      //clean up needed, just getting an implementation working...
-
       // add the creator as an owner on the project
       insertOwner <- retryWhen500orGoogleError(() => {
-        addMemberToGoogleGroup(RawlsGroup(RawlsGroupName(s"PROJECT_${projectName.value}-OWNER"), RawlsGroupEmail(toGoogleGroupName(RawlsGroupName(s"PROJECT_${projectName.value}-OWNER"))), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), Left(creator))
+        val groupName = RawlsGroupName(toBillingProjectGroupName(projectName, ProjectRoles.Owner))
+        addMemberToGoogleGroup(RawlsGroup(groupName, RawlsGroupEmail(toGoogleGroupName(groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), Left(creator))
       })
 
     } yield {
