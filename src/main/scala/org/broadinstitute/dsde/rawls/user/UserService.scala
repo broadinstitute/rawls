@@ -61,9 +61,9 @@ object UserService {
   case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
-  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
-  case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail) extends UserServiceMessage
+  case class RemoveUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case object ListBillingAccounts extends UserServiceMessage
 
   case class CreateBillingProjectFull(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName) extends UserServiceMessage
@@ -112,10 +112,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
     case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
     case AdminAddUserToBillingProject(projectName, accessUpdate) => asFCAdmin { addUserToBillingProject(projectName, accessUpdate) } pipeTo sender
-    case AdminRemoveUserFromBillingProject(projectName, userEmail) => asFCAdmin { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case AdminRemoveUserFromBillingProject(projectName, accessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, accessUpdate) } pipeTo sender
 
     case AddUserToBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
-    case RemoveUserFromBillingProject(projectName, userEmail) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, userEmail) } pipeTo sender
+    case RemoveUserFromBillingProject(projectName, projectAccessUpdate) => asProjectOwner(projectName) { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
@@ -438,8 +438,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
-        case Some(x) => x
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not add user ${projectAccessUpdate.email} to billing project [${projectName.value}]"))
+        case Some(member) => member
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not add member ${projectAccessUpdate.email} to billing project [${projectName.value}]"))
       }
     } map {
       case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
@@ -450,22 +450,20 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
-    val member = dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.loadFromEmail(userEmail.value).map {
-        case Some(x) => x
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not remove user ${userEmail.value} from billing project [${projectName.value}]"))
+  def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
+        case Some(member) => member
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not remove member ${projectAccessUpdate.email} from billing project [${projectName.value}]"))
       }
-    }
-
-    member.map {
+    } map {
       case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
       case Right(group) =>
         println(group)
         RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
     } flatMap { memberList =>
 
-      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, ProjectRoles.Owner))), memberList, RemoveGroupMembersOp) //don't hardcode
+      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, RemoveGroupMembersOp)
     }
   }
 

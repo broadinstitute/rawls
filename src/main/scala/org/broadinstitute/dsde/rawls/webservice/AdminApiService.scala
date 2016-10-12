@@ -66,7 +66,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       delete {
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminRemoveUserFromBillingProject(RawlsBillingProjectName(projectId), RawlsUserEmail(userEmail)))
+          UserService.AdminRemoveUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(role))))
       }
     } ~
     path("admin" / "submissions") {

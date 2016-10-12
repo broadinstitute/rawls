@@ -9,7 +9,7 @@ case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
 sealed trait UserAuthType { val value: String }
-case class RawlsUserEmail(value: String) extends UserAuthType //todo: make the two email types extend some shit
+case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
