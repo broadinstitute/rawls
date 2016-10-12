@@ -618,7 +618,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, creator: RawlsUser, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): Future[Unit] = {
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -645,6 +645,8 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
       })
 
+      //must add all groups to the billing account in google! this is also the place to handle GAWB-845
+
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
         val updatedPolicy = new Policy().setBindings(updateBindings(bindings, projectTemplate))
@@ -661,20 +663,6 @@ class HttpGoogleServicesDAO(
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       })
-
-      // create the owner and user groups
-      groups <- retryWhen500orGoogleError(() => {
-        Future.sequence(ProjectRoles.all.map { level =>
-          createGoogleGroup(RawlsGroupRef(RawlsGroupName(toBillingProjectGroupName(projectName, level))))
-        })
-      })
-
-      // add the creator as an owner on the project
-      insertOwner <- retryWhen500orGoogleError(() => {
-        val groupName = RawlsGroupName(toBillingProjectGroupName(projectName, ProjectRoles.Owner))
-        addMemberToGoogleGroup(RawlsGroup(groupName, RawlsGroupEmail(toGoogleGroupName(groupName)), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef]), Left(creator))
-      })
-
     } yield {
       // nothing
     }

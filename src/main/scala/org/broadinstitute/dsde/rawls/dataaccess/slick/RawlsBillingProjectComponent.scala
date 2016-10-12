@@ -41,12 +41,11 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
-    def create(billingProjectName: RawlsBillingProjectName, cromwellBucket: String, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): ReadWriteAction[RawlsBillingProject] = {
-      uniqueResult(findBillingProjectByName(billingProjectName.value).result) flatMap {
-        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProjectName.value}] in database because it already exists")
+    def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
+      uniqueResult(findBillingProjectByName(billingProject.projectName.value).result) flatMap {
+        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
         case None =>
-          val billingProject = RawlsBillingProject(billingProjectName, groups(ProjectRoles.Owner), groups(ProjectRoles.User), cromwellBucket, status)
-          (rawlsBillingProjectGroupQuery ++= groups.map{ case (role, group) => RawlsBillingProjectGroupRecord(billingProjectName.value, group.groupName.value, role.toString)}) andThen
+          (rawlsBillingProjectGroupQuery ++= billingProject.groups.map{ case (role, group) => RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)}) andThen
             (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
       }
     }

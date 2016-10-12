@@ -431,11 +431,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           creators
         } else Set[RawlsUserRef]()
         dataAccess.rawlsGroupQuery.save(RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), users, Set.empty)).map(x => role -> x)
-      })
+      }.toSeq)
 
       createGroups flatMap { groups =>
-        val foo = groups.toMap
-        dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, groups.toMap)
+        val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
+        dataAccess.rawlsBillingProjectQuery.create(billingProject)
       }
     }
   }
@@ -773,8 +773,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
             case None =>
               for {
-                _ <- DBIO.from(gcsDAO.createProject(projectName, RawlsUser(userInfo), billingAccount, billingProjectTemplate))
-                _ <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, Set(RawlsUser(userInfo)))
+                project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, Set(RawlsUser(userInfo)))
+                _ <- DBIO.from(gcsDAO.createProject(projectName, RawlsUser(userInfo), billingAccount, billingProjectTemplate, project.groups))
               } yield {
                 RequestComplete(StatusCodes.Created)
               }
