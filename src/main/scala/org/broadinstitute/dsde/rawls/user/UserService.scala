@@ -201,9 +201,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       DBIO.sequence(
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
-            DBIO.seq(u.billingProjects.map(projectName =>
-              dataAccess.rawlsBillingProjectQuery.addUserToProject(Left(u.user), projectName, ProjectRoles.User)
-            ): _*) map (_ => user)
+            DBIO.sequence(u.billingProjects.map { projectName =>
+              DBIO.from(addUserToBillingProject(projectName, ProjectAccessUpdate(u.user.userEmail.value, ProjectRoles.User)))
+            }) map ( _ => user)
           }
         }
       ) flatMap { users =>
@@ -422,7 +422,21 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
-      dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, creators)
+
+      //create the groups to back the project
+      val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
+        val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, ProjectRoles.Owner))
+        //we only want to add the creators to the owners group
+        val users = if(role.equals(ProjectRoles.Owner)) {
+          creators
+        } else Set[RawlsUserRef]()
+        dataAccess.rawlsGroupQuery.save(RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), users, Set.empty)).map(x => role -> x)
+      })
+
+      createGroups flatMap { groups =>
+        val foo = groups.toMap
+        dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, groups.toMap)
+      }
     }
   }
 
