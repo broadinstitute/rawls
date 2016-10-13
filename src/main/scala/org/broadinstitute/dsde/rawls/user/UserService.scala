@@ -774,7 +774,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             case None =>
               for {
                 project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, Set(RawlsUser(userInfo)))
-                _ <- DBIO.from(gcsDAO.createProject(projectName, RawlsUser(userInfo), billingAccount, billingProjectTemplate, project.groups))
+                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate, project.groups))
               } yield {
                 RequestComplete(StatusCodes.Created)
               }
