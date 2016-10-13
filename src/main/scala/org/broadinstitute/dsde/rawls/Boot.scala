@@ -52,9 +52,6 @@ object Boot extends App with LazyLogging {
       slickDataSource.initWithLiquibase(liquibaseChangeLog)
     }
 
-    // For testing/migration.  Not for production code!
-    //slickDataSource.initWithSlick()
-
     val gcsConfig = conf.getConfig("gcs")
     val jsonFactory = JacksonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
