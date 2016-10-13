@@ -442,10 +442,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     withBillingProject(projectName, dataAccess) { project =>
-      dataAccess.rawlsBillingProjectQuery.delete(project) map {
-        case true => RequestComplete(StatusCodes.OK)
-        case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
-      }
+      DBIO.from(Future.sequence(project.groups.map {case (foo, bar) => gcsDAO.deleteGoogleGroup(bar) })) andThen
+        dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
+          case true => RequestComplete(StatusCodes.OK)
+          case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+        }
     }
   }
 

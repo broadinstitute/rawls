@@ -224,6 +224,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   def toGoogleGroupName(groupName: RawlsGroupName): String = s"GROUP_${groupName.value}@dev.firecloud.org"
 
+  def toBillingProjectGroupName(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${role.toString}"
+
   override def toProxyFromUser(userSubjectId: RawlsUserSubjectId): String = s"PROXY_${userSubjectId}"
 
   override def toUserFromProxy(proxy: String): String = "joe.biden@whitehouse.gov"
@@ -239,7 +241,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): Future[Unit] = Future.successful(Unit)
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
   override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(Try(Unit))

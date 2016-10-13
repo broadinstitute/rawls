@@ -15,7 +15,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val ownerRef = RawlsUserRef(ownerSubjId)
 
     val projectName = RawlsBillingProjectName("arbitrary")
-    val project = RawlsBillingProject(projectName, Set(owner), Set(userRef), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val project = RawlsBillingProject(projectName, generateBillingGroups(projectName, Map(ProjectRoles.Owner -> Set(ownerRef), ProjectRoles.User -> Set(userRef)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     runAndWait(rawlsUserQuery.save(user))
     runAndWait(rawlsUserQuery.save(owner))
@@ -25,11 +25,11 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
 
     assertResult(false) {
-      runAndWait(rawlsBillingProjectQuery.delete(project))
+      runAndWait(rawlsBillingProjectQuery.delete(projectName))
     }
 
     assertResult(project) {
-      runAndWait(rawlsBillingProjectQuery.save(project))
+      runAndWait(rawlsBillingProjectQuery.create(project))
     }
 
     assertResult(Some(project)) {
@@ -37,11 +37,11 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
 
     assertResult(true) {
-      runAndWait(rawlsBillingProjectQuery.delete(project))
+      runAndWait(rawlsBillingProjectQuery.delete(projectName))
     }
 
     assertResult(false) {
-      runAndWait(rawlsBillingProjectQuery.delete(project))
+      runAndWait(rawlsBillingProjectQuery.delete(projectName))
     }
 
     assertResult(None) {
@@ -49,7 +49,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "add and remove users to projects, and list projects for users" in withEmptyTestDatabase {
+  it should "list projects for users" in withEmptyTestDatabase {
     val subjId1 = RawlsUserSubjectId("subject ID #1")
     val subjId2 = RawlsUserSubjectId("This is subject two")
     val subjId3 = RawlsUserSubjectId("3")
@@ -89,11 +89,11 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val projectName1 = RawlsBillingProjectName("project1")
     val projectName2 = RawlsBillingProjectName("project2")
 
-    val project1 = RawlsBillingProject(projectName1, Set(owner), Set(userRef1), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
-    val project2 = RawlsBillingProject(projectName2, Set(owner), Set(userRef2, userRef3), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val project1 = RawlsBillingProject(projectName1, generateBillingGroups(projectName1, Map(ProjectRoles.Owner -> Set(owner), ProjectRoles.User -> Set(userRef1)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val project2 = RawlsBillingProject(projectName2, generateBillingGroups(projectName2, Map(ProjectRoles.Owner -> Set(owner), ProjectRoles.User -> Set(userRef2, userRef3)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
-    runAndWait(rawlsBillingProjectQuery.save(project1))
-    runAndWait(rawlsBillingProjectQuery.save(project2))
+    runAndWait(rawlsBillingProjectQuery.create(project1))
+    runAndWait(rawlsBillingProjectQuery.create(project2))
 
     assert {
       runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName1, userRef1, Set(ProjectRoles.User)))
@@ -147,48 +147,5 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     assertResult(Some(project2)) {
       runAndWait(rawlsBillingProjectQuery.load(projectName2))
     }
-
-    val record = ProjectUsersRecord(subjId1.value, projectName2.value, ProjectRoles.User.toString)
-    assertResult(record) {
-      runAndWait(rawlsBillingProjectQuery.addUserToProject(userRef1, project2.projectName, ProjectRoles.User))
-    }
-
-    val project2PlusUser1 = project2.copy(users = project2.users + userRef1)
-    assertResult(Some(project2PlusUser1)) {
-      runAndWait(rawlsBillingProjectQuery.load(projectName2))
-    }
-
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, CreationStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.User, CreationStatuses.Ready))) {
-      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
-    }
-
-    assertResult(true) {
-      runAndWait(rawlsBillingProjectQuery.removeUserFromProject(userRef1, project2))
-    }
-
-    assertResult(false) {
-      runAndWait(rawlsBillingProjectQuery.removeUserFromProject(userRef1, project2))
-    }
-
-    assertResult(Some(project2)) {
-      runAndWait(rawlsBillingProjectQuery.load(projectName2))
-    }
-
-    assertResult(Seq(RawlsBillingProjectMembership(projectName1, ProjectRoles.User, CreationStatuses.Ready))) {
-      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
-    }
-
-    assertResult(true) {
-      runAndWait(rawlsBillingProjectQuery.removeUserFromAllProjects(userRef1))
-    }
-
-    assertResult(false) {
-      runAndWait(rawlsBillingProjectQuery.removeUserFromAllProjects(userRef1))
-    }
-
-    assertResult(Seq()) {
-      runAndWait(rawlsBillingProjectQuery.listUserProjects(userRef1))
-    }
-
   }
 }

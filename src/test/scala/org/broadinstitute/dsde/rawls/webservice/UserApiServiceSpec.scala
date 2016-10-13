@@ -156,7 +156,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
 
       runAndWait(rawlsUserQuery.save(billingUser))
 

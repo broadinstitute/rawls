@@ -323,7 +323,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
       val projectServices = gcsConfig.getStringList("projectTemplate.services")
 
-      Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices)), Duration.Inf)
+      Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices), Map.empty), Duration.Inf)
     } finally {
       gcsDAO.deleteProject(projectName)
     }

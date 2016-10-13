@@ -42,7 +42,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
 
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
@@ -248,7 +248,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assert {
-          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
         }
 
         Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
@@ -259,7 +259,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
             }
             assert {
               val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              loadedProject.users.contains(testData.userOwner) && !loadedProject.owners.contains(testData.userOwner)
+              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
             }
           }
 
@@ -271,7 +271,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
             }
             assert {
               val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              !loadedProject.users.contains(testData.userOwner) && loadedProject.owners.contains(testData.userOwner)
+              !loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
             }
           }
       }
@@ -313,7 +313,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
           sealRoute(services.adminRoutes) ~>
           check {
             assert {
-              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
             }
 
             Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
@@ -323,7 +323,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
                   status
                 }
                 assert {
-                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userOwner)
+                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
                 }
               }
           }
@@ -609,8 +609,8 @@ AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), Set.empty, Set(testUser, user2), "mock cromwell URL", CreationStatuses.Ready)
-      runAndWait(rawlsBillingProjectQuery.save(project))
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set.empty, ProjectRoles.User -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready)
+      runAndWait(rawlsBillingProjectQuery.create(project))
 
       assertResult(Some(project)) {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))
@@ -626,7 +626,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
       assertUserMissing(services, testUser)
 
-      assertResult(Some(project.copy(users = Set(user2)))) {
+      assertResult(Some(project.groups(ProjectRoles.User).copy(users = Set(user2)))) {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))
       }
 

@@ -87,6 +87,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       workflows, SubmissionStatuses.Submitted)
   }
 
+  def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, RawlsGroup] = {
+    ProjectRoles.all.map { role =>
+      val usersToAdd = users.getOrElse(role, Set.empty)
+      val groupsToAdd = subGroups.getOrElse(role, Set.empty)
+      role -> RawlsGroup(RawlsGroupName(s"PROJECT_${projectName.value}-${role.toString}"), RawlsGroupEmail(s"GROUP_PROJECT_${projectName.value}-${role.toString}@dev.test.firecloud.org"), usersToAdd, groupsToAdd)
+    }.toMap
+  }
+
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
 
@@ -158,7 +166,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(userOwner), Set.empty, "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -474,7 +482,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
-        rawlsBillingProjectQuery.save(billingProject),
+        rawlsBillingProjectQuery.create(billingProject),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -625,7 +633,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), Set(RawlsUser(userInfo)), Set.empty, "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty), "testBucketUrl", CreationStatuses.Ready)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -751,7 +759,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.save(RawlsUser(userInfo)),
-        rawlsBillingProjectQuery.save(billingProject),
+        rawlsBillingProjectQuery.create(billingProject),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
