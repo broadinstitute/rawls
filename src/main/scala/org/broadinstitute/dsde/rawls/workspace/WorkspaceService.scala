@@ -519,7 +519,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be changed in the billing area of the application."))
       }
 
-      val updatedRefsAndLevels = existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++ actualChangesToMake
+      val updatedRefsAndLevels = (existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++ actualChangesToMake).filterNot { case (_, level) => level == WorkspaceAccessLevels.NoAccess }
 
       val updatedRefsByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[(scala.Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel)]] = updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
 
