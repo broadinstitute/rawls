@@ -92,6 +92,10 @@ trait RawlsGroupComponent {
       loadGroup(findGroupByEmail(groupEmail.value))
     }
 
+    def loadGroupRefsByEmails(groupEmail: Seq[RawlsGroupEmail]): ReadAction[Map[String, RawlsGroupRef]] = {
+      rawlsGroupQuery.filter(_.groupEmail.inSetBind(groupEmail.map(_.value))).result.map(_.map(rec => rec.groupEmail -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap)
+    }
+
     def delete(groupRef: RawlsGroupRef): ReadWriteAction[Boolean] = {
       val name = groupRef.groupName.value
       val groupQuery = findGroupByName(name)
@@ -117,6 +121,21 @@ trait RawlsGroupComponent {
         case (Some(u), None) => Option(Left(u))
         case (None, Some(g)) => Option(Right(g))
         case _ => None
+      }
+    }
+
+    def loadRefsFromEmails(emails: Seq[String]): ReadAction[Map[String, Either[RawlsUserRef, RawlsGroupRef]]] = {
+      for {
+        userRefs <- rawlsUserQuery.loadUserRefsByEmails(emails.map(RawlsUserEmail))
+        groupRefs <- loadGroupRefsByEmails(emails.map(RawlsGroupEmail))
+      } yield {
+        val bothUserAndGroupEmails = userRefs.keySet.intersect(groupRefs.keySet)
+        if(bothUserAndGroupEmails.isEmpty) {
+          userRefs.map { case (k, v) => k -> Left(v) } ++ groupRefs.map { case (k, v) => k -> Right(v) }
+        } else {
+          throw new RawlsException(s"Database error: emails [$bothUserAndGroupEmails] refer to both a user and a group")
+        }
+
       }
     }
 
