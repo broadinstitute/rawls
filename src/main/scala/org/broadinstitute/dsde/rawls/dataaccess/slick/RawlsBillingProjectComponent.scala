@@ -41,31 +41,15 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
-    def create(projectName: RawlsBillingProjectName, bucketUrl: String, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef]): ReadWriteAction[RawlsBillingProject] = {
-      uniqueResult(findBillingProjectByName(projectName.value).result) flatMap {
-        case Some(_) => throw new RawlsException(s"Cannot create billing project [${projectName.value}] in database because it already exists")
+    def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
+      uniqueResult(findBillingProjectByName(billingProject.projectName.value).result) flatMap {
+        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
         case None =>
-          createBillingGroups(projectName, creators) flatMap { groups =>
-            val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
-            (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
-              (rawlsBillingProjectGroupQuery ++= billingProject.groups.map{ case (role, group) =>
-                RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)
-              }).map { _ => billingProject }}
+          (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
+            (rawlsBillingProjectGroupQuery ++= billingProject.groups.map { case (role, group) =>
+              println(group)
+              RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)}).map { _ => billingProject }
       }
-    }
-
-    def toBillingProjectGroupName(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${role.toString}"
-    def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@dev.test.firecloud.org"
-
-    def createBillingGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Seq[(ProjectRoles.ProjectRole, RawlsGroup)]] = {
-      DBIO.sequence(ProjectRoles.all.map { role =>
-        val name = RawlsGroupName(toBillingProjectGroupName(projectName, role))
-        //we only want to add the creators to the owners group
-        val users = if(role.equals(ProjectRoles.Owner)) {
-          creators
-        } else Set[RawlsUserRef]()
-        rawlsGroupQuery.save(RawlsGroup(name, RawlsGroupEmail(toGoogleGroupName(name)), users, Set.empty)).map(x => role -> x)
-      }.toSeq)
     }
 
     def updateCreationStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: CreationStatuses.CreationStatus): WriteAction[Int] = {
@@ -116,26 +100,6 @@ trait RawlsBillingProjectComponent {
 
     def findBillingGroups(billingProjectName: RawlsBillingProjectName) = {
       rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).map(_.groupName)
-    }
-
-    def getProjectRoleFromEmail(billingProjectName: RawlsBillingProjectName, email: String): ReadAction[ProjectRoles.ProjectRole] = {
-      rawlsGroupQuery.loadFromEmail(email) flatMap {
-        case None => throw new RawlsException(s"Unable to determine status of ${email} on project ${billingProjectName}")
-        case Some(ref) => ref match {
-          case Left(user) => findProjectUser(billingProjectName, user, ProjectRoles.all).result map { projectWithRole =>
-            projectWithRole.toMap.values match {
-              case Seq(role) => ProjectRoles.withName(role)
-              case _ => throw new RawlsException(s"Unable to determine status of ${email} on project ${billingProjectName}")
-            }
-          }
-          case Right(group) => findProjectSubgroup(billingProjectName, group, ProjectRoles.all).result map { projectWithRole =>
-            projectWithRole.toMap.values match {
-              case Seq(role) => ProjectRoles.withName(role)
-              case _ => throw new RawlsException(s"Unable to determine status of ${email} on project ${billingProjectName}")
-            }
-          }
-        }
-      }
     }
 
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {

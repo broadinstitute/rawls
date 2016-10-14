@@ -645,8 +645,6 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(cloudResManager.projects().getIamPolicy(projectName.value, null)).getBindings
       })
 
-      //must add all groups to the billing account in google! this is also the place to handle GAWB-845
-
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
         val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${groups(ProjectRoles.Owner).groupEmail.value}")))

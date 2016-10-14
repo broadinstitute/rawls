@@ -610,7 +610,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       }
 
       val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready)
-      runAndWait(rawlsBillingProjectQuery.create(project.projectName, project.cromwellAuthBucketUrl, project.status, project.groups(ProjectRoles.Owner).users))
+      runAndWait(rawlsBillingProjectQuery.create(project))
 
       assertResult(Some(project)) {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))

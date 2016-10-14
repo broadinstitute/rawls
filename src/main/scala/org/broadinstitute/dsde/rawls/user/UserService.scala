@@ -203,7 +203,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
             DBIO.sequence(u.billingProjects.map { projectName =>
               DBIO.from(addUserToBillingProject(projectName, ProjectAccessUpdate(u.user.userEmail.value, ProjectRoles.User)))
-            }) map ( _ => user)
+            }) map (_ => user)
           }
         }
       ) flatMap { users =>
@@ -414,7 +414,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
-
         createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, Set.empty) map (_ => RequestComplete(StatusCodes.Created))
     }
   }
@@ -423,22 +422,27 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
 
-      val createGoogleGroups = DBIO.sequence(ProjectRoles.all.map { role =>
+      val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
         val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
         val users = if(role.equals(ProjectRoles.Owner)) {
           creators
         } else Set[RawlsUserRef]()
 
-        DBIO.from(gcsDAO.createGoogleGroup(RawlsGroupRef(name)))
+        createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
       }.toSeq)
 
-      createGoogleGroups andThen dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, creators)
+      //add creator to owner group
+
+      createGroups flatMap { groups =>
+        val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
+        dataAccess.rawlsBillingProjectQuery.create(billingProject)
+      }
     }
   }
 
   def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
     withBillingProject(projectName, dataAccess) { project =>
-      DBIO.from(Future.sequence(project.groups.map {case (foo, bar) => gcsDAO.deleteGoogleGroup(bar) })) andThen
+      DBIO.from(Future.sequence(project.groups.map {case (_, group) => gcsDAO.deleteGoogleGroup(group) })) andThen
         dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
           case true => RequestComplete(StatusCodes.OK)
           case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
