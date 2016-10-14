@@ -271,7 +271,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
             }
             assert {
               val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              !loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
+              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
             }
           }
       }
@@ -522,7 +522,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${user.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
@@ -550,7 +550,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${user.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
@@ -609,8 +609,8 @@ AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set.empty, ProjectRoles.User -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready)
-      runAndWait(rawlsBillingProjectQuery.create(project))
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready)
+      runAndWait(rawlsBillingProjectQuery.create(project.projectName, project.cromwellAuthBucketUrl, project.status, project.groups(ProjectRoles.Owner).users))
 
       assertResult(Some(project)) {
         runAndWait(rawlsBillingProjectQuery.load(project.projectName))
@@ -619,15 +619,15 @@ AdminApiServiceSpec extends ApiServiceSpec {
       Delete(s"/admin/user/${testUser.userSubjectId.value}") ~>
         sealRoute(services.adminRoutes) ~>
         check {
-          assertResult(StatusCodes.NoContent) {
+          assertResult(StatusCodes.NoContent, response.entity.asString) {
             status
           }
         }
 
       assertUserMissing(services, testUser)
 
-      assertResult(Some(project.groups(ProjectRoles.User).copy(users = Set(user2)))) {
-        runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      assertResult(project.groups(ProjectRoles.Owner).copy(users = Set(user2))) {
+        runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.Owner)
       }
 
       assertResult(Some(group.copy(users = Set(user2)))) {
@@ -822,7 +822,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     Post("/admin/users", httpJson(userInfoList)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
       }

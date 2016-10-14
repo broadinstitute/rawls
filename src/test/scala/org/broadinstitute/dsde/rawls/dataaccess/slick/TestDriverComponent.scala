@@ -482,7 +482,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
-        rawlsBillingProjectQuery.create(billingProject),
+        rawlsBillingProjectQuery.create(billingProject.projectName, billingProject.cromwellAuthBucketUrl, billingProject.status, billingProject.groups(ProjectRoles.Owner).users),
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),
@@ -759,7 +760,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.save(RawlsUser(userInfo)),
-        rawlsBillingProjectQuery.create(billingProject),
+        rawlsBillingProjectQuery.create(billingProject.projectName, billingProject.cromwellAuthBucketUrl, billingProject.status, billingProject.groups(ProjectRoles.Owner).users),
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),

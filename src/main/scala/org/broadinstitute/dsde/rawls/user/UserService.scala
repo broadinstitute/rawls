@@ -317,7 +317,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       for {
         _ <- verifyNoSubmissions(userRef, dataAccess)
         _ <- dataAccess.rawlsGroupQuery.removeUserFromAllGroups(userRef)
-        _ <- dataAccess.rawlsBillingProjectQuery.removeUserFromAllProjects(userRef)
       } yield ()
     }
 
@@ -415,6 +414,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
+
         createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, Set.empty) map (_ => RequestComplete(StatusCodes.Created))
     }
   }
@@ -423,20 +423,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
 
-      //create the groups to back the project
-      val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
-        val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, ProjectRoles.Owner))
-        //we only want to add the creators to the owners group
+      val createGoogleGroups = DBIO.sequence(ProjectRoles.all.map { role =>
+        val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
         val users = if(role.equals(ProjectRoles.Owner)) {
           creators
         } else Set[RawlsUserRef]()
-        dataAccess.rawlsGroupQuery.save(RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), users, Set.empty)).map(x => role -> x)
+
+        DBIO.from(gcsDAO.createGoogleGroup(RawlsGroupRef(name)))
       }.toSeq)
 
-      createGroups flatMap { groups =>
-        val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
-        dataAccess.rawlsBillingProjectQuery.create(billingProject)
-      }
+      createGoogleGroups andThen dataAccess.rawlsBillingProjectQuery.create(projectName, bucketUrl, status, creators)
     }
   }
 
@@ -454,12 +450,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
         case Some(member) => member
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not add member ${projectAccessUpdate.email} to billing project [${projectName.value}]"))
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
       }
     } map {
       case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
-      case Right(group) =>
-        RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
     } flatMap { memberList =>
       updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, AddGroupMembersOp)
     }
@@ -469,15 +464,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
         case Some(member) => member
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not remove member ${projectAccessUpdate.email} from billing project [${projectName.value}]"))
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
       }
     } map {
       case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
-      case Right(group) =>
-        println(group)
-        RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
+      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
     } flatMap { memberList =>
-
       updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, RemoveGroupMembersOp)
     }
   }

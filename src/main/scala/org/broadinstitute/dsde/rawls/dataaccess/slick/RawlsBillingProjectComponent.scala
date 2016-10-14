@@ -41,13 +41,31 @@ trait RawlsBillingProjectComponent {
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
-    def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
-      uniqueResult(findBillingProjectByName(billingProject.projectName.value).result) flatMap {
-        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
+    def create(projectName: RawlsBillingProjectName, bucketUrl: String, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef]): ReadWriteAction[RawlsBillingProject] = {
+      uniqueResult(findBillingProjectByName(projectName.value).result) flatMap {
+        case Some(_) => throw new RawlsException(s"Cannot create billing project [${projectName.value}] in database because it already exists")
         case None =>
-          (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
-            (rawlsBillingProjectGroupQuery ++= billingProject.groups.map{ case (role, group) => RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)}).map { _ => billingProject }
+          createBillingGroups(projectName, creators) flatMap { groups =>
+            val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
+            (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
+              (rawlsBillingProjectGroupQuery ++= billingProject.groups.map{ case (role, group) =>
+                RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)
+              }).map { _ => billingProject }}
       }
+    }
+
+    def toBillingProjectGroupName(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = s"PROJECT_${projectName.value}-${role.toString}"
+    def toGoogleGroupName(groupName: RawlsGroupName) = s"GROUP_${groupName.value}@dev.test.firecloud.org"
+
+    def createBillingGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Seq[(ProjectRoles.ProjectRole, RawlsGroup)]] = {
+      DBIO.sequence(ProjectRoles.all.map { role =>
+        val name = RawlsGroupName(toBillingProjectGroupName(projectName, role))
+        //we only want to add the creators to the owners group
+        val users = if(role.equals(ProjectRoles.Owner)) {
+          creators
+        } else Set[RawlsUserRef]()
+        rawlsGroupQuery.save(RawlsGroup(name, RawlsGroupEmail(toGoogleGroupName(name)), users, Set.empty)).map(x => role -> x)
+      }.toSeq)
     }
 
     def updateCreationStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: CreationStatuses.CreationStatus): WriteAction[Int] = {
@@ -90,8 +108,9 @@ trait RawlsBillingProjectComponent {
 
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
       findBillingGroups(billingProjectName).result.flatMap { groupNames =>
-        rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete andThen
-          DBIO.sequence(groupNames.map { groupName => rawlsGroupQuery.delete(RawlsGroupRef(RawlsGroupName(groupName)))}) map { results => results.size > 0 }
+        rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).delete andThen
+          DBIO.sequence(groupNames.map { groupName => rawlsGroupQuery.delete(RawlsGroupRef(RawlsGroupName(groupName)))}) andThen
+            rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
       }
     }
 
@@ -117,10 +136,6 @@ trait RawlsBillingProjectComponent {
           }
         }
       }
-    }
-
-    def removeUserFromAllProjects(userRef: RawlsUserRef): WriteAction[Boolean] = {
-      findProjectGroupsByUserSubjectId(userRef.userSubjectId.value).delete.map { count => count > 0 }
     }
 
     def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {
@@ -156,8 +171,8 @@ trait RawlsBillingProjectComponent {
     private def findProjectUser(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]) = {
       for {
         group <- groupUsersQuery if group.userSubjectId === user.userSubjectId.value
-        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName
-        project <- rawlsBillingProjectQuery if groupsThatAreProjectRelated.groupName === group.groupName && project.projectName === projectName.value && groupsThatAreProjectRelated.role.inSet(roles.map(_.toString))
+        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName && groupsThatAreProjectRelated.projectName === projectName.value
+        project <- rawlsBillingProjectQuery if project.projectName === projectName.value && groupsThatAreProjectRelated.role.inSet(roles.map(_.toString))
       } yield (project, groupsThatAreProjectRelated.role)
     }
 
@@ -199,14 +214,6 @@ trait RawlsBillingProjectComponent {
 
     private def findBillingProjectGroups(name: String): RawlsBillingProjectGroupQuery = {
       rawlsBillingProjectGroupQuery filter (_.projectName === name)
-    }
-
-    private def findProjectGroupsByUserSubjectId(subjectId: String) = {
-      for {
-        group <- groupUsersQuery if group.userSubjectId === subjectId
-        billingGroup <- rawlsBillingProjectGroupQuery if billingGroup.groupName === group.groupName
-        membership <- groupUsersQuery if membership.groupName === billingGroup.groupName
-      } yield membership
     }
   }
 }

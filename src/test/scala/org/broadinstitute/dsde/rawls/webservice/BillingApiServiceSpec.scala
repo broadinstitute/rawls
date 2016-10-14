@@ -48,7 +48,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/billing/${project.projectName.value}/owner/${owner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
       }
@@ -79,7 +79,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
   }
