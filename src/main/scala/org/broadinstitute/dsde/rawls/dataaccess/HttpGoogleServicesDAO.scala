@@ -108,7 +108,7 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
     val bucketName = getBucketName(workspaceId)
 
     val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
@@ -143,19 +143,21 @@ class HttpGoogleServicesDAO(
 
           // When Intersection Groups exist, these are the groups used to determine ACLs.  Otherwise, Access Groups are used directly.
 
-          val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
+          val groupsByAccess = (intersectionGroupsByLevel getOrElse accessGroupsByLevel) + (ProjectOwner -> project.groups(ProjectRoles.Owner))
 
           // bucket ACLs should be:
+          //   project owner - bucker writer
           //   workspace owner - bucket writer
           //   workspace writer - bucket writer
           //   workspace reader - bucket reader
           //   bucket service account - bucket owner
-          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
+          val workspaceAccessToBucketAcl: Map[WorkspaceAccessLevel, String] = Map(ProjectOwner -> "WRITER", Owner -> "WRITER", Write -> "WRITER", Read -> "READER")
           val bucketAcls =
             groupsByAccess.map { case (access, group) => newBucketAccessControl(makeGroupEntityString(group.groupEmail.value), workspaceAccessToBucketAcl(access)) }.toSeq :+
               newBucketAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           // default object ACLs should be:
+          //   project owner - object reader
           //   workspace owner - object reader
           //   workspace writer - object reader
           //   workspace reader - object reader
@@ -165,7 +167,7 @@ class HttpGoogleServicesDAO(
               newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
 
           val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
-          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(projectId, bucket)
+          val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
           GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }

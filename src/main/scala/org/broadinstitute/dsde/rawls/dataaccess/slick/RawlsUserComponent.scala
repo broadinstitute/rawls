@@ -42,6 +42,10 @@ trait RawlsUserComponent {
       loadCommon(findUserByEmail(userEmail.value))
     }
 
+    def loadUserRefsByEmails(userEmails: Seq[RawlsUserEmail]): ReadAction[Map[String, RawlsUserRef]] = {
+      rawlsUserQuery.filter(_.userEmail.inSetBind(userEmails.map(_.value))).result.map(_.map(rec => rec.userEmail -> RawlsUserRef(RawlsUserSubjectId(rec.userSubjectId))).toMap)
+    }
+
     private def loadCommon(query: RawlsUserQuery): ReadAction[Option[RawlsUser]] = {
       uniqueResult[RawlsUserRecord](query).map {
         case None => None
