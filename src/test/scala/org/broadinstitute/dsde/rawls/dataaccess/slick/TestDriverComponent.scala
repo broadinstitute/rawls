@@ -175,7 +175,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val projectComponent3Name = RawlsBillingProjectName("project2")
 
     val projectComponent2 = RawlsBillingProject(projectComponent2Name, generateBillingGroups(projectComponent2Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
-    val projectComponent3 = RawlsBillingProject(projectComponent3Name, generateBillingGroups(projectComponent3Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter, userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val projectComponent3 = RawlsBillingProject(projectComponent3Name, generateBillingGroups(projectComponent3Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -492,6 +492,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(projectComponent1.groups.values.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(projectComponent2.groups.values.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(projectComponent3.groups.values.map(rawlsGroupQuery.save).toSeq),

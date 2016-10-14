@@ -34,13 +34,13 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Map.empty, "mockBucketUrl", CreationStatuses.Ready)
+  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
 
   private def createProject(services: TestApiService, project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
       }

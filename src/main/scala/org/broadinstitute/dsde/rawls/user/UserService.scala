@@ -424,18 +424,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
         val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
-        val users = if(role.equals(ProjectRoles.Owner)) {
-          creators
-        } else Set[RawlsUserRef]()
-
         createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
       }.toSeq)
 
-      //add creator to owner group
-
       createGroups flatMap { groups =>
-        val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
-        dataAccess.rawlsBillingProjectQuery.create(billingProject)
+        val groupMap = groups.toMap
+        DBIO.from(updateGroupMembers(groupMap(ProjectRoles.Owner), RawlsGroupMemberList(userSubjectIds = Some(creators.map(_.userSubjectId.value).toSeq)), AddGroupMembersOp)) flatMap { _ =>
+          val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
+          dataAccess.rawlsBillingProjectQuery.create(billingProject)
+        }
       }
     }
   }

@@ -47,7 +47,6 @@ trait RawlsBillingProjectComponent {
         case None =>
           (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
             (rawlsBillingProjectGroupQuery ++= billingProject.groups.map { case (role, group) =>
-              println(group)
               RawlsBillingProjectGroupRecord(billingProject.projectName.value, group.groupName.value, role.toString)}).map { _ => billingProject }
       }
     }
