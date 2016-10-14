@@ -521,7 +521,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
       val updatedRefsAndLevels = existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++ actualChangesToMake
 
-      val updatedRefsByLevel = updatedRefsAndLevels.toSet.groupBy { case (ref, level) => level }
+      val updatedRefsByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[(scala.Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel)]] = updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
 
       val overwriteGroupMessages = updatedRefsByLevel.map { case (level, refs) =>
         val userSubjectIds = refs.collect { case (Left(userRef), _) => userRef.userSubjectId.value }.toSeq
