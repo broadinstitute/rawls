@@ -64,13 +64,14 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
     Future(Await.result(database.run(f(dataAccess).transactionally), Duration.Inf))(actionExecutionContext)
   }
 
-  def initWithLiquibase(liquibaseChangeLog: String) = {
+  def initWithLiquibase(liquibaseChangeLog: String, parameters: Map[String, AnyRef]) = {
     val dbConnection = database.source.createConnection()
     try {
       val liquibaseConnection = new JdbcConnection(dbConnection)
       val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
-      //can probably pass liquibase params into here in some fashion
       val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
+
+      parameters.map(param => liquibase.setChangeLogParameter(param._1, param._2))
       liquibase.update(new Contexts())
 
     } catch {
