@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.user
 
+import _root_.slick.jdbc.TransactionIsolation
 import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
@@ -524,7 +525,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction ({ dataAccess =>
       withGroup(groupRef, dataAccess) { group =>
         withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
           val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, dataAccess)
@@ -536,7 +537,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         }
       }
-    }
+    }, TransactionIsolation.ReadCommitted)
   }
 
   def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
