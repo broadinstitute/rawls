@@ -417,28 +417,33 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(_) =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
-        createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, Set.empty) map (_ => RequestComplete(StatusCodes.Created))
+        for {
+          groups <- createBillingProjectGroups(dataAccess, projectName)
+          project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, groups) map (_ => RequestComplete(StatusCodes.Created))
+        } yield project
     }
   }
 
-  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[RawlsBillingProject] = {
+  private def createBillingProjectGroups(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
+    val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
+      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+      createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
+    }.toSeq)
+
+    createGroups flatMap { groups =>
+      val groupMap = groups.toMap
+      DBIO.sequence(creators.map(dataAccess.rawlsUserQuery.load).toSeq) flatMap { owners =>
+        updateGroupMembersInternal(groupMap(ProjectRoles.Owner), owners.flatten.toSet, Set.empty, AddGroupMembersOp, dataAccess).map(_ => groupMap)
+      }
+    }
+  }
+
+  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): ReadWriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
 
-      val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
-        val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
-        createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
-      }.toSeq)
-
-      createGroups flatMap { groups =>
-        val groupMap = groups.toMap
-        DBIO.sequence(creators.map(dataAccess.rawlsUserQuery.load).toSeq) flatMap { owners =>
-          updateGroupMembersInternal(groupMap(ProjectRoles.Owner), owners.flatten.toSet, Set.empty, AddGroupMembersOp, dataAccess) flatMap { _ =>
-            val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
-            dataAccess.rawlsBillingProjectQuery.create(billingProject)
-          }
-        }
-      }
+      val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status)
+      dataAccess.rawlsBillingProjectQuery.create(billingProject)
     }
   }
 
@@ -772,8 +777,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
             case None =>
               for {
-                project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, Set(RawlsUser(userInfo)))
-                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate, project.groups))
+                groups <- createBillingProjectGroups(dataAccess, projectName, Set(RawlsUser(userInfo)))
+                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate, groups))
+                _ <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, groups)
               } yield {
                 RequestComplete(StatusCodes.Created)
               }
