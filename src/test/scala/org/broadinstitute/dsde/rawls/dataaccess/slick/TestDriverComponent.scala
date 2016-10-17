@@ -95,6 +95,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }.toMap
   }
 
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
 
@@ -168,14 +170,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
 
-    val projectComponent1Name = RawlsBillingProjectName("arbitrary")
-    val projectComponent1 = RawlsBillingProject(projectComponent1Name, generateBillingGroups(projectComponent1Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject1Name = RawlsBillingProjectName("arbitrary")
+    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
-    val projectComponent2Name = RawlsBillingProjectName("project1")
-    val projectComponent3Name = RawlsBillingProjectName("project2")
+    val testProject2Name = RawlsBillingProjectName("project2")
+    val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
-    val projectComponent2 = RawlsBillingProject(projectComponent2Name, generateBillingGroups(projectComponent2Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
-    val projectComponent3 = RawlsBillingProject(projectComponent3Name, generateBillingGroups(projectComponent3Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject3Name = RawlsBillingProjectName("project3")
+    val testProject3 = RawlsBillingProject(testProject3Name, generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -493,9 +495,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userReader),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
-        DBIO.sequence(projectComponent1.groups.values.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(projectComponent2.groups.values.map(rawlsGroupQuery.save).toSeq),
-        DBIO.sequence(projectComponent3.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(ownerGroup),
         rawlsGroupQuery.save(writerGroup),
         rawlsGroupQuery.save(readerGroup),

@@ -42,8 +42,6 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
-
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
 
   def assertUserMissing(services: TestApiService, user: RawlsUser): Unit = {
@@ -146,7 +144,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     Post("/billing", CreateRawlsBillingProjectFullRequest(project.projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
 
@@ -610,6 +608,11 @@ AdminApiServiceSpec extends ApiServiceSpec {
       }
 
       val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready)
+
+      project.groups.map { case (_,g) =>
+        runAndWait(rawlsGroupQuery.save(g))
+      }
+
       runAndWait(rawlsBillingProjectQuery.create(project))
 
       assertResult(Some(project)) {

@@ -6,8 +6,8 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
   import driver.api._
 
   "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
-    val project = testData.projectComponent1
-    val projectName = testData.projectComponent1Name
+    val project = testData.testProject1
+    val projectName = testData.testProject1Name
 
     assertResult(None) {
       runAndWait(rawlsBillingProjectQuery.load(projectName))
@@ -39,11 +39,11 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
   }
 
   it should "list projects for users" in withDefaultTestDatabase {
-    val projectName2 = testData.projectComponent2Name
-    val projectName3 = testData.projectComponent3Name
+    val project2Name = testData.testProject2Name
+    val project3Name = testData.testProject3Name
 
-    val project2 = testData.projectComponent2
-    val project3 = testData.projectComponent3
+    val project2 = testData.testProject2
+    val project3 = testData.testProject3
 
     runAndWait(rawlsBillingProjectQuery.create(project2))
     runAndWait(rawlsBillingProjectQuery.create(project3))
@@ -52,46 +52,46 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(DBIO.sequence(project3.groups.values.map(rawlsGroupQuery.save)))
 
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userWriter, Set(ProjectRoles.User)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userWriter, Set(ProjectRoles.User)))
     }
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userWriter, Set(ProjectRoles.User, ProjectRoles.Owner)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userWriter, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userOwner, Set(ProjectRoles.User, ProjectRoles.Owner)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userOwner, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userOwner, Set(ProjectRoles.Owner)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userOwner, Set(ProjectRoles.Owner)))
     }
     assert {
-      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userWriter, Set(ProjectRoles.Owner)))
+      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userWriter, Set(ProjectRoles.Owner)))
     }
     assert {
-      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(projectName2, testData.userReader, Set(ProjectRoles.User, ProjectRoles.Owner)))
+      !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userReader, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName2, ProjectRoles.User, CreationStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(project2Name, ProjectRoles.User, CreationStatuses.Ready))) {
      runAndWait(rawlsBillingProjectQuery.listUserProjects(testData.userWriter))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(projectName3, ProjectRoles.User, CreationStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(project3Name, ProjectRoles.User, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(testData.userReader))
     }
 
-    assertResult(Seq(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(projectName2, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(projectName3, ProjectRoles.Owner, CreationStatuses.Ready))) {
+    assertResult(Seq(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(project2Name, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(project3Name, ProjectRoles.Owner, CreationStatuses.Ready))) {
       runAndWait(rawlsBillingProjectQuery.listUserProjects(testData.userOwner))
     }
 
     val expectedUsersProjects = Map(
-      testData.userWriter -> Seq(testData.projectComponent1Name, projectName2),
-      testData.userReader -> Seq(projectName3),
-      testData.userOwner -> Seq(testData.projectComponent1Name, projectName2, projectName3, testData.billingProject.projectName))
-    expectedUsersProjects should contain theSameElementsAs {
+      testData.userWriter -> Seq(project2Name),
+      testData.userReader -> Seq(project3Name),
+      testData.userOwner -> Seq(testData.billingProject.projectName, project2Name, project3Name))
+    expectedUsersProjects should contain theSameElementsAs  {
       runAndWait(rawlsBillingProjectQuery.loadAllUsersWithProjects)
     }
 
     assertResult(Some(project3)) {
-      runAndWait(rawlsBillingProjectQuery.load(projectName3))
+      runAndWait(rawlsBillingProjectQuery.load(project3Name))
     }
   }
 }

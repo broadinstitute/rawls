@@ -201,9 +201,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       DBIO.sequence(
         userInfos.map { u =>
           dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
-            DBIO.sequence(u.billingProjects.map { projectName =>
-              DBIO.from(addUserToBillingProject(projectName, ProjectAccessUpdate(u.user.userEmail.value, ProjectRoles.User)))
-            }) map (_ => user)
+            DBIO.seq(u.billingProjects.map { projectName =>
+              dataAccess.rawlsBillingProjectQuery.load(projectName) map {
+                case Some(project) => updateGroupMembersInternal(project.groups(ProjectRoles.User), Set(user), Set.empty, AddGroupMembersOp, dataAccess)
+                case None => throw new RawlsException(s"Project [${projectName.value}] not found")
+              }
+            }: _*) map (_ => user)
           }
         }
       ) flatMap { users =>
@@ -429,9 +432,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       createGroups flatMap { groups =>
         val groupMap = groups.toMap
-        DBIO.from(updateGroupMembers(groupMap(ProjectRoles.Owner), RawlsGroupMemberList(userSubjectIds = Some(creators.map(_.userSubjectId.value).toSeq)), AddGroupMembersOp)) flatMap { _ =>
-          val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
-          dataAccess.rawlsBillingProjectQuery.create(billingProject)
+        DBIO.sequence(creators.map(dataAccess.rawlsUserQuery.load).toSeq) flatMap { owners =>
+          updateGroupMembersInternal(groupMap(ProjectRoles.Owner), owners.flatten.toSet, Set.empty, AddGroupMembersOp, dataAccess) flatMap { _ =>
+            val billingProject = RawlsBillingProject(projectName, groups.toMap, bucketUrl, status)
+            dataAccess.rawlsBillingProjectQuery.create(billingProject)
+          }
         }
       }
     }
@@ -762,6 +767,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
+      println(userInfo)
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess => dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {

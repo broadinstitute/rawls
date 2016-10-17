@@ -34,8 +34,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
-
   private def createProject(services: TestApiService, project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
@@ -203,6 +201,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
+
     Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -212,7 +211,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
         runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
           case None => fail("project does not exist in db")
-          case Some(project) => assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
+          case Some(project) =>
+            println(project)
+            assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
         }
       }
   }
