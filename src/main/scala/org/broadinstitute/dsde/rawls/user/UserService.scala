@@ -767,7 +767,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
-      println(userInfo)
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess => dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {

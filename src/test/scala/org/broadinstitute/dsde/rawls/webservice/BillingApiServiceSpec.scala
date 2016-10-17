@@ -212,7 +212,6 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
           case None => fail("project does not exist in db")
           case Some(project) =>
-            println(project)
             assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
         }
       }
