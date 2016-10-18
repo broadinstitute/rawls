@@ -581,7 +581,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
     runAndWait(action)
   }
 
-  it should "delete a DB user and remove them from groups and billing projects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
+  it should "delete a DB user and remove them from groups and billing 'ojects" in withEmptyTestDatabase { dataSource: SlickDataSource =>
     withApiServices(dataSource) { services =>
 
       // values from MockUserInfoDirectives

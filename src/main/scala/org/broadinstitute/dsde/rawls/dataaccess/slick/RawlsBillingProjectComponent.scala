@@ -42,6 +42,7 @@ trait RawlsBillingProjectComponent {
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
+      validateUserDefinedString(billingProject.projectName.value)
       uniqueResult(findBillingProjectByName(billingProject.projectName.value).result) flatMap {
         case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
         case None =>

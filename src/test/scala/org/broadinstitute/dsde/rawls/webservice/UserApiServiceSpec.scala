@@ -226,6 +226,111 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
+  }
+
+  it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
+
+    Delete(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
+  }
+
+  it should "return 403 when a non-owner tries to alter project permissions" in withTestDataApiServices { services =>
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
+
+    import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
+
+    Post(s"/billing", httpJson(createRequest)) ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Delete(s"/admin/billing/${project1.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
+        }
+      }
+
+    Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.billingRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project1.projectName)).get
+          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
+  }
+
   it should "get details of a group a user is a member of" in withTestDataApiServices { services =>
     val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
     val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))

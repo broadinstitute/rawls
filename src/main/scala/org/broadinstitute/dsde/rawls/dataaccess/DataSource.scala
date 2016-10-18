@@ -71,7 +71,7 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcDriver])(implicit e
       val resourceAccessor: ResourceAccessor = new ClassLoaderResourceAccessor()
       val liquibase = new Liquibase(liquibaseChangeLog, resourceAccessor, liquibaseConnection)
 
-      parameters.map(param => liquibase.setChangeLogParameter(param._1, param._2))
+      parameters.map { case (key, value) => liquibase.setChangeLogParameter(key, value) }
       liquibase.update(new Contexts())
 
     } catch {
