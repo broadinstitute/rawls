@@ -58,10 +58,10 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userWriter, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userOwner, Set(ProjectRoles.User, ProjectRoles.Owner)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userProjectOwner, Set(ProjectRoles.User, ProjectRoles.Owner)))
     }
     assert {
-      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userOwner, Set(ProjectRoles.Owner)))
+      runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userProjectOwner, Set(ProjectRoles.Owner)))
     }
     assert {
       !runAndWait(rawlsBillingProjectQuery.hasOneOfProjectRole(project2Name, testData.userWriter, Set(ProjectRoles.Owner)))
@@ -79,13 +79,14 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
 
     assertResult(Seq(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(project2Name, ProjectRoles.Owner, CreationStatuses.Ready), RawlsBillingProjectMembership(project3Name, ProjectRoles.Owner, CreationStatuses.Ready))) {
-      runAndWait(rawlsBillingProjectQuery.listUserProjects(testData.userOwner))
+      runAndWait(rawlsBillingProjectQuery.listUserProjects(testData.userProjectOwner))
     }
 
     val expectedUsersProjects = Map(
       testData.userWriter -> Seq(project2Name),
       testData.userReader -> Seq(project3Name),
-      testData.userOwner -> Seq(testData.billingProject.projectName, project2Name, project3Name))
+      testData.userOwner -> Seq(testData.billingProject.projectName),
+      testData.userProjectOwner -> Seq(testData.billingProject.projectName, project2Name, project3Name))
     expectedUsersProjects should contain theSameElementsAs  {
       runAndWait(rawlsBillingProjectQuery.loadAllUsersWithProjects)
     }

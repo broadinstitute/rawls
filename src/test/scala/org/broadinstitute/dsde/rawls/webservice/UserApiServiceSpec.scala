@@ -143,7 +143,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(StatusCodes.OK) {
             status
           }
-          assertResult(Set(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.Owner, CreationStatuses.Ready))) {
+          assertResult(Set(RawlsBillingProjectMembership(testData.billingProject.projectName, ProjectRoles.User, CreationStatuses.Ready))) {
             import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectMembershipFormat
             responseAs[Seq[RawlsBillingProjectMembership]].toSet
           }
