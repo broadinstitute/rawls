@@ -14,4 +14,40 @@
         </sql>
     </changeSet>
 
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-2">
+        <sql stripComments="true">
+            create table temp_roles (role varchar(254))
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-3">
+        <sql stripComments="true">
+            insert into temp_roles values ("User"), ("Owner")
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-4">
+        <sql stripComments="true">
+            insert into `GROUP` select concat("PROJECT_",b.NAME,"-",r.role), concat("GROUP_PROJECT_",b.NAME,"-",r.role,"@","${gcs:appsDomain}") from BILLING_PROJECT b join temp_roles r
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-5">
+        <sql stripComments="true">
+            insert into GROUP_USERS select pu.USER_SUBJECT_ID, concat("PROJECT_",bp.NAME,"-",pu.ROLE) from BILLING_PROJECT bp left join PROJECT_USERS pu on bp.NAME=pu.PROJECT_NAME
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-6">
+        <sql stripComments="true">
+            insert into BILLING_PROJECT_GROUP select b.NAME, concat("PROJECT_",b.NAME,"-",r.role), r.role from BILLING_PROJECT b join temp_roles r
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-project-users-7">
+        <sql stripComments="true">
+            drop table temp_roles
+        </sql>
+    </changeSet>
+
 </databaseChangeLog>

@@ -51,7 +51,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   )
 
-  slickDataSource.initWithLiquibase(liquibaseChangeLog)
+  slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
   val bucketDeletionMonitor = system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO))
 
   val testProject = "broad-dsde-dev"
