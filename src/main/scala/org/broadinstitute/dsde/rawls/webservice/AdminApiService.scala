@@ -237,6 +237,13 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             WorkspaceService.ListAllWorkspaces)
       }
     } ~
+    path("admin" / "publishedWorkspaces") {
+      get {
+        requestContext => perRequest(requestContext,
+          WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.ListPublishedWorkspaces)
+      }
+    } ~
     path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>
       delete {
         requestContext => perRequest(requestContext,

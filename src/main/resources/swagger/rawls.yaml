@@ -1163,6 +1163,34 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/publishedWorkspaces':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Workspace'
+        '403':
+          description: You must be an admin to list published workspaces
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: List published workspaces
+      tags:
+        - admin
+        - workspaces
+      summary: list published workspaces
+      operationId: listPublishedWorkspaces
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/admin/workspaces/{workspaceNamespace}/{workspaceName}':
     delete:
           responses:

@@ -81,6 +81,10 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
+    def listPublished(): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(getPublishedWorkspaces)
+    }
+
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateUserDefinedString(workspace.name)
@@ -225,6 +229,13 @@ trait WorkspaceComponent {
           }
         })
       }
+    }
+
+    def getPublishedWorkspaces = {
+      for {
+        attribute <- workspaceAttributeQuery if attribute.namespace === "library" && attribute.name === "published" && attribute.valueBoolean.getOrElse(false)
+        workspace <- workspaceQuery if workspace.id === attribute.ownerId
+      } yield workspace
     }
 
     def listAccessGroupMemberEmails(workspaceIds: Seq[UUID], accessLevel: WorkspaceAccessLevel): ReadAction[Map[UUID, Seq[String]]] = {

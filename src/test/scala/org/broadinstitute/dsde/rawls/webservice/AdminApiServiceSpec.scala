@@ -1092,6 +1092,17 @@ AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 when listing all published workspaces" in withTestDataApiServices { services =>
+    Get(s"/admin/publishedWorkspaces") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspacePublished))
+      }
+
+  }
+
   it should "delete a workspace" in withTestDataApiServices { services =>
     Delete(s"/admin/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>

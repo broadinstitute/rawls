@@ -173,6 +173,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
       Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
 
+    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", None, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
+      wsAttrs + (AttributeName(AttributeName.libraryNamespace, "published") -> AttributeBoolean(true)), Map.empty, Map.empty)
+
     val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
     val realmWsName = wsName.name + "withRealm"
     val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner))
@@ -522,6 +525,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsGroupQuery.save(realmWriterGroup7),
         rawlsGroupQuery.save(realmReaderGroup7),
         workspaceQuery.save(workspace),
+        workspaceQuery.save(workspacePublished),
         workspaceQuery.save(workspaceNoGroups),
         workspaceQuery.save(workspaceWithRealm),
         workspaceQuery.save(otherWorkspaceWithRealm),
