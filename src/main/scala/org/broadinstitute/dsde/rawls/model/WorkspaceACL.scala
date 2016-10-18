@@ -30,7 +30,7 @@ object WorkspaceAccessLevels {
   // (see https://cloud.google.com/storage/docs/json_api/v1/bucketAccessControls)
   def toString(v: WorkspaceAccessLevel): String = {
     v match {
-      case ProjectOwner => "PROJECT OWNER"
+      case ProjectOwner => "PROJECT_OWNER"
       case Owner => "OWNER"
       case Write => "WRITER"
       case Read => "READER"
@@ -41,7 +41,7 @@ object WorkspaceAccessLevels {
 
   def withName(s: String): WorkspaceAccessLevel = {
     s match {
-      case "PROJECT OWNER" => ProjectOwner
+      case "PROJECT_OWNER" => ProjectOwner
       case "OWNER" => Owner
       case "WRITER" => Write
       case "READER" => Read

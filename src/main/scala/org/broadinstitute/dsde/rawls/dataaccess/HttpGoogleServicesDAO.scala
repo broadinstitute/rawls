@@ -137,13 +137,18 @@ class HttpGoogleServicesDAO(
       addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
     }
 
+    def insertProjectOwners: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+      val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
+      addMemberToGoogleGroup(projectOwnerGroup, Right(project.groups(ProjectRoles.Owner))).map(_ => groupsByAccess + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroup.copy(subGroups = projectOwnerGroup.subGroups + project.groups(ProjectRoles.Owner))))
+    }
+
     def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
       retryWhen500orGoogleError {
         () => {
 
           // When Intersection Groups exist, these are the groups used to determine ACLs.  Otherwise, Access Groups are used directly.
 
-          val groupsByAccess = (intersectionGroupsByLevel getOrElse accessGroupsByLevel) + (ProjectOwner -> project.groups(ProjectRoles.Owner))
+          val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
 
           // bucket ACLs should be:
           //   project owner - bucker writer
@@ -185,10 +190,10 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember flatMap insertProjectOwners
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember map { Option(_) }
+        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertProjectOwners map { Option(_) }
         case None => Future.successful(None)
       }
       inserted <- insertBucket(accessGroups, intersectionGroups)

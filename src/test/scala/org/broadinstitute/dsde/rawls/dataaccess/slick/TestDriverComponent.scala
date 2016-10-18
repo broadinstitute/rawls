@@ -6,6 +6,7 @@ import com.mysql.jdbc.exceptions.jdbc4.MySQLTransactionRollbackException
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
@@ -100,6 +101,31 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
 
+  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]])(namespace: String,
+                    name: String,
+                    realm: Option[RawlsGroupRef],
+                    workspaceId: String,
+                    bucketName: String,
+                    createdDate: DateTime,
+                    lastModified: DateTime,
+                    createdBy: String,
+                    attributes: AttributeMap,
+                    isLocked: Boolean) = {
+
+    val intersectionGroupsByLevel = realm.map { _ => usersByLevel.map { case (level, users) =>
+      level -> makeRawlsGroup(s"${namespace}/${name} IG ${level.toString}", users)
+    } }
+    val accessGroupsByLevel = usersByLevel.map { case (level, users) =>
+      level -> makeRawlsGroup(s"${namespace}/${name} ${level.toString}", users)
+    }
+
+    (Workspace(namespace, name, realm, workspaceId, bucketName, createdDate, createdDate, createdBy, attributes,
+      accessGroupsByLevel.map { case (level, group) => level -> RawlsGroup.toRef(group) },
+      intersectionGroupsByLevel.getOrElse(accessGroupsByLevel).map { case (level, group) => level -> RawlsGroup.toRef(group) }, isLocked),
+
+      intersectionGroupsByLevel.getOrElse(Map.empty).values ++ accessGroupsByLevel.values)
+  }
+
   class EmptyWorkspace() extends TestData {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
@@ -154,6 +180,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   class DefaultTestData() extends TestData {
     // setup workspace objects
+    val userProjectOwner = RawlsUser(UserInfo("project-owner-access", OAuth2BearerToken("token"), 123, "123456789876543210101"))
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
@@ -164,20 +191,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName5 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsFailedSubmission")
     val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
-    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set(userOwner))
-    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
-    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject3 = RawlsBillingProject(testProject3Name, generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+
+    val makeWorkspace = makeWorkspaceWithUsers(Map(
+      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
+      WorkspaceAccessLevels.Owner -> Set(userOwner),
+      WorkspaceAccessLevels.Write -> Set(userWriter),
+      WorkspaceAccessLevels.Read -> Set(userReader)
+    ))_
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
@@ -188,142 +219,42 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", None, UUID.randomUUID().toString, "aBucket2", currentTime(), currentTime(), "testUser", wsAttrs, Map.empty, Map.empty)
 
-    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
-      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+    val (workspace, workspaceGroups) = makeWorkspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
     val realmWsName = wsName.name + "withRealm"
-    val realmOwnerIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup = makeRawlsGroup(s"${realmWsName} IG READER", Set(userReader))
-    val realmOwnerGroup = makeRawlsGroup(s"${realmWsName} OWNER", Set(userOwner))
-    val realmWriterGroup = makeRawlsGroup(s"${realmWsName} WRITER", Set(userWriter))
-    val realmReaderGroup = makeRawlsGroup(s"${realmWsName} READER", Set(userReader))
 
     val realm2 = makeRawlsGroup(s"Test-Realm2", Set.empty)
     val realmWs2Name = wsName2.name + "withRealm"
-    val realmOwnerIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup2 = makeRawlsGroup(s"${realmWs2Name} IG READER", Set(userReader))
-    val realmOwnerGroup2 = makeRawlsGroup(s"${realmWs2Name} OWNER", Set(userOwner))
-    val realmWriterGroup2 = makeRawlsGroup(s"${realmWs2Name} WRITER", Set(userWriter))
-    val realmReaderGroup2 = makeRawlsGroup(s"${realmWs2Name} READER", Set(userReader))
 
     val realm3 = makeRawlsGroup(s"Test-Realm3", Set.empty)
-    val realmOwnerIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup3 = makeRawlsGroup(s"${wsName3.name} IG READER", Set(userReader))
-    val realmOwnerGroup3 = makeRawlsGroup(s"${wsName3.name} OWNER", Set(userOwner))
-    val realmWriterGroup3 = makeRawlsGroup(s"${wsName3.name} WRITER", Set(userWriter))
-    val realmReaderGroup3 = makeRawlsGroup(s"${wsName3.name} READER", Set(userReader))
 
     val realm4 = makeRawlsGroup(s"Test-Realm4", Set.empty)
-    val realmOwnerIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup4 = makeRawlsGroup(s"${wsName4.name} IG READER", Set(userReader))
-    val realmOwnerGroup4 = makeRawlsGroup(s"${wsName4.name} OWNER", Set(userOwner))
-    val realmWriterGroup4 = makeRawlsGroup(s"${wsName4.name} WRITER", Set(userWriter))
-    val realmReaderGroup4 = makeRawlsGroup(s"${wsName4.name} READER", Set(userReader))
 
     val realm5 = makeRawlsGroup(s"Test-Realm5", Set.empty)
-    val realmOwnerIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup5 = makeRawlsGroup(s"${wsName5.name} IG READER", Set(userReader))
-    val realmOwnerGroup5 = makeRawlsGroup(s"${wsName5.name} OWNER", Set(userOwner))
-    val realmWriterGroup5 = makeRawlsGroup(s"${wsName5.name} WRITER", Set(userWriter))
-    val realmReaderGroup5 = makeRawlsGroup(s"${wsName5.name} READER", Set(userReader))
 
     val realm6 = makeRawlsGroup(s"Test-Realm6", Set.empty)
-    val realmOwnerIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup6 = makeRawlsGroup(s"${wsName6.name} IG READER", Set(userReader))
-    val realmOwnerGroup6 = makeRawlsGroup(s"${wsName6.name} OWNER", Set(userOwner))
-    val realmWriterGroup6 = makeRawlsGroup(s"${wsName6.name} WRITER", Set(userWriter))
-    val realmReaderGroup6 = makeRawlsGroup(s"${wsName6.name} READER", Set(userReader))
 
     val realm7 = makeRawlsGroup(s"Test-Realm7", Set.empty)
-    val realmOwnerIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG OWNER", Set(userOwner))
-    val realmWriterIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG WRITER", Set(userWriter))
-    val realmReaderIntersectionGroup7 = makeRawlsGroup(s"${wsName7.name} IG READER", Set(userReader))
-    val realmOwnerGroup7 = makeRawlsGroup(s"${wsName7.name} OWNER", Set(userOwner))
-    val realmWriterGroup7 = makeRawlsGroup(s"${wsName7.name} WRITER", Set(userWriter))
-    val realmReaderGroup7 = makeRawlsGroup(s"${wsName7.name} READER", Set(userReader))
 
-    val workspaceWithRealm = Workspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup,
-        WorkspaceAccessLevels.Write -> realmWriterGroup,
-        WorkspaceAccessLevels.Read -> realmReaderGroup),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup))
+    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(wsName.namespace, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val otherWorkspaceWithRealm = Workspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup2,
-        WorkspaceAccessLevels.Write -> realmWriterGroup2,
-        WorkspaceAccessLevels.Read -> realmReaderGroup2),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup2,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup2,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup2))
+    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(wsName2.namespace, realmWs2Name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, without submissions
-    val workspaceNoSubmissions = Workspace(wsName3.namespace, wsName3.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup3,
-        WorkspaceAccessLevels.Write -> realmWriterGroup3,
-        WorkspaceAccessLevels.Read -> realmReaderGroup3),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup3,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup3,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup3))
+    val (workspaceNoSubmissions, workspaceNoSubmissionsGroups) = makeWorkspace(wsName3.namespace, wsName3.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with successful submission
-    val workspaceSuccessfulSubmission = Workspace(wsName4.namespace, wsName4.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup4,
-        WorkspaceAccessLevels.Write -> realmWriterGroup4,
-        WorkspaceAccessLevels.Read -> realmReaderGroup4),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup4,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup4,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup4))
+    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(wsName4.namespace, wsName4.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with failed submission
-    val workspaceFailedSubmission = Workspace(wsName5.namespace, wsName5.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup5,
-        WorkspaceAccessLevels.Write -> realmWriterGroup5,
-        WorkspaceAccessLevels.Read -> realmReaderGroup5),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup5,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup5,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup5))
+    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(wsName5.namespace, wsName5.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with submitted submission
-    val workspaceSubmittedSubmission = Workspace(wsName6.namespace, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup6,
-        WorkspaceAccessLevels.Write -> realmWriterGroup6,
-        WorkspaceAccessLevels.Read -> realmReaderGroup6),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup6,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup6,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup6))
+    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(wsName6.namespace, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms with aborted workflows
-    val workspaceMixedSubmissions = Workspace(wsName7.namespace, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs,
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerGroup7,
-        WorkspaceAccessLevels.Write -> realmWriterGroup7,
-        WorkspaceAccessLevels.Read -> realmReaderGroup7),
-      Map(
-        WorkspaceAccessLevels.Owner -> realmOwnerIntersectionGroup7,
-        WorkspaceAccessLevels.Write -> realmWriterIntersectionGroup7,
-        WorkspaceAccessLevels.Read -> realmReaderIntersectionGroup7))
+    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(wsName7.namespace, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
 
     val sample1 = Entity("sample1", "Sample",
@@ -490,6 +421,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     override def save() = {
       DBIO.seq(
+        rawlsUserQuery.save(userProjectOwner),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
@@ -498,52 +430,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
-        rawlsGroupQuery.save(ownerGroup),
-        rawlsGroupQuery.save(writerGroup),
-        rawlsGroupQuery.save(readerGroup),
+        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(realm),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup),
-        rawlsGroupQuery.save(realmOwnerGroup),
-        rawlsGroupQuery.save(realmWriterGroup),
-        rawlsGroupQuery.save(realmReaderGroup),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup2),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup2),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup2),
-        rawlsGroupQuery.save(realmOwnerGroup2),
-        rawlsGroupQuery.save(realmWriterGroup2),
-        rawlsGroupQuery.save(realmReaderGroup2),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup3),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup3),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup3),
-        rawlsGroupQuery.save(realmOwnerGroup3),
-        rawlsGroupQuery.save(realmWriterGroup3),
-        rawlsGroupQuery.save(realmReaderGroup3),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup4),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup4),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup4),
-        rawlsGroupQuery.save(realmOwnerGroup4),
-        rawlsGroupQuery.save(realmWriterGroup4),
-        rawlsGroupQuery.save(realmReaderGroup4),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup5),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup5),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup5),
-        rawlsGroupQuery.save(realmOwnerGroup5),
-        rawlsGroupQuery.save(realmWriterGroup5),
-        rawlsGroupQuery.save(realmReaderGroup5),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup6),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup6),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup6),
-        rawlsGroupQuery.save(realmOwnerGroup6),
-        rawlsGroupQuery.save(realmWriterGroup6),
-        rawlsGroupQuery.save(realmReaderGroup6),
-        rawlsGroupQuery.save(realmOwnerIntersectionGroup7),
-        rawlsGroupQuery.save(realmWriterIntersectionGroup7),
-        rawlsGroupQuery.save(realmReaderIntersectionGroup7),
-        rawlsGroupQuery.save(realmOwnerGroup7),
-        rawlsGroupQuery.save(realmWriterGroup7),
-        rawlsGroupQuery.save(realmReaderGroup7),
+        DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(otherWorkspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceNoSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceSuccessfulSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceFailedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspaceNoGroups),
         workspaceQuery.save(workspaceWithRealm),

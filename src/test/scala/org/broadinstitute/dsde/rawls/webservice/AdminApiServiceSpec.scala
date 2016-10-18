@@ -1064,9 +1064,11 @@ AdminApiServiceSpec extends ApiServiceSpec {
 
         responseStatus.statuses should contain theSameElementsAs
           Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
             "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
+            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
@@ -1078,6 +1080,8 @@ AdminApiServiceSpec extends ApiServiceSpec {
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"

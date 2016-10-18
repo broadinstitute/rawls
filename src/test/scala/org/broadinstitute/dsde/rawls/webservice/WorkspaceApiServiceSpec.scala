@@ -27,9 +27,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     def requireUserInfo(magnet: ImplicitMagnet[ExecutionContext]): Directive1[UserInfo] = {
       // just return the cookie text as the common name
       user match {
-        case "owner-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212345"))
-        case "writer-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212346"))
-        case "reader-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212347"))
+        case testData.userProjectOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userProjectOwner.userSubjectId.value))
+        case testData.userOwner.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userOwner.userSubjectId.value))
+        case testData.userWriter.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userWriter.userSubjectId.value))
+        case testData.userReader.userEmail.value => provide(UserInfo(user, OAuth2BearerToken("token"), 123, testData.userReader.userSubjectId.value))
         case "no-access" => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212348"))
         case _ => provide(UserInfo(user, OAuth2BearerToken("token"), 123, "123456789876543212349"))
       }
@@ -38,7 +39,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   case class TestApiService(dataSource: SlickDataSource, user: String, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectivesWithUser
 
-  def withApiServices[T](dataSource: SlickDataSource, user: String = "owner-access")(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, user: String = testData.userOwner.userEmail.value)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"))
     try {
       testCode(apiService)
@@ -72,53 +73,45 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   class TestWorkspaces() extends TestData {
-    val userOwner = RawlsUser(UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345"))
-    val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
-    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
+    val userProjectOwner = RawlsUser(UserInfo("project-owner-access", OAuth2BearerToken("token"), 123, "123456789876543210101"))
+    val userOwner = RawlsUser(UserInfo(testData.userOwner.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212345"))
+    val userWriter = RawlsUser(UserInfo(testData.userWriter.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212346"))
+    val userReader = RawlsUser(UserInfo(testData.userReader.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
     val workspaceName = WorkspaceName("ns", "testworkspace")
-    val workspaceOwnerGroup = makeRawlsGroup(s"${workspaceName} OWNER", Set(userOwner))
-    val workspaceWriterGroup = makeRawlsGroup(s"${workspaceName} WRITER", Set(userWriter))
-    val workspaceReaderGroup = makeRawlsGroup(s"${workspaceName} READER", Set(userReader))
 
     val workspace2Name = WorkspaceName("ns", "testworkspace2")
-    val workspace2OwnerGroup = makeRawlsGroup(s"${workspace2Name} OWNER", Set.empty)
-    val workspace2WriterGroup = makeRawlsGroup(s"${workspace2Name} WRITER", Set(userOwner))
-    val workspace2ReaderGroup = makeRawlsGroup(s"${workspace2Name} READER", Set.empty)
 
     val workspace3Name = WorkspaceName("ns", "testworkspace3")
-    val workspace3OwnerGroup = makeRawlsGroup(s"${workspace3Name} OWNER", Set.empty)
-    val workspace3WriterGroup = makeRawlsGroup(s"${workspace3Name} WRITER", Set(userOwner))
-    val workspace3ReaderGroup = makeRawlsGroup(s"${workspace3Name} READER", Set.empty)
 
     val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
 
     val workspace1Id = UUID.randomUUID().toString
-    val workspace = Workspace(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")),
-      Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
-        WorkspaceAccessLevels.Write -> workspaceWriterGroup,
-        WorkspaceAccessLevels.Read -> workspaceReaderGroup),
-      Map(WorkspaceAccessLevels.Owner -> workspaceOwnerGroup,
-        WorkspaceAccessLevels.Write -> workspaceWriterGroup,
-        WorkspaceAccessLevels.Read -> workspaceReaderGroup))
+    val makeWorkspace1 = makeWorkspaceWithUsers(Map(
+      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
+      WorkspaceAccessLevels.Owner -> Set(userOwner),
+      WorkspaceAccessLevels.Write -> Set(userWriter),
+      WorkspaceAccessLevels.Read -> Set(userReader)
+    ))_
+    val (workspace, workspaceGroups) = makeWorkspace1(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
+    val makeWorkspace2 = makeWorkspaceWithUsers(Map(
+      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
+      WorkspaceAccessLevels.Owner -> Set.empty,
+      WorkspaceAccessLevels.Write -> Set(userOwner),
+      WorkspaceAccessLevels.Read -> Set.empty
+    ))_
     val workspace2Id = UUID.randomUUID().toString
-    val workspace2 = Workspace(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")),
-      Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
-        WorkspaceAccessLevels.Write -> workspace2WriterGroup,
-        WorkspaceAccessLevels.Read -> workspace2ReaderGroup),
-      Map(WorkspaceAccessLevels.Owner -> workspace2OwnerGroup,
-        WorkspaceAccessLevels.Write -> workspace2WriterGroup,
-        WorkspaceAccessLevels.Read -> workspace2ReaderGroup))
+    val (workspace2, workspace2Groups) = makeWorkspace2(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
 
+    val makeWorkspace3 = makeWorkspaceWithUsers(Map(
+      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
+      WorkspaceAccessLevels.Owner -> Set.empty,
+      WorkspaceAccessLevels.Write -> Set(userOwner),
+      WorkspaceAccessLevels.Read -> Set.empty
+    ))_
     val workspace3Id = UUID.randomUUID().toString
-    val workspace3 = Workspace(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")),
-      Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
-        WorkspaceAccessLevels.Write -> workspace3WriterGroup,
-        WorkspaceAccessLevels.Read -> workspace3ReaderGroup),
-      Map(WorkspaceAccessLevels.Owner -> workspace3OwnerGroup,
-        WorkspaceAccessLevels.Write -> workspace3WriterGroup,
-        WorkspaceAccessLevels.Read -> workspace3ReaderGroup))
+    val (workspace3, workspace3Groups) = makeWorkspace3(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -160,18 +153,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     override def save() = {
       DBIO.seq(
+        rawlsUserQuery.save(userProjectOwner),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
-        rawlsGroupQuery.save(workspaceOwnerGroup),
-        rawlsGroupQuery.save(workspaceWriterGroup),
-        rawlsGroupQuery.save(workspaceReaderGroup),
-        rawlsGroupQuery.save(workspace2OwnerGroup),
-        rawlsGroupQuery.save(workspace2WriterGroup),
-        rawlsGroupQuery.save(workspace2ReaderGroup),
-        rawlsGroupQuery.save(workspace3OwnerGroup),
-        rawlsGroupQuery.save(workspace3WriterGroup),
-        rawlsGroupQuery.save(workspace3ReaderGroup),
+        DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
@@ -376,7 +364,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access"))
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq(testData.userOwner.userEmail.value))
         ){
           val response = responseAs[WorkspaceListResponse]
           WorkspaceListResponse(response.accessLevel, response.workspace.copy(lastModified = dateTime), response.workspaceSubmissionStats, response.owners)
@@ -511,7 +499,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq("owner-access")),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq(testData.userOwner.userEmail.value)),
           WorkspaceListResponse(WorkspaceAccessLevels.Write, testWorkspaces.workspace2.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty),
           WorkspaceListResponse(WorkspaceAccessLevels.NoAccess, testWorkspaces.workspace3.copy(lastModified = dateTime), WorkspaceSubmissionStats(None, None, 0), Seq.empty)
         )) {
@@ -1382,7 +1370,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
-  it should "allow an owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
+  it should "allow an project-owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1392,7 +1380,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a write-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("writer-access") { services =>
+  it should "allow an owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1402,7 +1390,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a read-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+  it should "allow a write-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "allow a read-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1424,7 +1422,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
-  it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser("owner-access") { services =>
+  it should "allow an project-owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1434,7 +1432,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser("writer-access") { services =>
+  it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1444,7 +1442,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser("reader-access") { services =>
+  it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1466,7 +1474,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
-  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser("owner-access") { services =>
+  it should "allow an project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1474,7 +1482,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser("owner-access") { services =>
+  it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+  }
+
+  it should "not allow an project-owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
     runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     import WorkspaceACLJsonSupport._
@@ -1487,7 +1503,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser("writer-access") { services =>
+  it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
+    runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
+    import WorkspaceACLJsonSupport._
+    WorkspaceAccessLevels.all.foreach { accessLevel =>
+      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel)))) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) { status }
+        }
+    }
+  }
+
+  it should "not allow an owner-access user to update project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
+      }
+  }
+
+  it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1495,7 +1533,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser("reader-access") { services =>
+  it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1514,7 +1552,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // End ACL-restriction Tests
 
   // Workspace Locking
-  it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices("owner-access") { services =>
+  it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1527,7 +1565,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices("writer-access") { services =>
+  it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1535,7 +1573,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a reader to read a workspace, even when locked"  in withLockedWorkspaceApiServices("reader-access") { services =>
+  it should "allow a reader to read a workspace, even when locked"  in withLockedWorkspaceApiServices(testData.userReader.userEmail.value) { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1543,7 +1581,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow an owner to retrieve and adjust an the ACL, even when locked"  in withLockedWorkspaceApiServices("owner-access") { services =>
+  it should "allow an owner to retrieve and adjust an the ACL, even when locked"  in withLockedWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1558,7 +1596,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow an owner to lock a workspace with incomplete submissions" in withTestDataApiServicesAndUser("owner-access") { services =>
+  it should "not allow an owner to lock a workspace with incomplete submissions" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1566,7 +1604,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow an owner to unlock the workspace (repeatedly)" in withEmptyWorkspaceApiServices("owner-access") { services =>
+  it should "allow an owner to unlock the workspace (repeatedly)" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1584,7 +1622,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "not allow a non-owner to lock or unlock the workspace" in withEmptyWorkspaceApiServices("writer-access") { services =>
+  it should "not allow a non-owner to lock or unlock the workspace" in withEmptyWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
     Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1654,6 +1692,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-PROJECT_OWNER")),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
@@ -1691,12 +1730,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-PROJECT_OWNER")),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
     )
 
     def expectedIntersectionGroups(workspaceId: String) = Map(
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-PROJECT_OWNER")),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$realmName-$workspaceId-READER"))
@@ -1806,7 +1847,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  it should "return 200 when a user can read a workspace bucket" in withEmptyWorkspaceApiServices("reader-access") { services =>
+  it should "return 200 when a user can read a workspace bucket" in withEmptyWorkspaceApiServices(testData.userReader.userEmail.value) { services =>
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/checkBucketReadAccess") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
