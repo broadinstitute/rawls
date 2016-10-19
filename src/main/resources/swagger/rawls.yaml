@@ -1191,6 +1191,40 @@ paths:
             - openid
             - email
             - profile
+  '/api/admin/workspacesByAttribute':
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Workspace'
+        '403':
+          description: You must be an admin to list published workspaces
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: look up workspaces containing a certain attribute
+      tags:
+        - admin
+        - workspaces
+      summary: workspaces by attribute
+      operationId: workspacesByAttribute
+      parameters:
+        - in: body
+          description: Attribute and value map
+          name: attributeMap
+          required: true
+          type: Map
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   '/api/admin/workspaces/{workspaceNamespace}/{workspaceName}':
     delete:
           responses:

@@ -8,6 +8,8 @@ import java.net.URLDecoder
 
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -242,6 +244,15 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.ListPublishedWorkspaces)
+      }
+    } ~
+    path("admin" / "workspacesByAttribute") {
+      post {
+        entity(as[AttributeMap]) { attributeMap =>
+          requestContext => perRequest(requestContext,
+            WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.ListWorkspacesWithAttribute(attributeMap))
+        }
       }
     } ~
     path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>

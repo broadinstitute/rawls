@@ -85,6 +85,10 @@ trait WorkspaceComponent {
       loadWorkspaces(getPublishedWorkspaces)
     }
 
+    def listWithAttribute(attributeMap: AttributeMap): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(getWorkspacesWithAttribute(attributeMap))
+    }
+
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
       validateUserDefinedString(workspace.namespace)
       validateUserDefinedString(workspace.name)
@@ -232,8 +236,13 @@ trait WorkspaceComponent {
     }
 
     def getPublishedWorkspaces = {
+      getWorkspacesWithAttribute(Map(AttributeName.libraryAttribute("published") -> AttributeBoolean(true)))
+    }
+
+    def getWorkspacesWithAttribute(attributeMap: AttributeMap) = {
+      val (attrName, attrValue) = attributeMap.head
       for {
-        attribute <- workspaceAttributeQuery if attribute.namespace === "library" && attribute.name === "published" && attribute.valueBoolean.getOrElse(false)
+        attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
     }

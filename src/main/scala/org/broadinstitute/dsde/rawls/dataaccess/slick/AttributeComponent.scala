@@ -154,7 +154,23 @@ trait AttributeComponent {
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
 
-  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
+  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord) {
+    private type WorkspaceAttributeQueryType = driver.api.Query[WorkspaceAttributeTable, WorkspaceAttributeRecord, Seq]
+
+    def findByNameQuery(attrName: AttributeName): WorkspaceAttributeQueryType = {
+      filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
+    }
+
+    def queryByAttribute(attrName: AttributeName, attrValue: Attribute): WorkspaceAttributeQueryType = {
+      findByNameQuery(attrName).filter { rec =>
+        attrValue match {
+          case s:AttributeString => rec.valueString === s.value
+          case n:AttributeNumber => rec.valueNumber === n.value.toDouble
+          case b:AttributeBoolean => rec.valueBoolean === b.value
+        }
+      }
+    }
+  }
 
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
