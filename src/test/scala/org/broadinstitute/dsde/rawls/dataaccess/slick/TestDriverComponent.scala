@@ -419,6 +419,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample6.toReference, inputResolutions)
       ), SubmissionStatuses.Done)
 
+    def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
+      val groups = billingProject.groups.values ++
+        testProject1.groups.values ++
+        testProject2.groups.values ++
+        testProject3.groups.values ++
+        workspaceGroups ++
+        workspaceWithRealmGroups ++
+        otherWorkspaceWithRealmGroups ++
+        workspaceNoSubmissionsGroups ++
+        workspaceSuccessfulSubmissionGroups ++
+        workspaceFailedSubmissionGroups ++
+        workspaceSubmittedSubmissionGroups ++
+        workspaceMixedSubmissionsGroups ++
+        Seq(realm)
+
+      groups.foreach(gcsDAO.createGoogleGroup(_))
+    }
+
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.save(userProjectOwner),
