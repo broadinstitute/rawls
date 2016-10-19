@@ -434,7 +434,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
           dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).map { emailsAndAccess =>
-            RequestComplete(StatusCodes.OK, emailsAndAccess.sortBy(_._2).reverse.toMap)
+            RequestComplete(StatusCodes.OK, emailsAndAccess.sortBy(_._2).toMap) // sort to make sure higher access levels are in the resulting map
           }
         }
       }
@@ -500,14 +500,20 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield {
       val emailsNotFound = aclUpdates.map(_.email).diff(refsToUpdateByEmail.keySet.toSeq)
 
+      // match up elements of aclUpdates and refsToUpdateByEmail ignoring unfound emails
       val refsToUpdateAndAccessLevel = aclUpdates.map { aclUpdate => refsToUpdateByEmail.get(aclUpdate.email) -> aclUpdate.accessLevel }.collect {
         case (Some(ref), accessLevel) => ref -> accessLevel
       }.toMap
 
+      // we are not updating ProjectOwner acls here, if any are added we throw an exception below
+      // any user/group that is already a project owner and is added to another level should end up in both levels
+      // so lets ignore all the existing project owners
       val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, level) => level == ProjectOwner }
 
+      // remove everything that is not changing
       val actualChangesToMake = refsToUpdateAndAccessLevel.toSet.diff(existingRefsAndLevelsExcludingPO.toSet).toMap
 
+      // some security checks
       if (actualChangesToMake.contains(Right(UserService.allUsersGroupRef))) {
         // UserService.allUsersGroupRef cannot be updated in this code path, there is an admin end point for that
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Please contact an administrator to alter access to ${UserService.allUsersGroupRef.groupName}"))
@@ -519,9 +525,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be changed in the billing area of the application."))
       }
 
-      val updatedRefsAndLevels = (existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++ actualChangesToMake).filterNot { case (_, level) => level == WorkspaceAccessLevels.NoAccess }
+      // update levels for all existing refs, add refs that don't exist, remove all no access levels
+      val updatedRefsAndLevels =
+        (existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++
+          actualChangesToMake).filterNot { case (_, level) => level == WorkspaceAccessLevels.NoAccess }
 
-      val updatedRefsByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[(scala.Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel)]] = updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
+      // formulate the UserService.OverwriteGroupMembers messages to send - 1 per level with users and groups separated
+      val updatedRefsByLevel: Map[WorkspaceAccessLevel, Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] =
+        updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
 
       val overwriteGroupMessages = updatedRefsByLevel.map { case (level, refs) =>
         val userSubjectIds = refs.collect { case (Left(userRef), _) => userRef.userSubjectId.value }.toSeq
@@ -529,6 +540,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         UserService.OverwriteGroupMembers(workspaceContext.workspace.accessLevels(level), RawlsGroupMemberList(userSubjectIds = Option(userSubjectIds), subGroupNames = Option(subGroupNames)))
       }
 
+      // voila
       (overwriteGroupMessages, emailsNotFound)
     }
   }
