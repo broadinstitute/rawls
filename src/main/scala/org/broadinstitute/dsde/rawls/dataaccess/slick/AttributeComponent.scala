@@ -358,7 +358,7 @@ trait AttributeComponent {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
         id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
-          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined)) {
+          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listLength.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
           } else if (attributeRecsWithRefForName.size > 1) {
             throw new RawlsException(s"more than one value exists for attribute but list index is not defined for all, records: $attributeRecsWithRefForName")
