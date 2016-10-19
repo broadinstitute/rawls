@@ -358,10 +358,10 @@ trait AttributeComponent {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
         id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
-          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listIndex.isDefined) && attributeRecsWithRefForName.forall(_._1.listLength.isDefined) ) {
+          val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listLength.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
           } else if (attributeRecsWithRefForName.size > 1) {
-            throw new RawlsException(s"more than one value exists for attribute but list length and index not defined for all, records: $attributeRecsWithRefForName")
+            throw new RawlsException(s"more than one value exists for attribute but list length not defined for all, records: $attributeRecsWithRefForName")
           } else if (attributeRecsWithRefForName.head._2.isDefined) {
             unmarshalReference(attributeRecsWithRefForName.head._2.get)
           } else {
@@ -373,8 +373,15 @@ trait AttributeComponent {
     }
 
     private def unmarshalList(attributeRecsWithRef: Set[(RECORD, Option[EntityRecord])]) = {
-      val sortedRecs = attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
-      if (sortedRecs.head._1.listLength.getOrElse(-1) == 0) {
+      val isEmptyList = attributeRecsWithRef.size == 1 && attributeRecsWithRef.head._1.listLength.getOrElse(-1) == 0
+
+      val sortedRecs = try {
+        attributeRecsWithRef.toSeq.sortBy(_._1.listIndex.get)
+      } catch {
+        case e: NoSuchElementException => throw new RawlsException(s"more than one value exists for attribute but list index not defined for all, records: $attributeRecsWithRef")
+      }
+
+      if (isEmptyList) {
         if( isEntityRefRecord(sortedRecs.head._1) ) {
           AttributeEntityReferenceEmptyList
         } else {
