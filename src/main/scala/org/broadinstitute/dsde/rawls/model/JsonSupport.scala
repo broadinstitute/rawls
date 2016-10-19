@@ -122,7 +122,7 @@ class JsonSupport extends DefaultJsonProtocol {
 
       case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet => (members(ENTITY_TYPE_KEY), members(ENTITY_NAME_KEY)) match {
         case (JsString(typeKey), JsString(nameKey)) => AttributeEntityReference(typeKey, nameKey)
-        case _ => throw new RawlsException()
+        case _ => throw new RawlsException("somehow JsObject keys have ceased being strings, which is terrifying")
       }
 
 
