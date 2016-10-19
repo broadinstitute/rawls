@@ -223,6 +223,18 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
+  it should "throw exception unmarshalling a list without listLength set for all" in withEmptyTestDatabase {
+    val attributeRecs = Seq(
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(1), None, None, Some(2), Some(3))), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(2), None, None, Some(1), None)), None),
+      ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(3), None, None, Some(0), Some(3))), None)
+    )
+
+    intercept[RawlsException] {
+      workspaceAttributeQuery.unmarshalAttributes(attributeRecs)
+    }
+  }
+
   it should "throw exception unmarshalling a list without listIndex set for all" in withEmptyTestDatabase {
     val attributeRecs = Seq(
       ((1 -> WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "valList", None, Some(1), None, None, Some(2), Some(3))), None),
