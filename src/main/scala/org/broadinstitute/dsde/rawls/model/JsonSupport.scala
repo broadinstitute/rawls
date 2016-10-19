@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import spray.json.{JsArray, _}
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
@@ -119,8 +120,11 @@ class JsonSupport extends DefaultJsonProtocol {
       case JsBoolean(b) => AttributeBoolean(b)
       case JsNumber(n) => AttributeNumber(n)
 
-      case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet =>
-        AttributeEntityReference(members(ENTITY_TYPE_KEY).asInstanceOf[JsString].value, members(ENTITY_NAME_KEY).asInstanceOf[JsString].value)
+      case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet => (members(ENTITY_TYPE_KEY), members(ENTITY_NAME_KEY)) match {
+        case (JsString(typeKey), JsString(nameKey)) => AttributeEntityReference(typeKey, nameKey)
+        case _ => throw new RawlsException()
+      }
+
 
       case _ => readListType(json)
     }
