@@ -21,7 +21,7 @@
   * Encryption
   * Audit trails
 - [ ] **Submitter**: If you're adding new libraries, sign us up to security updates for them
-- [ ] Tell ![](http://i.imgur.com/9dLzbPd.png) that the PR exists if he wants to look at it **(apply requires_doge label)**
+- [ ] Tell your tech lead (TL) that the PR exists if they want to look at it
 - [ ] Anoint a lead reviewer (LR). **Assign PR to LR**
 * Review cycle:
   * LR reviews
@@ -31,7 +31,7 @@
   * Submitter makes further commits. DO NOT SQUASH
   * Submitter updates documentation as needed
   * Submitter **reassigns to LR** for further feedback
-- [ ] ![](http://i.imgur.com/9dLzbPd.png) sign off
+- [ ] **TL** sign off
 - [ ] **LR** sign off
 - [ ] **Assign to submitter** to finalize
 - [ ] **Submitter**: Verify all tests go green, including CI tests
