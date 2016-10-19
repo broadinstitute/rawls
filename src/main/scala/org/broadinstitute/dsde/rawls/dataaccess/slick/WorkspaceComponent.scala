@@ -81,10 +81,6 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
-    def listPublished(): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(getPublishedWorkspaces)
-    }
-
     def listWithAttribute(attributeMap: AttributeMap): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(getWorkspacesWithAttribute(attributeMap))
     }
@@ -233,10 +229,6 @@ trait WorkspaceComponent {
           }
         })
       }
-    }
-
-    def getPublishedWorkspaces = {
-      getWorkspacesWithAttribute(Map(AttributeName.libraryAttribute("published") -> AttributeBoolean(true)))
     }
 
     def getWorkspacesWithAttribute(attributeMap: AttributeMap) = {

@@ -239,13 +239,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             WorkspaceService.ListAllWorkspaces)
       }
     } ~
-    path("admin" / "publishedWorkspaces") {
-      get {
-        requestContext => perRequest(requestContext,
-          WorkspaceService.props(workspaceServiceConstructor, userInfo),
-          WorkspaceService.ListPublishedWorkspaces)
-      }
-    } ~
     path("admin" / "workspacesByAttribute") {
       post {
         entity(as[AttributeMap]) { attributeMap =>
