@@ -1311,7 +1311,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def listWorkspacesWithAttribute(attributeMap: AttributeMap): Future[PerRequestMessage] = {
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithAttribute(attributeMap).map(RequestComplete(StatusCodes.OK, _))
+        if (attributeMap.size != 1)
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "specify one attribute only"))
+
+        val (attrName, attr) = attributeMap.head
+        attr match {
+          case attrValue:AttributeValue => dataAccess.workspaceQuery.listWithAttribute(attrName, attrValue).map(RequestComplete(StatusCodes.OK, _))
+          case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "unsupported attribute type"))
+        }
       }
     }
   }

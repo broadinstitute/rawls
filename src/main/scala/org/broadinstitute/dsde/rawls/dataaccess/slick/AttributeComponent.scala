@@ -161,12 +161,13 @@ trait AttributeComponent {
       filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
     }
 
-    def queryByAttribute(attrName: AttributeName, attrValue: Attribute): WorkspaceAttributeQueryType = {
+    def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue): WorkspaceAttributeQueryType = {
       findByNameQuery(attrName).filter { rec =>
         attrValue match {
-          case s:AttributeString => rec.valueString === s.value
-          case n:AttributeNumber => rec.valueNumber === n.value.toDouble
-          case b:AttributeBoolean => rec.valueBoolean === b.value
+          case AttributeString(s) => rec.valueString === s
+          case AttributeNumber(n) => rec.valueNumber === n
+          case AttributeBoolean(b) => rec.valueBoolean === b
+          case _ => throw new RawlsException("Unsupported attribute type")
         }
       }
     }

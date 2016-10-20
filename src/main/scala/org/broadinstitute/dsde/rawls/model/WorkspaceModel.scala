@@ -46,7 +46,7 @@ object AttributeName {
 
   def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
 
-  def libraryAttribute(name: String) = AttributeName(libraryNamespace, name)
+  def withLibraryNS(name: String) = AttributeName(libraryNamespace, name)
 
   def toDelimitedName(aName: AttributeName): String = {
     if (aName.namespace == defaultNamespace) aName.name

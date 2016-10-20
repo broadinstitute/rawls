@@ -1093,7 +1093,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by attribute" in withTestDataApiServices { services =>
-    Post(s"/admin/workspacesByAttribute", httpJson(Map("number" -> 10))) ~>
+    Get(s"/admin/workspacesByAttribute", httpJson(Map("number" -> 10))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }

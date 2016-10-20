@@ -81,8 +81,8 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
-    def listWithAttribute(attributeMap: AttributeMap): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(getWorkspacesWithAttribute(attributeMap))
+    def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] = {
+      loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }
 
     def save(workspace: Workspace): ReadWriteAction[Workspace] = {
@@ -231,8 +231,7 @@ trait WorkspaceComponent {
       }
     }
 
-    def getWorkspacesWithAttribute(attributeMap: AttributeMap) = {
-      val (attrName, attrValue) = attributeMap.head
+    def getWorkspacesWithAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
       for {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
