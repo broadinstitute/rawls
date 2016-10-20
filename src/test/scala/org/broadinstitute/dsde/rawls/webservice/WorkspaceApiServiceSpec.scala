@@ -1478,18 +1478,34 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
   it should "allow a project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        responseAs[Map[String, WorkspaceAccessLevels.WorkspaceAccessLevel]] should contain (testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Read)
       }
   }
 
   it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        responseAs[Map[String, WorkspaceAccessLevels.WorkspaceAccessLevel]] should contain (testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Read)
       }
   }
 
@@ -1534,7 +1550,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         responseAs[Map[String, WorkspaceAccessLevels.WorkspaceAccessLevel]] should contain (testData.userProjectOwner.userEmail.value -> WorkspaceAccessLevels.ProjectOwner)
 
       }
-
   }
 
   it should "not allow an owner-access user to add project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>

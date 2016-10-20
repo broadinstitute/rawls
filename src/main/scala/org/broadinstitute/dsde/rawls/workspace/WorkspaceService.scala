@@ -505,13 +505,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (Some(ref), accessLevel) => ref -> accessLevel
       }.toMap
 
-      // we are not updating ProjectOwner acls here, if any are added we throw an exception below
-      // any user/group that is already a project owner and is added to another level should end up in both levels
-      // so lets ignore all the existing project owners
-      val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, level) => level == ProjectOwner }
-
       // remove everything that is not changing
-      val actualChangesToMake = refsToUpdateAndAccessLevel.toSet.diff(existingRefsAndLevelsExcludingPO.toSet).toMap
+      val actualChangesToMake = refsToUpdateAndAccessLevel.toSet.diff(existingRefsAndLevels.toSet).toMap
 
       // some security checks
       if (actualChangesToMake.contains(Right(UserService.allUsersGroupRef))) {
@@ -525,6 +520,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be changed in the billing area of the application."))
       }
 
+      // we are not updating ProjectOwner acls here, if any are added we threw an exception above
+      // any user/group that is already a project owner and is added to another level should end up in both levels
+      // so lets ignore all the existing project owners, we should not update by mistake
+      val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, level) => level == ProjectOwner }
+
       // update levels for all existing refs, add refs that don't exist, remove all no access levels
       val updatedRefsAndLevels =
         (existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMake.getOrElse(ref, level) } ++
@@ -534,11 +534,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val updatedRefsByLevel: Map[WorkspaceAccessLevel, Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] =
         updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
 
-      val overwriteGroupMessages = updatedRefsByLevel.map { case (level, refs) =>
+      // the above transformations drop empty groups so add those back in
+      val emptyLevels = Seq(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Read).map(_ -> Set.empty[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]).toMap
+      val updatedRefsByLevelWithEmpties = emptyLevels ++ updatedRefsByLevel
+
+      val overwriteGroupMessages = updatedRefsByLevelWithEmpties.map { case (level, refs) =>
         val userSubjectIds = refs.collect { case (Left(userRef), _) => userRef.userSubjectId.value }.toSeq
         val subGroupNames = refs.collect { case (Right(groupRef), _) => groupRef.groupName.value }.toSeq
         UserService.OverwriteGroupMembers(workspaceContext.workspace.accessLevels(level), RawlsGroupMemberList(userSubjectIds = Option(userSubjectIds), subGroupNames = Option(subGroupNames)))
       }
+
+
 
       // voila
       (overwriteGroupMessages, emailsNotFound)
