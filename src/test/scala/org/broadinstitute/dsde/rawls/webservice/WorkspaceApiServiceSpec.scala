@@ -673,6 +673,35 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 on update with workspace attributes that specify list as value" in withTestDataApiServices { services =>
+    // we can't make this non-sensical json from our object hierarchy; we have to craft it by hand
+    val testPayload =
+      """
+        |[{
+        |    "op" : "AddUpdateAttribute",
+        |    "attributeName" : "something",
+        |    "addUpdateAttribute" : {
+        |      "itemsType" : "SomeValueNotExpected",
+        |      "items" : ["foo", "bar", "baz"]
+        |    }
+        |}]
+      """.stripMargin
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, testPayload)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        // TODO: test currently fails, response is as follows. What should this respond with?
+        /*
+        HttpResponse(400 Bad Request,HttpEntity(text/plain; charset=UTF-8,The request content was malformed:illegal array type),List(),HTTP/1.1)
+         */
+        val errorText = responseAs[ErrorReport].message
+        assert(errorText.contains(name.namespace))
+      }
+  }
+
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
