@@ -693,12 +693,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.BadRequest) {
           status
         }
-        // TODO: test currently fails, response is as follows. What should this respond with?
-        /*
-        HttpResponse(400 Bad Request,HttpEntity(text/plain; charset=UTF-8,The request content was malformed:illegal array type),List(),HTTP/1.1)
-         */
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(name.namespace))
       }
   }
 

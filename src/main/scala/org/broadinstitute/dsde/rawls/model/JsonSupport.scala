@@ -48,6 +48,7 @@ trait TypedAttributeListSerializer extends AttributeListSerializer {
 
   val VALUE_LIST_TYPE = "AttributeValue"
   val REF_LIST_TYPE = "EntityReference"
+  val ALLOWED_LIST_TYPES = Seq(VALUE_LIST_TYPE, REF_LIST_TYPE)
 
   def writeListType(obj: Attribute): JsValue = obj match {
     //lists
@@ -75,13 +76,14 @@ trait TypedAttributeListSerializer extends AttributeListSerializer {
     }
 
     (jsMap(LIST_ITEMS_TYPE_KEY), attrList) match {
-      case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.isEmpty => AttributeValueEmptyList
-      case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if vals.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => AttributeValueList(vals)
+      case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if attrList.isEmpty => AttributeValueEmptyList
+      case (JsString(VALUE_LIST_TYPE), vals: Seq[AttributeValue @unchecked]) if attrList.map(_.isInstanceOf[AttributeValue]).reduce(_&&_) => AttributeValueList(vals)
 
-      case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if refs.isEmpty => AttributeEntityReferenceEmptyList
-      case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if refs.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_) => AttributeEntityReferenceList(refs)
+      case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if attrList.isEmpty => AttributeEntityReferenceEmptyList
+      case (JsString(REF_LIST_TYPE), refs: Seq[AttributeEntityReference @unchecked]) if attrList.map(_.isInstanceOf[AttributeEntityReference]).reduce(_&&_) => AttributeEntityReferenceList(refs)
 
-      case _ => throw new DeserializationException("illegal array type")
+      case (JsString(s), _) if !ALLOWED_LIST_TYPES.contains(s) => throw new DeserializationException(s"illegal array type: $LIST_ITEMS_TYPE_KEY must be one of ${ALLOWED_LIST_TYPES.mkString(", ")}")
+      case _ => throw new DeserializationException("illegal array type: array elements don't match array type")
     }
   }
 }
