@@ -244,7 +244,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         entity(as[AttributeMap]) { attributeMap =>
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListWorkspacesWithAttribute(attributeMap))
+            WorkspaceService.AdminListWorkspacesWithAttribute(attributeMap))
         }
       }
     } ~

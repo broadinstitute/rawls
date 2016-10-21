@@ -50,7 +50,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
-  case class ListWorkspacesWithAttribute(attributeMap: AttributeMap) extends WorkspaceServiceMessage
+  case class AdminListWorkspacesWithAttribute(attributeMap: AttributeMap) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
@@ -123,7 +123,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
-    case ListWorkspacesWithAttribute(attributeMap) => pipe(listWorkspacesWithAttribute(attributeMap)) to sender
+    case AdminListWorkspacesWithAttribute(attributeMap) => asFCAdmin { listWorkspacesWithAttribute(attributeMap) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
@@ -1309,16 +1309,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listWorkspacesWithAttribute(attributeMap: AttributeMap): Future[PerRequestMessage] = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        if (attributeMap.size != 1)
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "specify one attribute only"))
+    dataSource.inTransaction { dataAccess =>
+      if (attributeMap.size != 1)
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "specify one attribute only"))
 
-        val (attrName, attr) = attributeMap.head
-        attr match {
-          case attrValue:AttributeValue => dataAccess.workspaceQuery.listWithAttribute(attrName, attrValue).map(RequestComplete(StatusCodes.OK, _))
-          case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "unsupported attribute type"))
-        }
+      val (attrName, attr) = attributeMap.head
+      attr match {
+        case attrValue:AttributeValue => dataAccess.workspaceQuery.listWithAttribute(attrName, attrValue).map(RequestComplete(StatusCodes.OK, _))
+        case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "unsupported attribute type"))
       }
     }
   }

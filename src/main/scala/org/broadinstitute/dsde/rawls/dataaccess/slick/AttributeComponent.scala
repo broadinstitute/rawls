@@ -165,7 +165,7 @@ trait AttributeComponent {
       findByNameQuery(attrName).filter { rec =>
         attrValue match {
           case AttributeString(s) => rec.valueString === s
-          case AttributeNumber(n) => rec.valueNumber === n
+          case AttributeNumber(n) => rec.valueNumber === n.doubleValue
           case AttributeBoolean(b) => rec.valueBoolean === b
           case _ => throw new RawlsException("Unsupported attribute type")
         }
