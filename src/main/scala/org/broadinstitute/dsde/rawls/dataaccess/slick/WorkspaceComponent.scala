@@ -354,7 +354,7 @@ trait WorkspaceComponent {
 
       val subGroupQuery = for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId
-        subGroup <- groupSubgroupsQuery if subGroup.childGroupName === access.groupName
+        subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === access.groupName
       } yield {
         (subGroup.childGroupName, access.accessLevel)
       }

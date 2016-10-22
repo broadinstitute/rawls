@@ -32,7 +32,7 @@ object DbResource {
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
 
   val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
-  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+//  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
 }
 
 /**
@@ -192,10 +192,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
 
+    val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
+
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map(ProjectRoles.User -> Set(nestedProjectGroup))), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
 
     val testProject2Name = RawlsBillingProjectName("project2")
     val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
@@ -443,11 +445,15 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
+        rawlsGroupQuery.save(nestedProjectGroup),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(testProject1.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(testProject1),
         DBIO.sequence(testProject2.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(testProject2),
         DBIO.sequence(testProject3.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(testProject3),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(realm),
         DBIO.sequence(workspaceWithRealmGroups.map(rawlsGroupQuery.save).toSeq),
@@ -688,7 +694,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       DBIO.seq(
         rawlsUserQuery.save(RawlsUser(userInfo)),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
-        //rawlsBillingProjectQuery.create(billingProject),
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),

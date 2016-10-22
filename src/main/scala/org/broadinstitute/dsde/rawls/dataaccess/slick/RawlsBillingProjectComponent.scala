@@ -43,7 +43,7 @@ trait RawlsBillingProjectComponent {
 
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
       validateUserDefinedString(billingProject.projectName.value)
-      uniqueResult(findBillingProjectByName(billingProject.projectName.value).result) flatMap {
+      uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
         case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists")
         case None =>
           (rawlsBillingProjectQuery += marshalBillingProject(billingProject)) andThen
@@ -60,8 +60,7 @@ trait RawlsBillingProjectComponent {
       filter(_.creationStatus === status.toString).result
     }
 
-    def load(rawlsProjectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
-      val projectName = rawlsProjectName.value
+    def load(projectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
         case Some(projectRec) =>
@@ -77,17 +76,18 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def loadProjectUsersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
-      val ownerUsersQuery = findProjectUsersWithRole(rawlsProjectName, ProjectRoles.Owner)
-      val userUsersQuery = findProjectUsersWithRole(rawlsProjectName, ProjectRoles.User)
+    /**
+     * loads the immediate (i.e. not recursive) users and groups for a project
+     * @param rawlsProjectName
+     * @return
+     */
+    def loadDirectProjectMembersWithEmail(rawlsProjectName: RawlsBillingProjectName): ReadAction[Seq[RawlsBillingProjectMember]] = {
+      val usersQuery = findDirectProjectUsers(rawlsProjectName)
+      val subgroupsQuery = findDirectProjectSubgroups(rawlsProjectName)
 
-      val ownerSubgroupsQuery = findProjectSubgroupsWithRole(rawlsProjectName, ProjectRoles.Owner)
-      val userSubgroupsQuery = findProjectSubgroupsWithRole(rawlsProjectName, ProjectRoles.User)
+      val membersQuery = usersQuery union subgroupsQuery
 
-      val owners = ownerUsersQuery union ownerSubgroupsQuery
-      val users = userUsersQuery union userSubgroupsQuery
-
-      (owners union users).result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))})
+      membersQuery.result.map(_.map{ case(email, role) => RawlsBillingProjectMember(RawlsUserEmail(email), ProjectRoles.withName(role))})
     }
 
     def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
@@ -98,19 +98,26 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def findBillingGroups(billingProjectName: RawlsBillingProjectName) = {
+    private def findBillingGroups(billingProjectName: RawlsBillingProjectName) = {
       rawlsBillingProjectGroupQuery.filter(_.projectName === billingProjectName.value).map(_.groupName)
     }
 
-    def listUserProjects(rawlsUser: RawlsUserRef): ReadAction[Iterable[RawlsBillingProjectMembership]] = {
+    /**
+     * Given a list of groups, only some of which may be associated to projects, figure out which groups
+     * are associated to projects and the role for the group.
+     *
+     * @param groups
+     * @return
+     */
+    def listProjectMembershipsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[RawlsBillingProjectMembership]] = {
       val query = for {
-        group <- groupUsersQuery if group.userSubjectId === rawlsUser.userSubjectId.value
-        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName
-        project <- rawlsBillingProjectQuery if project.projectName === groupsThatAreProjectRelated.projectName
-      } yield (groupsThatAreProjectRelated.role, groupsThatAreProjectRelated.projectName, project.creationStatus)
-      query.result.map { _.map {
-        case (role, projectName, creationStatus) => RawlsBillingProjectMembership(RawlsBillingProjectName(projectName), ProjectRoles.withName(role), CreationStatuses.withName(creationStatus))
-      }}
+        projectGroup <- rawlsBillingProjectGroupQuery if (projectGroup.groupName.inSetBind(groups.map(_.groupName.value)))
+        project <- rawlsBillingProjectQuery if (project.projectName === projectGroup.projectName)
+      } yield (project, projectGroup)
+
+      query.result.map(_.map { case (project, projectGroup) =>
+        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus))
+      })
     }
 
     def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
@@ -128,40 +135,41 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    /**
+     * Checks that user has at least one of roles for the project specified by projectName. Will recurse through sub groups.
+     * @param projectName
+     * @param user
+     * @param roles
+     * @return
+     */
     def hasOneOfProjectRole(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]): ReadAction[Boolean] = {
-      findProjectUser(projectName, user, roles).length.result.map(_ > 0)
+      val projectUsersAction = findBillingProjectGroupsForRoles(projectName, roles).result.flatMap { groups =>
+        DBIO.sequence(groups.map { group =>
+          rawlsGroupQuery.flattenGroupMembership(RawlsGroupRef(RawlsGroupName(group.groupName)))
+        })
+      }
+
+      projectUsersAction.map { projectUsers =>
+        projectUsers.flatten.contains(user)
+      }
     }
 
-    private def findProjectUser(projectName: RawlsBillingProjectName, user: RawlsUserRef, roles: Set[ProjectRole]) = {
+    // does not recurse
+    private def findDirectProjectUsers(projectName: RawlsBillingProjectName) = {
       for {
-        group <- groupUsersQuery if group.userSubjectId === user.userSubjectId.value
-        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.groupName && groupsThatAreProjectRelated.projectName === projectName.value
-        project <- rawlsBillingProjectQuery if project.projectName === projectName.value && groupsThatAreProjectRelated.role.inSet(roles.map(_.toString))
-      } yield (project, groupsThatAreProjectRelated.role)
+        projectGroup <- rawlsBillingProjectGroupQuery if projectGroup.projectName === projectName.value
+        groupUser <- groupUsersQuery if groupUser.groupName === projectGroup.groupName
+        user <- rawlsUserQuery if user.userSubjectId === groupUser.userSubjectId
+      } yield (user.userEmail, projectGroup.role)
     }
 
-    private def findProjectSubgroup(projectName: RawlsBillingProjectName, groupRef: RawlsGroupRef, roles: Set[ProjectRole]) = {
+    // does not recurse
+    private def findDirectProjectSubgroups(projectName: RawlsBillingProjectName) = {
       for {
-        group <- groupSubgroupsQuery if group.parentGroupName === groupRef.groupName.value
-        groupsThatAreProjectRelated <- rawlsBillingProjectGroupQuery if groupsThatAreProjectRelated.groupName === group.parentGroupName
-        project <- rawlsBillingProjectQuery if groupsThatAreProjectRelated.groupName === group.parentGroupName && project.projectName === projectName.value && groupsThatAreProjectRelated.role.inSet(roles.map(_.toString))
-      } yield (project, groupsThatAreProjectRelated.role)
-    }
-
-    private def findProjectUsersWithRole(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = {
-      for {
-        group <- rawlsBillingProjectGroupQuery if group.projectName === projectName.value && group.role === role.toString
-        user <- groupUsersQuery if user.groupName === group.groupName
-        email <- rawlsUserQuery if email.userSubjectId === user.userSubjectId
-      } yield (email.userEmail, LiteralColumn(role.toString))
-    }
-
-    private def findProjectSubgroupsWithRole(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole) = {
-      for {
-        group <- rawlsBillingProjectGroupQuery if group.projectName === projectName.value && group.role === role.toString
-        subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === group.groupName
-        email <- rawlsGroupQuery if email.groupName === subGroup.parentGroupName
-      } yield (email.groupEmail, LiteralColumn(role.toString))
+        projectGroup <- rawlsBillingProjectGroupQuery if projectGroup.projectName === projectName.value
+        groupSubgroup <- groupSubgroupsQuery if groupSubgroup.parentGroupName === projectGroup.groupName
+        subgroup <- rawlsGroupQuery if subgroup.groupName === groupSubgroup.parentGroupName
+      } yield (subgroup.groupEmail, projectGroup.role)
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
@@ -172,12 +180,16 @@ trait RawlsBillingProjectComponent {
       RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), groups, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus))
     }
 
-    private def findBillingProjectByName(name: String): RawlsBillingProjectQuery = {
-      filter(_.projectName === name)
+    private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
+      filter(_.projectName === name.value)
     }
 
-    private def findBillingProjectGroups(name: String): RawlsBillingProjectGroupQuery = {
-      rawlsBillingProjectGroupQuery filter (_.projectName === name)
+    private def findBillingProjectGroups(name: RawlsBillingProjectName): RawlsBillingProjectGroupQuery = {
+      rawlsBillingProjectGroupQuery filter (_.projectName === name.value)
+    }
+
+    private def findBillingProjectGroupsForRoles(name: RawlsBillingProjectName, roles: Set[ProjectRole]): RawlsBillingProjectGroupQuery = {
+      rawlsBillingProjectGroupQuery filter { rec => rec.projectName === name.value && rec.role.inSetBind(roles.map(_.toString)) }
     }
   }
 }

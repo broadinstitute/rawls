@@ -396,13 +396,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def listBillingProjects(userEmail: RawlsUserEmail): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withUser(userEmail, dataAccess) { user =>
-        dataAccess.rawlsBillingProjectQuery.listUserProjects(user)
+        for {
+          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+          memberships <- dataAccess.rawlsBillingProjectQuery.listProjectMembershipsForGroups(groups)
+        } yield memberships
       } map(RequestComplete(_))
     }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.loadProjectUsersWithEmail(projectName).map(RequestComplete(_))
+      dataAccess.rawlsBillingProjectQuery.loadDirectProjectMembersWithEmail(projectName).map(RequestComplete(_))
     }
   }
 
@@ -448,13 +451,21 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
-    withBillingProject(projectName, dataAccess) { project =>
-      DBIO.from(Future.sequence(project.groups.map {case (_, group) => gcsDAO.deleteGoogleGroup(group) })) andThen
-        dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
-          case true => RequestComplete(StatusCodes.OK)
-          case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+  def unregisterBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    for {
+      groups <- dataSource.inTransaction { dataAccess =>
+        withBillingProject(projectName, dataAccess) { project =>
+          dataAccess.rawlsBillingProjectQuery.delete(project.projectName) map {
+            case true => project.groups
+            case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Could not delete billing project [${projectName.value}]"))
+          }
         }
+      }
+
+      _ <- Future.sequence(groups.map {case (_, group) => gcsDAO.deleteGoogleGroup(group) })
+
+    } yield {
+      RequestComplete(StatusCodes.OK)
     }
   }
 
@@ -537,7 +548,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         }
       }
-    }, TransactionIsolation.ReadCommitted)
+    }, TransactionIsolation.ReadCommitted) // read committed required to reduce db locks and allow concurrency
   }
 
   def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
