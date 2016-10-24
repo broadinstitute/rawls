@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet id="fixup_empty_entityattribute_value_lists" author="hussein" logicalFilePath="dummy">
+        <sql>
+            UPDATE ENTITY_ATTRIBUTE eattr
+            SET
+            eattr.value_number = -1, eattr.list_index = NULL
+            WHERE
+            eattr.list_index = -1 AND eattr.name not in ('participants', 'samples', 'pairs')
+        </sql>
+    </changeSet>
+
+    <changeSet id="fixup_empty_entityattribute_ref_lists" author="hussein" logicalFilePath="dummy">
+        <sql>
+            UPDATE ENTITY_ATTRIBUTE eattr
+            SET
+            eattr.list_index = NULL
+            WHERE
+            eattr.list_index = -1 AND eattr.name in ('participants', 'samples', 'pairs')
+        </sql>
+    </changeSet>
+
+    <changeSet id="fixup_empty_wsattribute_value_lists" author="hussein" logicalFilePath="dummy">
+        <sql>
+            UPDATE WORKSPACE_ATTRIBUTE wsattr
+            SET
+            wsattr.value_number = -1, wsattr.list_index = NULL
+            WHERE
+            wsattr.list_index = -1
+        </sql>
+    </changeSet>
+
+    <changeSet id="add_minusone_to_empty_subattribute_value_lists" author="hussein" logicalFilePath="dummy">
+        <sql>
+            UPDATE SUBMISSION_ATTRIBUTE subattr
+            SET
+            subattr.value_number = -1, subattr.list_index = NULL
+            WHERE
+            subattr.list_index = -1
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

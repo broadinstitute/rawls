@@ -174,12 +174,12 @@ case class SubmissionReport(
 )
 
 case class CallMetadata(
-  inputs: Map[String, Attribute],
+  inputs: JsObject,
   executionStatus: String,
   backend: Option[String],
   backendStatus: Option[String],
-  backendLogs: Option[Map[String, Attribute]],
-  outputs: Option[Map[String, OutputType]],
+  backendLogs: Option[JsObject],
+  outputs: Option[JsObject],
   start: Option[DateTime],
   end: Option[DateTime],
   jobId: Option[String],
@@ -196,8 +196,8 @@ case class ExecutionMetadata
   submission: DateTime,
   start: Option[DateTime],
   end: Option[DateTime],
-  inputs: Map[String, Attribute],
-  outputs: Option[Map[String, OutputType]],
+  inputs: JsObject,
+  outputs: Option[JsObject],
   calls: Map[String, Seq[CallMetadata]]
 )
 
@@ -222,6 +222,7 @@ case class SubmissionWorkflowStatusResponse(
 
 object ExecutionJsonSupport extends JsonSupport {
   type OutputType = Either[Attribute, UnsupportedOutputType]
+  implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
   implicit object WorkflowStatusFormat extends RootJsonFormat[WorkflowStatus] {
     override def write(obj: WorkflowStatus): JsValue = JsString(obj.toString)
@@ -241,12 +242,12 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
-      case Left(attribute) => AttributeFormat.write(attribute)
+      case Left(attribute) => attributeFormat.write(attribute)
       case Right(UnsupportedOutputType(json)) => json
     }
 
     override def read(json: JsValue): OutputType = {
-      Try { AttributeFormat.read(json) } match {
+      Try { attributeFormat.read(json) } match {
         case Success(attribute) => Left(attribute)
         case Failure(e: DeserializationException) => Right(UnsupportedOutputType(json))
         case Failure(t) => throw t

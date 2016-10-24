@@ -521,7 +521,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(testData.workspace)) ~>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent", None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -669,6 +670,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(name.namespace))
+      }
+  }
+
+  it should "return 400 on update with workspace attributes that specify list as value" in withTestDataApiServices { services =>
+    // we can't make this non-sensical json from our object hierarchy; we have to craft it by hand
+    val testPayload =
+      """
+        |[{
+        |    "op" : "AddUpdateAttribute",
+        |    "attributeName" : "something",
+        |    "addUpdateAttribute" : {
+        |      "itemsType" : "SomeValueNotExpected",
+        |      "items" : ["foo", "bar", "baz"]
+        |    }
+        |}]
+      """.stripMargin
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, testPayload)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
       }
   }
 
@@ -1337,7 +1361,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(testData.workspace)) ~>
+    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = testData.workspaceNoGroups.name, None, Map.empty)
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {

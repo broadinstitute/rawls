@@ -794,16 +794,41 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
         case RemoveAttribute(attributeName) => startingAttributes - attributeName
 
+        case CreateAttributeEntityReferenceList(attributeName) =>
+          if( startingAttributes.contains(attributeName) ) { //non-destructive
+            startingAttributes
+          } else {
+            startingAttributes + (attributeName -> AttributeEntityReferenceEmptyList)
+          }
+
+        case CreateAttributeValueList(attributeName) =>
+          if( startingAttributes.contains(attributeName) ) { //non-destructive
+            startingAttributes
+          } else {
+            startingAttributes + (attributeName -> AttributeValueEmptyList)
+          }
+
         case AddListMember(attributeListName, newMember) =>
           startingAttributes.get(attributeListName) match {
-            case Some(AttributeEmptyList) =>
+            case Some(AttributeValueEmptyList) =>
               newMember match {
                 case AttributeNull =>
                   startingAttributes
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>
+                  throw new AttributeUpdateOperationException("Cannot add non-value to list of values.")
+                case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
+              }
+
+            case Some(AttributeEntityReferenceEmptyList) =>
+              newMember match {
+                case AttributeNull =>
+                  startingAttributes
+                case newMember: AttributeEntityReference =>
                   startingAttributes + (attributeListName -> AttributeEntityReferenceList(Seq(newMember)))
+                case newMember: AttributeValue =>
+                  throw new AttributeUpdateOperationException("Cannot add non-reference to list of references.")
                 case _ => throw new AttributeUpdateOperationException("Cannot create list with that type.")
               }
 
@@ -828,7 +853,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             case None =>
               newMember match {
                 case AttributeNull =>
-                  startingAttributes + (attributeListName -> AttributeEmptyList)
+                  throw new AttributeUpdateOperationException("Cannot use AttributeNull to create empty list. Use CreateEmpty[Ref|Val]List instead.")
                 case newMember: AttributeValue =>
                   startingAttributes + (attributeListName -> AttributeValueList(Seq(newMember)))
                 case newMember: AttributeEntityReference =>

@@ -49,19 +49,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     assertResult(entity) { runAndWait(entityQuery.save(workspaceContext, entity)) }
     assertResult(Some(entity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
 
-    val emptyListAttributeEntity = entity.copy(name = "emptyListy", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeEmptyList))
-    runAndWait(entityQuery.save(workspaceContext, emptyListAttributeEntity))
-    assertResult(Some(emptyListAttributeEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyListy")) }
+    //save AttributeValueEmptyList
+    val emptyValListAttributeEntity = entity.copy(name = "emptyValListy", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeValueEmptyList))
+    runAndWait(entityQuery.save(workspaceContext, emptyValListAttributeEntity))
+    assertResult(Some(emptyValListAttributeEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyValListy")) }
 
     //convert AttributeValueList(Seq()) -> AttributeEmptyList
     val emptyValListEntity = entity.copy(name = "emptyValList", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeValueList(Seq())))
     runAndWait(entityQuery.save(workspaceContext, emptyValListEntity))
-    assertResult(Some(emptyListAttributeEntity.copy(name="emptyValList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyValList")) }
+    assertResult(Some(emptyValListAttributeEntity.copy(name="emptyValList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyValList")) }
 
-    //convert AttributeEntityReferenceList(Seq()) -> AttributeEmptyList
+    //save AttributeEntityReferenceEmptyList
+    val emptyRefListAttributeEntity = entity.copy(name = "emptyRefListy", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeEntityReferenceEmptyList))
+    runAndWait(entityQuery.save(workspaceContext, emptyRefListAttributeEntity))
+    assertResult(Some(emptyRefListAttributeEntity)) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyRefListy")) }
+
+    //convert AttributeEntityReferenceList(Seq()) -> AttributeEntityReferenceEmptyList
     val emptyRefListEntity = entity.copy(name = "emptyRefList", attributes = Map(AttributeName.withDefaultNS("emptyList") -> AttributeEntityReferenceList(Seq())))
     runAndWait(entityQuery.save(workspaceContext, emptyRefListEntity))
-    assertResult(Some(emptyListAttributeEntity.copy(name="emptyRefList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyRefList")) }
+    assertResult(Some(emptyRefListAttributeEntity.copy(name="emptyRefList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyRefList")) }
 
     assertResult(true) { runAndWait(entityQuery.delete(workspaceContext, "type", "name")) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
