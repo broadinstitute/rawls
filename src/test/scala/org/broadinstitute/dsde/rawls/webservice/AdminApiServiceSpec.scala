@@ -1088,12 +1088,12 @@ AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished, testData.workspaceNoAttrs))
       }
   }
 
   it should "return 200 when getting workspaces by attribute" in withTestDataApiServices { services =>
-    Get(s"/admin/workspacesByAttribute", httpJson(Map("number" -> 10))) ~>
+    Get(s"/admin/workspaces?attributeName=number&valueNumber=10", httpJson(Map("number" -> 10))) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }

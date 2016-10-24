@@ -6,6 +6,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.net.URLDecoder
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -234,17 +235,20 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
     } ~
     path("admin" / "workspaces") {
       get {
+        parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
           requestContext => perRequest(requestContext,
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListAllWorkspaces)
-      }
-    } ~
-    path("admin" / "workspacesByAttribute") {
-      get {
-        entity(as[AttributeMap]) { attributeMap =>
-          requestContext => perRequest(requestContext,
-            WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.AdminListWorkspacesWithAttribute(attributeMap))
+            nameOption match {
+              case None => WorkspaceService.ListAllWorkspaces
+              case Some(attributeName) =>
+                val name = AttributeName.fromDelimitedName(attributeName)
+                (stringOption, numberOption, booleanOption) match {
+                  case (Some(string), None, None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeString(string))
+                  case (None, Some(number), None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeNumber(number.toInt))
+                  case (None, None, Some(boolean)) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
+                  case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
+                }
+            })
         }
       }
     } ~
