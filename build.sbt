@@ -21,6 +21,8 @@ resolvers += "artifactory-releases" at artifactory + "libs-release"
 
 resolvers += "artifactory-snapshots" at artifactory + "libs-snapshot"
 
+val swaggerUIV = "2.1.1"
+
 libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
@@ -36,7 +38,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-client" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
-    "org.webjars" % "swagger-ui" % "2.1.1",
+    "org.webjars" % "swagger-ui" % swaggerUIV,
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     ("org.broadinstitute" %% "wdl4s" % "0.4"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
@@ -102,6 +104,7 @@ validMysqlHost := {
 }
 
 lazy val rawls = project.in(file("."))
+  .enablePlugins(BuildInfoPlugin)
   .configs(IntegrationTest)
   .settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
   .settings((test in Test) <<= (test in Test) dependsOn validMysqlHost)
@@ -109,6 +112,11 @@ lazy val rawls = project.in(file("."))
   .settings(
     testOptions in Test ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     testOptions in IntegrationTest := Seq(Tests.Filter(s => isIntegrationTest(s)))
+  )
+  .settings(
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion, "swaggerUIVersion" -> swaggerUIV),
+    buildInfoPackage := "org.broadinstitute.dsde.rawls.build",
+    buildInfoUsePackageAsPath := true
   )
 
 // SLF4J initializes itself upon the first logging call.  Because sbt
