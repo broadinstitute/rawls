@@ -34,7 +34,11 @@ case class ExecutionServiceStatus(
   status: String
 )
 
-case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray])
+case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray]) {
+  def toMessageList: Seq[String] = {
+    Seq(message) ++ errors.getOrElse(JsArray()).elements.map(err => err.toString)
+  }
+}
 
 // Cromwell's response to workflow validation
 case class ExecutionServiceValidation(
