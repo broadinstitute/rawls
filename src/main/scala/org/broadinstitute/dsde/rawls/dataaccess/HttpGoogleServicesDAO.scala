@@ -25,7 +25,7 @@ import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
+import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
@@ -322,6 +322,25 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(aclGetter).getItems.toList) }) {
       case e: HttpResponseException => None
     }
+  }
+
+  override def getBucketUsage(bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
+    def processPage(pageToken: Option[String] = None): Future[BigInt] = {
+      val fetcher = getStorage(getBucketServiceAccountCredential).objects().list(bucketName)
+      if (maxResults.isDefined) fetcher setMaxResults maxResults.get
+      if (pageToken.isDefined) fetcher setPageToken pageToken.get
+      retryWithRecoverWhen500orGoogleError(() => {
+        val result = executeGoogleRequest(fetcher)
+        val total: BigInt = (BigInt(0) /: result.getItems) { (sum, o) => sum + o.getSize }
+        result match {
+          case r: Objects if r.getNextPageToken == null => total
+          case _ => total + Await.result(processPage(Some(result.getNextPageToken)), Duration.Inf)
+        }
+      }) {
+        case e: HttpResponseException => throw new RawlsException(s"Error gathering storage bucket usage: ${e.getMessage}")
+      }
+    }
+    processPage()
   }
 
   override def getBucket(bucketName: String): Future[Option[Bucket]] = {

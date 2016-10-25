@@ -62,6 +62,20 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
+  /**
+    * Queries the objects in a bucket and calculates the total usage (bytes).
+    *
+    * Note: maxResults is used for integration testing of multi-page queries. While it could potentially be used for
+    * performance tuning, it would be better to build that into the service instead of giving the caller a dial to mess
+    * with. For that reason, the maxResults parameter should be removed in favor of extracting Storage building from the
+    * service implementation to enable test doubles to be injected.
+    *
+    * @param bucketName the name of the bucket to query
+    * @param maxResults (optional) the page size to use when fetching objects
+    * @return the size in bytes of the data stored in the bucket
+    */
+  def getBucketUsage(bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
+
   def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]

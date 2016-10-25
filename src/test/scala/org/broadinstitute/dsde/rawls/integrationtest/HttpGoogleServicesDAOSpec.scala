@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
-import java.io.StringReader
+import java.io.{ByteArrayInputStream, StringReader}
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
-import com.google.api.client.http.{HttpHeaders, HttpResponseException}
-import com.google.api.client.http.HttpResponseException
+import com.google.api.client.http.{HttpHeaders, HttpResponseException, InputStreamContent}
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
@@ -19,6 +18,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.services.storage.model.StorageObject
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -327,6 +327,30 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     } finally {
       gcsDAO.deleteProject(projectName)
     }
+  }
+
+  it should "calculate data size" in {
+    val random = scala.util.Random
+    val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, testProject, UUID.randomUUID.toString, testWorkspace, None), Duration.Inf)
+
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+
+    // add some objects and check size computation
+    val objectContent = "Test Content"
+    // insert 2 objects and use a page size of 1 to exercise fetching multiple pages of objects
+    val objectCount: Int = 2
+    for (i <- 1 to objectCount) {
+      val so = new StorageObject().setName(s"HttpGoogleServicesDAOObject$i")
+      val media = new InputStreamContent("text/plain", new ByteArrayInputStream(objectContent.getBytes))
+      val inserter = storage.objects().insert(googleWorkspaceInfo.bucketName, so, media)
+      inserter.getMediaHttpUploader.setDirectUploadEnabled(true)
+      Await.result(retry(when500)(() => Future { inserter.execute() }), Duration.Inf)
+    }
+    val dataSize = Await.result(gcsDAO.getBucketUsage(googleWorkspaceInfo.bucketName, Some(1L)), Duration.Inf)
+    dataSize should be (objectContent.length * objectCount)
+
+    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
   }
 
   private def when500( throwable: Throwable ): Boolean = {
