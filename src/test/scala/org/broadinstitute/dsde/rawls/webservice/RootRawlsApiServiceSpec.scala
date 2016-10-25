@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.model.ApplicationVersion
 import spray.http.StatusCodes
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersionFormat
@@ -10,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ApplicationVersi
 class RootRawlsApiServiceSpec extends ApiServiceSpec with RootRawlsApiService {
   val appVersion = ApplicationVersion("githash", "buildnumber", "version")
   val googleClientId = "FAKE-VALUE"
-  val swaggerUIVersion = "FAKE-VALUE"
+  val swaggerUIVersion = ConfigFactory.parseResources("version.conf").getString("version.swaggerUIVersion")
 
   "RootRawlsApiService" should "get a version" in  {
     Get("/version") ~>
