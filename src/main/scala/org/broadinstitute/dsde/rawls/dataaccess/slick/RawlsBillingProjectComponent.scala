@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
+import slick.dbio.Effect.Read
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String)
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String])
 case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
 
 trait RawlsBillingProjectComponent {
@@ -18,8 +19,9 @@ trait RawlsBillingProjectComponent {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
+    def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
 
-    def * = (projectName, cromwellAuthBucketUrl, creationStatus) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   class RawlsBillingProjectGroupTable(tag: Tag) extends Table[RawlsBillingProjectGroupRecord](tag, "BILLING_PROJECT_GROUP") {
@@ -56,23 +58,28 @@ trait RawlsBillingProjectComponent {
       filter(_.projectName inSetBind(projectNames.map(_.value))).map(_.creationStatus).update(newStatus.toString)
     }
 
-    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProjectRecord]] = {
-      filter(_.creationStatus === status.toString).result
+    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] = {
+      filter(_.creationStatus === status.toString).result.flatMap { projectRecords =>
+        DBIO.sequence(projectRecords.map { projectRec => load(projectRec) })
+      }
     }
 
     def load(projectName: RawlsBillingProjectName): ReadAction[Option[RawlsBillingProject]] = {
       uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).flatMap {
         case None => DBIO.successful(None)
-        case Some(projectRec) =>
-          findBillingProjectGroups(projectName).result.flatMap { groups =>
-            DBIO.sequence(groups.map { group =>
-              for {
-                loadedGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(group.groupName)))
-              } yield (ProjectRoles.withName(group.role), loadedGroup.get)
-            }) map { groups =>
-              Option(unmarshalBillingProject(projectRec, groups.toMap))
-            }
-          }
+        case Some(projectRec) => load(projectRec).map(Option(_))
+      }
+    }
+
+    def load(projectRec: RawlsBillingProjectRecord): ReadAction[RawlsBillingProject] = {
+      findBillingProjectGroups(RawlsBillingProjectName(projectRec.projectName)).result.flatMap { groups =>
+        DBIO.sequence(groups.map { group =>
+          for {
+            loadedGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(group.groupName)))
+          } yield (ProjectRoles.withName(group.role), loadedGroup.get)
+        }) map { groups =>
+          unmarshalBillingProject(projectRec, groups.toMap)
+        }
       }
     }
 
@@ -173,11 +180,11 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString)
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value))
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), groups, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus))
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), groups, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName))
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

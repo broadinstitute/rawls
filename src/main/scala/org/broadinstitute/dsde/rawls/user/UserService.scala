@@ -34,8 +34,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, billingProjectTemplate)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -87,7 +87,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, billingProjectTemplate: ProjectTemplate)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
@@ -124,7 +124,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
-    case CreateBillingProjectFull(projectName, billingAccount) => createBillingProjectFull(projectName, billingAccount) pipeTo sender
+    case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
 
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
@@ -428,6 +428,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  @deprecated
   private def createBillingProjectGroups(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
     val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
       val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
@@ -442,11 +443,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
+  private def createBillingProjectGroupsNoGoogle(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
+    val groupsByRole = ProjectRoles.all.map { role =>
+      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+      val members: Set[RawlsUserRef] = role match {
+        case ProjectRoles.Owner => creators
+        case _ => Set.empty
+      }
+      role -> RawlsGroup(name, RawlsGroupEmail(gcsDAO.toGoogleGroupName(name)), members, Set.empty)
+    }.toMap
+
+    val groupSaves = DBIO.sequence(groupsByRole.values.map { dataAccess.rawlsGroupQuery.save })
+
+    groupSaves.map(_ => groupsByRole.toMap)
+  }
+
   private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): ReadWriteAction[RawlsBillingProject] = {
     DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
       val bucketUrl = "gs://" + bucketName
 
-      val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status)
+      val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
       dataAccess.rawlsBillingProjectQuery.create(billingProject)
     }
   }
@@ -782,24 +798,29 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createBillingProjectFull(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
+  def startBillingProjectCreation(projectName: RawlsBillingProjectName, billingAccountName: RawlsBillingAccountName): Future[PerRequestMessage] = {
     gcsDAO.listBillingAccounts(userInfo) flatMap { billingAccountNames =>
       billingAccountNames.find(_.accountName == billingAccountName) match {
-        case Some(billingAccount) if billingAccount.firecloudHasAccess => dataSource.inTransaction { dataAccess =>
-          dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
-            case None =>
-              for {
-                groups <- createBillingProjectGroups(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                _ <- DBIO.from(gcsDAO.createProject(projectName, billingAccount, billingProjectTemplate, groups))
-                _ <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Creating, groups)
-              } yield {
-                RequestComplete(StatusCodes.Created)
+        case Some(billingAccount) if billingAccount.firecloudHasAccess =>
+          for {
+            _ <- gcsDAO.createProject(projectName, billingAccount)
+            result <- dataSource.inTransaction { dataAccess =>
+              dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+                case None =>
+                  for {
+                    groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+
+                  } yield {
+                    RequestComplete(StatusCodes.Created)
+                  }
+
+                case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
               }
-
-            case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
+            }
+          } yield {
+            result
           }
-        }
-
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
         case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
       }

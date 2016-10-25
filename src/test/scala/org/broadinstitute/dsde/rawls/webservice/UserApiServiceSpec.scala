@@ -157,7 +157,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       // first add the project and user to the DB
 
       val billingUser = testData.userOwner
-      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+      val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
 
       runAndWait(rawlsUserQuery.save(billingUser))
 
@@ -186,8 +186,9 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitorNotDone = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
+        override val projectTemplate: ProjectTemplate = null
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
+          override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
         }
       }
 
@@ -207,6 +208,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
       val billingProjectMonitorDone = new CreatingBillingProjectMonitor {
         override val datasource: SlickDataSource = services.dataSource
+        override val projectTemplate: ProjectTemplate = null
         override val gcsDAO = services.gcsDAO
       }
 
@@ -228,7 +230,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when adding a user to a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -241,10 +243,12 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
+    Await.result(services.gcsDAO.setupProject(project1, null), Duration.Inf)
+
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
         assert {
@@ -255,7 +259,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a user from a billing project that the caller owns" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -267,6 +271,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
+
+    Await.result(services.gcsDAO.setupProject(project1, null), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -294,7 +300,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when a non-owner tries to alter project permissions" in withTestDataApiServices { services =>
-    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+    val project1 = RawlsBillingProject(RawlsBillingProjectName("project1"), generateBillingGroups(RawlsBillingProjectName("project1"), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
     val createRequest = CreateRawlsBillingProjectFullRequest(project1.projectName, services.gcsDAO.accessibleBillingAccountName)
 
     import UserAuthJsonSupport.CreateRawlsBillingProjectFullRequestFormat
@@ -306,6 +312,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
+
+    Await.result(services.gcsDAO.setupProject(project1, null), Duration.Inf)
 
     Delete(s"/admin/billing/${project1.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>

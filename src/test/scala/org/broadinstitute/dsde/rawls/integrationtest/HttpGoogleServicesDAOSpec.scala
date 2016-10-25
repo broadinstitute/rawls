@@ -28,7 +28,7 @@ import spray.http.{OAuth2BearerToken, StatusCodes}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 import scala.collection.JavaConversions._
-import scala.util.Try
+import scala.concurrent.duration._
 
 class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
 
@@ -93,7 +93,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   "HttpGoogleServicesDAO" should "do all of the things" in {
 
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
 
@@ -162,7 +162,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "do all of the things with a realm" in {
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
 
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
 
@@ -251,7 +251,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "handle failures setting up workspace" in {
-    val project = RawlsBillingProject(RawlsBillingProjectName("not a project"), Map(ProjectRoles.Owner -> RawlsGroup(RawlsGroupName("foo"), RawlsGroupEmail("foo"), Set.empty, Set.empty)), "", Ready)
+    val project = RawlsBillingProject(RawlsBillingProjectName("not a project"), Map(ProjectRoles.Owner -> RawlsGroup(RawlsGroupName("foo"), RawlsGroupEmail("foo"), Set.empty, Set.empty)), "", Ready, None)
     intercept[GoogleJsonResponseException] {
       Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
     }
@@ -273,7 +273,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
   it should "handle failures getting workspace bucket" in {
     val projectOwnerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
-    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGroup), "", Ready)
+    val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGroup), "", Ready, None)
     val random = scala.util.Random
     val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
     val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
@@ -365,15 +365,22 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "create a project" in {
+
     val projectName = RawlsBillingProjectName("dsde-test-" + UUID.randomUUID().toString.take(8))
+    val ownerGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(s"${projectName.value}_owner"))), Duration.Inf)
     try {
       val billingAccount = RawlsBillingAccount(RawlsBillingAccountName("billingAccounts/0089F0-98A321-679BA7"), true, " This is A test ___-444")
 
       val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
+      val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
       val projectServices = gcsConfig.getStringList("projectTemplate.services")
-
-      Await.result(gcsDAO.createProject(projectName, billingAccount, ProjectTemplate( Map("roles/owner" -> projectOwners), projectServices), Map.empty), Duration.Inf)
+      val project = RawlsBillingProject(projectName, Map(ProjectRoles.Owner -> ownerGroup), "", CreationStatuses.Creating, Option(billingAccount.accountName))
+      Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
+      Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
+        gcsDAO.setupProject(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)).map(_.get)
+      }, 6 minutes)
     } finally {
+      gcsDAO.deleteGoogleGroup(ownerGroup)
       gcsDAO.deleteProject(projectName)
     }
   }

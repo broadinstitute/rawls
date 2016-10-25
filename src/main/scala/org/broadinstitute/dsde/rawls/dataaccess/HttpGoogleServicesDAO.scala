@@ -625,7 +625,22 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): Future[Unit] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit] = {
+    val credential = getBillingServiceAccountCredential
+
+    val cloudResManager = getCloudResourceManager(credential)
+
+    retryWhen500orGoogleError(() => {
+      executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
+    }).recover {
+      case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
+    } map ( _ => ())
+
+  }
+
+  override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate): Future[Try[Unit]] = {
+    val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -633,18 +648,17 @@ class HttpGoogleServicesDAO(
     val computeManager = getComputeManager(credential)
 
     val projectResourceName = s"projects/${projectName.value}"
-    for {
-      // create the project
-      project <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(cloudResManager.projects().create(new Project().setName(projectName.value).setProjectId(projectName.value).setLabels(Map("billingaccount" -> labelSafeString(billingAccount.displayName)))))
-      }).recover {
-        case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-      }
+
+    // all of these things should be idempotent
+    toFutureTry(for {
+      _ <- Future.traverse(project.groups.values) { group => createGoogleGroup(group).recover {
+        case t: HttpResponseException if t.getStatusCode == 409 => group
+      } }
 
       // set the billing account
       billing <- retryWhen500orGoogleError(() => {
-        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount.accountName.value)))
+        val billingAccount = project.billingAccount.getOrElse(throw new RawlsException(s"billing account undefined for project ${project.projectName.value}")).value
+        executeGoogleRequest(billingManager.projects().updateBillingInfo(projectResourceName, new ProjectBillingInfo().setBillingEnabled(true).setBillingAccountName(billingAccount)))
       })
 
       // get current permissions
@@ -654,7 +668,7 @@ class HttpGoogleServicesDAO(
 
       // add any missing permissions
       policy <- retryWhen500orGoogleError(() => {
-        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${groups(ProjectRoles.Owner).groupEmail.value}")))
+        val updatedTemplate = projectTemplate.copy(policies = projectTemplate.policies + ("roles/viewer" -> Seq(s"group:${project.groups(ProjectRoles.Owner).groupEmail.value}")))
         val updatedPolicy = new Policy().setBindings(updateBindings(bindings, updatedTemplate))
         executeGoogleRequest(cloudResManager.projects().setIamPolicy(projectName.value, new SetIamPolicyRequest().setPolicy(updatedPolicy)))
       })
@@ -665,13 +679,20 @@ class HttpGoogleServicesDAO(
       })})
 
       // create project usage export bucket
-      bucket <- retryWhen500orGoogleError(() => {
+      exportBucket <- retryWithRecoverWhen500orGoogleError(() => {
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
-      })
+      }) { case t: HttpResponseException if t.getStatusCode == 409 => new Bucket().setName(projectUsageExportBucketName(projectName)) }
+
+      cromwellAuthBucket <- createCromwellAuthBucket(projectName)
+
+      _ <- Future { // don't retry this last step because it may take several minutes for this to happen and this whole process will retry
+        val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
+        executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
+      }
     } yield {
       // nothing
-    }
+    })
   }
 
   def labelSafeString(s: String): String = {
@@ -699,20 +720,6 @@ class HttpGoogleServicesDAO(
   }
 
   def projectUsageExportBucketName(projectName: RawlsBillingProjectName) = s"${projectName.value}-usage-export"
-
-  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = {
-    val credential = getBillingServiceAccountCredential
-    val computeManager = getComputeManager(credential)
-
-    toFutureTry {
-      Future {
-        blocking {
-          val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
-          executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
-        }
-      }
-    }
-  }
 
   def getComputeManager(credential: Credential): Compute = {
     new Compute.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()

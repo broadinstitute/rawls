@@ -94,8 +94,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO,
-      ProjectTemplate(Map.empty, Seq.empty)
+      directoryDAO
     )_
 
     val genomicsServiceConstructor = GenomicsService.constructor(

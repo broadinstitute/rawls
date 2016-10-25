@@ -169,8 +169,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        directoryDAO,
-        ProjectTemplate(Map.empty, Seq.empty)
+        directoryDAO
       )_
 
       val execServiceBatchSize = 3
