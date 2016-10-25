@@ -96,7 +96,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }.toMap
   }
 
-  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready)
+  def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
 
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
@@ -194,16 +194,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userOwner)), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map(ProjectRoles.User -> Set(nestedProjectGroup))), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject1 = RawlsBillingProject(testProject1Name, generateBillingGroups(testProject1Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map(ProjectRoles.User -> Set(nestedProjectGroup))), "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
-    val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject2 = RawlsBillingProject(testProject2Name, generateBillingGroups(testProject2Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userWriter)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
-    val testProject3 = RawlsBillingProject(testProject3Name, generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready)
+    val testProject3 = RawlsBillingProject(testProject3Name, generateBillingGroups(testProject3Name, Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set(userReader)), Map.empty), "http://cromwell-auth-url.example.com", CreationStatuses.Ready, None)
 
     val makeWorkspace = makeWorkspaceWithUsers(Map(
       WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
@@ -567,7 +567,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set(userWriter))
     val readerGroup = makeRawlsGroup(s"${wsName} READER", Set(userReader))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty), "testBucketUrl", CreationStatuses.Ready)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(RawlsUser(userInfo))), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
