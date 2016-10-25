@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.actor.{Actor, Props}
+import org.broadinstitute.dsde.rawls.build.BuildInfo
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -52,7 +53,7 @@ trait RootRawlsApiService extends HttpService {
     }
   }
 
-  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/2.1.1"
+  private val swaggerUiPath = "META-INF/resources/webjars/swagger-ui/" + BuildInfo.swaggerUIVersion
 
   val swaggerRoute = {
     get {
