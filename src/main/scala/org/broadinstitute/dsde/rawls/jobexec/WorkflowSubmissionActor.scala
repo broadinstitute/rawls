@@ -250,7 +250,11 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failures = results collect {
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
-        val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(failure.toMessageList.map(AttributeString), wfRec.id) }
+
+        val failureMessages = failures map { case (wfRec, failure) =>
+          logger.error("cromwell ExecutionServiceFailure")
+          logger.error(failure.toString)
+          dataAccess.workflowQuery.saveMessages(failure.toMessageList.map(AttributeString), wfRec.id) }
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
