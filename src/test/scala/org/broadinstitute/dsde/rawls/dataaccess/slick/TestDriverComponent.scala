@@ -32,7 +32,7 @@ object DbResource {
   private val liquibaseChangeLog = liquibaseConf.getString("changelog")
 
   val dataSource = new SlickDataSource(config)(TestExecutionContext.testExecutionContext)
-//  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
+  dataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
 }
 
 /**
