@@ -38,6 +38,10 @@ object WorkflowSubmissionActor {
     Props(new WorkflowSubmissionActor(dataSource, methodRepoDAO, googleServicesDAO, executionServiceCluster, batchSize, credential, pollInterval, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, runtimeOptions))
   }
 
+  def cromwellFailureToMessageList(failure: ExecutionServiceFailure): Seq[AttributeString] = {
+    Seq(AttributeString(failure.message)) ++ failure.errors.getOrElse(JsArray()).elements.map(err => AttributeString(err.toString))
+  }
+
   sealed trait WorkflowSubmissionMessage
   case object ScheduleNextWorkflowQuery extends WorkflowSubmissionMessage
   case object LookForWorkflows extends WorkflowSubmissionMessage
@@ -250,7 +254,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failures = results collect {
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
-        val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(Seq(AttributeString(failure.message)), wfRec.id) }
+        val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(cromwellFailureToMessageList(failure), wfRec.id) }
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)

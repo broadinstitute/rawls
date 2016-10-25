@@ -34,7 +34,7 @@ case class ExecutionServiceStatus(
   status: String
 )
 
-case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsValue])
+case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray])
 
 // Cromwell's response to workflow validation
 case class ExecutionServiceValidation(
