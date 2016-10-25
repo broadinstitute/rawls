@@ -36,7 +36,10 @@ case class ExecutionServiceStatus(
 
 case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray]) {
   def toMessageList: Seq[String] = {
-    Seq(message) ++ errors.getOrElse(JsArray()).elements.map(err => err.toString)
+    Seq(message) ++ errors.getOrElse(JsArray()).elements.map( {
+      case err:JsString => err.convertTo[String] //otherwise spray escapes the quotes
+      case err:JsValue => err.toString
+    })
   }
 }
 
