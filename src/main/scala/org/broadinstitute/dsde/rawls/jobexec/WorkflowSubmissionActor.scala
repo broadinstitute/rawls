@@ -17,6 +17,7 @@ import _root_.slick.dbio.Effect.{Read, Write}
 import org.joda.time.DateTime
 import spray.http.{OAuth2BearerToken, StatusCodes}
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -178,6 +179,13 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     })
   }
 
+  def execServiceFailureMessages(failure: ExecutionServiceFailure): Seq[AttributeString] = {
+    Seq(AttributeString(failure.message)) ++ failure.errors.getOrElse(JsArray()).elements.map( {
+      case err:JsString => AttributeString(err.convertTo[String]) //otherwise spray escapes the quotes
+      case err:JsValue => AttributeString(err.toString)
+    })
+  }
+
   //submit the batch of workflows with the given ids
   def submitWorkflowBatch(workflowIds: Seq[Long])(implicit executionContext: ExecutionContext): Future[WorkflowSubmissionMessage] = {
 
@@ -250,7 +258,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failures = results collect {
           case (wfRec, Right(failure: ExecutionServiceFailure)) => (wfRec, failure)
         }
-        val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(failure.toMessageList.map(AttributeString), wfRec.id) }
+        val failureMessages = failures map { case (wfRec, failure) => dataAccess.workflowQuery.saveMessages(execServiceFailureMessages(failure), wfRec.id) }
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
