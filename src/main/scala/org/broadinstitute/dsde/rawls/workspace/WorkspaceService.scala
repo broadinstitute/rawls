@@ -450,6 +450,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @return
    */
   def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] = {
+
+    import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+
     val overwriteGroupMessagesFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
@@ -460,7 +463,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
     for {
-      (overwriteGroupMessages, emailsNotFound) <- overwriteGroupMessagesFuture
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMake) <- overwriteGroupMessagesFuture
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
     } yield {
       overwriteGroupResults.map {
@@ -468,7 +471,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           val emailNotFoundReports = emailsNotFound.map( email => ErrorReport( StatusCodes.NotFound, email ) )
 
           if (emailNotFoundReports.isEmpty) {
-            RequestComplete(StatusCodes.OK)
+            val changesMade = actualChangesToMake.map { case (member, accessLevel) =>
+              member match {
+                case Left(userRef) => WorkspaceACLUpdate(userRef.userSubjectId.value, accessLevel)
+                case Right(groupRef) => WorkspaceACLUpdate(groupRef.groupName.value, accessLevel)
+              }
+            }.toList
+            RequestComplete(StatusCodes.OK, changesMade)
           } else {
             //this is a case where we don't want to rollback the transaction in the event of getting an error.
             //we will process the emails that are valid, and report any others as invalid
@@ -495,7 +504,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[String])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[String], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersByAccessLevel(workspaceContext.workspaceId)
@@ -549,7 +558,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
 
       // voila
-      (overwriteGroupMessages, emailsNotFound)
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMake)
     }
   }
 
