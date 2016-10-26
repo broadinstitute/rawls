@@ -21,6 +21,8 @@ resolvers += "artifactory-releases" at artifactory + "libs-release"
 
 resolvers += "artifactory-snapshots" at artifactory + "libs-snapshot"
 
+val swaggerUIV = "2.1.1"
+
 libraryDependencies ++= {
   val akkaV = "2.3.6"
   val sprayV = "1.3.2"
@@ -36,7 +38,7 @@ libraryDependencies ++= {
     "io.spray" %% "spray-client" % sprayV,
     "io.spray" %% "spray-http" % sprayV,
     "io.spray" %% "spray-json" % "1.3.1",
-    "org.webjars" % "swagger-ui" % "2.1.1",
+    "org.webjars" % "swagger-ui" % swaggerUIV,
     "org.apache.commons" % "commons-jexl" % "2.1.1",
     ("org.broadinstitute" %% "wdl4s" % "0.4"),
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
@@ -151,7 +153,7 @@ resourceGenerators in Compile <+= Def.task {
   // jenkins sets BUILD_NUMBER and GIT_COMMIT environment variables
   val buildNumber = sys.env.getOrElse("BUILD_NUMBER", default = "None")
   val gitHash = sys.env.getOrElse("GIT_COMMIT", default = "None")
-  val contents = "version {\nbuild.number=%s\ngit.hash=%s\nversion=%s\n}".format(buildNumber, gitHash, version.value)
+  val contents = "version {\nbuild.number=%s\ngit.hash=%s\nversion=%s\nswaggerUIVersion=%s}".format(buildNumber, gitHash, version.value, swaggerUIV)
   IO.write(file, contents)
   Seq(file)
 }

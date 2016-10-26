@@ -154,6 +154,7 @@ object Boot extends App with LazyLogging {
       genomicsServiceConstructor,
       statisticsServiceConstructor,
       ApplicationVersion(conf.getString("version.git.hash"), conf.getString("version.build.number"), conf.getString("version.version")),
+      conf.getString("version.swaggerUIVersion"),
       clientSecrets.getDetails.getClientId,
       submissionTimeout
     ),
