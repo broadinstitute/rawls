@@ -67,8 +67,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO,
-      ProjectTemplate(Map.empty, Seq.empty)
+      directoryDAO
     )_
 
     val execServiceBatchSize = 3
@@ -336,11 +335,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     assertResult(Map(
-      "owner-access" -> WorkspaceAccessLevels.Owner,
+      testData.userProjectOwner.userEmail.value -> WorkspaceAccessLevels.ProjectOwner,
+      testData.userOwner.userEmail.value -> WorkspaceAccessLevels.Owner,
       "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
       "group@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
-      "writer-access" -> WorkspaceAccessLevels.Write,
-      "reader-access" -> WorkspaceAccessLevels.Read)) {
+      testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Write,
+      testData.userReader.userEmail.value -> WorkspaceAccessLevels.Read)) {
       vData
     }
   }
@@ -369,10 +369,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
 
     assertResult(Map(
-      "owner-access" -> WorkspaceAccessLevels.Owner,
+      testData.userProjectOwner.userEmail.value -> WorkspaceAccessLevels.ProjectOwner,
+      testData.userOwner.userEmail.value -> WorkspaceAccessLevels.Owner,
       "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
-      "writer-access" -> WorkspaceAccessLevels.Write,
-      "reader-access" -> WorkspaceAccessLevels.Read,
+      testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Write,
+      testData.userReader.userEmail.value -> WorkspaceAccessLevels.Read,
       "group@whitehouse.gov" -> WorkspaceAccessLevels.Read), "Add ACL should actually do so") {
       addedACLs
     }
@@ -391,10 +392,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
 
     assertResult(Map(
-      "owner-access" -> WorkspaceAccessLevels.Owner,
+      testData.userProjectOwner.userEmail.value -> WorkspaceAccessLevels.ProjectOwner,
+      testData.userOwner.userEmail.value -> WorkspaceAccessLevels.Owner,
       "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
-      "writer-access" -> WorkspaceAccessLevels.Write,
-      "reader-access" -> WorkspaceAccessLevels.Read,
+      testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Write,
+      testData.userReader.userEmail.value -> WorkspaceAccessLevels.Read,
       "group@whitehouse.gov" -> WorkspaceAccessLevels.Write), "Update ACL should actually do so") {
       updatedACLs
     }
@@ -413,10 +415,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       .asInstanceOf[RequestComplete[(StatusCode, Map[String, WorkspaceAccessLevel])]].response
 
     assertResult(Map(
-      "owner-access" -> WorkspaceAccessLevels.Owner,
+      testData.userProjectOwner.userEmail.value -> WorkspaceAccessLevels.ProjectOwner,
+      testData.userOwner.userEmail.value -> WorkspaceAccessLevels.Owner,
       "obama@whitehouse.gov" -> WorkspaceAccessLevels.Owner,
-      "writer-access" -> WorkspaceAccessLevels.Write,
-      "reader-access" -> WorkspaceAccessLevels.Read), "Remove ACL should actually do so") {
+      testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Write,
+      testData.userReader.userEmail.value -> WorkspaceAccessLevels.Read), "Remove ACL should actually do so") {
       removedACLs
     }
   }
@@ -465,7 +468,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+    assertResult(Vector((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
@@ -520,7 +523,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+    assertResult(Vector((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
@@ -576,7 +579,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+    assertResult(Vector((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
@@ -631,7 +634,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Vector(("owner-access", WorkspaceAccessLevels.Owner), ("reader-access",WorkspaceAccessLevels.Read), ("writer-access",WorkspaceAccessLevels.Write))) {
+    assertResult(Vector((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 

@@ -41,7 +41,9 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, owners: Set[RawlsUserRef], users: Set[RawlsUserRef], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus)
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName])
+
+case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -121,9 +123,14 @@ object UserAuthJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
+  implicit object ProjectRoleFormat extends RootJsonFormat[ProjectRole] {
+    override def write(obj: ProjectRole): JsValue = JsString(obj.toString)
 
-  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
+    override def read(json: JsValue): ProjectRole = json match {
+      case JsString(name) => ProjectRoles.withName(name)
+      case _ => throw new DeserializationException("could not deserialize project role")
+    }
+  }
 
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
 
@@ -132,6 +139,10 @@ object UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
+
+  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
+
+  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
 
@@ -146,16 +157,9 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 
-  implicit object ProjectRoleFormat extends RootJsonFormat[ProjectRole] {
-    override def write(obj: ProjectRole): JsValue = JsString(obj.toString)
-
-    override def read(json: JsValue): ProjectRole = json match {
-      case JsString(name) => ProjectRoles.withName(name)
-      case _ => throw new DeserializationException("could not deserialize project role")
-    }
-  }
-
   implicit val RawlsBillingProjectMembershipFormat = jsonFormat3(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
+
+  implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 }

@@ -34,13 +34,11 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  private def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), Set.empty, Set.empty, "mockBucketUrl", CreationStatuses.Ready)
-
   private def createProject(services: TestApiService, project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
     Put(s"/admin/billing/register/${project.projectName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.Created) {
+        assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
       }
@@ -48,7 +46,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/billing/${project.projectName.value}/owner/${owner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
+        assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
       }
@@ -67,7 +65,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          loadedProject.users.contains(testData.userWriter) && !loadedProject.owners.contains(testData.userWriter)
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
 
@@ -79,7 +77,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.users.contains(testData.userWriter) && loadedProject.owners.contains(testData.userWriter)
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
   }
@@ -97,7 +95,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.users.contains(testData.userReader) && !loadedProject.owners.contains(testData.userReader)
+          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
         }
       }
 
@@ -109,7 +107,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
         }
         assert {
           val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-          !loadedProject.users.contains(testData.userReader) && !loadedProject.owners.contains(testData.userReader)
+          !loadedProject.groups(ProjectRoles.User).users.contains(testData.userReader) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userReader)
         }
       }
   }
@@ -146,7 +144,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.billingRoutes) ~>
       check {
         assert {
-          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userWriter)
+          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
         }
       }
 
@@ -157,7 +155,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           status
         }
         assert {
-          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.users.contains(testData.userWriter)
+          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userWriter)
         }
       }
   }
@@ -173,7 +171,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           status
         }
         assert {
-          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.owners.contains(testData.userWriter)
+          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
         }
       }
   }
@@ -203,6 +201,7 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
   it should "return 204 when creating a project with accessible billing account" in withTestDataApiServices { services =>
     val projectName = RawlsBillingProjectName("test_good")
+
     Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
       sealRoute(services.billingRoutes) ~>
       check {
@@ -212,7 +211,8 @@ class BillingApiServiceSpec extends ApiServiceSpec {
 
         runAndWait(rawlsBillingProjectQuery.load(projectName)) match {
           case None => fail("project does not exist in db")
-          case Some(project) => assert(project.users.isEmpty && project.owners.size == 1 && project.owners.head.userSubjectId.value == "123456789876543212345")
+          case Some(project) =>
+            assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
         }
       }
   }

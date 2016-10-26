@@ -74,6 +74,10 @@ trait RawlsGroupComponent {
       loadGroup(findGroupByName(groupRef.groupName.value))
     }
 
+    def loadEmails(refs: Seq[RawlsGroupRef]): ReadAction[Map[RawlsGroupRef, RawlsGroupEmail]] = {
+      findGroupsByNames(refs.map(_.groupName.value)).result.map(_.map(rec => RawlsGroupRef(RawlsGroupName(rec.groupName)) -> RawlsGroupEmail(rec.groupEmail)).toMap)
+    }
+
     def subGroupEmailsQuery: GroupMemberEmailQuery = {
       for {
         groupSubGroupRec <- groupSubgroupsQuery
@@ -90,6 +94,10 @@ trait RawlsGroupComponent {
 
     def loadGroupByEmail(groupEmail: RawlsGroupEmail): ReadAction[Option[RawlsGroup]] = {
       loadGroup(findGroupByEmail(groupEmail.value))
+    }
+
+    def loadGroupRefsByEmails(groupEmail: Seq[RawlsGroupEmail]): ReadAction[Map[String, RawlsGroupRef]] = {
+      rawlsGroupQuery.filter(_.groupEmail.inSetBind(groupEmail.map(_.value))).result.map(_.map(rec => rec.groupEmail -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap)
     }
 
     def delete(groupRef: RawlsGroupRef): ReadWriteAction[Boolean] = {
@@ -117,6 +125,21 @@ trait RawlsGroupComponent {
         case (Some(u), None) => Option(Left(u))
         case (None, Some(g)) => Option(Right(g))
         case _ => None
+      }
+    }
+
+    def loadRefsFromEmails(emails: Seq[String]): ReadAction[Map[String, Either[RawlsUserRef, RawlsGroupRef]]] = {
+      for {
+        userRefs <- rawlsUserQuery.loadUserRefsByEmails(emails.map(RawlsUserEmail))
+        groupRefs <- loadGroupRefsByEmails(emails.map(RawlsGroupEmail))
+      } yield {
+        val bothUserAndGroupEmails = userRefs.keySet.intersect(groupRefs.keySet)
+        if(bothUserAndGroupEmails.isEmpty) {
+          userRefs.map { case (k, v) => k -> Left(v) } ++ groupRefs.map { case (k, v) => k -> Right(v) }
+        } else {
+          throw new RawlsException(s"Database error: emails [$bothUserAndGroupEmails] refer to both a user and a group")
+        }
+
       }
     }
 
@@ -257,6 +280,10 @@ trait RawlsGroupComponent {
 
     def findGroupByName(name: String): GroupQuery = {
       rawlsGroupQuery.filter(_.groupName === name)
+    }
+
+    def findGroupsByNames(names: Seq[String]): GroupQuery = {
+      rawlsGroupQuery.filter(_.groupName.inSetBind(names))
     }
 
     private def findGroupByEmail(email: String): GroupQuery = {

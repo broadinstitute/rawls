@@ -84,7 +84,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, projectId: String, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
 
     def workspaceAccessGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
       RawlsGroup(RawlsGroupName(s"fc-${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), users, Set.empty)
@@ -239,8 +239,11 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount, projectTemplate: ProjectTemplate): Future[Unit] = Future.successful(Unit)
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit] = Future.successful(Unit)
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
-  override def setProjectUsageExportBucket(projectName: RawlsBillingProjectName): Future[Try[Unit]] = Future.successful(Try(Unit))
+  override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = Future.successful {
+    project.groups.values.foreach(group => createGoogleGroup(group))
+    Try(Unit)
+  }
 }
