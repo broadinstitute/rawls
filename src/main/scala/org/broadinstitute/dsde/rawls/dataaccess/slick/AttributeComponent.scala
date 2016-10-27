@@ -154,24 +154,7 @@ trait AttributeComponent {
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
 
-  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord) {
-    private type WorkspaceAttributeQueryType = driver.api.Query[WorkspaceAttributeTable, WorkspaceAttributeRecord, Seq]
-
-    def findByNameQuery(attrName: AttributeName): WorkspaceAttributeQueryType = {
-      filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
-    }
-
-    def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue): WorkspaceAttributeQueryType = {
-      findByNameQuery(attrName).filter { rec =>
-        attrValue match {
-          case AttributeString(s) => rec.valueString === s
-          case AttributeNumber(n) => rec.valueNumber === n.doubleValue
-          case AttributeBoolean(b) => rec.valueBoolean === b
-          case _ => throw new RawlsException("Unsupported attribute type")
-        }
-      }
-    }
-  }
+  protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
 
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
@@ -288,6 +271,21 @@ trait AttributeComponent {
       }
 
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, valueString, valueNumber, valueBoolean, None, listIndex, listLength)
+    }
+
+    def findByNameQuery(attrName: AttributeName) = {
+      filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
+    }
+
+    def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
+      findByNameQuery(attrName).filter { rec =>
+        attrValue match {
+          case AttributeString(s) => rec.valueString === s
+          case AttributeNumber(n) => rec.valueNumber === n.doubleValue
+          case AttributeBoolean(b) => rec.valueBoolean === b
+          case _ => throw new RawlsException("Unsupported attribute type")
+        }
+      }
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
