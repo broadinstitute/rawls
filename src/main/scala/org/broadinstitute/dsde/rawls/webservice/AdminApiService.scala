@@ -6,8 +6,11 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.net.URLDecoder
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -232,9 +235,21 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
     } ~
     path("admin" / "workspaces") {
       get {
-          requestContext => perRequest(requestContext,
-            WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.ListAllWorkspaces)
+        parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
+          requestContext =>
+            val msg = nameOption match {
+              case None => WorkspaceService.ListAllWorkspaces
+              case Some(attributeName) =>
+                val name = AttributeName.fromDelimitedName(attributeName)
+                (stringOption, numberOption, booleanOption) match {
+                  case (Some(string), None, None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeString(string))
+                  case (None, Some(number), None) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
+                  case (None, None, Some(boolean)) => WorkspaceService.AdminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
+                  case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
+                }
+            }
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), msg)
+        }
       }
     } ~
     path("admin" / "workspaces" / Segment / Segment ) { (workspaceNamespace, workspaceName) =>

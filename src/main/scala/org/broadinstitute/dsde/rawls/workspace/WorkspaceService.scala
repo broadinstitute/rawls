@@ -51,6 +51,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
+  case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
@@ -123,6 +124,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
+    case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
@@ -1364,6 +1366,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.listAll.map(RequestComplete(StatusCodes.OK, _))
       }
+    }
+  }
+
+  def listWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue).map(RequestComplete(StatusCodes.OK, _))
     }
   }
 

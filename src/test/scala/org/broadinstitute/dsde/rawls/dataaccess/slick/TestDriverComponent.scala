@@ -226,6 +226,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val (workspace, workspaceGroups) = makeWorkspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+    val workspacePublished = Workspace(wsName.namespace, wsName.name + "_published", None, UUID.randomUUID().toString, "aBucket3", currentTime(), currentTime(), "testUser",
+      wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
+    val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", None, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+
     val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
     val realmWsName = wsName.name + "withRealm"
 
@@ -467,6 +471,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace),
+        workspaceQuery.save(workspacePublished),
+        workspaceQuery.save(workspaceNoAttrs),
         workspaceQuery.save(workspaceNoGroups),
         workspaceQuery.save(workspaceWithRealm),
         workspaceQuery.save(otherWorkspaceWithRealm),

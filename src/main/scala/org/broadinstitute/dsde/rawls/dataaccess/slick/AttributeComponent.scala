@@ -291,6 +291,21 @@ trait AttributeComponent {
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, valueString, valueNumber, valueBoolean, None, listIndex, listLength)
     }
 
+    def findByNameQuery(attrName: AttributeName) = {
+      filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
+    }
+
+    def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
+      findByNameQuery(attrName).filter { rec =>
+        attrValue match {
+          case AttributeString(s) => rec.valueString === s
+          case AttributeNumber(n) => rec.valueNumber === n.doubleValue
+          case AttributeBoolean(b) => rec.valueBoolean === b
+          case _ => throw new RawlsException("Unsupported attribute type")
+        }
+      }
+    }
+
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }

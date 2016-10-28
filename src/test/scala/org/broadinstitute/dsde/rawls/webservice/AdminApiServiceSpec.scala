@@ -1095,7 +1095,37 @@ AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) { status }
         responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups))
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished, testData.workspaceNoAttrs))
+      }
+  }
+
+  it should "return 200 when getting workspaces by a string attribute" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished))
+      }
+  }
+
+  it should "return 200 when getting workspaces by a numeric attribute" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished))
+      }
+  }
+
+  it should "return 200 when getting workspaces by a boolean attribute" in withTestDataApiServices { services =>
+    Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        responseAs[Array[Workspace]] should contain
+        theSameElementsAs(Array(testData.workspacePublished))
       }
   }
 

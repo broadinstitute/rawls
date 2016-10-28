@@ -1158,6 +1158,27 @@ paths:
         - workspaces
       summary: list all workspaces
       operationId: listAllWorkspaces
+      parameters:
+        - in: query
+          description: Optional workspace attribute to filter on
+          name: attributeName
+          required: false
+          type: string
+        - in: query
+          description: attribute value (for String attributes)
+          name: valueString
+          required: false
+          type: string
+        - in: query
+          description: attribute value (for numerical attributes)
+          name: valueNumber
+          required: false
+          type: number
+        - in: query
+          description: attribute value (for boolean attributes)
+          name: valueBoolean
+          required: false
+          type: boolean
       security:
         - authorization:
             - openid
@@ -4130,11 +4151,11 @@ definitions:
   ValidatedMethodConfiguration:
     description: ''
     required:
-      -methodConfiguration
-      -validInputs
-      -invalidInputs
-      -validOutputs
-      -invalidOutputs
+      - methodConfiguration
+      - validInputs
+      - invalidInputs
+      - validOutputs
+      - invalidOutputs
     properties:
       validInputs:
         type: array
