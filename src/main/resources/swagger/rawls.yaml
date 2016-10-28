@@ -3247,7 +3247,7 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
-  '/api/workspaces/{workspaceNamespace}/{workspaceName}/getBucketUsage':
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage':
     get:
       responses:
         '200':
@@ -4381,7 +4381,7 @@ definitions:
     properties:
       usageInBytes:
         type: integer
-        description: The current storage bucked usage in bytes
+        description: The current storage bucket usage in bytes
 
   Attribute:
     description: ''

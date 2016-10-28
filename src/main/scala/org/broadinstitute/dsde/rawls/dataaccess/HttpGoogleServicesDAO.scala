@@ -326,27 +326,25 @@ class HttpGoogleServicesDAO(
 
   override def getBucketUsage(bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
     def sumItemSizes(items: java.util.List[StorageObject]) = {
-      (BigInt(0) /: items) { (sum, o) => sum + o.getSize }
+      items.map(o => BigInt(o.getSize)).sum
     }
 
-    def processPage(pageToken: Option[String] = None): Future[BigInt] = {
+    def fetchUsage(sum: BigInt, pageToken: Option[String] = None): Future[BigInt] = {
       val fetcher = getStorage(getBucketServiceAccountCredential).objects().list(bucketName)
-      if (maxResults.isDefined) fetcher setMaxResults maxResults.get
-      if (pageToken.isDefined) fetcher setPageToken pageToken.get
+      maxResults.foreach(fetcher.setMaxResults(_))
+      pageToken.foreach(fetcher.setPageToken)
 
-      retryWithRecoverWhen500orGoogleError(() => {
+      retryWhen500orGoogleError(() => {
         val result = executeGoogleRequest(fetcher)
-        result match {
-          case r if r.getItems == null => BigInt(0)
-          case r if r.getNextPageToken == null => sumItemSizes(r.getItems)
-          case r => sumItemSizes(r.getItems) + Await.result(processPage(Some(result.getNextPageToken)), Duration.Inf)
-        }
-      }) {
-        case e: HttpResponseException => throw new RawlsException(s"Error gathering storage bucket usage: ${e.getMessage}")
+        val newSum = Option(result.getItems).map(sumItemSizes).getOrElse(BigInt(0)) + sum
+        (newSum, Option(result.getNextPageToken))
+      }) flatMap {
+        case (newSum, None) => Future.successful(newSum)
+        case (newSum, Some(nextPageToken)) => fetchUsage(newSum, Some(nextPageToken))
       }
     }
 
-    processPage()
+    fetchUsage(BigInt(0))
   }
 
   override def getBucket(bucketName: String): Future[Option[Bucket]] = {
