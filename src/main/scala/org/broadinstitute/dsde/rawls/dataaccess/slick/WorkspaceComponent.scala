@@ -231,6 +231,16 @@ trait WorkspaceComponent {
       }
     }
 
+    /**
+      * Lists all workspaces with a particular attribute name/value pair.
+      *
+      * ** Note: This is an inefficient query.  It performs a full scan of the attribute table since
+      *    there is no index on attribute name and/or value.  This method is only being used in one
+      *    place; if you find yourself needing this for other things, consider adding such an index.
+      * @param attrName
+      * @param attrValue
+      * @return
+      */
     def getWorkspacesWithAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
       for {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
