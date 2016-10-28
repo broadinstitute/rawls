@@ -30,25 +30,25 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-3">
         <sql stripComments="true">
-            insert ignore into `GROUP` select group_name, group_email from super_owners_temp_no_realm
+            insert into `GROUP` select group_name, group_email from super_owners_temp_no_realm
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-4">
         <sql stripComments="true">
-            insert ignore into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-5">
         <sql stripComments="true">
-            insert ignore into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-6">
         <sql stripComments="true">
-            insert ignore into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_no_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_no_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
@@ -109,37 +109,37 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-11">
         <sql stripComments="true">
-            insert ignore into `GROUP` select group_name, group_email from super_owners_temp_realm
+            insert into `GROUP` select group_name, group_email from super_owners_temp_realm
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-12">
         <sql stripComments="true">
-            insert ignore into `GROUP` select group_name, group_email from super_owners_temp_realm_intersection
+            insert into `GROUP` select group_name, group_email from super_owners_temp_realm_intersection
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-13">
         <sql stripComments="true">
-            insert ignore into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-14">
         <sql stripComments="true">
-            insert ignore into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm_intersection s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm_intersection s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-15">
         <sql stripComments="true">
-            insert ignore into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-16">
         <sql stripComments="true">
-            insert ignore into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm_intersection s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm_intersection s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
         </sql>
     </changeSet>
 
