@@ -324,7 +324,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val RawlsGroupRefFormat = UserAuthJsonSupport.RawlsGroupRefFormat
+  implicit val RawlsGroupRefFormat = UserModelJsonSupport.RawlsGroupRefFormat
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 

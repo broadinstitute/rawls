@@ -7,10 +7,11 @@ object Dependencies {
 
   val modelDependencies = Seq(
     "io.spray" %% "spray-json" % "1.3.1",
-    "io.spray" %% "spray-http" % sprayV
+    "io.spray" %% "spray-http" % sprayV,
+    "joda-time" % "joda-time" % "2.9.4"
   )
 
-  val rawlsDependencies = Seq(
+  val rawlsDependencies = modelDependencies ++ Seq(
     "com.typesafe" % "config" % "1.3.0",
     ("com.gettyimages" %% "spray-swagger" % "0.5.0").exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11").exclude("com.typesafe.scala-logging", "scala-logging-api_2.11").exclude("com.google.guava", "guava"),
     "com.typesafe.akka" %% "akka-actor" % akkaV,

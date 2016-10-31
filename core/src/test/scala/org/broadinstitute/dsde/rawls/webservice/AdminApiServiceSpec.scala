@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmission
  */
 class
 AdminApiServiceSpec extends ApiServiceSpec {
+  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives

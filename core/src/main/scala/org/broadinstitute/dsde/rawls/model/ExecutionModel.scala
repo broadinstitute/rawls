@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
-import UserAuthJsonSupport.RawlsUserRefFormat
+import UserModelJsonSupport.RawlsUserRefFormat
 
 import spray.json._
 import org.joda.time.DateTime
@@ -311,11 +311,6 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 
   implicit val WorkflowQueueStatusResponseFormat = jsonFormat3(WorkflowQueueStatusResponse)
-}
-
-trait RawlsEnumeration[T <: RawlsEnumeration[T]] { self: T =>
-  def toString: String
-  def withName(name:String): T
 }
 
 object WorkflowStatuses {

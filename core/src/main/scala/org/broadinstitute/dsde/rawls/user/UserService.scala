@@ -387,7 +387,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   import spray.json.DefaultJsonProtocol._
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectNameFormat
+  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsBillingProjectNameFormat
 
   def listBillingAccounts(): Future[PerRequestMessage] =
     gcsDAO.listBillingAccounts(userInfo) map(RequestComplete(_))
