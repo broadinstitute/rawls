@@ -32,14 +32,12 @@ object Settings {
   )
 
   val commonSettings: Seq[_root_.sbt.Def.Setting[_]] =
-    buildSettings ++ assemblySettings ++ testSettings
-  /*
-    ++ List(
+    buildSettings ++ assemblySettings ++ testSettings ++ List(
     organization  := "org.broadinstitute",
     scalaVersion  := "2.11.7",
     resolvers ++= commonResolvers,
     scalacOptions ++= compilerSettings
-  )*/
+  )
 
   val modelSettings = List(
     name := "rawls-model",
