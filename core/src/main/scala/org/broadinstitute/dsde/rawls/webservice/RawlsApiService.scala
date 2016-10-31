@@ -80,6 +80,7 @@ trait RootRawlsApiService extends HttpService {
   }
 
   private def serveSwaggerIndex(): Route = {
+    print(swaggerUiPath)
     val indexHtml = getResourceFileContents(swaggerUiPath + "/index.html")
     complete {
       HttpEntity(ContentType(`text/html`),
