@@ -18,7 +18,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
-import com.google.api.services.storage.model.StorageObject
+import com.google.api.services.storage.model.{Bucket, StorageObject}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -329,12 +329,13 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
   }
 
-  it should "calculate data size" in {
-    val random = scala.util.Random
-    val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, testProject, UUID.randomUUID.toString, testWorkspace, None), Duration.Inf)
-
+  it should "calculate bucket usage" in {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+
+    val bucketName = "services-dao-spec-" + UUID.randomUUID.toString
+    val bucket = new Bucket().setName(bucketName)
+    val bucketInserter = storage.buckets.insert(testProject, bucket)
+    Await.result(retry(when500)(() => Future { bucketInserter.execute() }), Duration.Inf)
 
     // add some objects and check size computation
     val objectContent = "Test Content"
@@ -343,14 +344,14 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     for (i <- 1 to objectCount) {
       val so = new StorageObject().setName(s"HttpGoogleServicesDAOObject$i")
       val media = new InputStreamContent("text/plain", new ByteArrayInputStream(objectContent.getBytes))
-      val inserter = storage.objects().insert(googleWorkspaceInfo.bucketName, so, media)
+      val inserter = storage.objects().insert(bucketName, so, media)
       inserter.getMediaHttpUploader.setDirectUploadEnabled(true)
       Await.result(retry(when500)(() => Future { inserter.execute() }), Duration.Inf)
     }
-    val dataSize = Await.result(gcsDAO.getBucketUsage(googleWorkspaceInfo.bucketName, Some(1L)), Duration.Inf)
+    val dataSize = Await.result(gcsDAO.getBucketUsage(bucketName, Some(1L)), Duration.Inf)
     dataSize should be (objectContent.length * objectCount)
 
-    Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
+    gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor)
   }
 
   private def when500( throwable: Throwable ): Boolean = {

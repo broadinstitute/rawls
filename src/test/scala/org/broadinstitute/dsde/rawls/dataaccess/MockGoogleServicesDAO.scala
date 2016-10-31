@@ -120,7 +120,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = Future.successful(Some(List.fill(5)(new BucketAccessControl)))
 
-  override def getBucketUsage(bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(BigInt(0))
+  override def getBucketUsage(bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(BigInt(42))
 
   override def diagnosticBucketWrite(user: RawlsUser, bucketName: String) = Future.successful(None)
 

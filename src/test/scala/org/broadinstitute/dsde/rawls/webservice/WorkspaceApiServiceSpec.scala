@@ -1847,5 +1847,39 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-}
+  it should "return 404 when requesting bucket size for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}x/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
 
+  // TODO: adjust user access for this test once the requirements of GAWB-1145 settle down
+  for (access <- Seq("no-access")) {
+    it should s"not allow a $access user to request bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+      Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.NotFound) {
+            status
+          }
+        }
+    }
+  }
+
+  // TODO: adjust user access for this test once the requirements of GAWB-1145 settle down
+  for (access <- Seq("reader-access", "writer-access", "owner-access")) {
+    it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(access) { services =>
+      Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) { status }
+          assertResult(BucketUsageResponse(BigInt(42))) {
+            responseAs[BucketUsageResponse]
+          }
+        }
+    }
+  }
+
+}
