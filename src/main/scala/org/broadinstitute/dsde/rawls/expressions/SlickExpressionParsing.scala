@@ -396,7 +396,18 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
               case AttributeValueEmptyList => Seq.empty
               case av: AttributeValue => Seq(av)
               case avl: AttributeValueList => avl.list
-              case badType => throw new RawlsException(s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}")
+              case ae: AttributeEntityReference => throw new RawlsException("Attribute expression returned a reference to an entity.")
+              case ael: AttributeEntityReferenceList => throw new RawlsException("Attribute expression returned a list of entities.")
+              case AttributeEntityReferenceEmptyList => throw new RawlsException("Attribute expression returned a list of entities.")
+              case badType =>
+                val message = s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}"
+                val MAX_ERROR_SIZE = 997
+                val trimmed = if( message.length > MAX_ERROR_SIZE ) {
+                  message.take(MAX_ERROR_SIZE) + "..."
+                } else {
+                  message
+                }
+                throw new RawlsException(trimmed)
             }.flatten)
           }
           //add any missing entities (i.e. those missing the attribute) back into the result map
