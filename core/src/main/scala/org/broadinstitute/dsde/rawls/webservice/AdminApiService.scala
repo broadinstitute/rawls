@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -25,6 +24,7 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
   implicit val executionContext: ExecutionContext
 
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
   import spray.httpx.SprayJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService

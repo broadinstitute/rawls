@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 
@@ -1117,6 +1117,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a string attribute" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1127,6 +1128,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a numeric attribute" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1137,6 +1139,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a boolean attribute" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1184,7 +1187,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
-
     import spray.json.DefaultJsonProtocol._
     Get("/admin/genomics/operations/dummy-job-id") ~>
       sealRoute(services.adminRoutes) ~>
