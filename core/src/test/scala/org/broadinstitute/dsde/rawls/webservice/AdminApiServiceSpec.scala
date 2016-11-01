@@ -8,17 +8,19 @@ import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import spray.http.StatusCodes
-import spray.json.JsObject
+
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 
+import spray.http._
+import spray.json._
+
 /**
  * Created by tsharpe on 9/28/15.
  */
-class
-AdminApiServiceSpec extends ApiServiceSpec {
+class AdminApiServiceSpec extends ApiServiceSpec {
+
   import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
@@ -38,8 +40,6 @@ AdminApiServiceSpec extends ApiServiceSpec {
       withApiServices(dataSource)(testCode)
     }
   }
-
-  import scala.collection.JavaConversions._
 
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
@@ -80,6 +80,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   "AdminApi" should "return 200 when listing active submissions" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -94,6 +95,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
   // NOTE: we no longer support deleting entities that are tied to an existing submission - this will cause a
   // Referential integrity constraint violation - if we change that behavior we need to fix this test
   ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -356,6 +358,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing a user's billing projects" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
     val project1 = billingProjectFromName("project1")
 
@@ -1103,6 +1106,7 @@ AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1180,7 +1184,8 @@ AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
-    import spray.json._
+
+    import spray.json.DefaultJsonProtocol._
     Get("/admin/genomics/operations/dummy-job-id") ~>
       sealRoute(services.adminRoutes) ~>
       check {
