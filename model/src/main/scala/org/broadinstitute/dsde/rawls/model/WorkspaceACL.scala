@@ -22,7 +22,7 @@ object WorkspaceAccessLevels {
   case object Owner extends WorkspaceAccessLevel
   case object ProjectOwner extends WorkspaceAccessLevel
 
-  val all = Seq(NoAccess, Read, Write, Owner, ProjectOwner)
+  val all: Seq[WorkspaceAccessLevel] = Seq(NoAccess, Read, Write, Owner, ProjectOwner)
   val groupAccessLevelsAscending = Seq(Read, Write, Owner, ProjectOwner)
 
   // note that the canonical string must match the format for GCS ACL roles,
