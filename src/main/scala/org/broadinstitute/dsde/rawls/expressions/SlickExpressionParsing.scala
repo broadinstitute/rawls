@@ -396,6 +396,9 @@ class SlickExpressionEvaluator protected (val parser: DataAccess, val rootEntiti
               case AttributeValueEmptyList => Seq.empty
               case av: AttributeValue => Seq(av)
               case avl: AttributeValueList => avl.list
+              case ae: AttributeEntityReference => throw new RawlsException("Attribute expression returned a reference to an entity.")
+              case ael: AttributeEntityReferenceList => throw new RawlsException("Attribute expression returned a list of entities.")
+              case AttributeEntityReferenceEmptyList => throw new RawlsException("Attribute expression returned a list of entities.")
               case badType => throw new RawlsException(s"unsupported type resulting from attribute expression: $badType: ${badType.getClass}")
             }.flatten)
           }
