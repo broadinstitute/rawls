@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{attributeFormat, AttributeNameFormat}
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeNameFormat, attributeFormat}
 import org.scalatest.{Assertions, FreeSpec}
-import spray.json._
 import spray.json.DefaultJsonProtocol._
+import spray.json._
 
 class AttributeSpec extends FreeSpec with Assertions {
 

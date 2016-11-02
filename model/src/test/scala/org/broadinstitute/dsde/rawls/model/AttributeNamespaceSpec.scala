@@ -1,11 +1,8 @@
-package org.broadinstitute.dsde.rawls.expressions
+package org.broadinstitute.dsde.rawls.model
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.AttributeName
 import org.scalatest.{FlatSpec, Matchers}
-import spray.testkit.ScalatestRouteTest
 
-class AttributeNamespaceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
+class AttributeNamespaceSpec extends FlatSpec with Matchers {
   "AttributeNamespace" should "parse delimited names" in {
     val fromExpectations = Map(
       "simple"              -> AttributeName("default", "simple"),

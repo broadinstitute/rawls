@@ -9,7 +9,8 @@ object Dependencies {
     "io.spray" %% "spray-json" % "1.3.1",
     "io.spray" %% "spray-http" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0"
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 
   val rawlsDependencies = modelDependencies ++ Seq(
@@ -41,7 +42,6 @@ object Dependencies {
     "ch.qos.logback" % "logback-classic" % "1.1.6",
     "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
     "io.spray" %% "spray-testkit" % sprayV % "test",
-    "org.scalatest" %% "scalatest" % "2.2.4" % "test",
     "org.mock-server" % "mockserver-netty" % "3.9.2" % "test"
   )
 }
