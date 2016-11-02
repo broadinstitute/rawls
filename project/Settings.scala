@@ -46,9 +46,13 @@ object Settings {
   ) ++ commonSettings
 
   val rawlsSettings = List(
-    name := "rawls",
+    name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsDependencies
   ) ++ rawlsCompileSettings ++ commonSettings
 
+  val rootSettings = List(
+    name := "rawls",
+    version := "0.1"
+  )
 }

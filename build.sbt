@@ -17,7 +17,12 @@ lazy val rawlsModel: Project = (project in file("model"))
   .settings(modelSettings:_*)
   .withTestSettings
 
-lazy val rawls = project.in(file("core"))
+lazy val rawlsCore = project.in(file("core"))
   .settings(rawlsSettings:_*)
   .dependsOn(rawlsModel)
+  .withTestSettings
+
+lazy val rawls = project.in(file("."))
+  .settings(rootSettings:_*)
+  .aggregate(rawlsCore)
   .withTestSettings
