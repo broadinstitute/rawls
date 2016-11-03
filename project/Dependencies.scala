@@ -9,6 +9,7 @@ object Dependencies {
     "io.spray" %% "spray-json" % "1.3.1",
     "io.spray" %% "spray-http" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
+    "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
