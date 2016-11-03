@@ -28,7 +28,8 @@ object Settings {
 
   val assemblySettings = Seq(
     assemblyMergeStrategy in assembly := customMergeStrategy((assemblyMergeStrategy in assembly).value),
-    test in assembly := {}
+    test in assembly := {},
+    mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot")
   )
 
   val commonSettings: Seq[_root_.sbt.Def.Setting[_]] =
