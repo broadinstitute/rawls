@@ -55,5 +55,5 @@ object Settings {
   val rootSettings = List(
     name := "rawls",
     version := "0.1"
-  )
+  ) ++ commonSettings
 }
