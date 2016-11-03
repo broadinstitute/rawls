@@ -565,4 +565,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     }
   }
 
+  it should s"fail using reserved attribute name sample_id in namespace default for sample entity type" in withDefaultTestDatabase {
+    val e = Entity("test_sample", "Sample", Map(AttributeName.withDefaultNS("sample_id") -> AttributeString("foo")))
+
+    withWorkspaceContext(testData.workspace) { context =>
+      intercept[RawlsException] {
+        runAndWait(entityQuery.save(context, e))
+      }
+    }
+  }
  }

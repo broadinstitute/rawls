@@ -10,7 +10,7 @@ import spray.json._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
-  val reservedAttributeNames = Set("name", "entityType")
+  val reservedAttributeNames = Set("name", "entityType", "workspace_id")
   type AttributeMap = Map[AttributeName, Attribute]
 }
 
@@ -35,6 +35,7 @@ case class AttributeName(
   // enable implicit ordering for sorting
   import scala.math.Ordered.orderingToOrdered
   def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
+  def equalsIgnoreCase(that: AttributeName): Boolean = (this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name))
 }
 
 object AttributeName {

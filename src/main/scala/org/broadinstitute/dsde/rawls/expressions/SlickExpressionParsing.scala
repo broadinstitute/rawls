@@ -231,13 +231,31 @@ trait SlickExpressionParser extends JavaTokenParsers {
   private def entityAttributeFinalFunc(attrName: AttributeName)(context: SlickExpressionContext, queryPipeline: Option[PipeType]): ReadAction[Map[String, Iterable[Attribute]]] = {
     // attributeForNameQuery will only contain attribute records of the given name but for possibly more than 1 entity
     // and in the case of a list there will be more than one attribute record for an entity
-    val attributeForNameQuery = (for {
+    val attributeQuery = for {
       (rootEntityName, entity) <- queryPipeline.get
       attribute <- entityAttributeQuery if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
-    } yield (rootEntityName, entity.name, attribute)).result
+    } yield (rootEntityName, entity.name, attribute)
 
-    attributeForNameQuery.map { entityWithAttributeRecs =>
-      val byRootEnt: Map[String, Seq[(String, String, EntityAttributeRecord)]] = entityWithAttributeRecs groupBy { case (rootEntity, lastEntity, attribRecord) => rootEntity }
+    val attributeForNameQuery =
+      if (attrName.namespace.equalsIgnoreCase(AttributeName.defaultNamespace) && attrName.name.toLowerCase.endsWith(entityIdAttributeSuffix)) {
+        // This query will match an attribute with name in the form [entity type]_id and return the entity's name as an artificial
+        // attribute record. The artificial record consists of all literal columns except the name in the value string spot.
+        // The fighting alligators (<>) at the end allows mapping of the artificial record to the right record case class.
+        val attributeIdQuery = queryPipeline.get.filter { case (rootEntityName, entity) => entity.entityType ++ "_id" === attrName.name && LiteralColumn(AttributeName.defaultNamespace) === attrName.namespace }.map { case (rootEntityName, entity) =>
+          (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
+        }
+
+        // we need to do both queries (unionAll below) because we don't know the entity type until execution time
+        // and this expression could be either [entity type]_id
+        // also note some crazy stuff: if the order of the union below is reversed slick reorders the second select clause and it breaks
+        attributeIdQuery unionAll attributeQuery
+
+      } else {
+        attributeQuery
+      }
+
+    attributeForNameQuery.result.map { entityWithAttributeRecs =>
+      val byRootEnt: Map[String, Seq[(String, String, EntityAttributeRecord)]] = entityWithAttributeRecs.groupBy { case (rootEntity, lastEntity, attribRecord) => rootEntity }
 
       byRootEnt.map { case (rootEnt, attrs) =>
         // unmarshalAttributes requires a structure of ((entity id, attribute rec), option[entity rec]) where the optional entity rec is used for entity references.
@@ -301,7 +319,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
-      case "name" => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
+      case "name" | "workspace_id" => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
       case "entityType" => throw new RawlsException("entityType not valid for workspace")
     }
   }

@@ -18,6 +18,8 @@ trait DriverComponent {
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
+  val entityIdAttributeSuffix = "_id"
+  val workspaceEntityType = "workspace"
 
   import driver.api._
 
@@ -42,8 +44,10 @@ trait DriverComponent {
     if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
   }
 
-  def validateAttributeName(an: AttributeName) = {
-    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name))) {
+  def validateAttributeName(an: AttributeName, entityType: String) = {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
+      AttributeName.withDefaultNS(entityType + entityIdAttributeSuffix).equalsIgnoreCase(an)) {
+
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
     }
   }

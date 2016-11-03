@@ -547,11 +547,14 @@ trait EntityComponent {
   }
 
   def validateEntity(entity: Entity): Unit = {
-    validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
+    if (entity.entityType.equalsIgnoreCase(workspaceEntityType)) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type $workspaceEntityType is reserved", statusCode = StatusCodes.BadRequest))
+    }
+    validateUserDefinedString(entity.entityType)
     validateUserDefinedString(entity.name)
     entity.attributes.keys.foreach { attrName =>
       validateUserDefinedString(attrName.name)
-      validateAttributeName(attrName)
+      validateAttributeName(attrName, entity.entityType)
     }
   }
 
