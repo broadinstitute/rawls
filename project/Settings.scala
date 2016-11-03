@@ -28,7 +28,10 @@ object Settings {
 
   val assemblySettings = Seq(
     assemblyMergeStrategy in assembly := customMergeStrategy((assemblyMergeStrategy in assembly).value),
-    test in assembly := {},
+    test in assembly := {}
+  )
+
+  val rawlsAssemblySettings = Seq(
     mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot")
   )
 
@@ -50,7 +53,7 @@ object Settings {
     name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsDependencies
-  ) ++ rawlsCompileSettings ++ commonSettings
+  ) ++ rawlsCompileSettings ++ rawlsAssemblySettings ++ commonSettings
 
   val rootSettings = List(
     name := "rawls",
