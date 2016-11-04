@@ -108,7 +108,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     withWorkspaceContext(testData.workspace) { context =>
 
       val desiredTypesAndAttrNames = Map(
-        "Sample" -> Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle"),
+        "Sample" -> Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id"),
         //"Aliquot" -> Seq(), NOTE: this is commented out because the db query doesn't return types that have no attributes.
         "Pair" -> Seq("case", "control", "whatsit"),
         "SampleSet" -> Seq("samples", "hasSamples"),
@@ -132,7 +132,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     withWorkspaceContext(testData.workspace) { context =>
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "Sample" -> EntityTypeMetadata(8, Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle")),
+        "Sample" -> EntityTypeMetadata(8, Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
         "Aliquot" -> EntityTypeMetadata(2, Seq()),
         "Pair" -> EntityTypeMetadata(2, Seq("case", "control", "whatsit")),
         "SampleSet" -> EntityTypeMetadata(5, Seq("samples", "hasSamples")),

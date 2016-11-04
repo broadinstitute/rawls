@@ -245,16 +245,21 @@ trait SlickExpressionParser extends JavaTokenParsers {
           (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
         }
 
-        // we need to do both queries (unionAll below) because we don't know the entity type until execution time
-        // and this expression could be either [entity type]_id
-        // also note some crazy stuff: if the order of the union below is reversed slick reorders the second select clause and it breaks
-        attributeIdQuery unionAll attributeQuery
+        // we need to do both queries because we don't know the entity type until execution time
+        // and this expression could be either [entity type]_id or some_other_id
+        // so do the normal query first and if that is empty do the second query, this preserves behavior of any
+        // _id attributes that may have existed (I counted 4) before this change went in
+        // I think using a union here would be better but https://github.com/slick/slick/issues/1571
+        attributeQuery.result flatMap { entityWithAttributeRecs =>
+          if (entityWithAttributeRecs.isEmpty) attributeIdQuery.result
+          else DBIO.successful(entityWithAttributeRecs)
+        }
 
       } else {
-        attributeQuery
+        attributeQuery.result
       }
 
-    attributeForNameQuery.result.map { entityWithAttributeRecs =>
+    attributeForNameQuery.map { entityWithAttributeRecs =>
       val byRootEnt: Map[String, Seq[(String, String, EntityAttributeRecord)]] = entityWithAttributeRecs.groupBy { case (rootEntity, lastEntity, attribRecord) => rootEntity }
 
       byRootEnt.map { case (rootEnt, attrs) =>

@@ -82,6 +82,10 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.type"))
       }
 
+      assertResult(Map("sample8" -> TrySuccess(Seq(AttributeString("1029384756"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample8", "this.foo_id"))
+      }
+
       assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("normal"), AttributeString("tumor"), AttributeString("tumor"))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "this.samples.type"))
       }
