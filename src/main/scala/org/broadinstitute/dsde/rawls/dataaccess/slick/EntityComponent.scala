@@ -547,8 +547,8 @@ trait EntityComponent {
   }
 
   def validateEntity(entity: Entity): Unit = {
-    if (entity.entityType.equalsIgnoreCase(workspaceEntityType)) {
-      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type $workspaceEntityType is reserved", statusCode = StatusCodes.BadRequest))
+    if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type ${Attributable.workspaceEntityType} is reserved", statusCode = StatusCodes.BadRequest))
     }
     validateUserDefinedString(entity.entityType)
     validateUserDefinedString(entity.name)

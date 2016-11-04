@@ -339,7 +339,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.workspace_id"))
       }
 
-      intercept[RawlsException] {
+      assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("workspace"))))) {
         runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "workspace.entityType"))
       }
     }

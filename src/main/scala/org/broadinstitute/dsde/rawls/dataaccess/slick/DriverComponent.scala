@@ -18,8 +18,6 @@ trait DriverComponent {
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
-  val entityIdAttributeSuffix = "_id"
-  val workspaceEntityType = "workspace"
 
   import driver.api._
 
@@ -46,7 +44,7 @@ trait DriverComponent {
 
   def validateAttributeName(an: AttributeName, entityType: String) = {
     if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
-      AttributeName.withDefaultNS(entityType + entityIdAttributeSuffix).equalsIgnoreCase(an)) {
+      AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
 
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
     }

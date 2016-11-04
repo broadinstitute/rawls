@@ -237,7 +237,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
     } yield (rootEntityName, entity.name, attribute)
 
     val attributeForNameQuery =
-      if (attrName.namespace.equalsIgnoreCase(AttributeName.defaultNamespace) && attrName.name.toLowerCase.endsWith(entityIdAttributeSuffix)) {
+      if (attrName.namespace.equalsIgnoreCase(AttributeName.defaultNamespace) && attrName.name.toLowerCase.endsWith(Attributable.entityIdAttributeSuffix)) {
         // This query will match an attribute with name in the form [entity type]_id and return the entity's name as an artificial
         // attribute record. The artificial record consists of all literal columns except the name in the value string spot.
         // The fighting alligators (<>) at the end allows mapping of the artificial record to the right record case class.
@@ -309,8 +309,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
 
     //Might as well call the function now it exists.
     attributeName match {
-      case "name" => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractNameFromRecord)
-      case "entityType" => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractEntityTypeFromRecord)
+      case Attributable.nameReservedAttribute => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractNameFromRecord)
+      case Attributable.entityTypeReservedAttribute => returnMapOfRootEntityToReservedAttribute(queryPipeline.get, extractEntityTypeFromRecord)
     }
   }
 
@@ -319,8 +319,8 @@ trait SlickExpressionParser extends JavaTokenParsers {
     assert(shouldBeNone.isEmpty)
 
     attributeName match {
-      case "name" | "workspace_id" => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
-      case "entityType" => throw new RawlsException("entityType not valid for workspace")
+      case Attributable.nameReservedAttribute | Attributable.workspaceIdAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(context.workspaceContext.workspace.name))).toMap )
+      case Attributable.entityTypeReservedAttribute => DBIO.successful( context.rootEntities.map( _.name -> Seq(AttributeString(Attributable.workspaceEntityType))).toMap )
     }
   }
 

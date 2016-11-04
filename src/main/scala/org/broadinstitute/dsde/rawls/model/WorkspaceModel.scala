@@ -10,7 +10,12 @@ import spray.json._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
-  val reservedAttributeNames = Set("name", "entityType", "workspace_id")
+  val entityIdAttributeSuffix = "_id"
+  val workspaceEntityType = "workspace"
+  val workspaceIdAttribute = workspaceEntityType + entityIdAttributeSuffix
+  val nameReservedAttribute = "name"
+  val entityTypeReservedAttribute = "entityType"
+  val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
 }
 
