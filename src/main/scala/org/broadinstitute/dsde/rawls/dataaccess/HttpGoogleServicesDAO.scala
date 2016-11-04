@@ -239,7 +239,7 @@ class HttpGoogleServicesDAO(
   private def newObjectAccessControl(entity: String, accessLevel: String) =
     new ObjectAccessControl().setEntity(entity).setRole(accessLevel)
 
-  override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any] = {
+  override def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Unit] = {
     val buckets = getStorage(getBucketServiceAccountCredential).buckets
     val deleter = buckets.delete(bucketName)
     retryWithRecoverWhen500orGoogleError(() => {
@@ -253,12 +253,11 @@ class HttpGoogleServicesDAO(
         //This can be used to auto-delete all objects next time the Google lifecycle manager runs (~every 24h).
         //More info: http://bit.ly/1WCYhhf and http://bit.ly/1Py6b6O
         val deleteEverythingRule = new Lifecycle.Rule()
-          .setAction(new Action().setType("delete"))
+          .setAction(new Action().setType("Delete"))
           .setCondition(new Condition().setAge(0))
         val lifecycle = new Lifecycle().setRule(List(deleteEverythingRule))
-        val fetcher = buckets.get(bucketName)
-        val bucketFuture = retryWhen500orGoogleError(() => { executeGoogleRequest(fetcher) })
-        bucketFuture.map(bucket => bucket.setLifecycle(lifecycle))
+        val patcher = buckets.patch(bucketName, new Bucket().setLifecycle(lifecycle))
+        retryWhen500orGoogleError(() => { executeGoogleRequest(patcher) })
 
         system.scheduler.scheduleOnce(deletedBucketCheckSeconds seconds, monitorRef, DeleteBucket(bucketName))
       // Bucket is already deleted
