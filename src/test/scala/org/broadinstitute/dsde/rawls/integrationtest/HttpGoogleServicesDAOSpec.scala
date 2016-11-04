@@ -407,6 +407,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val rule = lifecycle.getRule.head
     rule.getAction.getType should be ("Delete")
     rule.getCondition.getAge should be (0)
+
+    // Final clean-up to make sure that the test bucket will eventually be deleted
+    bucketDeletionMonitor ! DeleteBucket(bucketName)
   }
 
   private def insertObject(bucketName: String, objectName: String, content: String): Unit = {
