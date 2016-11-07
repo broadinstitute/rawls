@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import java.util.concurrent.TimeUnit
 import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, WorkspaceTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -18,14 +19,15 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
 import org.scalatest.{FlatSpec, Matchers}
-import spray.http.{StatusCodes, StatusCode}
+import spray.http.{StatusCode, StatusCodes}
 import spray.testkit.ScalatestRouteTest
+
 import scala.concurrent.{Await, ExecutionContext}
-import scala.concurrent.duration.{FiniteDuration, Duration}
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with WorkspaceTestUtils {
   import driver.api._
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
@@ -444,7 +446,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
-    assertResult(Option(testData.workspaceNoSubmissions)) {
+    assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
       runAndWait(workspaceQuery.findByName(testData.wsName3))
     }
 
@@ -461,7 +463,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "delete a workspace with succeeded submission" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
-    assertResult(Option(testData.workspaceSuccessfulSubmission)) {
+    assertWorkspaceResult(Option(testData.workspaceSuccessfulSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName4))
     }
 
@@ -516,7 +518,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "delete a workspace with failed submission" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
-    assertResult(Option(testData.workspaceFailedSubmission)) {
+    assertWorkspaceResult(Option(testData.workspaceFailedSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName5))
     }
 
@@ -572,7 +574,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "delete a workspace with submitted submission" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
-    assertResult(Option(testData.workspaceSubmittedSubmission)) {
+    assertWorkspaceResult(Option(testData.workspaceSubmittedSubmission)) {
       runAndWait(workspaceQuery.findByName(testData.wsName6))
     }
 
@@ -627,7 +629,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "delete a workspace with mixed submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
-    assertResult(Option(testData.workspaceMixedSubmissions)) {
+    assertWorkspaceResult(Option(testData.workspaceMixedSubmissions)) {
       runAndWait(workspaceQuery.findByName(testData.wsName7))
     }
 

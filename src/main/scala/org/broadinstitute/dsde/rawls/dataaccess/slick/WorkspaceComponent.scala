@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
-import java.util.UUID
+import java.util.{Date, UUID}
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
@@ -97,11 +97,13 @@ trait WorkspaceComponent {
         case None =>
           (workspaceQuery += marshalNewWorkspace(workspace)) andThen
             insertOrUpdateAccessRecords(workspace) andThen
-            upsertAttributes(workspace)
+            upsertAttributes(workspace) andThen
+            updateLastModified(UUID.fromString(workspace.workspaceId))
         case Some(workspaceRecord) =>
           insertOrUpdateAccessRecords(workspace) andThen
             upsertAttributes(workspace) andThen
-            optimisticLockUpdate(workspaceRecord)
+            optimisticLockUpdate(workspaceRecord) andThen
+            updateLastModified(UUID.fromString(workspace.workspaceId))
       } map { _ => workspace }
     }
 
@@ -164,12 +166,24 @@ trait WorkspaceComponent {
       }
     }
 
+    def updateLastModified(workspaceId: UUID) = {
+      val currentTime = new Timestamp(new Date().getTime)
+      findByIdQuery(workspaceId).map(_.lastModified).update(currentTime)
+    }
+
+    def updateLastModified(workspaceName: WorkspaceName) = {
+      val currentTime = new Timestamp(new Date().getTime)
+      findByNameQuery(workspaceName).map(_.lastModified).update(currentTime)
+    }
+
     def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(true)
+      findByNameQuery(workspaceName).map(_.isLocked).update(true) andThen
+        updateLastModified(workspaceName)
     }
 
     def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(false)
+      findByNameQuery(workspaceName).map(_.isLocked).update(false) andThen
+        updateLastModified(workspaceName)
     }
     
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
@@ -199,19 +213,22 @@ trait WorkspaceComponent {
     def deleteWorkspaceEntitiesAndAttributes(workspaceId: UUID) = {
       entityQuery.DeleteEntityAttributesQuery.deleteAction(workspaceId) andThen {
         entityQuery.filter(_.workspaceId === workspaceId).delete
-      }
+      } andThen
+        updateLastModified(workspaceId)
     }
 
     def deleteWorkspaceSubmissions(workspaceId: UUID) = {
       submissionQuery.DeleteSubmissionQuery.deleteAction(workspaceId) andThen {
         submissionQuery.filter(_.workspaceId === workspaceId).delete
-      }
+      } andThen
+        updateLastModified(workspaceId)
     }
 
     def deleteWorkspaceMethodConfigs(workspaceId: UUID) = {
       methodConfigurationQuery.DeleteMethodConfigurationQuery.deleteAction(workspaceId) andThen {
         methodConfigurationQuery.filter(_.workspaceId === workspaceId).delete
-      }
+      } andThen
+        updateLastModified(workspaceId)
     }
 
     def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {

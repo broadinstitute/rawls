@@ -2,13 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.WorkspaceTestUtils
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with WorkspaceTestUtils {
   import driver.api._
 
   private def saveRawlsGroup(name: String, email: String) = {
@@ -60,19 +60,19 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
-    assertResult(workspace) {
+    assertWorkspaceResult(workspace) {
       runAndWait(workspaceQuery.save(workspace))
     }
 
-    assertResult(Option(workspace)) {
+    assertWorkspaceResult(Option(workspace)) {
       runAndWait(workspaceQuery.findById(workspaceId.toString))
     }
 
-    assertResult(Seq(workspace)) {
+    assertWorkspaceResult(Seq(workspace)) {
       runAndWait(workspaceQuery.listByIds(Seq(workspaceId)))
     }
 
-    assertResult(Option(workspace)) {
+    assertWorkspaceResult(Option(workspace)) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
@@ -86,15 +86,15 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
         WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName("owner2")))
     )
 
-    assertResult(updatedWorkspace) {
+    assertWorkspaceResult(updatedWorkspace) {
       runAndWait(workspaceQuery.save(updatedWorkspace))
     }
 
-    assertResult(Option(updatedWorkspace)) {
+    assertWorkspaceResult(Option(updatedWorkspace)) {
       runAndWait(workspaceQuery.findById(workspaceId.toString))
     }
 
-    assertResult(Option(updatedWorkspace)) {
+    assertWorkspaceResult(Option(updatedWorkspace)) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
