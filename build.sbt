@@ -24,5 +24,7 @@ lazy val rawlsCore = project.in(file("core"))
 
 lazy val rawls = project.in(file("."))
   .settings(rootSettings:_*)
+  .aggregate(rawlsModel)
   .aggregate(rawlsCore)
+  .dependsOn(rawlsCore)
   .withTestSettings
