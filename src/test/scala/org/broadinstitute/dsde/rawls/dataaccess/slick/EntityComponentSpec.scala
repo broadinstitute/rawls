@@ -132,12 +132,12 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
     withWorkspaceContext(testData.workspace) { context =>
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "Sample" -> EntityTypeMetadata(8, Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
-        "Aliquot" -> EntityTypeMetadata(2, Seq()),
-        "Pair" -> EntityTypeMetadata(2, Seq("case", "control", "whatsit")),
-        "SampleSet" -> EntityTypeMetadata(5, Seq("samples", "hasSamples")),
-        "PairSet" -> EntityTypeMetadata(1, Seq("pairs")),
-        "Individual" -> EntityTypeMetadata(2, Seq("sset"))
+        "Sample" -> EntityTypeMetadata(8, "sample_id", Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
+        "Aliquot" -> EntityTypeMetadata(2, "aliquot_id", Seq()),
+        "Pair" -> EntityTypeMetadata(2, "pair_id", Seq("case", "control", "whatsit")),
+        "SampleSet" -> EntityTypeMetadata(5, "sampleset_id", Seq("samples", "hasSamples")),
+        "PairSet" -> EntityTypeMetadata(1, "pairset_id", Seq("pairs")),
+        "Individual" -> EntityTypeMetadata(2, "individual_id", Seq("sset"))
       )
 
       //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
@@ -169,8 +169,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
       runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some("")))
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "null_attrs_type" -> EntityTypeMetadata(1, Seq()),
-        "blank_attrs_type" -> EntityTypeMetadata(1, Seq())
+        "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),
+        "blank_attrs_type" -> EntityTypeMetadata(1, "blank_attrs_type", Seq())
       )
 
       //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
