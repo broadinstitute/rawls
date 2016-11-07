@@ -10,7 +10,12 @@ import spray.json._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
-  val reservedAttributeNames = Set("name", "entityType")
+  val entityIdAttributeSuffix = "_id"
+  val workspaceEntityType = "workspace"
+  val workspaceIdAttribute = workspaceEntityType + entityIdAttributeSuffix
+  val nameReservedAttribute = "name"
+  val entityTypeReservedAttribute = "entityType"
+  val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
 }
 
@@ -35,6 +40,7 @@ case class AttributeName(
   // enable implicit ordering for sorting
   import scala.math.Ordered.orderingToOrdered
   def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
+  def equalsIgnoreCase(that: AttributeName): Boolean = (this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name))
 }
 
 object AttributeName {
@@ -110,6 +116,7 @@ case class Entity(
 
 case class EntityTypeMetadata(
                              count: Int,
+                             idName: String,
                              attributeNames: Seq[String]
                              )
 
@@ -327,7 +334,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
-  implicit val EntityTypeMetadataFormat = jsonFormat2(EntityTypeMetadata)
+  implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
   implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
 

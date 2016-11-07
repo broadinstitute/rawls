@@ -413,7 +413,7 @@ trait EntityComponent {
       typesAndCountsQ flatMap { typesAndCounts =>
         typesAndAttrsQ map { typesAndAttrs =>
           (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), typesAndAttrs.getOrElse(entityType, Seq()) ))
+            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), entityType + Attributable.entityIdAttributeSuffix, typesAndAttrs.getOrElse(entityType, Seq()) ))
           } toMap
         }
       }
@@ -547,11 +547,14 @@ trait EntityComponent {
   }
 
   def validateEntity(entity: Entity): Unit = {
-    validateUserDefinedString(entity.entityType) // do we need to check this here if we're already validating all edges?
+    if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Entity type ${Attributable.workspaceEntityType} is reserved", statusCode = StatusCodes.BadRequest))
+    }
+    validateUserDefinedString(entity.entityType)
     validateUserDefinedString(entity.name)
     entity.attributes.keys.foreach { attrName =>
       validateUserDefinedString(attrName.name)
-      validateAttributeName(attrName)
+      validateAttributeName(attrName, entity.entityType)
     }
   }
 

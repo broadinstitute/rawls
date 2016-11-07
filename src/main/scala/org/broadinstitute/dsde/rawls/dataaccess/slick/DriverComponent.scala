@@ -42,8 +42,10 @@ trait DriverComponent {
     if(!s.matches("[A-z0-9_-]+")) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"""Invalid input: "$s". Input may only contain alphanumeric characters, underscores, and dashes.""", statusCode = StatusCodes.BadRequest))
   }
 
-  def validateAttributeName(an: AttributeName) = {
-    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name))) {
+  def validateAttributeName(an: AttributeName, entityType: String) = {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
+      AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
+
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Attribute name ${an.name} is reserved", statusCode = StatusCodes.BadRequest))
     }
   }

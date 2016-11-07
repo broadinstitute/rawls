@@ -280,7 +280,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val sample5 = Entity("sample5", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
     val sample6 = Entity("sample6", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
     val sample7 = Entity("sample7", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"), AttributeName.withDefaultNS("cycle") -> AttributeEntityReference("Sample", "sample6")))
-    val sample8 = Entity("sample8", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
+    val sample8 = Entity("sample8", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"), AttributeName.withDefaultNS("foo_id") -> AttributeString("1029384756")))
     val extraSample = Entity("extraSample", "Sample", Map.empty)
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)

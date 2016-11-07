@@ -90,7 +90,7 @@ trait WorkspaceComponent {
       validateUserDefinedString(workspace.name)
       workspace.attributes.keys.foreach { attrName =>
         validateUserDefinedString(attrName.name)
-        validateAttributeName(attrName)
+        validateAttributeName(attrName, Attributable.workspaceEntityType)
       }
 
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
