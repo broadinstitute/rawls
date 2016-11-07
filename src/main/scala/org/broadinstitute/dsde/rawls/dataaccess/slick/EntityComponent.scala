@@ -413,7 +413,7 @@ trait EntityComponent {
       typesAndCountsQ flatMap { typesAndCounts =>
         typesAndAttrsQ map { typesAndAttrs =>
           (typesAndCounts.keySet ++ typesAndAttrs.keySet) map { entityType =>
-            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), typesAndAttrs.getOrElse(entityType, Seq()) ))
+            (entityType, EntityTypeMetadata( typesAndCounts.getOrElse(entityType, 0), entityType + Attributable.entityIdAttributeSuffix, typesAndAttrs.getOrElse(entityType, Seq()) ))
           } toMap
         }
       }

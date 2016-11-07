@@ -116,6 +116,7 @@ case class Entity(
 
 case class EntityTypeMetadata(
                              count: Int,
+                             idName: String,
                              attributeNames: Seq[String]
                              )
 
@@ -333,7 +334,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityNameFormat = jsonFormat1(EntityName)
 
-  implicit val EntityTypeMetadataFormat = jsonFormat2(EntityTypeMetadata)
+  implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
   implicit val EntityQueryFormat = jsonFormat5(EntityQuery)
 

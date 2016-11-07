@@ -241,7 +241,9 @@ trait SlickExpressionParser extends JavaTokenParsers {
         // This query will match an attribute with name in the form [entity type]_id and return the entity's name as an artificial
         // attribute record. The artificial record consists of all literal columns except the name in the value string spot.
         // The fighting alligators (<>) at the end allows mapping of the artificial record to the right record case class.
-        val attributeIdQuery = queryPipeline.get.filter { case (rootEntityName, entity) => entity.entityType ++ "_id" === attrName.name && LiteralColumn(AttributeName.defaultNamespace) === attrName.namespace }.map { case (rootEntityName, entity) =>
+        val attributeIdQuery = queryPipeline.get.filter { case (rootEntityName, entity) =>
+          entity.entityType ++ "_id" === attrName.name && LiteralColumn(AttributeName.defaultNamespace) === attrName.namespace
+        }.map { case (rootEntityName, entity) =>
           (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
         }
 

@@ -3991,6 +3991,9 @@ definitions:
       count:
         type: int
         description: The number of entities of this type
+      idName:
+        type: string
+        description: The name if the id field for the entity
       attributeNames:
         type: array
         description: A list of all attribute names used
