@@ -264,7 +264,8 @@ trait EntityComponent {
 
     /** creates or replaces an entity */
     def save(workspaceContext: SlickWorkspaceContext, entity: Entity): ReadWriteAction[Entity] = {
-      save(workspaceContext, Seq(entity)).map(_.head)
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        save(workspaceContext, Seq(entity)).map(_.head)
     }
 
     def save(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
@@ -343,13 +344,14 @@ trait EntityComponent {
 
     /** deletes an entity */
     def delete(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadWriteAction[Boolean] = {
-      uniqueResult[EntityRecord](findEntityByName(workspaceContext.workspaceId, entityType, entityName)) flatMap {
-        case None => DBIO.successful(false)
-        case Some(entityRec) =>
-          val deleteActions = deleteEntityAttributes(Seq(entityRec))
-          val deleteEntity = findEntityByName(workspaceContext.workspaceId, entityType, entityName).delete
-          deleteActions andThen deleteEntity.map(_ > 0)
-      }
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        uniqueResult[EntityRecord](findEntityByName(workspaceContext.workspaceId, entityType, entityName)) flatMap {
+          case None => DBIO.successful(false)
+          case Some(entityRec) =>
+            val deleteActions = deleteEntityAttributes(Seq(entityRec))
+            val deleteEntity = findEntityByName(workspaceContext.workspaceId, entityType, entityName).delete
+            deleteActions andThen deleteEntity.map(_ > 0)
+        }
     }
 
     object DeleteEntityAttributesQuery extends RawSqlQuery {
@@ -378,7 +380,8 @@ trait EntityComponent {
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {
-      findEntityByName(workspaceContext.workspaceId, entityType, oldName).map(_.name).update(newName)
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        findEntityByName(workspaceContext.workspaceId, entityType, oldName).map(_.name).update(newName)
     }
 
     def getEntityTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[String]] = {
@@ -431,7 +434,8 @@ trait EntityComponent {
 
     def batchInsertEntities(workspaceContext: SlickWorkspaceContext, entities: Seq[EntityRecord]): ReadWriteAction[Seq[EntityRecord]] = {
       if(!entities.isEmpty) {
-        insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities)
+        workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+          insertInBatches(entityQuery, entities) andThen selectEntityIds(workspaceContext, entities)
       }
       else {
         DBIO.successful(Seq.empty[EntityRecord])
