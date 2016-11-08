@@ -6,9 +6,10 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.Read
+import slick.dbio.Effect.{Read, Write}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import slick.profile.FixedSqlAction
 
 /**
  * Created by dvoet on 2/4/16.

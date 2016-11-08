@@ -2,16 +2,18 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.Write
+import slick.dbio.{DBIOAction, DatabaseAction}
+import slick.dbio.Effect.{Read, Write}
 import slick.driver.H2Driver.api._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
-import slick.profile.FixedSqlAction
+import slick.profile.{FixedSqlAction, SqlAction}
 
 /**
  * Created by mbemis on 2/18/16.
@@ -164,9 +166,17 @@ trait SubmissionComponent {
       }
     } map { _ => submission }
 
+    def updateSubmissionWorkspace(submissionId: UUID) = {
+      uniqueResult[SubmissionRecord](findById(submissionId)) flatMap {
+        case None => DBIO.successful(None)
+        case Some(submissionRec) => workspaceQuery.updateLastModified(submissionRec.workspaceId)
+      }
+    }
+
     /* updates the status of a submission */
-    def updateStatus(submissionId: UUID, newStatus: SubmissionStatus): FixedSqlAction[Int, driver.api.NoStream, Write] = {
-      findById(submissionId).map(_.status).update(newStatus.toString)
+    def updateStatus(submissionId: UUID, newStatus: SubmissionStatus) = {
+      updateSubmissionWorkspace(submissionId) andThen
+        findById(submissionId).map(_.status).update(newStatus.toString)
     }
 
     /* deletes a submission and all associated records */
@@ -174,7 +184,9 @@ trait SubmissionComponent {
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submissionId))) flatMap {
         case None =>
           DBIO.successful(false)
-        case Some(submissionRec) => deleteSubmissionAction(UUID.fromString(submissionId)).map(_ > 0)
+        case Some(submissionRec) =>
+          updateSubmissionWorkspace(UUID.fromString(submissionId)) andThen
+            deleteSubmissionAction(UUID.fromString(submissionId)).map(_ > 0)
       }
     }
 
@@ -185,7 +197,7 @@ trait SubmissionComponent {
       }))
     }
 
-    def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {
+    private def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {
       val workflowDeletes = workflowQuery.filter(_.submissionId === submissionId).result flatMap { result =>
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)
       }
