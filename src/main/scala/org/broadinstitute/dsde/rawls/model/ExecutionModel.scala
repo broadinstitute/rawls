@@ -173,9 +173,16 @@ case class SubmissionReport(
   workflows: Seq[SubmissionValidationEntityInputs]
 )
 
+case class ExecutionEvent(
+  description: String,
+  startTime: DateTime,
+  endTime: DateTime
+)
+
 case class CallMetadata(
   inputs: JsObject,
   executionStatus: String,
+  executionEvents: Option[Seq[ExecutionEvent]],
   backend: Option[String],
   backendStatus: Option[String],
   backendLogs: Option[JsObject],
@@ -257,6 +264,8 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
 
+  implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
+
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
 
   implicit val ExecutionServiceFailureFormat = jsonFormat3(ExecutionServiceFailure)
@@ -295,7 +304,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionListResponseFormat = jsonFormat8(SubmissionListResponse)
 
-  implicit val CallMetadataFormat = jsonFormat13(CallMetadata)
+  implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 
   implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
 

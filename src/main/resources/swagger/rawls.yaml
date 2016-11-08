@@ -4413,6 +4413,22 @@ definitions:
         type: string
         description: ''
 
+  ExecutionEvent:
+    description: ''
+    required:
+      - description
+      - startTime
+    properties:
+      description:
+        type: string
+        description: Description of the event
+      startTime:
+        type: date-time
+        description: When the event started
+      endTime:
+        type: date-time
+        description: When the event finished
+
   WorkspaceListResponse:
     description: ''
     properties:
@@ -4435,6 +4451,11 @@ definitions:
       executionStatus:
         type: string
         description: status of call
+      executionEvents:
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/ExecutionEvent'
       backendStatus:
         type: string
         description: status of the backend
