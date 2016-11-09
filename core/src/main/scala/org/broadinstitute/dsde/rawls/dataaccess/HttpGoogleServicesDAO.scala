@@ -366,10 +366,11 @@ class HttpGoogleServicesDAO(
     }
 
     def recurse(pageToken: Option[String] = None): Future[BigInt] = {
+      // Fetch objects with a prefix of "${bucketName}_storage_", (ignoring "_usage_" logs)
       val fetcher = getStorage(getBucketServiceAccountCredential).
         objects().
         list(getStorageLogsBucketName(projectName)).
-        setPrefix(bucketName + "_storage_")
+        setPrefix(s"${bucketName}_storage_")
       maxResults.foreach(fetcher.setMaxResults(_))
       pageToken.foreach(fetcher.setPageToken)
 
@@ -378,7 +379,11 @@ class HttpGoogleServicesDAO(
         (result.getItems, result.getNextPageToken)
       }) flatMap {
         case (null, _) => Future.failed(new RawlsException(s"No storage logs available for $bucketName"))
-        case (items, null) => usageFromLogObject(items.last)
+        case (items, null) =>
+          /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
+           * timestamp, they are also in increasing chronological order. Therefore, the last one is the most recent.
+           */
+          usageFromLogObject(items.last)
         case (_, nextPageToken) => recurse(Some(nextPageToken))
       }
     }
