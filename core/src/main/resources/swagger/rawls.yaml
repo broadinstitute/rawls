@@ -3268,6 +3268,35 @@ paths:
             - email
             - profile
             - https://www.googleapis.com/auth/devstorage.full_control
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/bucketUsage':
+      get:
+        responses:
+          '200':
+            description: Successful Request
+            schema:
+              $ref: '#/definitions/BucketUsageResponse'
+        description: Get the storage bucket usage
+        tags:
+          - workspaces
+        summary: Get bucket usage
+        operationId: getBucketUsage
+        parameters:
+          - in: path
+            description: Workspace Namespace
+            name: workspaceNamespace
+            required: true
+            type: string
+          - in: path
+            description: Workspace Name
+            name: workspaceName
+            required: true
+            type: string
+        security:
+          - authorization:
+              - openid
+              - email
+              - profile
+              - https://www.googleapis.com/auth/devstorage.full_control
   '/register/user':
      post:
        responses:
@@ -4368,6 +4397,15 @@ definitions:
         description: An optional realm for the workspace
       attributes:
         $ref: ''
+
+  BucketUsageResponse:
+    description: ''
+    required:
+      - usageInBytes
+    properties:
+      usageInBytes:
+        type: integer
+        description: The current storage bucket usage in bytes
 
   Attribute:
     description: ''
