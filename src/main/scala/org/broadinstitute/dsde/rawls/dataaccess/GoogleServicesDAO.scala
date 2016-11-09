@@ -21,6 +21,26 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def createCromwellAuthBucket(billingProject: RawlsBillingProjectName): Future[String]
 
+  /** Deletes a bucket from Google Cloud Storage. If the bucket is not empty, all objects in the bucket will be marked
+    * for deletion (see below).
+    *
+    * Warning: Direct calls to this method may cause deletion to not happen if it has to be deferred and rawls is
+    * restarted at an inopportune time! The preferred way to delete a bucket from rawls code is to send a
+    * [[org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket DeleteBucket]] message to the
+    * [[org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor]] which itself calls this method. The monitor does a
+    * better job of retrying deletion if it cannot be done immediately.
+    *
+    * If the bucket is not empty, the bucket's lifecycle rule is set to delete any objects older than 0 days. This
+    * effectively marks all objects in the bucket for deletion the next time GCS inspects the bucket (up to 24 hours
+    * later at the time of this writing; see [[https://cloud.google.com/storage/docs/lifecycle#behavior]]).
+    * Rawls will periodically retry the bucket deletion until it succeeds.
+    *
+    * This strategy is inspired by [[http://blog.iangsy.com/2014/04/google-cloud-storage-deleting-full.html]].
+    *
+    * @param bucketName the name of the bucket to delete
+    * @param monitorRef a [[org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor]] to handle deferred actions
+    * @return a [[scala.concurrent.Future]] for whatever return value is appropriate for the implementation
+    */
   def deleteBucket(bucketName: String, monitorRef: ActorRef): Future[Any]
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"

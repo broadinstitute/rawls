@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
-import java.io.StringReader
+import java.io.{ByteArrayInputStream, StringReader}
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
-import com.google.api.client.http.{HttpHeaders, HttpResponseException}
-import com.google.api.client.http.HttpResponseException
+import com.google.api.client.http.{HttpHeaders, HttpResponseException, InputStreamContent}
 import com.google.api.services.admin.directory.model.Member
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -21,6 +20,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.services.storage.model.{Bucket, StorageObject}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -383,6 +383,42 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       gcsDAO.deleteGoogleGroup(ownerGroup)
       gcsDAO.deleteProject(projectName)
     }
+  }
+
+  it should "set lifecycle policy when deleting non-empty bucket" in {
+    val bucketName = "services-dao-spec-" + UUID.randomUUID.toString
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+    val bucket = new Bucket().setName(bucketName)
+    val bucketInserter = storage.buckets.insert(testProject, bucket)
+    Await.result(retry(when500)(() => Future { bucketInserter.execute() }), Duration.Inf)
+    insertObject(bucketName, s"HttpGoogleServiceDAOSpec-object-${UUID.randomUUID().toString}", "delete me")
+
+    Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
+    /*
+     * There's no reason for callers to wait for the result, but there will be 2 Google calls in this case: one to
+     * delete the bucket (which will fail) and one to set the lifecycle rule. Therefore, this test needs to wait
+     * "a little bit" for those operations to complete. 1s seems to be enough.
+     */
+    Thread.sleep(1000)
+
+    val fetchedBucket = Await.result(gcsDAO.getBucket(bucketName), Duration.Inf)
+    val lifecycle = fetchedBucket.get.getLifecycle
+    lifecycle.getRule.length should be (1)
+    val rule = lifecycle.getRule.head
+    rule.getAction.getType should be ("Delete")
+    rule.getCondition.getAge should be (0)
+
+    // Final clean-up to make sure that the test bucket will eventually be deleted
+    bucketDeletionMonitor ! DeleteBucket(bucketName)
+  }
+
+  private def insertObject(bucketName: String, objectName: String, content: String): Unit = {
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+    val o = new StorageObject().setName(objectName)
+    val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(content.getBytes))
+    val inserter = storage.objects().insert(bucketName, o, stream)
+    inserter.getMediaHttpUploader.setDirectUploadEnabled(true)
+    Await.result(retry(when500)(() => Future { inserter.execute() }), Duration.Inf)
   }
 
   private def when500( throwable: Throwable ): Boolean = {
