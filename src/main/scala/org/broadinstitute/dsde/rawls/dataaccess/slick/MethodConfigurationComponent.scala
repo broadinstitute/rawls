@@ -115,7 +115,8 @@ trait MethodConfigurationComponent {
             saveMaps(configId)
           }
         case Some(methodConfigRec) =>
-          findInputsByConfigId(methodConfigRec.id).delete andThen
+          workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+            findInputsByConfigId(methodConfigRec.id).delete andThen
             findOutputsByConfigId(methodConfigRec.id).delete andThen
             findPrereqsByConfigId(methodConfigRec.id).delete andThen
             findById(methodConfigRec.id).map(rec => (rec.methodNamespace, rec.methodName, rec.methodVersion)).update(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion) andThen

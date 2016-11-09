@@ -52,6 +52,31 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
+    val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
+      MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+  }
+
+
+
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
     val outputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
@@ -219,6 +244,27 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "update the workspace last modified date on method configuration rename" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+  }
+
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -264,6 +310,28 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "update the workspace last modified date on delete method configuration" in withTestDataApiServices { services =>
+    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig3.namespace}/${testData.methodConfig3.name}") ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+  }
+
+
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}x") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -297,6 +365,29 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
       }
   }
+
+  it should "update the workspace last modified date on update method configuration" in withTestDataApiServices { services =>
+    val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+  }
+
 
   it should "validate attribute syntax in update method configuration" in withTestDataApiServices { services =>
     val newInputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
@@ -418,6 +509,27 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         }
         assertResult("testConfig1") {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.name
+        }
+      }
+  }
+
+  it should "update the destination workspace last modified date on copy method configuration" in withTestDataApiServices { services =>
+    Post("/methodconfigs/copy", httpJson(testData.methodConfigNamePairCreated)) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
         }
       }
   }

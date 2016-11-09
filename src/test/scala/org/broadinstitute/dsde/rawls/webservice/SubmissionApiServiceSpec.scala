@@ -111,6 +111,22 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "update the last modified date on a workspace for submission entries" in withTestDataApiServices { services =>
+    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+
+  }
+
+
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))
   val z1 = Entity("z1", "Sample", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("splat") -> attributeList))
   val workspace2Name = new WorkspaceName(testData.wsName.namespace + "2", testData.wsName.name + "2")

@@ -1386,6 +1386,25 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+  }
+
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1645,6 +1664,44 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
+  }
+
+  it should "locking (and unlocking) a workspace should modify the workspace last modified date" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+
   }
 
   it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>

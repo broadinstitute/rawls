@@ -264,11 +264,11 @@ trait EntityComponent {
 
     /** creates or replaces an entity */
     def save(workspaceContext: SlickWorkspaceContext, entity: Entity): ReadWriteAction[Entity] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        save(workspaceContext, Seq(entity)).map(_.head)
+      save(workspaceContext, Seq(entity)).map(_.head)
     }
 
     def save(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity]): ReadWriteAction[Traversable[Entity]] = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId)
       entities.foreach(validateEntity)
 
       for {
