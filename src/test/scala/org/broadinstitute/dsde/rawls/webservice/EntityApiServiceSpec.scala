@@ -58,13 +58,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -79,13 +73,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -134,24 +122,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             Get(s"/workspaces/${workspaceSrcRequest.namespace}/${workspaceSrcRequest.name}") ~>
               sealRoute(services.workspaceRoutes) ~>
               check {
-                assertResult(StatusCodes.OK) {
-                  status
-                }
-                val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-                assert {
-                  updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-                }
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
               }
             Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}") ~>
               sealRoute(services.workspaceRoutes) ~>
               check {
-                assertResult(StatusCodes.OK) {
-                  status
-                }
-                val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-                assert {
-                  updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-                }
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
               }
           }
       }
@@ -173,13 +149,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -198,14 +168,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
-      }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)      }
   }
 
   it should "return 201 on create entity" in withTestDataApiServices { services =>

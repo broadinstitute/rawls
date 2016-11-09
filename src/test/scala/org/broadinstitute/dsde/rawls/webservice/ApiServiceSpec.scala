@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
+import org.broadinstitute.dsde.rawls.WorkspaceTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
@@ -22,7 +23,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFla
 import org.broadinstitute.dsde.rawls.model.RawlsUser
 
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport {
+trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with HttpService with ScalatestRouteTest with SprayJsonSupport with WorkspaceTestUtils {
   // increate the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
   implicit val routeTestTimeout = RouteTestTimeout(5.seconds)

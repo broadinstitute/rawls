@@ -65,13 +65,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -255,13 +249,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -321,13 +309,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -378,13 +360,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 
@@ -524,13 +500,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
 

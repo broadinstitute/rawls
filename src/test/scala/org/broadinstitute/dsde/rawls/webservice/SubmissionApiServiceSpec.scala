@@ -112,16 +112,16 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the last modified date on a workspace for submission entries" in withTestDataApiServices { services =>
+    val wsName = testData.wsName
+    val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+    val methodConf = MethodConfiguration(mcName.namespace, mcName.name, "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("dsde", "no_input", 1))
+
+    val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
+
     Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
-        assert {
-          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
-        }
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
 
   }

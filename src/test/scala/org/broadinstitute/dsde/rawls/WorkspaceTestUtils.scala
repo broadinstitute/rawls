@@ -3,8 +3,18 @@ package org.broadinstitute.dsde.rawls
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.model.Workspace
 import org.scalatest.exceptions.TestFailedException
+import spray.http.{StatusCode, StatusCodes}
 
 trait WorkspaceTestUtils extends TestDriverComponentWithFlatSpecAndMatchers {
+
+  def assertWorkspaceModifiedDate(status: StatusCode, workspace: Workspace) = {
+    assertResult(StatusCodes.OK) {
+      status
+    }
+    assert {
+      workspace.lastModified.isAfter(workspace.createdDate)
+    }
+  }
 
   def assertWorkspaceResult(expected: Workspace)(actual: Workspace) = {
     assertResult(expected) {
