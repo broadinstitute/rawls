@@ -1480,6 +1480,16 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "check that an update to a workspace modifies the last modified date" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
+    var mutableWorkspace: Workspace = testData.workspace.copy()
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        mutableWorkspace = responseAs[WorkspaceListResponse].workspace
+      }
+
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1496,6 +1506,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
         assert {
           updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+        assert {
+          updatedWorkspace.lastModified.isAfter(mutableWorkspace.lastModified)
         }
       }
   }

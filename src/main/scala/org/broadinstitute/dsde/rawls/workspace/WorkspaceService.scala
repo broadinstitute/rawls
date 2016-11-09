@@ -1336,6 +1336,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceQuery.updateLastModified(workspaceName)
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
           DBIO.from((userServiceRef ? UserService.AddGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),
@@ -1352,6 +1353,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceQuery.updateLastModified(workspaceName)
           val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
           DBIO.from((userServiceRef ? UserService.RemoveGroupMembers(
             workspaceContext.workspace.accessLevels(WorkspaceAccessLevels.Read),

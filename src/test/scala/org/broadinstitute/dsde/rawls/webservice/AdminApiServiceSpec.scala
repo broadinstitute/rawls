@@ -968,6 +968,18 @@ AdminApiServiceSpec extends ApiServiceSpec {
       }
     }
 
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
+        }
+      }
+
     Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -984,6 +996,18 @@ AdminApiServiceSpec extends ApiServiceSpec {
       assertResult(Some(false)) {
         Await.result(services.gcsDAO.listGroupMembers(group2), Duration.Inf).map { members =>
           members.contains(Right(UserService.allUsersGroupRef))
+        }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assert {
+          updatedWorkspace.lastModified.isAfter(updatedWorkspace.createdDate)
         }
       }
 
