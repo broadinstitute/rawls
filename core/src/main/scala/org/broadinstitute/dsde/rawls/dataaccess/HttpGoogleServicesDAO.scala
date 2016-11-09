@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, StringReader}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, StringReader}
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -44,6 +44,7 @@ import spray.json._
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
 import scala.concurrent.duration._
+import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 class HttpGoogleServicesDAO(
@@ -89,10 +90,7 @@ class HttpGoogleServicesDAO(
           setName(tokenBucketName + "-logs")
         val logInserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, logBucket)
         executeGoogleRequest(logInserter)
-
-        // add cloud-storage-analytics@google.com as a writer so it can write logs
-        // do it as a separate call so bucket gets default permissions plus this one
-        executeGoogleRequest(getStorage(getBucketServiceAccountCredential).bucketAccessControls.insert(logBucket.getName, new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")))
+        allowGoogleCloudStorageWrite(logBucket.getName)
 
         val bucketAcls = List(new BucketAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
         val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + serviceAccountClientId).setRole("OWNER"))
@@ -104,6 +102,14 @@ class HttpGoogleServicesDAO(
         val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, bucket)
         executeGoogleRequest(inserter)
     }
+  }
+
+  def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
+    // add cloud-storage-analytics@google.com as a writer so it can write logs
+    // do it as a separate call so bucket gets default permissions plus this one
+    val storage = getStorage(getBucketServiceAccountCredential)
+    val bac = new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")
+    executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
@@ -171,7 +177,12 @@ class HttpGoogleServicesDAO(
             groupsByAccess.map { case (access, group) => newObjectAccessControl(makeGroupEntityString(group.groupEmail.value), "READER") }.toSeq :+
               newObjectAccessControl("user-" + serviceAccountClientId, "OWNER")
 
-          val bucket = new Bucket().setName(bucketName).setAcl(bucketAcls).setDefaultObjectAcl(defaultObjectAcls)
+          val logging = new Logging().setLogBucket(getStorageLogsBucketName(project.projectName))
+          val bucket = new Bucket().
+            setName(bucketName).
+            setAcl(bucketAcls).
+            setDefaultObjectAcl(defaultObjectAcls).
+            setLogging(logging)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
           GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
@@ -231,6 +242,26 @@ class HttpGoogleServicesDAO(
 
         bucketName
       }) { case t: HttpResponseException if t.getStatusCode == 409 => bucketName }
+  }
+
+  def createStorageLogsBucket(billingProject: RawlsBillingProjectName): Future[String] = {
+    val bucketName = getStorageLogsBucketName(billingProject)
+    logger debug s"storage log bucket: $bucketName"
+
+    retryWithRecoverWhen500orGoogleError(() => {
+      val bucket = new Bucket().setName(bucketName)
+      val deleteAfterOneYear = new Lifecycle.Rule()
+        .setAction(new Action().setType("Delete"))
+        .setCondition(new Condition().setAge(365))
+      bucket.setLifecycle(new Lifecycle().setRule(List(deleteAfterOneYear)))
+      val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
+      executeGoogleRequest(inserter)
+
+      bucketName
+    }) {
+      // bucket already exists
+      case t: HttpResponseException if t.getStatusCode == 409 => bucketName
+    }
   }
 
   private def newBucketAccessControl(entity: String, accessLevel: String) =
@@ -321,6 +352,38 @@ class HttpGoogleServicesDAO(
     retryWithRecoverWhen500orGoogleError(() => { Option(executeGoogleRequest(getter)) }) {
       case e: HttpResponseException if e.getStatusCode == StatusCodes.NotFound.intValue => None
     }
+  }
+
+  override def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = {
+
+    def usageFromLogObject(o: StorageObject): Future[BigInt] = {
+      streamObject(o.getBucket, o.getName) { inputStream =>
+        val content = Source.fromInputStream(inputStream).mkString
+        val byteHours = BigInt(content.split('\n')(1).split(',')(1).replace("\"", ""))
+        // convert byte/hours to byte/days to better match the billing unit of GB/days
+        byteHours / 24
+      }
+    }
+
+    def recurse(pageToken: Option[String] = None): Future[BigInt] = {
+      val fetcher = getStorage(getBucketServiceAccountCredential).
+        objects().
+        list(getStorageLogsBucketName(projectName)).
+        setPrefix(bucketName + "_storage_")
+      maxResults.foreach(fetcher.setMaxResults(_))
+      pageToken.foreach(fetcher.setPageToken)
+
+      retryWhen500orGoogleError(() => {
+        val result = executeGoogleRequest(fetcher)
+        (result.getItems, result.getNextPageToken)
+      }) flatMap {
+        case (null, _) => Future.failed(new RawlsException(s"No storage logs available for $bucketName"))
+        case (items, null) => usageFromLogObject(items.last)
+        case (_, nextPageToken) => recurse(Some(nextPageToken))
+      }
+    }
+
+    recurse()
   }
 
   override def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]] = {
@@ -694,6 +757,10 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(getStorage(credential).buckets.insert(projectName.value, bucket))
       }) { case t: HttpResponseException if t.getStatusCode == 409 => new Bucket().setName(projectUsageExportBucketName(projectName)) }
 
+      // create bucket for workspace bucket storage/usage logs
+      storageLogsBucket <- createStorageLogsBucket(projectName)
+      _ <- retryWhen500orGoogleError(() => { allowGoogleCloudStorageWrite(storageLogsBucket) })
+
       cromwellAuthBucket <- createCromwellAuthBucket(projectName)
 
       _ <- Future { // don't retry this last step because it may take several minutes for this to happen and this whole process will retry
@@ -904,7 +971,31 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  private def streamObject[A](bucketName: String, objectName: String)(f: (InputStream) => A): Future[A] = {
+    val getter = getStorage(getBucketServiceAccountCredential).objects().get(bucketName, objectName).setAlt("media")
+    retryWhen500orGoogleError(() => { executeGoogleFetch(getter) { is => f(is) } })
+  }
+
   private def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
+    executeGoogleCall(request) { () =>
+      request.execute()
+    } { response =>
+      response.parseAs(request.getResponseClass)
+    }
+  }
+
+  private def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B): B = {
+    executeGoogleCall(request) { () =>
+      val inputStream = request.executeAsInputStream()
+      val result = f(inputStream)
+      inputStream.close()
+      result
+    } { response =>
+      f(response.getContent)
+    }
+  }
+
+  private def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(executeRequest: () => B)(processUnparsedResponse: (com.google.api.client.http.HttpResponse) => B): B = {
     import spray.json._
     import GoogleRequestJsonSupport._
 
@@ -925,7 +1016,9 @@ class HttpGoogleServicesDAO(
       } match {
         case Success(response) =>
           logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(response.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
-          response.parseAs(request.getResponseClass)
+          val result = processUnparsedResponse(response)
+          response.disconnect()
+          result
         case Failure(httpRegrets: HttpResponseException) =>
           logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(httpRegrets.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
           throw httpRegrets
@@ -934,7 +1027,7 @@ class HttpGoogleServicesDAO(
           throw regrets
       }
     } else {
-      request.execute()
+      executeRequest()
     }
   }
 }

@@ -187,6 +187,8 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   override def getGoogleGroup(groupName: String): Future[Option[Group]] = Future.successful(Some(new Group))
 
+  def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long]): Future[BigInt] = Future.successful(42)
+
   override def deleteGoogleGroup(group: RawlsGroup): Future[Unit] = Future {
     groups.remove(group)
   }

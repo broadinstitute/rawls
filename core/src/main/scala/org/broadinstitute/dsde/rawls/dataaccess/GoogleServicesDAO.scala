@@ -45,6 +45,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getCromwellAuthBucketName(billingProject: RawlsBillingProjectName) = s"cromwell-auth-${billingProject.value}"
 
+  def getStorageLogsBucketName(billingProject: RawlsBillingProjectName) = s"storage-logs-${billingProject.value}"
+
   def isAdmin(userEmail: String): Future[Boolean]
 
   def isLibraryCurator(userEmail: String): Future[Boolean]
@@ -77,6 +79,23 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def isEmailInGoogleGroup(email: String, groupName: String): Future[Boolean]
 
   def getGoogleGroup(groupName: String): Future[Option[Group]]
+
+  /**
+    * Returns the most recent daily storage usage information for a bucket in bytes. The information comes from daily
+    * storage logs reported in byte-hours over a 24-hour period, which is divided by 24 to obtain usage in bytes.
+    * Queries the objects in a bucket and calculates the total usage (bytes).
+    *
+    * Note: maxResults is used for integration testing of multi-page queries. While it could potentially be used for
+    * performance tuning, it would be better to build that into the service instead of giving the caller a dial to mess
+    * with. For that reason, the maxResults parameter should be removed in favor of extracting the creation of Storage
+    * objects from the service implementation to enable test doubles to be injected.
+    *
+    * @param projectName  the name of the project that owns the bucket
+    * @param bucketName the name of the bucket to query
+    * @param maxResults (optional) the page size to use when fetching objects
+    * @return the size in bytes of the data stored in the bucket
+    */
+  def getBucketUsage(projectName: RawlsBillingProjectName, bucketName: String, maxResults: Option[Long] = None): Future[BigInt]
 
   def getBucket(bucketName: String): Future[Option[Bucket]]
 
