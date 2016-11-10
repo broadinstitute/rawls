@@ -50,8 +50,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("billingSecrets"))),
     gcsConfig.getString("billingPemEmail"),
     gcsConfig.getString("pathToBillingPem"),
-    gcsConfig.getString("billingEmail")
-
+    gcsConfig.getString("billingEmail"),
+    gcsConfig.getInt("bucketLogsMaxAge")
   )
 
   slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
@@ -350,7 +350,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("billingSecrets"))),
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
-      gcsConfig.getString("billingEmail")
+      gcsConfig.getString("billingEmail"),
+      gcsConfig.getInt("bucketLogsMaxAge")
       )
 
     val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")

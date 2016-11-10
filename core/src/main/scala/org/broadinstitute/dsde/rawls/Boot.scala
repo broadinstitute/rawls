@@ -72,7 +72,8 @@ object Boot extends App with LazyLogging {
       billingClientSecrets,
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
-      gcsConfig.getString("billingEmail")
+      gcsConfig.getString("billingEmail"),
+      gcsConfig.getInt("bucketLogsMaxAge")
     )
 
     val ldapConfig = conf.getConfig("userLdap")

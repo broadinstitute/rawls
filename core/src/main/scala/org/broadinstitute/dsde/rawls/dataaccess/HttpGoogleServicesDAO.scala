@@ -61,7 +61,8 @@ class HttpGoogleServicesDAO(
   billingClientSecrets: GoogleClientSecrets,
   billingPemEmail: String,
   billingPemFile: String,
-  val billingEmail: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
+  val billingEmail: String,
+  bucketLogsMaxAge: Int)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
 
@@ -252,7 +253,7 @@ class HttpGoogleServicesDAO(
       val bucket = new Bucket().setName(bucketName)
       val deleteAfterOneYear = new Lifecycle.Rule()
         .setAction(new Action().setType("Delete"))
-        .setCondition(new Condition().setAge(365))
+        .setCondition(new Condition().setAge(bucketLogsMaxAge))
       bucket.setLifecycle(new Lifecycle().setRule(List(deleteAfterOneYear)))
       val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
       executeGoogleRequest(inserter)
@@ -376,15 +377,15 @@ class HttpGoogleServicesDAO(
 
       retryWhen500orGoogleError(() => {
         val result = executeGoogleRequest(fetcher)
-        (result.getItems, result.getNextPageToken)
+        (Option(result.getItems), Option(result.getNextPageToken))
       }) flatMap {
-        case (null, _) => Future.failed(new RawlsException(s"No storage logs available for $bucketName"))
-        case (items, null) =>
+        case (None, _) => Future.failed(new RawlsException(s"No storage logs available for $bucketName"))
+        case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
+        case (Some(items), None) =>
           /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
            * timestamp, they are also in increasing chronological order. Therefore, the last one is the most recent.
            */
           usageFromLogObject(items.last)
-        case (_, nextPageToken) => recurse(Some(nextPageToken))
       }
     }
 
