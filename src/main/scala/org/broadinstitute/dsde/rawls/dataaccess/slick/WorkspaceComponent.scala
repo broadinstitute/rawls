@@ -178,13 +178,11 @@ trait WorkspaceComponent {
     }
 
     def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(true) andThen
-        updateLastModified(workspaceName)
+      findByNameQuery(workspaceName).map(_.isLocked).update(true)
     }
 
     def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(false) andThen
-        updateLastModified(workspaceName)
+      findByNameQuery(workspaceName).map(_.isLocked).update(false)
     }
     
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
