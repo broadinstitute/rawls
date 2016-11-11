@@ -4488,6 +4488,9 @@ definitions:
       stderr:
         type: string
         description: location of stderr
+      shardIndex:
+        type: integer
+        description: index of execution cluster instance
   ExecutionMetadata:
     description: Stuff you need to know about a workflow
     properties:
