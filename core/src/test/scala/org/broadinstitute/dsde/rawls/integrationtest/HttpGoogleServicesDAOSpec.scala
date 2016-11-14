@@ -424,15 +424,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     bucketDeletionMonitor ! DeleteBucket(bucketName)
   }
 
-  private def insertObject(bucketName: String, objectName: String, content: String): Unit = {
-    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
-    val o = new StorageObject().setName(objectName)
-    val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(content.getBytes))
-    val inserter = storage.objects().insert(bucketName, o, stream)
-    inserter.getMediaHttpUploader.setDirectUploadEnabled(true)
-    Await.result(retry(when500)(() => Future { inserter.execute() }), Duration.Inf)
-  }
-
   it should "determine bucket usage" in {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
