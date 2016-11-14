@@ -21,7 +21,6 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.storage.model.{Bucket, StorageObject}
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -466,7 +465,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   }
 
   it should "fail to get usage when there are no storage logs" in {
-    intercept[RawlsException] {
+    intercept[GoogleStorageLogException] {
       Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), "no-bucket-here-" + UUID.randomUUID.toString), Duration.Inf)
     }
   }

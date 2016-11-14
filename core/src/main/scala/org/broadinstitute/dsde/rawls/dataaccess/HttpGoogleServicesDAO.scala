@@ -379,7 +379,7 @@ class HttpGoogleServicesDAO(
         val result = executeGoogleRequest(fetcher)
         (Option(result.getItems), Option(result.getNextPageToken))
       }) flatMap {
-        case (None, _) => Future.failed(new RawlsException(s"No storage logs available for $bucketName"))
+        case (None, _) => Future.failed(new GoogleStorageLogException(s"No storage logs available for $bucketName"))
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
           /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
@@ -1045,3 +1045,5 @@ private object GoogleRequestJsonSupport extends JsonSupport {
 }
 
 private class GoogleServiceException(message: String) extends RawlsException(message)
+
+class GoogleStorageLogException(message: String) extends RawlsException(message)
