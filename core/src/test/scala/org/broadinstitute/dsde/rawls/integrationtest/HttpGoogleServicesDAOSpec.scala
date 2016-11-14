@@ -387,7 +387,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       bucket.getLifecycle.getRule.length should be (1)
       val rule = bucket.getLifecycle.getRule.head
       rule.getAction.getType should be ("Delete")
-      rule.getCondition.getAge should be (365)
+      rule.getCondition.getAge should be (180)
       val bucketAcl = Await.result(gcsDAO.getBucketACL(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
       bucketAcl.count(bac =>
         bac.getEntity == "group-cloud-storage-analytics@google.com" && bac.getRole == "WRITER") should be (1)
