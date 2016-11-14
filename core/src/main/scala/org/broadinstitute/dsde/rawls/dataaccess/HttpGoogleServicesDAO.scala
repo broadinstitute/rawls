@@ -983,58 +983,74 @@ class HttpGoogleServicesDAO(
   }
 
   private def executeGoogleRequest[T](request: AbstractGoogleClientRequest[T]): T = {
-    executeGoogleCall(request) { () =>
-      request.execute()
-    } { response =>
+    executeGoogleCall(request) { response =>
       response.parseAs(request.getResponseClass)
     }
   }
 
   private def executeGoogleFetch[A,B](request: AbstractGoogleClientRequest[A])(f: (InputStream) => B): B = {
-    executeGoogleCall(request) { () =>
-      val inputStream = request.executeAsInputStream()
-      val result = f(inputStream)
-      inputStream.close()
-      result
-    } { response =>
-      f(response.getContent)
+    executeGoogleCall(request) { response =>
+      val stream = response.getContent
+      try {
+        f(stream)
+      } finally {
+        stream.close()
+      }
     }
   }
 
-  private def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(executeRequest: () => B)(processUnparsedResponse: (com.google.api.client.http.HttpResponse) => B): B = {
+  private def executeGoogleCall[A,B](request: AbstractGoogleClientRequest[A])(processResponse: (com.google.api.client.http.HttpResponse) => B): B = {
+    val start = System.currentTimeMillis()
+    Try {
+      request.executeUnparsed()
+    } match {
+      case Success(response) =>
+        logGoogleRequest(request, start, response)
+        try {
+          processResponse(response)
+        } finally {
+          response.disconnect()
+        }
+      case Failure(httpRegrets: HttpResponseException) =>
+        logGoogleRequest(request, start, httpRegrets)
+        throw httpRegrets
+      case Failure(regrets) =>
+        logGoogleRequest(request, start, regrets)
+        throw regrets
+    }
+  }
+
+  private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, response: com.google.api.client.http.HttpResponse): Unit = {
+    logGoogleRequest(request, startTime, Option(response.getStatusCode), None)
+  }
+
+  private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, regrets: Throwable): Unit = {
+    regrets match {
+      case e: HttpResponseException => logGoogleRequest(request, startTime, Option(e.getStatusCode), None)
+      case t: Throwable => logGoogleRequest(request, startTime, None, Option(ErrorReport(t)))
+    }
+  }
+
+  private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, statusCode: Option[Int], errorReport: Option[ErrorReport]): Unit = {
     import spray.json._
     import GoogleRequestJsonSupport._
 
-    if (logger.underlying.isDebugEnabled) {
-      val payload = Option(request.getHttpContent) match {
-        case Some(content: JsonHttpContent) =>
-          Try {
-            val outputStream = new ByteArrayOutputStream()
-            content.writeTo(outputStream)
-            outputStream.toString.parseJson
-          }.toOption
-        case _ => None
+    val payload =
+      if (logger.underlying.isDebugEnabled) {
+        Option(request.getHttpContent) match {
+          case Some(content: JsonHttpContent) =>
+            Try {
+              val outputStream = new ByteArrayOutputStream()
+              content.writeTo(outputStream)
+              outputStream.toString.parseJson
+            }.toOption
+          case _ => None
+        }
+      } else {
+        None
       }
 
-      val start = System.currentTimeMillis()
-      Try {
-        request.executeUnparsed()
-      } match {
-        case Success(response) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(response.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
-          val result = processUnparsedResponse(response)
-          response.disconnect()
-          result
-        case Failure(httpRegrets: HttpResponseException) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, Option(httpRegrets.getStatusCode), None).toJson(GoogleRequestFormat).compactPrint)
-          throw httpRegrets
-        case Failure(regrets) =>
-          logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - start, None, Option(ErrorReport(regrets))).toJson(GoogleRequestFormat).compactPrint)
-          throw regrets
-      }
-    } else {
-      executeRequest()
-    }
+    logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 }
 
