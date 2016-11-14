@@ -149,6 +149,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerGroup.groupEmail.value).execute() }), Duration.Inf)
     projectOwnerMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
 
+    // should return 0, not raise an error due to storage logs not being written yet
+    val usage = Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), s"fc-$testWorkspaceId"), Duration.Inf)
+
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
     Await.result(Future.traverse(project.groups.values) { group => gcsDAO.deleteGoogleGroup(group) }, Duration.Inf)

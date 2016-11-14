@@ -186,6 +186,17 @@ class HttpGoogleServicesDAO(
             setLogging(logging)
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
+
+          // manually insert an initial storage log
+          val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
+            """"bucket","storage_byte_hours"
+              |"$bucketName","0"
+              |""".stripMargin.getBytes))
+          // use an object name that will always be superceded by a real storage log
+          val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
+          val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
+          executeGoogleRequest(objectInserter)
+
           GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }
       }
