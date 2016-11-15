@@ -155,18 +155,6 @@ trait MethodConfigurationComponent {
       findById(id).map(rec => (rec.deleted, rec.name)).update(true, name + "-deleted-" + DateTime.now().toString("yyyy-MM-dd_HH:mm:ss"))
     }
 
-    object HideMethodConfigurationQuery {
-      val driver: JdbcDriver = MethodConfigurationComponent.this.driver
-
-      def hideAction(methodConfigId: Long) = {
-       val now = DateTime.now.toString("yyyy-MM-dd HH:mm:ss")
-
-        sql"""UPDATE METHOD_CONFIG mc
-                SET mc.DELETED = 1, mc.NAMESPACE = mcNAMESPACE + "-DELETED-" + $now
-                WHERE mc.ID = $methodConfigId AND (mc.DELETED = 0 OR mc.DELETE IS NULL);"""
-      }
-    }
-
     // Delete a Method completely from the DB - used when deleting a workspace
     object DeleteMethodConfigurationQuery extends RawSqlQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver
