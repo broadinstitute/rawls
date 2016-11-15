@@ -1386,6 +1386,19 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+  }
+
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
     Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -1456,6 +1469,35 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK) {
           status
+        }
+      }
+  }
+
+  it should "check that an update to a workspace modifies the last modified date" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
+    var mutableWorkspace: Workspace = testData.workspace.copy()
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        mutableWorkspace = responseAs[WorkspaceListResponse].workspace
+      }
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
+        assertWorkspaceModifiedDate(status, updatedWorkspace)
+        assert {
+          updatedWorkspace.lastModified.isAfter(mutableWorkspace.lastModified)
         }
       }
   }
@@ -1624,6 +1666,32 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
+  }
+
+  it should "locking (and unlocking) a workspace should modify the workspace last modified date" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+
+    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+
   }
 
   it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>

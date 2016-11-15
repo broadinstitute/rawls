@@ -115,7 +115,8 @@ trait MethodConfigurationComponent {
             saveMaps(configId)
           }
         case Some(methodConfigRec) =>
-          findInputsByConfigId(methodConfigRec.id).delete andThen
+          workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+            findInputsByConfigId(methodConfigRec.id).delete andThen
             findOutputsByConfigId(methodConfigRec.id).delete andThen
             findPrereqsByConfigId(methodConfigRec.id).delete andThen
             findById(methodConfigRec.id).map(rec => (rec.methodNamespace, rec.methodName, rec.methodVersion)).update(methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion) andThen
@@ -133,19 +134,21 @@ trait MethodConfigurationComponent {
     }
 
     def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): ReadWriteAction[Int] = {
-      findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
     }
 
     // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
-      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
-        case None => DBIO.successful(false)
-        case Some(methodConfigRec) => {
-          hideMethodConfigurationAction(methodConfigRec.id, methodConfigurationName)
-        } map { count =>
-          count > 0
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
+          case None => DBIO.successful(false)
+          case Some(methodConfigRec) => {
+            hideMethodConfigurationAction(methodConfigRec.id, methodConfigurationName)
+          } map { count =>
+            count > 0
+          }
         }
-      }
     }
 
     def hideMethodConfigurationAction(id: Long, name: String): ReadWriteAction[Int] = {

@@ -47,6 +47,130 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "update the workspace last modified date on entity rename" in withTestDataApiServices { services =>
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}/rename", httpJson(EntityName("s2_changed"))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+  }
+
+  it should "update the workspace last modified date on entity update" in withTestDataApiServices { services =>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, responseAs[String]) {
+          status
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+  }
+
+  it should "update the workspace last modified date on entity post and copy" in withTestDataApiServices { services =>
+
+    val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeString("c")))
+    val z1 = Entity("z1", "Sample", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("splat") -> attributeList))
+    val workspaceSrcName = new WorkspaceName(testData.wsName.namespace, testData.wsName.name + "_copy_source")
+    val workspaceSrcRequest = WorkspaceRequest(
+      workspace2Name.namespace,
+      workspace2Name.name,
+      None,
+      Map.empty
+    )
+
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
+
+    Post("/workspaces", httpJson(workspaceSrcRequest)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        Post(s"/workspaces/${workspaceSrcRequest.namespace}/${workspaceSrcRequest.name}/entities", httpJson(z1)) ~>
+          sealRoute(services.entityRoutes) ~>
+          check {
+            assertResult(StatusCodes.Created, response.entity.asString) {
+              status
+            }
+            assertResult(z1) {
+              val ws2 = runAndWait(workspaceQuery.findByName(workspace2Name)).get
+              runAndWait(entityQuery.get(SlickWorkspaceContext(ws2), z1.entityType, z1.name)).get
+            }
+
+            val sourceWorkspace = WorkspaceName(workspaceSrcRequest.namespace, workspaceSrcRequest.name)
+            val entityCopyDefinition = EntityCopyDefinition(sourceWorkspace, testData.wsName, "Sample", Seq("z1"))
+            Post("/workspaces/entities/copy", httpJson(entityCopyDefinition)) ~>
+              sealRoute(services.entityRoutes) ~>
+              check {
+                assertResult(StatusCodes.Created, response.entity.asString) {
+                  status
+                }
+              }
+            Get(s"/workspaces/${workspaceSrcRequest.namespace}/${workspaceSrcRequest.name}") ~>
+              sealRoute(services.workspaceRoutes) ~>
+              check {
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+              }
+            Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}") ~>
+              sealRoute(services.workspaceRoutes) ~>
+              check {
+                assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+              }
+          }
+      }
+  }
+
+  it should "update the workspace last modified date on entity batchUpsert" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("bar"))))
+    val update2 = EntityUpdateDefinition(testData.sample2.name, testData.sample2.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+  }
+
+  it should "update the workspace last modified date on entity batchUpdate" in withTestDataApiServices { services =>
+    val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("bar"))))
+    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName.withDefaultNS("newAttribute") -> AttributeString("bar"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)      }
+  }
+
   it should "return 201 on create entity" in withTestDataApiServices { services =>
     val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))

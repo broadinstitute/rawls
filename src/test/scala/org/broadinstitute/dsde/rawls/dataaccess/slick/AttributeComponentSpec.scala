@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, WorkspaceTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -13,7 +13,7 @@ import scala.concurrent.duration.Duration
 /**
  * Created by dvoet on 2/9/16.
  */
-class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent {
+class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with WorkspaceTestUtils {
   import driver.api._
 
   val workspace = Workspace("broad-dsde-test", "test-workspace", None, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
@@ -283,7 +283,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       Await.result(saveWorkspace flatMap { _ => updateWorkspace }, Duration.Inf)
     }
 
-    assertResult(Option(updatedWorkspace)) {
+    assertWorkspaceResult(Option(updatedWorkspace)) {
       runAndWait(this.workspaceQuery.findById(workspaceId.toString))
     }
   }

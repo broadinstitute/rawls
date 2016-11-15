@@ -968,6 +968,12 @@ AdminApiServiceSpec extends ApiServiceSpec {
       }
     }
 
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
+      }
+
     Delete(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -985,6 +991,12 @@ AdminApiServiceSpec extends ApiServiceSpec {
         Await.result(services.gcsDAO.listGroupMembers(group2), Duration.Inf).map { members =>
           members.contains(Right(UserService.allUsersGroupRef))
         }
+      }
+
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
 
   }
