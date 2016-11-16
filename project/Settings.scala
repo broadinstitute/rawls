@@ -54,9 +54,12 @@ object Settings {
     version := "0.1",
     libraryDependencies ++= rawlsDependencies
   ) ++ commonSettings ++ rawlsAssemblySettings ++ rawlsCompileSettings
+  //NOTE: rawlsCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
+  //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
   val rootSettings = List(
     name := "rawls",
     version := "0.1"
   ) ++ commonSettings ++ rawlsAssemblySettings ++ rawlsCompileSettings
+  //See immediately above NOTE.
 }
