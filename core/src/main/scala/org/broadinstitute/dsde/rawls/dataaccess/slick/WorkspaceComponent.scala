@@ -6,10 +6,9 @@ import java.util.{Date, UUID}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.{Read, Write}
+import slick.dbio.Effect.Read
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import slick.profile.FixedSqlAction
 
 /**
  * Created by dvoet on 2/4/16.
@@ -118,19 +117,22 @@ trait WorkspaceComponent {
     private def upsertAttributes(workspace: Workspace) = {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
-      def insertScratchAttributes(transactionId: String): ReadWriteAction[Unit] = {
-        val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
-        val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
-        val entitiesToLookup = (entityRefs ++ entityRefListMembers)
+      val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
+      val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
+      val entitiesToLookup = (entityRefs ++ entityRefListMembers)
 
-        entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
-          val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-          workspaceAttributeScratchQuery.batchInsertAttributes(workspace.attributes.map(attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)).flatten.toSeq, transactionId)
-        }
+      def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+        workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
-      //this is really only ever going to be one id but in order to be generic we pretend it's a list
-      workspaceAttributeQuery.AlterAttributesUsingScratchTableQueries.upsertAction(Seq(workspaceId), insertScratchAttributes)
+      entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
+        val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
+        val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
+
+        workspaceAttributeQuery.findByOwnerQuery(Seq(workspaceId)).result flatMap { existingAttributes =>
+          workspaceAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+        }
+      }
     }
 
     private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {

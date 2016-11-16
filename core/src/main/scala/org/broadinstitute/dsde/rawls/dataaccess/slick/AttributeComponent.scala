@@ -5,7 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
-import slick.ast.TypedType
+import slick.ast.{BaseTypedType, TypedType}
 import slick.dbio.Effect.Write
 import slick.driver.JdbcDriver
 import spray.http.StatusCodes
@@ -53,8 +53,7 @@ case class EntityAttributeScratchRecord(id: Long,
                                      valueEntityRef: Option[Long],
                                      listIndex: Option[Int],
                                      listLength: Option[Int],
-                                     transactionId: String) extends AttributeScratchRecord[Long] {
-}
+                                     transactionId: String) extends AttributeScratchRecord[Long]
 
 case class WorkspaceAttributeRecord(id: Long,
                                     ownerId: UUID, // workspace id
@@ -158,9 +157,7 @@ trait AttributeComponent {
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
-
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
-
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
   protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int], String) => TEMP_RECORD) extends TableQuery[T](cons) {
@@ -179,7 +176,7 @@ trait AttributeComponent {
    * @tparam OWNER_ID the type of the ownerId field
    * @tparam RECORD the record class
    */
-  protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag: BaseTypedType, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
 
     def marshalAttribute(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
@@ -245,6 +242,10 @@ trait AttributeComponent {
       filter(rec => rec.namespace === attrName.namespace && rec.name === attrName.name)
     }
 
+    def findByOwnerQuery(ownerIds: Seq[OWNER_ID]) = {
+      filter(_.ownerId inSetBind ownerIds)
+    }
+
     def queryByAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
       findByNameQuery(attrName).filter { rec =>
         attrValue match {
@@ -260,22 +261,40 @@ trait AttributeComponent {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
 
+    // for DB performance reasons, it's necessary to split "save attributes" into 3 steps:
+    // - delete attributes which are not present in the new set
+    // - insert attributes which are not present in the existing set
+    // - update attributes which are common to both sets
+    // Delete and Insert use standard Slick actions, but Update uses a scratch table
+    // (AlterAttributesUsingScratchTableQueries) for DB performance reasons.
+
+    // we use set operations (filter, contains, partition) to split the attributes,
+    // which uses the element type's equals method.  Ideally we would use AttributeRecord.equals,
+    // but we only want to use a subset of the fields: the primary key.
+    // AttributeRecordPrimaryKey encapsulates only those fields.
+
+    case class AttributeRecordPrimaryKey(ownerId: OWNER_ID, namespace: String, name: String, listIndex: Option[Int])
+
+    // a map of PK -> Record allows us to perform set operations on the PKs but return the Records as results
+    def toPrimaryKeyMap(recs: Traversable[RECORD]) =
+      recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
+
+    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => ReadWriteAction[Unit]) = {
+      val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
+      val existingAttrMap = toPrimaryKeyMap(existingAttributes)
+
+      // update attributes which are in both to-save and currently-exists, insert attributes which are in save but not exists
+      val (attrsToUpdateMap, attrsToInsertMap) = toSaveAttrMap.partition { case (k, v) => existingAttrMap.keySet.contains(k) }
+      // delete attributes which currently exist but are not in the attributes to save
+      val attributesToDelete = existingAttrMap.filterKeys(! attrsToUpdateMap.keySet.contains(_)).values
+
+      deleteAttributeRecords(attributesToDelete.toSeq) andThen
+        batchInsertAttributes(attrsToInsertMap.values.toSeq) andThen
+        AlterAttributesUsingScratchTableQueries.updateAction(insertFunction(attrsToUpdateMap.values.toSeq))
+    }
+
     object AlterAttributesUsingScratchTableQueries extends RawSqlQuery {
       val driver: JdbcDriver = AttributeComponent.this.driver
-      /*!CAUTION! - do not drop the ownerIds clause at the end or it will delete every attribute in the table!
-
-        deleteMasterFromAction: deletes any row in *_ATTRIBUTE that doesn't
-          exist in *_ATTRIBUTE_TEMP but exists in *_ATTRIBUTE (bound by ownerIds)
-        updateInMasterAction: updates any row in *_ATTRIBUTE that also
-          exists in *_ATTRIBUTE_TEMP (bound by ownerIds)
-        insertIntoMasterAction: inserts any row into *_ATTRIBUTE that doesn't
-          exist in *_ATTRIBUTE but exists in *_ATTRIBUTE_TEMP (bound by ownerIds)
-
-        These left joins give us the rows related to the attributes that are in the temp table.
-        We filter on ta.owner_id == null if we want to see that the row does NOT exist in the temp table
-        We filter on a.owner_id == null if we want to see that the row does NOT exist in the real table
-        We filter on ta.owner_id != null if we want to see that the row exists in both of the tables
-       */
 
       def ownerIdTail(ownerIds: Seq[OWNER_ID]) = {
         concatSqlActions(sql"(", reduceSqlActionsWithDelim(ownerIds.map {
@@ -287,34 +306,22 @@ trait AttributeComponent {
       //MySQL seems to handle null safe operators inefficiently. the solution to this
       //is to use ifnull and default to -2 if the list_index is null. list_index of -2
       //is never used otherwise
-      def deleteFromMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
-        concatSqlActions(sql"""delete a from #${baseTableRow.tableName} a
-                left join #${baseTableRow.tableName}_SCRATCH ta
-                on ta.transaction_id = $transactionId and (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2))
-                where ta.owner_id is null and a.owner_id in """, ownerIdTail(ownerIds)).as[Int]
-      def updateInMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
+
+      // updateInMasterAction: updates any row in *_ATTRIBUTE that also exists in *_ATTRIBUTE_SCRATCH
+      def updateInMasterAction(transactionId: String) =
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_SCRATCH ta
                 on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
                 set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
-      def insertIntoMasterAction(ownerIds: Seq[OWNER_ID], transactionId: String) =
-        concatSqlActions(sql"""insert into #${baseTableRow.tableName}(namespace,name,value_string,value_number,value_boolean,value_entity_ref,list_index,owner_id,list_length)
-                select ta.namespace,ta.name,ta.value_string,ta.value_number,ta.value_boolean,ta.value_entity_ref,ta.list_index,ta.owner_id,ta.list_length
-                from #${baseTableRow.tableName}_SCRATCH ta
-                left join #${baseTableRow.tableName} a
-                on (a.namespace,a.name,a.owner_id,a.list_index)<=>(ta.namespace,ta.name,ta.owner_id,ta.list_index) and a.owner_id in """, ownerIdTail(ownerIds),
-                sql""" where ta.transaction_id = $transactionId and a.owner_id is null""").as[Int]
 
       def clearAttributeScratchTableAction(transactionId: String) = {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
       }
 
-      def upsertAction(ownerIds: Seq[OWNER_ID], insertFunction: String => ReadWriteAction[Unit]) = {
+      def updateAction(insertIntoScratchFunction: String => ReadWriteAction[Unit]) = {
         val transactionId = UUID.randomUUID().toString
-        insertFunction(transactionId) andThen
-          deleteFromMasterAction(ownerIds, transactionId) andThen
-          updateInMasterAction(ownerIds, transactionId) andThen
-          insertIntoMasterAction(ownerIds, transactionId) andFinally
+        insertIntoScratchFunction(transactionId) andThen
+          updateInMasterAction(transactionId) andThen
           clearAttributeScratchTableAction(transactionId)
       }
     }

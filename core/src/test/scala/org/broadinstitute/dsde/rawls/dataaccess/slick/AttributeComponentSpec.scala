@@ -331,4 +331,33 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(this.entityQuery.get(SlickWorkspaceContext(workspace), entity.entityType, entity.name))
     }
   }
+
+  it should "upsert" in withEmptyTestDatabase {
+    // copied from WorkspaceComponent
+    def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+      workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
+    }
+
+    def insertAndUpdateID(rec: WorkspaceAttributeRecord): WorkspaceAttributeRecord = {
+      rec.copy(id = runAndWait((workspaceAttributeQuery returning workspaceAttributeQuery.map(_.id)) += rec))
+    }
+
+    runAndWait(workspaceQuery.save(workspace))
+
+    val existing = Seq(
+      insertAndUpdateID(WorkspaceAttributeRecord(dummyId1, workspaceId, AttributeName.defaultNamespace, "test1", Option("test"), None, None, None, None, None)),
+      insertAndUpdateID(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test2", None, Option(2), None, None, None, None))
+    )
+
+    assertExpectedRecords(existing:_*)
+
+    val update = WorkspaceAttributeRecord(2, workspaceId, AttributeName.defaultNamespace, "test2", Option("test2"), None, None, None, None, None)
+    val insert = WorkspaceAttributeRecord(3, workspaceId, AttributeName.defaultNamespace, "test3", None, None, Option(false), None, None, None)
+    val toSave = Seq(update, insert)
+
+    runAndWait(workspaceAttributeQuery.upsertAction(toSave, existing, insertScratchAttributes))
+
+    assertExpectedRecords(toSave:_*)
+  }
+
 }

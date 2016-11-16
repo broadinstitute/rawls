@@ -296,17 +296,19 @@ trait EntityComponent {
     }
 
     private def upsertAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
-      def insertScratchAttributes(transactionId: String): ReadWriteAction[Unit] = {
-        val attributeRecsToEntityId = for {
-          entity <- entitiesToSave
-          (attributeName, attribute) <- entity.attributes
-          attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
-        } yield attributeRec
+      val attributesToSave = for {
+        entity <- entitiesToSave
+        (attributeName, attribute) <- entity.attributes
+        attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
+      } yield attributeRec
 
-        entityAttributeScratchQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq, transactionId)
+      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+        entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
-      entityAttributeQuery.AlterAttributesUsingScratchTableQueries.upsertAction(entityIds, insertScratchAttributes)
+      entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
+        entityAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+      }
     }
 
     private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
