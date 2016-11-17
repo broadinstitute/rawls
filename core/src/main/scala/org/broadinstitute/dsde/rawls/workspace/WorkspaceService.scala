@@ -1515,7 +1515,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
       bucketName <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
+        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Owner, dataAccess) { workspaceContext =>
           DBIO.successful(workspaceContext.workspace.bucketName)
         }
       }

@@ -1999,31 +1999,37 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // TODO: adjust user access for this test once the requirements of GAWB-1145 settle down
-  for (access <- Seq("no-access")) {
-    it should s"not allow a $access user to request bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+  it should "return 404 when a no-access user requests bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  for (access <- Seq("reader-access", "writer-access")) {
+    it should s"not allow a $access user to request bucket usage" in withTestWorkspacesApiServicesAndUser(access) { services =>
       Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
-          assertResult(StatusCodes.NotFound) {
+          assertResult(StatusCodes.Forbidden) {
             status
           }
         }
     }
   }
 
-  // TODO: adjust user access for this test once the requirements of GAWB-1145 settle down
-  for (access <- Seq("reader-access", "writer-access", "owner-access")) {
-    it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(access) { services =>
-      Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
-        sealRoute(services.workspaceRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) { status }
-          assertResult(BucketUsageResponse(BigInt(42))) {
-            responseAs[BucketUsageResponse]
-          }
+  it should "return 200 when workspace with owner-access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser("owner-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        assertResult(BucketUsageResponse(BigInt(42))) {
+          responseAs[BucketUsageResponse]
         }
-    }
+      }
   }
 }
 
