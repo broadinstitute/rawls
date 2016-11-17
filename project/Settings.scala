@@ -15,7 +15,7 @@ object Settings {
     "artifactory-snapshots" at artifactory + "libs-snapshot"
   )
 
-  val buildSettings: Seq[_root_.sbt.Def.Setting[_]] = Defaults.defaultSettings ++ Seq(
+  val buildSettings = Defaults.defaultSettings ++ Seq(
     javaOptions += "-Xmx2G"
   )
 
@@ -35,7 +35,7 @@ object Settings {
     mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot")
   )
 
-  val commonSettings: Seq[_root_.sbt.Def.Setting[_]] =
+  val commonSettings =
     buildSettings ++ assemblySettings ++ testSettings ++ List(
     organization  := "org.broadinstitute",
     scalaVersion  := "2.11.7",

@@ -13,7 +13,7 @@ javaOptions in Revolver.reStart := sys.env("JAVA_OPTS").split(" ")
 
 net.virtualvoid.sbt.graph.Plugin.graphSettings
 
-lazy val rawlsModel: Project = (project in file("model"))
+lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
   .withTestSettings
 
