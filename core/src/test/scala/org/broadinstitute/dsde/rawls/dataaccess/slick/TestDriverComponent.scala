@@ -407,7 +407,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+
+    //a submission with a succeeeded workflow
+    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
 
     //a submission with a failed workflow
@@ -419,7 +423,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted)
 
     //a submission with an aborted workflow
-    val submissionAborted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+
+    //a submission with an aborted workflow
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
       Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
 
     //a submission with multiple failed and succeeded workflows
@@ -531,7 +539,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             methodConfigurationQuery.save(context, methodConfig),
             methodConfigurationQuery.save(context, methodConfig2),
 
-            submissionQuery.create(context, submissionSuccessful),
+            submissionQuery.create(context, submissionSuccessful1),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
@@ -561,8 +569,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
             methodConfigurationQuery.save(context, methodConfig),
 
-            submissionQuery.create(context, submissionAborted),
-            submissionQuery.create(context, submissionSuccessful),
+            submissionQuery.create(context, submissionAborted2),
+            submissionQuery.create(context, submissionSuccessful2),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
@@ -572,7 +580,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
             methodConfigurationQuery.save(context, methodConfig),
 
-            submissionQuery.create(context, submissionAborted),
+            submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
