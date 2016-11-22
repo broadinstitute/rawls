@@ -569,7 +569,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
           dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
-            if (!submissions.forall(_.status.isDone)) {
+            if (!submissions.forall(_.status.isTerminated)) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
             } else {
               dataAccess.workspaceQuery.lock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
