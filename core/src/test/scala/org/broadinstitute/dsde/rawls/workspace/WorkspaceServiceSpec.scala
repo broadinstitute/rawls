@@ -444,6 +444,18 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "lock a workspace with no running submissions" in withTestDataServices { services =>
+    //check workspace is not locked
+    assert(!testData.workspaceMixedSubmissions.isLocked)
+
+    //lock workspace
+    services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)).
+
+    //check workspace is locked
+    assert(testData.workspaceMixedSubmissions.isLocked)
+
+  }
+
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
