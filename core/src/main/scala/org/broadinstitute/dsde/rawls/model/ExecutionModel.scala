@@ -359,7 +359,7 @@ object SubmissionStatuses {
 
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
     def isDone = {
-      terminalStatuses.contains(this)
+      terminalStatuses.contains(this) 
     }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = SubmissionStatuses.withName(name)
