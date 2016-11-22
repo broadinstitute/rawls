@@ -449,7 +449,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!testData.workspaceMixedSubmissions.isLocked)
 
     //lock workspace
-    services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)).
+    services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name))
 
     //check workspace is locked
     assert(testData.workspaceMixedSubmissions.isLocked)
