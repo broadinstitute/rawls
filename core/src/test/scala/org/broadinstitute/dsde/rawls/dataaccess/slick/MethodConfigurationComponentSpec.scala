@@ -1,17 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.util.UUID
-
-import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 /**
  * Created by mbemis on 2/17/16.
  */
-class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
   "MethodConfigurationComponenent" should "save and get a method config" in withDefaultTestDatabase {
@@ -52,11 +48,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "list method configs" in withDefaultTestDatabase {
-    val workspaceContext = SlickWorkspaceContext(testData.workspace)
-
-    List(testData.methodConfig, testData.methodConfig2, testData.methodConfigValid, testData.methodConfigUnparseable, testData.methodConfigNotAllSamples, testData.methodConfigAttrTypeMixup).map(_.toShort) should contain
-    theSameElementsAs(runAndWait(methodConfigurationQuery.list(workspaceContext)).toList)
+  it should "list method configs" in withConstantTestDatabase {
+    val workspaceContext = SlickWorkspaceContext(constantData.workspace)
+    assertSameElements(constantData.allMCs.map(_.toShort), runAndWait(methodConfigurationQuery.list(workspaceContext)))
   }
 
   it should "rename method configs" in withDefaultTestDatabase {

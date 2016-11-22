@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
 
-class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
   "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
@@ -50,9 +51,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       testData.userReader -> Set(testData.testProject3Name),
       testData.userOwner -> Set(testData.billingProject.projectName),
       testData.userProjectOwner -> Set(testData.billingProject.projectName, testData.testProject1.projectName, testData.testProject2Name, testData.testProject3Name))
-    expectedUsersProjects should contain theSameElementsAs  {
-      runAndWait(rawlsBillingProjectQuery.loadAllUsersWithProjects).map { case (user, projects) => user -> projects.toSet}
-    }
+    assertSameElements(expectedUsersProjects, runAndWait(rawlsBillingProjectQuery.loadAllUsersAndTheirProjects).map { case (user, projects) => user -> projects.toSet})
 
     assertResult(Some(testData.testProject3)) {
       runAndWait(rawlsBillingProjectQuery.load(testData.testProject3Name))

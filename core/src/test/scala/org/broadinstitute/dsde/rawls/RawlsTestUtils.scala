@@ -1,11 +1,12 @@
 package org.broadinstitute.dsde.rawls
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, TestDriverComponentWithFlatSpecAndMatchers}
 import org.broadinstitute.dsde.rawls.model.Workspace
+import org.scalatest.{Matchers, Suite}
 import org.scalatest.exceptions.TestFailedException
 import spray.http.{StatusCode, StatusCodes}
 
-trait WorkspaceTestUtils extends TestDriverComponentWithFlatSpecAndMatchers {
+trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
 
   def assertWorkspaceModifiedDate(status: StatusCode, workspace: Workspace) = {
     assertResult(StatusCodes.OK) {
@@ -50,4 +51,13 @@ trait WorkspaceTestUtils extends TestDriverComponentWithFlatSpecAndMatchers {
     }
   }
 
+  def sortAndAssertWorkspaceResult(expected: Seq[Workspace])(actual: Seq[Workspace]) = {
+    def ordering(w: Workspace) = (w.namespace, w.name)
+    assertWorkspaceResult(expected.sortBy(ordering))(actual.sortBy(ordering))
+  }
+
+  // prefer this to using theSameElementsAs directly, because its functionality depends on whitespace
+  def assertSameElements[T](expected: TraversableOnce[T], actual: TraversableOnce[T]): Unit = {
+    expected.toTraversable should contain theSameElementsAs actual.toTraversable
+  }
 }

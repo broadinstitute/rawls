@@ -6,7 +6,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, WorkspaceTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -27,7 +27,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 
-class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with WorkspaceTestUtils {
+class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matchers with TestDriverComponent with RawlsTestUtils {
   import driver.api._
 
   val attributeList = AttributeValueList(Seq(AttributeString("a"), AttributeString("b"), AttributeBoolean(true)))

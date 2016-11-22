@@ -2,13 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.WorkspaceTestUtils
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model._
 
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with WorkspaceTestUtils {
+class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils {
   import driver.api._
 
   private def saveRawlsGroup(name: String, email: String) = {

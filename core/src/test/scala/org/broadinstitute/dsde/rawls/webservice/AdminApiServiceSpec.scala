@@ -41,6 +41,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withConstantTestDataApiServices[T](testCode: TestApiService =>  T): T = {
+    withConstantTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
   def getBillingProject(dataSource: SlickDataSource, project: RawlsBillingProject) = runAndWait(rawlsBillingProjectQuery.load(project.projectName))
 
   def loadUser(user: RawlsUser) = runAndWait(rawlsUserQuery.load(user))
@@ -79,16 +85,18 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
-  "AdminApi" should "return 200 when listing active submissions" in withTestDataApiServices { services =>
+  "AdminApi" should "return 200 when listing active submissions" in withConstantTestDataApiServices { services =>
+    val expected = Seq(
+      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submissionNoWorkflows),
+      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
+      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
+
     import spray.json.DefaultJsonProtocol._
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[ActiveSubmission]] should contain
-          theSameElementsAs(Array(ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission1),
-                                  ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission2),
-                                  ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest)))
+        assertSameElements(expected, responseAs[Seq[ActiveSubmission]])
       }
   }
 
@@ -115,10 +123,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[ActiveSubmission]] should contain
-        theSameElementsAs(Array(ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission1),
+        val expected = Array(ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission1),
           ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission2),
-          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest)))
+          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest))
+        assertSameElements(expected, responseAs[Array[ActiveSubmission]])
       }
   }
 
@@ -804,28 +812,28 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  val userNoBilling = RawlsUser(RawlsUserSubjectId("4637649"), RawlsUserEmail("no-billing-projects@example.com"))
+  val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, userNoBilling)
+
   it should "return 200 when listing users" in withTestDataApiServices { services =>
-    val userOwner = RawlsUserInfo(testData.userOwner, Seq(RawlsBillingProjectName("myNamespace")))
-    val userWriter = RawlsUserInfo(testData.userWriter, Seq.empty)
-    val userReader = RawlsUserInfo(testData.userReader, Seq.empty)
+    runAndWait(rawlsUserQuery.save(userNoBilling))
 
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader))
+        assertSameElements(testDataUsers, responseAs[RawlsUserInfoList].userInfoList.map(_.user))
       }
   }
 
   it should "return 200 when importing users" in withTestDataApiServices { services =>
-    val userOwner = RawlsUserInfo(testData.userOwner, Seq(RawlsBillingProjectName("myNamespace")))
-    val userWriter = RawlsUserInfo(testData.userWriter, Seq.empty)
-    val userReader = RawlsUserInfo(testData.userReader, Seq.empty)
-    val user1 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("1"), RawlsUserEmail("owner-access2")), Seq(RawlsBillingProjectName("myNamespace")))
+    runAndWait(rawlsUserQuery.save(userNoBilling))
+
+    val user1 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("1"), RawlsUserEmail("owner-access2")), Seq(testData.billingProject.projectName))
     val user2 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("2"), RawlsUserEmail("writer-access2")), Seq.empty)
     val user3 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("3"), RawlsUserEmail("reader-access2")), Seq.empty)
+    val newUsers = Seq(user1, user2, user3)
 
-    val userInfoList = RawlsUserInfoList(Seq(user1, user2, user3))
-
+    val userInfoList = RawlsUserInfoList(newUsers)
     Post("/admin/users", httpJson(userInfoList)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -837,12 +845,13 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get("/admin/users") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        responseAs[RawlsUserInfoList].userInfoList contains theSameElementsAs(Seq(userOwner, userWriter, userReader, user1, user2, user3))
+        val expected = testDataUsers ++ newUsers.map(_.user)
+        assertSameElements(expected, responseAs[RawlsUserInfoList].userInfoList.map(_.user))
       }
   }
 
   it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
+    val group = RawlsGroupRef(RawlsGroupName("test_group"))
 
     Post(s"/admin/groups", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
@@ -857,8 +866,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when removing a member from a group" in withTestDataApiServices { services =>
-    val group = new RawlsGroupRef(RawlsGroupName("test_group"))
-    val subGroup = new RawlsGroupRef(RawlsGroupName("test_subGroup"))
+    val group = RawlsGroupRef(RawlsGroupName("test_group"))
+    val subGroup = RawlsGroupRef(RawlsGroupName("test_subGroup"))
 
     //make main group
     Post(s"/admin/groups", httpJson(group)) ~>
@@ -1052,13 +1061,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
-        responseAs[SyncReport].items should contain theSameElementsAs
-          Seq(
-            SyncReportItem("added", Option(inDbUser), None, None),
-            SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
-            SyncReportItem("removed", Option(inGoogleUser), None, None),
-            SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
-          )
+
+        val expected = Seq(
+          SyncReportItem("added", Option(inDbUser), None, None),
+          SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
+          SyncReportItem("removed", Option(inGoogleUser), None, None),
+          SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
+        )
+        assertSameElements(expected, responseAs[SyncReport].items)
       }
   }
 
@@ -1078,8 +1088,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           responseStatus.workspaceName
         }
 
-        responseStatus.statuses should contain theSameElementsAs
-          Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
+        val expected = Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
@@ -1102,6 +1111,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"
           )
+        assertSameElements(expected, responseStatus.statuses)
       }
   }
 
@@ -1111,30 +1121,28 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished, testData.workspaceNoAttrs))
+        // TODO: why is this result returned out of order?
+        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[Workspace]] }
       }
   }
 
-  it should "return 200 when getting workspaces by a string attribute" in withTestDataApiServices { services =>
+  it should "return 200 when getting workspaces by a string attribute" in withConstantTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished))
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[Workspace]] }
       }
   }
 
-  it should "return 200 when getting workspaces by a numeric attribute" in withTestDataApiServices { services =>
+  it should "return 200 when getting workspaces by a numeric attribute" in withConstantTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspace, testData.workspaceNoGroups, testData.workspacePublished))
+        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[Workspace]] }
       }
   }
 
@@ -1144,8 +1152,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        responseAs[Array[Workspace]] should contain
-        theSameElementsAs(Array(testData.workspacePublished))
+        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[Workspace]] }
       }
   }
 

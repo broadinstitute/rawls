@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
-import slick.dbio.Effect.Read
 
 case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String])
 case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
@@ -127,16 +126,17 @@ trait RawlsBillingProjectComponent {
       })
     }
 
-    def loadAllUsersWithProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
+    // includes users who are not in any billing projects
+    def loadAllUsersAndTheirProjects: ReadAction[Map[RawlsUser, Iterable[RawlsBillingProjectName]]] = {
       val usersAndProjects = for {
         (project, user) <- rawlsBillingProjectQuery join rawlsBillingProjectGroupQuery on (_.projectName === _.projectName) join
-          groupUsersQuery on (_._2.groupName === _.groupName) join rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
-      } yield (user, project._1._1)
+          groupUsersQuery on (_._2.groupName === _.groupName) joinRight rawlsUserQuery on (_._2.userSubjectId === _.userSubjectId)
+      } yield (user, project map (_._1._1))
 
       usersAndProjects.result.map { results =>
-        results.groupBy(_._1) map {
+        results.groupBy { case (userRec, optProjectRec) => userRec } map {
           case (userRec, userAndProjectOps) =>
-            val projects = userAndProjectOps.map(proj => RawlsBillingProjectName(proj._2.projectName))
+            val projects = userAndProjectOps.collect { case (userRec, Some(projectRec)) => RawlsBillingProjectName(projectRec.projectName) }
             rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
         }
       }

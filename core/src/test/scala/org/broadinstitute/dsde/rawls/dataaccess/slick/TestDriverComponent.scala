@@ -459,6 +459,20 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       groups.foreach(gcsDAO.createGoogleGroup(_))
     }
 
+    val allWorkspaces = Seq(workspace,
+      workspacePublished,
+      workspaceNoAttrs,
+      workspaceNoGroups,
+      workspaceWithRealm,
+      otherWorkspaceWithRealm,
+      workspaceNoSubmissions,
+      workspaceSuccessfulSubmission,
+      workspaceFailedSubmission,
+      workspaceSubmittedSubmission,
+      workspaceMixedSubmissions,
+      workspaceTerminatedSubmissions)
+    val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
+
     override def save() = {
       DBIO.seq(
         rawlsUserQuery.save(userProjectOwner),
@@ -484,18 +498,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
-        workspaceQuery.save(workspace),
-        workspaceQuery.save(workspacePublished),
-        workspaceQuery.save(workspaceNoAttrs),
-        workspaceQuery.save(workspaceNoGroups),
-        workspaceQuery.save(workspaceWithRealm),
-        workspaceQuery.save(otherWorkspaceWithRealm),
-        workspaceQuery.save(workspaceNoSubmissions),
-        workspaceQuery.save(workspaceSuccessfulSubmission),
-        workspaceQuery.save(workspaceFailedSubmission),
-        workspaceQuery.save(workspaceSubmittedSubmission),
-        workspaceQuery.save(workspaceMixedSubmissions),
-        workspaceQuery.save(workspaceTerminatedSubmissions),
+        saveAllWorkspacesAction,
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
@@ -725,11 +728,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(sample1, sample2, sample3), Map(sample1 -> inputResolutions, sample2 -> inputResolutions, sample3 -> inputResolutions),
       Seq(sample4, sample5, sample6), Map(sample4 -> inputResolutions2, sample5 -> inputResolutions2, sample6 -> inputResolutions2))
 
+    val allEntities = Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)
+    val allMCs = Seq(methodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigUnparseable, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigEntityUpdate)
+    def saveAllMCs(context: SlickWorkspaceContext) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.save(context, mc) })
+
     override def save() = {
       DBIO.seq(
-        rawlsUserQuery.save(RawlsUser(userInfo)),
-        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsUserQuery.save(userOwner),
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
         rawlsGroupQuery.save(ownerGroup),
@@ -738,17 +744,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceQuery.save(workspace),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
-            entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
-
-            methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
-            methodConfigurationQuery.save(context, methodConfig3),
-            methodConfigurationQuery.save(context, methodConfigValid),
-            methodConfigurationQuery.save(context, methodConfigUnparseable),
-            methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-            methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-            methodConfigurationQuery.save(context, methodConfigEntityUpdate),
-
+            entityQuery.save(context, allEntities),
+            saveAllMCs(context),
             submissionQuery.create(context, submissionNoWorkflows),
             submissionQuery.create(context, submission1),
             submissionQuery.create(context, submission2)
