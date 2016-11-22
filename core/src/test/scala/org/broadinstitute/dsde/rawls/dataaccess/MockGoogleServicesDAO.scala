@@ -84,7 +84,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
     def workspaceAccessGroup(workspaceId: String, accessLevel: WorkspaceAccessLevel, users: Set[RawlsUserRef]) = {
       RawlsGroup(RawlsGroupName(s"fc-${workspaceId}-${accessLevel.toString}"), RawlsGroupEmail(s"$accessLevel@$workspaceId"), users, Set.empty)
@@ -95,13 +95,20 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     }
 
     val accessGroups: Map[WorkspaceAccessLevel, RawlsGroup] = groupAccessLevelsAscending.map { accessLevel =>
-      val users: Set[RawlsUserRef] = if (accessLevel == WorkspaceAccessLevels.Owner) Set(RawlsUser(userInfo)) else Set.empty
-      accessLevel -> workspaceAccessGroup(workspaceId, accessLevel, users)
+      accessLevel -> (accessLevel match {
+        case WorkspaceAccessLevels.Owner => workspaceAccessGroup(workspaceId, accessLevel, Set(RawlsUser(userInfo)))
+        case WorkspaceAccessLevels.ProjectOwner => project.groups(ProjectRoles.Owner)
+        case _ => workspaceAccessGroup(workspaceId, accessLevel, Set.empty)
+      })
     }.toMap
 
     val intersectionGroups: Option[Map[WorkspaceAccessLevel, RawlsGroup]] = realm map { realmGroupRef =>
       groupAccessLevelsAscending.map { accessLevel =>
-        val users: Set[RawlsUserRef] = if (accessLevel == WorkspaceAccessLevels.Owner) Set(RawlsUser(userInfo)) else Set.empty
+        val users: Set[RawlsUserRef] = accessLevel match {
+          case WorkspaceAccessLevels.Owner => Set(RawlsUser(userInfo))
+          case WorkspaceAccessLevels.ProjectOwner => realmProjectOwnerIntersection.getOrElse(Set.empty)
+          case _ => Set.empty
+        }
         accessLevel -> intersectionGroup(workspaceId, realmGroupRef.groupName.value, accessLevel, users)
       }.toMap
     }

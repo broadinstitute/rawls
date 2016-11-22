@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.integrationtest
 
 import java.io.{ByteArrayInputStream, StringReader}
+import java.util
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -95,7 +96,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
 
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, None, None), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -146,9 +147,6 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val ownerMembers = Await.result(retry(when500)(() => Future { directory.members().list(ownerGroup.groupEmail.value).execute() }), Duration.Inf)
     ownerMembers.getMembers.map(_.getEmail) should be { Seq(gcsDAO.toProxyFromUser(testCreator)) }
 
-    val projectOwnerMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerGroup.groupEmail.value).execute() }), Duration.Inf)
-    projectOwnerMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
-
     // should return 0, not raise an error due to storage logs not being written yet
     val usage = Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), s"fc-$testWorkspaceId"), Duration.Inf)
 
@@ -167,7 +165,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
 
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm), Option(Set(RawlsUserRef(RawlsUserSubjectId(testCreator.userSubjectId))))), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -231,11 +229,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     //check that the owner is a part of both the access group and the intersection group
     Await.result(retry(when500)(() => Future { directory.members.get(ownerAG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
     Await.result(retry(when500)(() => Future { directory.members.get(ownerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
-
-    val projectOwnerAGMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerAG.groupEmail.value).execute() }), Duration.Inf)
-    projectOwnerAGMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
-    val projectOwnerIGMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerIG.groupEmail.value).execute() }), Duration.Inf)
-    projectOwnerIGMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
+    Await.result(retry(when500)(() => Future { directory.members.get(projectOwnerIG.groupEmail.value, gcsDAO.toProxyFromUser(testCreator)).execute() }), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
@@ -256,7 +250,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   it should "handle failures setting up workspace" in {
     val project = RawlsBillingProject(RawlsBillingProjectName("not a project"), Map(ProjectRoles.Owner -> RawlsGroup(RawlsGroupName("foo"), RawlsGroupEmail("foo"), Set.empty, Set.empty)), "", Ready, None)
     intercept[GoogleJsonResponseException] {
-      Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm)), Duration.Inf)
+      Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm), None), Duration.Inf)
     }
 
     val groups: Seq[RawlsGroup] = groupAccessLevelsAscending flatMap { accessLevel =>
@@ -279,7 +273,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGroup), "", Ready, None)
     val random = scala.util.Random
     val testUser = testCreator.copy(userSubjectId = random.nextLong().toString)
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, None), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testUser, project, testWorkspaceId, testWorkspace, None, None), Duration.Inf)
 
     val user = RawlsUser(UserInfo("foo@bar.com", null, 0, testUser.userSubjectId))
 

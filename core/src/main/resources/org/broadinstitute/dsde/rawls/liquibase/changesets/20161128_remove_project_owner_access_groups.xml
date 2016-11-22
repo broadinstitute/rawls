@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummmy" author="dvoet" id="create_project_owner_groups_to_remove">
+        <createTable tableName="project_owner_groups_to_remove">
+            <column name="name" type="varchar(254)"></column>
+            <column name="email" type="varchar(254)"></column>
+        </createTable>
+    </changeSet>
+    <changeSet logicalFilePath="dummmy" author="dvoet" id="insert_project_owner_groups_to_remove">
+        <sql>
+            insert into project_owner_groups_to_remove select g.name, g.email from WORKSPACE_ACCESS wa inner join `GROUP` g on wa.group_name = g.name inner join GROUP_SUBGROUPS sg on sg.parent_name = g.name where wa.access_level='PROJECT_OWNER' and wa.is_realm_acl = 0;
+        </sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummmy" author="dvoet" id="remove_project_owner_workspace_access">
+        <sql>
+            delete from WORKSPACE_ACCESS where group_name in (select x.name from project_owner_groups_to_remove x)
+        </sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummmy" author="dvoet" id="insert_project_owner_workspace_access">
+        <sql>
+            insert into WORKSPACE_ACCESS(workspace_id, group_name, access_level, is_realm_acl) select w.id, bpg.group_name, 'PROJECT_OWNER', 0  from WORKSPACE w, BILLING_PROJECT_GROUP bpg where w.namespace = bpg.project_name and project_role = 'Owner'
+        </sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummmy" author="dvoet" id="insert_project_owner_workspace_access_realm">
+        <sql>
+            insert into WORKSPACE_ACCESS(workspace_id, group_name, access_level, is_realm_acl) select w.id, bpg.group_name, 'PROJECT_OWNER', 1  from WORKSPACE w, BILLING_PROJECT_GROUP bpg where w.namespace = bpg.project_name and project_role = 'Owner' and w.realm_group_name is null
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

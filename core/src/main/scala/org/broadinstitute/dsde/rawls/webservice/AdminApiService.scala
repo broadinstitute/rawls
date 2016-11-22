@@ -94,46 +94,48 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
             UserService.props(userServiceConstructor, userInfo),
             UserService.AdminCreateGroup(groupRef))
         }
-      } ~
-      delete {
-        entity(as[RawlsGroupRef]) { groupRef =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminDeleteGroup(groupRef))
-        }
       }
     } ~
-    path("admin" / "groups" / Segment / "members") { (groupNameRaw) =>
-      val groupName = URLDecoder.decode(groupNameRaw, "UTF-8")
+    pathPrefix("admin" / "groups" / Segment) { (groupNameRaw) =>
+      val rawlsGroupRef = RawlsGroupRef(RawlsGroupName(URLDecoder.decode(groupNameRaw, "UTF-8")))
+      pathEnd {
+        delete {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.AdminDeleteGroup(rawlsGroupRef))
+        }
+      } ~
       // there are 3 methods supported to modify group membership:
       // PUT = "set the group members to exactly this list"
       // POST = "add these things to the list"
       // DELETE = "remove these things from the list"
-      put {
-        entity(as[RawlsGroupMemberList]) { memberList =>
+      path("members") {
+        put {
+          entity(as[RawlsGroupMemberList]) { memberList =>
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.AdminOverwriteGroupMembers(rawlsGroupRef, memberList))
+          }
+        } ~
+        post {
+          entity(as[RawlsGroupMemberList]) { memberList =>
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.AdminAddGroupMembers(rawlsGroupRef, memberList))
+          }
+        } ~
+        delete {
+          entity(as[RawlsGroupMemberList]) { memberList =>
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.AdminRemoveGroupMembers(rawlsGroupRef, memberList))
+          }
+        } ~
+        get {
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminOverwriteGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
+            UserService.AdminListGroupMembers(rawlsGroupRef))
         }
-      } ~
-      post {
-        entity(as[RawlsGroupMemberList]) { memberList =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminAddGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
-        }
-      } ~
-      delete {
-        entity(as[RawlsGroupMemberList]) { memberList =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminRemoveGroupMembers(RawlsGroupRef(RawlsGroupName(groupName)), memberList))
-        }
-      } ~
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminListGroupMembers(groupName))
       }
     } ~
     path("admin" / "groups" / Segment / "sync") { (groupNameRaw) =>

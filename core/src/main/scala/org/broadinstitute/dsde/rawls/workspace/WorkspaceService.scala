@@ -11,11 +11,12 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.expressions._
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths, RoleSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.user.UserService.OverwriteGroupMembers
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
@@ -264,10 +265,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   private def deleteWorkspace(workspaceName: WorkspaceName, workspaceContext: SlickWorkspaceContext): Future[PerRequestMessage] = {
-    def deleteGroups(dataAccess: DataAccess): Iterable[ReadWriteAction[Boolean]] = {
-    workspaceContext.workspace.accessLevels.map { case (_, group) =>
-      dataAccess.rawlsGroupQuery.delete(group)}
-    }
     //Attempt to abort any running workflows so they don't write any more to the bucket.
     //Notice that we're kicking off Futures to do the aborts concurrently, but we never collect their results!
     //This is because there's nothing we can do if Cromwell fails, so we might as well move on and let the
@@ -282,9 +279,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           case wf if !WorkflowStatuses.withName(wf.status).isDone => dataAccess.workflowQuery.updateStatus(wf, WorkflowStatuses.Aborted)
         }}
 
-        //Gather the Google groups to remove
-        groupRefs: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.values.toSet ++ workspaceContext.workspace.realmACLs.values
-        groupsToRemove <- DBIO.sequence(groupRefs.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
+        //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
+        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.realmACLs.values
+        groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
@@ -293,7 +290,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
 
         // Delete groups
-        _ <- DBIO.seq(deleteGroups(dataAccess).toSeq: _*)
+        _ <- DBIO.seq(groupRefsToRemove.map { group => dataAccess.rawlsGroupQuery.delete(group) }.toSeq: _*)
 
         // Delete the workspace
         _ <- dataAccess.workspaceQuery.delete(workspaceName)
@@ -532,7 +529,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not change your own permissions"))
       }
       if (actualChangesToMake.exists { case (_, level) => level == ProjectOwner }) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be changed in the billing area of the application."))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be added in the billing area of the application."))
+      }
+      val existingProjectOwners = existingRefsAndLevels.collect { case (member, ProjectOwner) => member }.toSet
+      if (!(actualChangesToMake.keySet intersect existingProjectOwners).isEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be removed in the billing area of the application."))
       }
 
       // we are not updating ProjectOwner acls here, if any are added we threw an exception above
@@ -1577,42 +1578,59 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
                                      (op: (SlickWorkspaceContext) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+
+    def saveNewWorkspace(workspaceId: String, googleWorkspaceInfo: GoogleWorkspaceInfo, workspaceRequest: WorkspaceRequest, dataAccess: DataAccess): ReadWriteAction[Workspace] = {
+      val currentDate = DateTime.now
+
+      val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
+      val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map {
+        _.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
+      }
+
+      val workspace = Workspace(
+        namespace = workspaceRequest.namespace,
+        name = workspaceRequest.name,
+        realm = workspaceRequest.realm,
+        workspaceId = workspaceId,
+        bucketName = googleWorkspaceInfo.bucketName,
+        createdDate = currentDate,
+        lastModified = currentDate,
+        createdBy = userInfo.userEmail,
+        attributes = workspaceRequest.attributes,
+        accessLevels = accessGroups,
+        realmACLs = intersectionGroups getOrElse accessGroups
+      )
+
+      val groupInserts =
+        // project owner group should already exsist, don't save it again
+        googleWorkspaceInfo.accessGroupsByLevel.filterKeys(_ != ProjectOwner).values.map(dataAccess.rawlsGroupQuery.save) ++
+          googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
+
+      DBIO.seq(groupInserts.toSeq: _*) andThen
+        dataAccess.workspaceQuery.save(workspace)
+    }
+
+
     requireCreateWorkspaceAccess(workspaceRequest, dataAccess) {
       dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None =>
           val workspaceId = UUID.randomUUID.toString
-          dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace)) flatMap { project =>
-            DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm)) flatMap { googleWorkspaceInfo =>
-              val currentDate = DateTime.now
+          for {
+            project <- dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceRequest.namespace))
 
-              val accessGroups = googleWorkspaceInfo.accessGroupsByLevel.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
-              val intersectionGroups = googleWorkspaceInfo.intersectionGroupsByLevel map {
-                _.map { case (a, g) => (a -> RawlsGroup.toRef(g)) }
-              }
-
-              val workspace = Workspace(
-                namespace = workspaceRequest.namespace,
-                name = workspaceRequest.name,
-                realm = workspaceRequest.realm,
-                workspaceId = workspaceId,
-                bucketName = googleWorkspaceInfo.bucketName,
-                createdDate = currentDate,
-                lastModified = currentDate,
-                createdBy = userInfo.userEmail,
-                attributes = workspaceRequest.attributes,
-                accessLevels = accessGroups,
-                realmACLs = intersectionGroups getOrElse accessGroups
-              )
-
-              val groupInserts =
-                googleWorkspaceInfo.accessGroupsByLevel.values.map(dataAccess.rawlsGroupQuery.save) ++
-                  googleWorkspaceInfo.intersectionGroupsByLevel.map(_.values.map(dataAccess.rawlsGroupQuery.save)).getOrElse(Seq.empty)
-
-              DBIO.seq(groupInserts.toSeq: _*) andThen
-                dataAccess.workspaceQuery.save(workspace).flatMap(ws => op(SlickWorkspaceContext(ws)))
+            // we have already verified that the user is in the realm but the project owners might not be
+            // so if there is a realm we have to do the intersection. There should not be any readers or writers
+            // at this point (brand new workspace) so we don't need to do intersections for those
+            realmProjectOwnerIntersection <- DBIOUtils.maybeDbAction(workspaceRequest.realm) {
+              realm => dataAccess.rawlsGroupQuery.intersectGroupMembership(project.get.groups(ProjectRoles.Owner), realm)
             }
-          }
+
+            googleWorkspaceInfo <- DBIO.from(gcsDAO.setupWorkspace(userInfo, project.get, workspaceId, workspaceRequest.toWorkspaceName, workspaceRequest.realm, realmProjectOwnerIntersection))
+
+            savedWorkspace <- saveNewWorkspace(workspaceId, googleWorkspaceInfo, workspaceRequest, dataAccess)
+            response <- op(SlickWorkspaceContext(savedWorkspace))
+          } yield response
       }
     }
   }

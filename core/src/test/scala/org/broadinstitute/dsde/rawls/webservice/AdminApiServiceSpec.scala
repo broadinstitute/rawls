@@ -443,7 +443,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.Created) { status }
       }
-    Delete(s"/admin/groups", httpJson(group)) ~>
+    Delete(s"/admin/groups/${group.groupName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -453,7 +453,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "return 404 when trying to delete a group that does not exist" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("dbgap"))
 
-    Delete(s"/admin/groups", httpJson(group)) ~>
+    Delete(s"/admin/groups/${group.groupName.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }

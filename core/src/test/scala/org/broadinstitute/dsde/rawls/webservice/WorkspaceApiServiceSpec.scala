@@ -1607,7 +1607,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK, response.entity.asString ) { status }
+        assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
       }
 
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
@@ -1813,14 +1813,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "use access groups as realmACLs when creating a workspace if there is no realm" in withTestDataApiServices { services =>
     val request = WorkspaceRequest(
-      namespace = testData.wsName.namespace,
+      namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
       None,
       Map.empty
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-PROJECT_OWNER")),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
@@ -1851,14 +1851,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realm = makeRawlsGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
-      namespace = testData.wsName.namespace,
+      namespace = testData.billingProject.projectName.value,
       name = "newWorkspace",
       Option(realm),
       Map.empty
     )
 
     def expectedAccessGroups(workspaceId: String) = Map(
-      WorkspaceAccessLevels.ProjectOwner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-PROJECT_OWNER")),
+      WorkspaceAccessLevels.ProjectOwner -> RawlsGroup.toRef(testData.billingProject.groups(ProjectRoles.Owner)),
       WorkspaceAccessLevels.Owner -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-OWNER")),
       WorkspaceAccessLevels.Write -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-WRITER")),
       WorkspaceAccessLevels.Read -> RawlsGroupRef(RawlsGroupName(s"fc-$workspaceId-READER"))
