@@ -487,6 +487,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceQuery.save(workspaceFailedSubmission),
         workspaceQuery.save(workspaceSubmittedSubmission),
         workspaceQuery.save(workspaceMixedSubmissions),
+        workspaceQuery.save(workspaceTerminatedSubmissions),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
