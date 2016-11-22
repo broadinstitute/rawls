@@ -463,7 +463,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //lock workspace
     assertResult(StatusCodes.Conflict) {
       Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-        .asInstanceOf[RawlsExceptionWithErrorReport].response.statusCode.get
+        .asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode.get
     }
 
     //check workspace is not locked
