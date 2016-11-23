@@ -449,9 +449,14 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!testData.workspaceTerminatedSubmissions.isLocked)
 
     //lock workspace
-    val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    system.log.info(result.toString)
+    //val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    val result = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    }
 
+    assertResult(StatusCodes.Conflict) {
+      result.errorReport.statusCode.get
+    }
     //check workspace is locked
     assert(testData.workspaceTerminatedSubmissions.isLocked)
 
@@ -461,8 +466,16 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
 
-    val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    system.log.error(result.toString)
+   // val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
+   // system.log.error(result.toString)
+
+    val result = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
+    }
+
+    assertResult(StatusCodes.Conflict) {
+      result.errorReport.statusCode.get
+    }
 
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
