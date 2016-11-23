@@ -459,6 +459,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert {
       runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
     }
+
+    val x = 1
   }
 
   it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
@@ -469,14 +471,13 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
    }
 
-    /* FIXME: use the except defined above
     assertResult(StatusCodes.Conflict) {
-      result.errorReport.statusCode.get
+      except.errorReport.statusCode.get
     }
-    */
 
-    //check workspace is not locked FIXME: do a db query like above
-    //assert(!testData.workspaceMixedSubmissions.isLocked)
+    assert {
+      !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
+    }
   }
 
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
