@@ -449,7 +449,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!testData.workspaceTerminatedSubmissions.isLocked)
 
     //lock workspace
-    Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    val thing = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
 
     //check workspace is locked
     assert(testData.workspaceTerminatedSubmissions.isLocked)
@@ -459,6 +459,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
+
+    val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    }
+
 
     //lock workspace
     assertResult(StatusCodes.Conflict) {
