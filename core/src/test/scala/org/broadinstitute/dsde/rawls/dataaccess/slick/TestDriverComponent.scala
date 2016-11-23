@@ -408,11 +408,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     //a submission with a succeeeded workflow
     val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
 
     //a submission with a succeeeded workflow
     val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+      Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
 
     //a submission with a failed workflow
     val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
@@ -424,16 +424,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     //a submission with an aborted workflow
     val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+      Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
 
     //a submission with an aborted workflow
     val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+      Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
 
     //a submission with multiple failed and succeeded workflows
     val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
-        Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
+      Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
+        Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
         Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
         Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample4.toReference, inputResolutions),
         Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample5.toReference, inputResolutions),

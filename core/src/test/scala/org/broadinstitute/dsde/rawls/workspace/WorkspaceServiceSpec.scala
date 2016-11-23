@@ -450,7 +450,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     //lock workspace
     val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    system.log.debug(result.toString)
+    system.log.info(result.toString)
+
     //check workspace is locked
     assert(testData.workspaceTerminatedSubmissions.isLocked)
 
@@ -461,7 +462,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!testData.workspaceMixedSubmissions.isLocked)
 
     val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    system.log.debug(result.toString)
+    system.log.error(result.toString)
 
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
