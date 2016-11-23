@@ -355,9 +355,12 @@ object WorkflowStatuses {
 
 object SubmissionStatuses {
   val activeStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting)
+  val terminalStatuses: Seq[SubmissionStatus] = Seq(Aborted, Done)
 
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
-    def isDone = { this == Done }
+    def isTerminated = {
+      terminalStatuses.contains(this)
+    }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = SubmissionStatuses.withName(name)
   }

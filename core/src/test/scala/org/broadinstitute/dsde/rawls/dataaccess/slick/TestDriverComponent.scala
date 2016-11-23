@@ -194,6 +194,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName5 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsFailedSubmission")
     val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
+    val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
 
@@ -262,8 +263,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     // Workspace with realms, with submitted submission
     val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(wsName6.namespace, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    // Workspace with realms with aborted workflows
+    // Workspace with realms with mixed workflows
     val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(wsName7.namespace, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+
+    // Workspace with realms, with aborted and successful submissions
+    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(wsName8.namespace, wsName8.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
 
     val sample1 = Entity("sample1", "Sample",
@@ -403,8 +407,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         Workflow(Option("workflowD"),WorkflowStatuses.Submitted,testDate,sample4.toReference, inputResolutions)), SubmissionStatuses.Submitted)
 
     //a submission with a succeeeded workflow
-    val submissionSuccessful = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+    val submissionSuccessful1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
+
+    //a submission with a succeeeded workflow
+    val submissionSuccessful2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Done)
 
     //a submission with a failed workflow
     val submissionFailed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
@@ -415,18 +423,22 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       Seq(Workflow(Option("workflowSubmitted"), WorkflowStatuses.Submitted, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Submitted)
 
     //a submission with an aborted workflow
-    val submissionAborted = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowAborted"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+    val submissionAborted1 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowAborted1"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
+
+    //a submission with an aborted workflow
+    val submissionAborted2 = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
+      Seq(Workflow(Option("workflowAborted2"), WorkflowStatuses.Failed, testDate, sample1.toReference, inputResolutions)), SubmissionStatuses.Aborted)
 
     //a submission with multiple failed and succeeded workflows
     val submissionMixed = Submission(UUID.randomUUID().toString(), testDate, userOwner, methodConfig.namespace, methodConfig.name, indiv1.toReference,
-      Seq(Workflow(Option("workflowSuccessful1"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
-        Workflow(Option("workflowSuccessful2"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
+      Seq(Workflow(Option("workflowSuccessful3"), WorkflowStatuses.Succeeded, testDate, sample1.toReference, inputResolutions),
+        Workflow(Option("workflowSuccessful4"), WorkflowStatuses.Succeeded, testDate, sample2.toReference, inputResolutions),
         Workflow(Option("worklowFailed1"), WorkflowStatuses.Failed, testDate, sample3.toReference, inputResolutions),
         Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample4.toReference, inputResolutions),
         Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample5.toReference, inputResolutions),
         Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample6.toReference, inputResolutions)
-      ), SubmissionStatuses.Done)
+      ), SubmissionStatuses.Submitted)
 
     def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
       val groups = billingProject.groups.values ++
@@ -441,6 +453,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceFailedSubmissionGroups ++
         workspaceSubmittedSubmissionGroups ++
         workspaceMixedSubmissionsGroups ++
+        workspaceTerminatedSubmissionsGroups ++
         Seq(realm)
 
       groups.foreach(gcsDAO.createGoogleGroup(_))
@@ -470,6 +483,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceFailedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspacePublished),
         workspaceQuery.save(workspaceNoAttrs),
@@ -481,6 +495,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceQuery.save(workspaceFailedSubmission),
         workspaceQuery.save(workspaceSubmittedSubmission),
         workspaceQuery.save(workspaceMixedSubmissions),
+        workspaceQuery.save(workspaceTerminatedSubmissions),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
@@ -524,7 +539,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             methodConfigurationQuery.save(context, methodConfig),
             methodConfigurationQuery.save(context, methodConfig2),
 
-            submissionQuery.create(context, submissionSuccessful),
+            submissionQuery.create(context, submissionSuccessful1),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
@@ -548,13 +563,24 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }),
+        withWorkspaceContext(workspaceTerminatedSubmissions)( { context =>
+          DBIO.seq(
+            entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
+
+            methodConfigurationQuery.save(context, methodConfig),
+
+            submissionQuery.create(context, submissionAborted2),
+            submissionQuery.create(context, submissionSuccessful2),
+            updateWorkflowExecutionServiceKey("unittestdefault")
+          )
+        }),
         withWorkspaceContext(workspaceMixedSubmissions)({ context =>
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
             methodConfigurationQuery.save(context, methodConfig),
 
-            submissionQuery.create(context, submissionAborted),
+            submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
             updateWorkflowExecutionServiceKey("unittestdefault")
           )

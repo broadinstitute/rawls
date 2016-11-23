@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
 import org.scalatest.{FlatSpec, Matchers}
@@ -444,6 +444,40 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
+    //check workspace is not locked
+    assert(!testData.workspaceTerminatedSubmissions.isLocked)
+
+    val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+        .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
+    }
+
+    //check workspace is locked
+    assert {
+      runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
+  it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
+    //check workspace is not locked
+    assert(!testData.workspaceMixedSubmissions.isLocked)
+
+   val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+     Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
+   }
+
+    assertResult(StatusCodes.Conflict) {
+      except.errorReport.statusCode.get
+    }
+
+    assert {
+      !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
+    }
+  }
+
   it should "delete a workspace with no submissions" in withTestDataServices { services =>
     //check that the workspace to be deleted exists
     assertWorkspaceResult(Option(testData.workspaceNoSubmissions)) {
@@ -478,7 +512,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if submissions on workspace exist
-    assertResult(List(testData.submissionSuccessful)) {
+    assertResult(List(testData.submissionSuccessful1)) {
       runAndWait(submissionQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
