@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
+import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import org.broadinstitute.dsde.rawls.webservice._
 import AttributeUpdateOperations._
 import org.scalatest.{FlatSpec, Matchers}
@@ -448,37 +448,35 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //check workspace is not locked
     assert(!testData.workspaceTerminatedSubmissions.isLocked)
 
-    //lock workspace
-    //val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+        .asInstanceOf[RequestComplete[StatusCode]]
+
+    assertResult(StatusCodes.NoContent) {
+      rqComplete.response
     }
 
-    assertResult(StatusCodes.Conflict) {
-      result.errorReport.statusCode.get
-    }
     //check workspace is locked
-    assert(testData.workspaceTerminatedSubmissions.isLocked)
-
+    assert {
+      runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
+    }
   }
 
   it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
 
-   // val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
-   // system.log.error(result.toString)
+   val except: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
+     Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
+   }
 
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceMixedSubmissions.name)), Duration.Inf)
-    }
-
+    /* FIXME: use the except defined above
     assertResult(StatusCodes.Conflict) {
       result.errorReport.statusCode.get
     }
+    */
 
-    //check workspace is not locked
-    assert(!testData.workspaceMixedSubmissions.isLocked)
+    //check workspace is not locked FIXME: do a db query like above
+    //assert(!testData.workspaceMixedSubmissions.isLocked)
   }
 
   it should "delete a workspace with no submissions" in withTestDataServices { services =>

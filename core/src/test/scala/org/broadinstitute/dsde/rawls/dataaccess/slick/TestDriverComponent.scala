@@ -438,7 +438,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         Workflow(Option("workflowFailed2"), WorkflowStatuses.Failed, testDate, sample4.toReference, inputResolutions),
         Workflow(Option("workflowSubmitted1"), WorkflowStatuses.Submitted, testDate, sample5.toReference, inputResolutions),
         Workflow(Option("workflowSubmitted2"), WorkflowStatuses.Submitted, testDate, sample6.toReference, inputResolutions)
-      ), SubmissionStatuses.Done)
+      ), SubmissionStatuses.Submitted)
 
     def createWorkspaceGoogleGroups(gcsDAO: GoogleServicesDAO): Unit = {
       val groups = billingProject.groups.values ++
