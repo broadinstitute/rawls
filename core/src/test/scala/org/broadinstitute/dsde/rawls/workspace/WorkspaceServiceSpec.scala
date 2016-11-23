@@ -449,8 +449,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!testData.workspaceTerminatedSubmissions.isLocked)
 
     //lock workspace
-    val thing = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-
+    val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceTerminatedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    system.log.debug(result.toString)
     //check workspace is locked
     assert(testData.workspaceTerminatedSubmissions.isLocked)
 
@@ -460,16 +460,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
 
-    val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-    }
-
-
-    //lock workspace
-    assertResult(StatusCodes.Conflict) {
-      Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
-        .asInstanceOf[RawlsExceptionWithErrorReport].errorReport.statusCode.get
-    }
+    val result = Await.result(services.workspaceService.lockWorkspace(new WorkspaceName(testData.workspaceMixedSubmissions.namespace, testData.workspaceTerminatedSubmissions.name)), Duration.Inf)
+    system.log.debug(result.toString)
 
     //check workspace is not locked
     assert(!testData.workspaceMixedSubmissions.isLocked)
