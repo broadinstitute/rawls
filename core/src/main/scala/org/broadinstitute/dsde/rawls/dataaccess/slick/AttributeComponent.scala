@@ -181,56 +181,6 @@ trait AttributeComponent {
    */
   protected abstract class AttributeQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
 
-    /**
-     * Insert an attribute into the database. This will be multiple inserts for a list and will lookup
-     * referenced entities.
-     *
-     * @param ownerId
-     * @param attributeName
-     * @param attribute
-     * @param workspaceId used only for AttributeEntityReferences (or lists of them) to resolve the reference within the workspace
-     * @return a sequence of write actions the resulting value being the attribute id inserted
-     */
-    def insertAttributeRecords(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, workspaceId: UUID): Seq[ReadWriteAction[Int]] = {
-
-      def insertEmptyVal: Seq[ReadWriteAction[Int]] = {
-        Seq(insertAttributeValue(ownerId, attributeName, AttributeNumber(-1), None, Option(0)))
-      }
-
-      def insertEmptyRef: Seq[ReadWriteAction[Int]] = {
-        Seq(this += marshalAttributeEmptyEntityReferenceList(ownerId, attributeName))
-      }
-
-      attribute match {
-        case AttributeEntityReferenceEmptyList => insertEmptyRef
-        case AttributeValueEmptyList => insertEmptyVal
-        //convert empty AttributeList types to AttributeEmptyList on save
-        case AttributeEntityReferenceList(refs) if refs.isEmpty => insertEmptyRef
-        case AttributeValueList(values) if values.isEmpty => insertEmptyVal
-
-        case AttributeEntityReferenceList(refs) =>
-          assertConsistentReferenceListMembers(refs)
-          refs.zipWithIndex.map { case (ref, index) => insertAttributeRef(ownerId, attributeName, workspaceId, ref, Option(index), Option(refs.length)) }
-        case AttributeValueList(values) =>
-          assertConsistentValueListMembers(values)
-          values.zipWithIndex.map { case (value, index) => insertAttributeValue(ownerId, attributeName, value, Option(index), Option(values.length)) }
-        case value: AttributeValue => Seq(insertAttributeValue(ownerId, attributeName, value))
-        case ref: AttributeEntityReference => Seq(insertAttributeRef(ownerId, attributeName, workspaceId, ref))
-      }
-    }
-
-    private def insertAttributeRef(ownerId: OWNER_ID, attributeName: AttributeName, workspaceId: UUID, ref: AttributeEntityReference, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
-      uniqueResult[EntityRecord](entityQuery.findEntityByName(workspaceId, ref.entityType, ref.entityName)).flatMap {
-        case None => throw new RawlsException(s"$ref not found in workspace $workspaceId")
-        case Some(entityRecord) =>
-          (this += marshalAttributeEntityReference(ownerId, attributeName, listIndex, ref, Map(ref -> entityRecord.id), listLength))
-      }
-    }
-
-    private def insertAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int] = None, listLength: Option[Int] = None): ReadWriteAction[Int] = {
-      (this += marshalAttributeValue(ownerId, attributeName, value, listIndex, listLength))
-    }
-
     def marshalAttribute(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
       def marshalEmptyVal : Seq[T#TableElementType] = {
