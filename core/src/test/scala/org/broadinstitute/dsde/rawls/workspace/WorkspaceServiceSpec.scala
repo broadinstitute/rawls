@@ -459,8 +459,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert {
       runAndWait(workspaceQuery.findByName(testData.workspaceTerminatedSubmissions.toWorkspaceName)).head.isLocked
     }
-
-    val x = 1
   }
 
   it should "fail to lock a workspace with active submissions" in withTestDataServices { services =>
