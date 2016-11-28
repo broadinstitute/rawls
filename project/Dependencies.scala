@@ -11,7 +11,7 @@ object Dependencies {
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-    "org.scalatest" %% "scalatest" % "2.2.4" % "test"
+    "org.scalatest" %% "scalatest" % "3.0.0" % "test"
   )
 
   val rawlsDependencies = modelDependencies ++ Seq(
@@ -27,7 +27,7 @@ object Dependencies {
     "io.spray" %% "spray-client" % sprayV,
     "org.webjars" % "swagger-ui" % "2.1.1",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
-    "org.broadinstitute" %% "wdl4s" % "0.5",
+    "org.broadinstitute" %% "wdl4s" % "0.5" intransitive,
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
       exclude("com.google.guava", "guava-jdk5"),
