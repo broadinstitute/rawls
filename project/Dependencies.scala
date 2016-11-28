@@ -11,7 +11,7 @@ object Dependencies {
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-    "org.scalatest" %% "scalatest" % "3.0.0" % "test"
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 
   val rawlsDependencies = modelDependencies ++ Seq(
