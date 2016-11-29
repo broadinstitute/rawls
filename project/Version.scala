@@ -3,6 +3,7 @@ import sbt._
 
 object Version {
   val baseModelVersion = "0.1"
+
   val lastModelCommit = ("git log -n 1 --pretty=format:%h model" !!).trim
 
   val modelVersionSettings: Seq[Setting[_]] =

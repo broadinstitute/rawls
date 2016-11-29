@@ -2,6 +2,8 @@ import Dependencies._
 import Merging._
 import Testing._
 import Compiling._
+import Version._
+import Publishing._
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
@@ -45,9 +47,8 @@ object Settings {
 
   val modelSettings = List(
     name := "rawls-model",
-    version := "0.1", //FIXME: do we ever increment this? Should we care?
     libraryDependencies ++= modelDependencies
-  ) ++ commonSettings
+  ) ++ commonSettings ++ modelVersionSettings ++ modelPublishSettings
 
   val rawlsSettings = List(
     name := "rawls-core",
