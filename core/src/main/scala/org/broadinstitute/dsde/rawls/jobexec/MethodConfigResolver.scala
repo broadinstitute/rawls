@@ -15,7 +15,7 @@ import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
+import org.broadinstitute.dsde.rawls.expressions.{JsonExpressionParsing, SlickExpressionEvaluator}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
 object MethodConfigResolver {
@@ -68,11 +68,17 @@ object MethodConfigResolver {
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
+    val jsonInputTries = inputs.map( input => JsonExpressionParsing.evaluate(input.expression) )
+    //partition the above and send the non-json failures down to the block below
+
     /*
     * TODO: NOTES ON READING INPUTS AS JSON
-    * - should probably go in expressionEvaluator
+    * - should probably go in expressionEvaluator - NOPE
     * - need a way to represent "this is just some raw JSON"
     *   - as an attribute type!
+    *     - this will necessitate a release of rawlsModel
+    *     - what orch and ui updates are required here? only to handle the raw JSON case
+    *       - which MacArthur isn't going to be using
     *   - in the database!
      */
 
