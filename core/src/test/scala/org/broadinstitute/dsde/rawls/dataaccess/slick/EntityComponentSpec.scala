@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.util.UUID
 
 import _root_.slick.dbio.DBIOAction
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 
 /**
  * Created by dvoet on 2/12/16.
  */
-class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
@@ -84,13 +84,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "list all entities of all entity types" in withDefaultTestDatabase { 
-    
-      withWorkspaceContext(testData.workspace) { context =>
-        Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7, testData.sset1, testData.sset2, testData.sset3, testData.sset4, testData.sset_empty, testData.aliquot1, testData.aliquot2, testData.pair1, testData.pair2, testData.ps1, testData.indiv1, testData.aliquot1, testData.aliquot2) should contain
-        theSameElementsAs(runAndWait(entityQuery.listEntitiesAllTypes(context)).toSet)
-      }
-
+  it should "list all entities of all entity types" in withConstantTestDatabase {
+    withWorkspaceContext(constantData.workspace) { context =>
+      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listEntitiesAllTypes(context)))
+    }
   }
 
   it should "list all entity types with their counts" in withDefaultTestDatabase {
@@ -116,14 +113,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
         "Individual" -> Seq("sset")
       )
 
-      //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
+      //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
       val testTypesAndAttrNames = runAndWait(entityQuery.getAttrNamesAndEntityTypes(context))
-      testTypesAndAttrNames.keys should contain theSameElementsAs desiredTypesAndAttrNames.keys
+      assertSameElements(testTypesAndAttrNames.keys, desiredTypesAndAttrNames.keys)
 
       desiredTypesAndAttrNames foreach { case (eType, attrNames) =>
         //...and handle that the values are all correct here.
-        testTypesAndAttrNames(eType) should contain theSameElementsAs attrNames
+        assertSameElements(testTypesAndAttrNames(eType), attrNames)
       }
     }
   }
@@ -140,17 +137,17 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
         "Individual" -> EntityTypeMetadata(2, "individual_id", Seq("sset"))
       )
 
-      //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
+      //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
       val testTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
-      testTypeMetadata.keys should contain theSameElementsAs desiredTypeMetadata.keys
+      assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
 
       testTypeMetadata foreach { case (eType, testMetadata) =>
         val desiredMetadata = desiredTypeMetadata(eType)
 
         //...and test that count and the list of attribute names are correct here.
         assert(testMetadata.count == desiredMetadata.count)
-        testMetadata.attributeNames should contain theSameElementsAs desiredMetadata.attributeNames
+        assertSameElements(testMetadata.attributeNames, desiredMetadata.attributeNames)
       }
     }
   }
@@ -173,17 +170,17 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
         "blank_attrs_type" -> EntityTypeMetadata(1, "blank_attrs_type", Seq())
       )
 
-      //"should contain theSameElementsAs" is fine with out-of-order keys but isn't find with out-of-order interable-type values
+      //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
       val testTypeMetadata = runAndWait(entityQuery.getEntityTypeMetadata(context))
-      testTypeMetadata.keys should contain theSameElementsAs desiredTypeMetadata.keys
+      assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
 
       testTypeMetadata foreach { case (eType, testMetadata) =>
         val desiredMetadata = desiredTypeMetadata(eType)
 
         //...and test that count and the list of attribute names are correct here.
         assert(testMetadata.count == desiredMetadata.count)
-        testMetadata.attributeNames should contain theSameElementsAs desiredMetadata.attributeNames
+        assertSameElements(testMetadata.attributeNames, desiredMetadata.attributeNames)
       }
     }
   }
@@ -358,13 +355,19 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
 
   }
 
-  it should "list entities" in withDefaultTestDatabase {
-    
-      withWorkspaceContext(testData.workspace) { context =>
-        Set(testData.sample1, testData.sample2, testData.sample3, testData.sample4, testData.sample5, testData.sample6, testData.sample7) should contain
-        theSameElementsAs(runAndWait(entityQuery.list(context, "Sample")).toSet)
-      }
+  it should "list entities" in withConstantTestDatabase {
+    val expected = Seq(constantData.sample1,
+      constantData.sample2,
+      constantData.sample3,
+      constantData.sample4,
+      constantData.sample5,
+      constantData.sample6,
+      constantData.sample7,
+      constantData.sample8)
 
+    withWorkspaceContext(constantData.workspace) { context =>
+      assertSameElements(expected, runAndWait(entityQuery.list(context, "Sample")))
+    }
   }
 
   it should "add cycles to entity graph" in withDefaultTestDatabase {

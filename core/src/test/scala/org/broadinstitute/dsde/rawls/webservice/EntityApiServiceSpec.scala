@@ -522,8 +522,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         val samples = runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType))
-        responseAs[Array[Entity]].toSet should contain
-        theSameElementsAs(samples.toSet)
+        assertSameElements(responseAs[Array[Entity]], samples)
       }
   }
 

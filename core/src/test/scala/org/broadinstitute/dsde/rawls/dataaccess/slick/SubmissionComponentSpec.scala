@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 
@@ -11,7 +12,7 @@ import scala.concurrent.duration.Duration
 /**
  * Created by mbemis on 2/22/16.
  */
-class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers {
+class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
   private val submission3 = createTestSubmission(testData.workspace, testData.methodConfig2, testData.indiv1, testData.userOwner,
@@ -233,9 +234,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
       //This is a bit roundabout, but we need to get the workflow IDs so we can load them individually through the loadWorkflow codepath.
       val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(submissionList.submissionId))).map(_.id)
 
-      submissionList.workflows should contain theSameElementsAs {
-        workflowIds map { id => runAndWait(workflowQuery.get(id)).get }
-      }
+      assertSameElements(submissionList.workflows, workflowIds map { id => runAndWait(workflowQuery.get(id)).get })
     }
   }
 

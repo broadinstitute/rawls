@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor.{ActorSystem, PoisonPill}
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
@@ -26,7 +26,7 @@ import scala.concurrent.duration._
 /**
  * Created by dvoet on 5/17/16.
  */
-class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll {
+class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowSubmissionSpec"))
@@ -82,7 +82,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
     val workflowSubMsg = Await.result(workflowSubmission.getUnlaunchedWorkflowBatch(), Duration.Inf)
     workflowSubMsg match {
       case SubmitWorkflowBatch(workflowIds) =>
-        workflowIds should contain theSameElementsAs workflowRecs.map(_.id)
+        assertSameElements(workflowIds, workflowRecs.map(_.id))
       case _ => fail("wrong workflow submission message")
     }
 

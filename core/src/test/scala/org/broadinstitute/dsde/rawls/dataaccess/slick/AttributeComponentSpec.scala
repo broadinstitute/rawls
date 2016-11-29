@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.{RawlsException, WorkspaceTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -13,7 +13,7 @@ import scala.concurrent.duration.Duration
 /**
  * Created by dvoet on 2/9/16.
  */
-class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with WorkspaceTestUtils {
+class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with AttributeComponent with RawlsTestUtils {
   import driver.api._
 
   val workspace = Workspace("broad-dsde-test", "test-workspace", None, UUID.randomUUID().toString, "fake-bucket", DateTime.now, DateTime.now, "biden", Map.empty, Map.empty, Map.empty, false)
@@ -23,7 +23,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
   val (dummyId1, dummyId2) = (12345, 67890)
   def assertExpectedRecords(expectedRecords: WorkspaceAttributeRecord*): Unit = {
     val records = runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result) map { _.copy(id = dummyId1) }
-    records should contain theSameElementsAs { expectedRecords map { _.copy(id = dummyId1) }}
+    assertSameElements(records, expectedRecords map { _.copy(id = dummyId1) })
   }
 
   def insertWorkspaceAttributeRecords(workspaceId: UUID, attributeName: AttributeName, attribute: Attribute): ReadWriteAction[Option[Int]] = {
