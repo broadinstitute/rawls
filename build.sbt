@@ -2,8 +2,6 @@ import Settings._
 import Testing._
 
 
-net.virtualvoid.sbt.graph.Plugin.graphSettings
-
 lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
   .withTestSettings
@@ -26,6 +24,7 @@ lazy val rawls = project.in(file("."))
 Revolver.settings
 
 mainClass in Revolver.reStart := Some("org.broadinstitute.dsde.rawls.Boot")
+
 Revolver.enableDebugging(port = 5050, suspend = false)
 
 // When JAVA_OPTS are specified in the environment, they are usually meant for the application
