@@ -1,5 +1,6 @@
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
+  - [ ] **...and Orchestration's Swagger too!**
 - [ ] **Submitter**: If updating admin endpoints, also update [firecloud-admin-cli](https://github.com/broadinstitute/firecloud-admin-cli)
 - [ ] **Submitter**: Check documentation and code comments. Add explanatory PR comments if helpful.
 - [ ] **Submitter**: JIRA ticket checks:
