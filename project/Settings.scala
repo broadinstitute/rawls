@@ -45,22 +45,25 @@ object Settings {
     scalacOptions ++= compilerSettings
   )
 
-  val modelSettings = List(
+  //commonSettings -> defaultSettings overrides name so we put it first
+  val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
-  ) ++ commonSettings ++ modelVersionSettings ++ modelPublishSettings
+  ) ++ modelVersionSettings ++ modelPublishSettings
 
-  val rawlsSettings = List(
+  //commonSettings -> defaultSettings overrides name so we put it first
+  val rawlsSettings = commonSettings ++ List(
     name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsDependencies
-  ) ++ commonSettings ++ rawlsAssemblySettings ++ rawlsCompileSettings
+  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ noPublishSettings
   //NOTE: rawlsCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
-  val rootSettings = List(
+  //commonSettings -> defaultSettings overrides name so we put it first
+  val rootSettings = commonSettings ++ List(
     name := "rawls",
     version := "0.1"
-  ) ++ commonSettings ++ rawlsAssemblySettings ++ rawlsCompileSettings
+  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings
   //See immediately above NOTE.
 }
