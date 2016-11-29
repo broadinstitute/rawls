@@ -27,7 +27,7 @@ object Dependencies {
     "io.spray" %% "spray-client" % sprayV,
     "org.webjars" % "swagger-ui" % "2.1.1",
     "org.apache.commons" % "commons-jexl" % "2.1.1",
-    "org.broadinstitute" %% "wdl4s" % "0.4",
+    "org.broadinstitute" %% "wdl4s" % "0.5" intransitive,
     "org.broadinstitute.dsde.vault" %% "vault-common" % "0.1-15-bf74315",
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
       exclude("com.google.guava", "guava-jdk5"),
