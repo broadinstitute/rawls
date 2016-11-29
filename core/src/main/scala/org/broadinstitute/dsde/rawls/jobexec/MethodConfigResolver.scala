@@ -68,6 +68,20 @@ object MethodConfigResolver {
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
+    /*
+    * TODO: NOTES ON READING INPUTS AS JSON
+    * - should probably go in expressionEvaluator
+    * - need a way to represent "this is just some raw JSON"
+    *   - as an attribute type!
+    *   - in the database!
+     */
+
+    /*
+    * TODO: ON SENDING THIS TO CROMWELL
+    * i think we send things to cromwell by putting them through the PlainArrayAttributeSerializer.
+    * if that's the case, all we need to do is add a case for AttributeRawJSON in the serializer and we're done
+     */
+
     if( inputs.isEmpty ) {
       //no inputs to resolve = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
