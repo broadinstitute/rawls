@@ -23,5 +23,13 @@ object Publishing {
   }
 
   val modelPublishSettings: Seq[Setting[_]] =
-    Seq(publishTo := Option(artifactoryResolver(isSnapshot.value)), credentials += artifactoryCredentials)
+    //we only publish to libs-release-local because of a bug in sbt that makes snapshots take
+    //priority over the local package cache. see here: https://github.com/sbt/sbt/issues/2687#issuecomment-236586241
+    Seq(publishTo := Option(artifactoryResolver(false)), credentials += artifactoryCredentials)
+
+  val noPublishSettings: Seq[Setting[_]] =
+    Seq(
+      publish := {},
+      publishLocal := {}
+    )
 }
