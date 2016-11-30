@@ -68,39 +68,24 @@ object MethodConfigResolver {
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
+    //TODO:
+
+    //First attempt to parse input expressions as JSON.
+    //Partition the attempts into successful and failures. The failures will be put through the standard expression evaluator.
     val (jsonSuccesses, jsonFailures) = inputs.map( input => input -> JsonExpressionParsing.evaluate(input.expression) ).partition {
       case (input: MethodInput, attrT: Try[Iterable[AttributeValue]]) => attrT.isSuccess
     }
-
-    val evaluatedJsonInputs = DBIO.successful((entities map { entityRec: EntityRecord =>
+    //the successes
+    val evaluatedJsonInputs: ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] =
+      DBIO.successful((entities map { entityRec: EntityRecord =>
       entityRec.name -> (jsonSuccesses map {
         case (input: MethodInput, Success(attributeIterable)) =>
            unpackResult(attributeIterable, input.workflowInput)
       })
     }).toMap)
 
+    //the failures - evaluate these as expressions.
     val expressionInputs = jsonFailures.toMap.keys.toSeq
-
-
-    //partition the above and send the non-json failures down to the block below
-
-    /*
-    * TODO: NOTES ON READING INPUTS AS JSON
-    * - should probably go in expressionEvaluator - NOPE
-    * - need a way to represent "this is just some raw JSON"
-    *   - as an attribute type!
-    *     - this will necessitate a release of rawlsModel
-    *     - what orch and ui updates are required here? only to handle the raw JSON case
-    *       - which MacArthur isn't going to be using
-    *   - in the database!
-     */
-
-    /*
-    * TODO: ON SENDING THIS TO CROMWELL
-    * i think we send things to cromwell by putting them through the PlainArrayAttributeSerializer.
-    * if that's the case, all we need to do is add a case for AttributeRawJSON in the serializer and we're done
-     */
-
     val evaluatedExpressionInputs: ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = if( expressionInputs.isEmpty ) {
       //no inputs to resolve = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
@@ -130,8 +115,8 @@ object MethodConfigResolver {
         }
       }
     }
-    //FIXME: gotta glue these together while still maintaining types.
-    DBIO.seq(evaluatedJsonInputs, evaluatedExpressionInputs)
+    //stitch the two maps together and return them in a new DBIOAction
+    DBIO.sequence(Seq(evaluatedJsonInputs, evaluatedExpressionInputs)) map { seq => CollectionUtils.groupByTuplesFlatten( seq.flatMap(_.toSeq) ) }
   }
 
   /**
