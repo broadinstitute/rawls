@@ -17,49 +17,56 @@ object Settings {
     "artifactory-snapshots" at artifactory + "libs-snapshot"
   )
 
-  val buildSettings = Defaults.defaultSettings ++ Seq(
+  //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
+  val commonBuildSettings = Defaults.coreDefaultSettings ++ Defaults.defaultConfigs ++ Seq(
     javaOptions += "-Xmx2G"
   )
 
-  val compilerSettings: Seq[String] = Seq(
+  val commonCompilerSettings = Seq(
     "-unchecked",
     "-deprecation",
     "-encoding", "utf8",
     "-Xmax-classfile-name", "100"
   )
 
-  val assemblySettings = Seq(
+  //sbt assembly settings common to rawlsCore and rawlsModel
+  val commonAssemblySettings = Seq(
     assemblyMergeStrategy in assembly := customMergeStrategy((assemblyMergeStrategy in assembly).value),
     test in assembly := {}
   )
 
+  //sbt assembly settings for rawls proper needs to include a main class to launch the jar
   val rawlsAssemblySettings = Seq(
     mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot")
   )
 
+  //common settings for all sbt subprojects
   val commonSettings =
-    buildSettings ++ assemblySettings ++ testSettings ++ List(
+    commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute",
     scalaVersion  := "2.11.7",
     resolvers ++= commonResolvers,
-    scalacOptions ++= compilerSettings
+    scalacOptions ++= commonCompilerSettings
   )
 
-  //commonSettings -> defaultSettings overrides name so we put it first
+  //the full list of settings for the rawlsModel project (see build.sbt)
+  //commonSettings -> coreDefaultSettings sets name so we put it first so we can override it ourselves
   val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
   ) ++ modelVersionSettings ++ modelPublishSettings
 
+  //the full list of settings for the rawlsCore project (see build.sbt)
   //commonSettings -> defaultSettings overrides name so we put it first
-  val rawlsSettings = commonSettings ++ List(
+  val rawlsCoreSettings = commonSettings ++ List(
     name := "rawls-core",
     version := "0.1",
-    libraryDependencies ++= rawlsDependencies
-  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ noPublishSettings
-  //NOTE: rawlsCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
+    libraryDependencies ++= rawlsCoreDependencies
+  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings
+  //NOTE: rawlsCoreCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
+  //the full list of settings for the root rawls project that's ultimately the one we build into a fat JAR and run
   //commonSettings -> defaultSettings overrides name so we put it first
   val rootSettings = commonSettings ++ List(
     name := "rawls",

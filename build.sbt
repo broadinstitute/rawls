@@ -9,7 +9,7 @@ lazy val rawlsModel = project.in(file("model"))
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
-  .settings(rawlsSettings:_*)
+  .settings(rawlsCoreSettings:_*)
   .dependsOn(rawlsModel)
   .withTestSettings
 
