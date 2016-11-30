@@ -50,14 +50,16 @@ object Settings {
   )
 
   //the full list of settings for the rawlsModel project (see build.sbt)
-  //commonSettings -> coreDefaultSettings sets name so we put it first so we can override it ourselves
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
   val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
   ) ++ modelVersionSettings ++ modelPublishSettings
 
   //the full list of settings for the rawlsCore project (see build.sbt)
-  //commonSettings -> defaultSettings overrides name so we put it first
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
   val rawlsCoreSettings = commonSettings ++ List(
     name := "rawls-core",
     version := "0.1",
@@ -67,7 +69,8 @@ object Settings {
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
   //the full list of settings for the root rawls project that's ultimately the one we build into a fat JAR and run
-  //commonSettings -> defaultSettings overrides name so we put it first
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
   val rootSettings = commonSettings ++ List(
     name := "rawls",
     version := "0.1"
