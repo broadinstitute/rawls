@@ -14,7 +14,7 @@ object Dependencies {
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 
-  val rawlsCoreDependencies = modelDependencies ++ Seq(
+  val rawlsDependencies = modelDependencies ++ Seq(
     "com.typesafe" % "config" % "1.3.0",
     "com.gettyimages" %% "spray-swagger" % "0.5.0"
       exclude("com.typesafe.scala-logging", "scala-logging-slf4j_2.11")

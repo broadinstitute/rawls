@@ -1,4 +1,4 @@
-FROM broadinstitute/scala-baseimage:scala-2.11.8
+FROM broadinstitute/scala-baseimage
 
 # Rawls' default port
 EXPOSE 8080
