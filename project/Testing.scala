@@ -17,7 +17,7 @@ object Testing {
 
   lazy val IntegrationTest = config("it") extend Test
 
-  val testSettings: Seq[Setting[_]] = List(
+  val commonTestSettings: Seq[Setting[_]] = List(
 
     // SLF4J initializes itself upon the first logging call.  Because sbt
     // runs tests in parallel it is likely that a second thread will
