@@ -68,7 +68,9 @@ object MethodConfigResolver {
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
-    //TODO:
+    //TODO: add serialization and database-ing for RawJson attribute type
+    //maybe make a new parser that includes both the json and expr parsers and does the fallback internally rather than making this code horrible
+    //test test test
 
     //First attempt to parse input expressions as JSON.
     //Partition the attempts into successful and failures. The failures will be put through the standard expression evaluator.
