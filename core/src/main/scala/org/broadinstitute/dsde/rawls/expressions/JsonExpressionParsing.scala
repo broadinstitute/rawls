@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.expressions
 
 import com.sun.xml.internal.ws.encoding.soap.DeserializationException
-import org.broadinstitute.dsde.rawls.model.{Attribute, WDLJsonSupport}
+import org.broadinstitute.dsde.rawls.model._
 import spray.json.JsonParser.ParsingException
 import spray.json._
 
@@ -12,11 +12,15 @@ object JsonExpressionParsing {
     try {
       val jsonExpr = expression.parseJson
       val attribute = WDLJsonSupport.attributeFormat.read(expression.parseJson)
-      //todo: check for references or arrays thereof
+      attribute match {
+        case ref: AttributeEntityReference => Success(AttributeValueRawJson(jsonExpr))
+        case refList: AttributeEntityReferenceList => Success(AttributeValueRawJson(jsonExpr))
+      }
     } catch {
       case e: ParsingException => //jsonExpr was never json to begin with
       case e: DeserializationException =>
-        //could still be a mixed-type array or a jsobject that could be parsed as such
+        Success(AttributeValueRawJson(jsonExpr))
+        //could still be a mixed-type array or a jsobject that could be parsed as such. use raw json
 
     }
 
