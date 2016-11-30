@@ -8,31 +8,26 @@ import spray.json._
 import scala.util.{Success, Try}
 
 object JsonExpressionParsing {
-  def evaluate(expression: String): Try[Attribute] = {
-    try {
-      val jsonExpr = expression.parseJson
-      val attribute = WDLJsonSupport.attributeFormat.read(expression.parseJson)
-      attribute match {
-        case ref: AttributeEntityReference => Success(AttributeValueRawJson(jsonExpr))
-        case refList: AttributeEntityReferenceList => Success(AttributeValueRawJson(jsonExpr))
-      }
-    } catch {
-      case e: ParsingException => //jsonExpr was never json to begin with
-      case e: DeserializationException =>
-        Success(AttributeValueRawJson(jsonExpr))
-        //could still be a mixed-type array or a jsobject that could be parsed as such. use raw json
-
+  def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
+    val jsonExprT = Try(expression.parseJson)
+    jsonExprT map { jsonExpr =>
+      WDLJsonSupport.attributeFormat.read(expression.parseJson)
+    } map {
+      //handle the user typing in JSON that looks like our representation of references, which aren't legit WDL inputs.
+      //turn it back into raw JSON.
+      case _: AttributeEntityReference => Seq(AttributeValueRawJson(jsonExprT.get))
+      case _: AttributeEntityReferenceList => Seq(AttributeValueRawJson(jsonExprT.get))
+      case av: AttributeValue => Seq(av)
+      case avl: AttributeValueList => avl.list
+      case AttributeValueEmptyList => Seq.empty
+    } recover {
+      //DeserializationException will be thrown if the user gives us JSON that we fail to parse as one of our
+      //Attribute types, but is still legit JSON. In this case we treat it as raw JSON, because it is.
+      case _: DeserializationException => Seq(AttributeValueRawJson(jsonExprT.get))
     }
 
-    /*
-    * TODO: can we parse this as JSON?
-    * if so, attempt to parse it through PlainArrayAttributeSerializer.read
-    * - if that works, return the attribute
-    * - watch out for objects that look like entity references: special-case them out, because they're lies
-    * - otherwise return as a raw JSON attribute type if the parsing works but read() gives us a DeserializationException
-    *
-    * else fall through to expression parsing.
-     */
+    //todo: if this is an array type, turn it into a seq of its elements
+    //otherwise turn it into a seq of one
 
     /*
     * TODO: ON TESTING

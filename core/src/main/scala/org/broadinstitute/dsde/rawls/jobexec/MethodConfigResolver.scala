@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio
 import slick.dbio.{DBIOAction, NoStream}
-import slick.dbio.Effect.Read
+import slick.dbio.Effect.{Read, Write}
 import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
 import wdl4s.types.WdlArrayType
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
@@ -68,7 +68,20 @@ object MethodConfigResolver {
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     import dataAccess.driver.api._
 
-    val jsonInputTries = inputs.map( input => JsonExpressionParsing.evaluate(input.expression) )
+    val (jsonSuccesses, jsonFailures) = inputs.map( input => input -> JsonExpressionParsing.evaluate(input.expression) ).partition {
+      case (input: MethodInput, attrT: Try[Iterable[AttributeValue]]) => attrT.isSuccess
+    }
+
+    val evaluatedJsonInputs = DBIO.successful((entities map { entityRec: EntityRecord =>
+      entityRec.name -> (jsonSuccesses map {
+        case (input: MethodInput, Success(attributeIterable)) =>
+           unpackResult(attributeIterable, input.workflowInput)
+      })
+    }).toMap)
+
+    val expressionInputs = jsonFailures.toMap.keys.toSeq
+
+
     //partition the above and send the non-json failures down to the block below
 
     /*
@@ -88,13 +101,13 @@ object MethodConfigResolver {
     * if that's the case, all we need to do is add a case for AttributeRawJSON in the serializer and we're done
      */
 
-    if( inputs.isEmpty ) {
+    val evaluatedExpressionInputs: ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = if( expressionInputs.isEmpty ) {
       //no inputs to resolve = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
       SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
-        val resultsByInput = inputs.map { input =>
+        val resultsByInput = expressionInputs.map { input =>
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
             val validationValuesByEntity: Seq[(String, SubmissionValidationValue)] = tryAttribsByEntity match {
               case Failure(regret) =>
@@ -117,6 +130,8 @@ object MethodConfigResolver {
         }
       }
     }
+    //FIXME: gotta glue these together while still maintaining types.
+    DBIO.seq(evaluatedJsonInputs, evaluatedExpressionInputs)
   }
 
   /**
