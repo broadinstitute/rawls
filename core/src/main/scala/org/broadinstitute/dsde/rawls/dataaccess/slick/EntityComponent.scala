@@ -272,17 +272,18 @@ trait EntityComponent {
       entities.foreach(validateEntity)
 
       for {
-        preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference)).map(updateEntityRecords(_, entities))
+        preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference)).map(populateAllAttributeValues(_, entities))
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
-        _ <- upsertAttributes(entities, (savingEntityRecs ++ preExistingEntityRecs), referencedAndSavingEntityRecs)
+        entityIdsByRef = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
+        _ <- upsertAttributes(entities, savingEntityRecs.map(_.id), entityIdsByRef)
         _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
       } yield entities
     }
 
-    def updateEntityRecords(entityRecs: Seq[EntityRecord], entities: Traversable[Entity]): Seq[EntityRecord] = {
-      val entitiesByRef = entities.map(e => e.toReference -> e).toMap
-      entityRecs.map { rec =>
+    def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord], entitiesToSave: Traversable[Entity]): Seq[EntityRecord] = {
+      val entitiesByRef = entitiesToSave.map(e => e.toReference -> e).toMap
+      entityRecsFromDb.map { rec =>
         rec.copy(allAttributeValues = createAllAttributesString(entitiesByRef(AttributeEntityReference(rec.entityType, rec.name))))
       }
     }
@@ -294,21 +295,20 @@ trait EntityComponent {
       }
     }
 
-    private def upsertAttributes(entities: Traversable[Entity], entityRecs: Traversable[EntityRecord], referencedAndSavingEntityRecs: Traversable[EntityRecord]) = {
-      val entityIds = entityRecs.map(_.id).toSeq
+    private def upsertAttributes(entitiesToSave: Traversable[Entity], entityIds: Seq[Long], entityIdsByRef: Map[AttributeEntityReference, Long]) = {
+      val attributesToSave = for {
+        entity <- entitiesToSave
+        (attributeName, attribute) <- entity.attributes
+        attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
+      } yield attributeRec
 
-      def insertScratchAttributes(transactionId: String): ReadWriteAction[Unit] = {
-        val entityIdsByName = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
-        val attributeRecsToEntityId = for {
-          entity <- entities
-          (attributeName, attribute) <- entity.attributes
-          attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByName(entity.toReference), attributeName, attribute, entityIdsByName)
-        } yield attributeRec
-
-        entityAttributeScratchQuery.batchInsertAttributes(attributeRecsToEntityId.toSeq, transactionId)
+      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+        entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
-      entityAttributeQuery.AlterAttributesUsingScratchTableQueries.upsertAction(entityIds, insertScratchAttributes)
+      entityAttributeQuery.findByOwnerQuery(entityIds).result flatMap { existingAttributes =>
+        entityAttributeQuery.upsertAction(attributesToSave, existingAttributes, insertScratchAttributes)
+      }
     }
 
     private def lookupNotYetLoadedReferences(workspaceContext: SlickWorkspaceContext, entities: Traversable[Entity], alreadyLoadedEntityRecs: Seq[EntityRecord]): ReadAction[Seq[EntityRecord]] = {
