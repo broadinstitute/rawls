@@ -25,15 +25,5 @@ object JsonExpressionParsing {
       //Attribute types, but is still legit JSON. In this case we treat it as raw JSON, because it is.
       case _: DeserializationException => Seq(AttributeValueRawJson(jsonExprT.get))
     }
-
-    //todo: if this is an array type, turn it into a seq of its elements
-    //otherwise turn it into a seq of one
-
-    /*
-    * TODO: ON TESTING
-    * there are already tests for string and numeric literals. they should pass with absolutely no changes
-    * add more tests for arrays-of-values: [1, 2, "three", true] is a valid JSON array that should make an AttributeValueList
-    * other types such as maps and anything that is or includes an entity reference should return a AttributeRawJSON type instead
-     */
   }
 }

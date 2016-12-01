@@ -791,7 +791,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
               //parsing failure
               case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
@@ -1756,7 +1756,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           withSingleEntityRec(submissionRequest.entityType, submissionRequest.entityName, workspaceContext, dataAccess)(op)
         }
       case Some(expression) =>
-        SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
+        ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
           evaluator.evalFinalEntity(workspaceContext, expression).asTry
         } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
           case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
