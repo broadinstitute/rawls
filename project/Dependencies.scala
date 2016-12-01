@@ -6,7 +6,7 @@ object Dependencies {
   val slickV = "3.1.1"
 
   val modelDependencies = Seq(
-    "io.spray" %% "spray-json" % "1.3.1",
+    "io.spray" %% "spray-json" % "1.3.2",
     "io.spray" %% "spray-http" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
