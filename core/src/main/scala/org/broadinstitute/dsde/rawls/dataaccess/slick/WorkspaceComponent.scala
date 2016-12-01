@@ -385,14 +385,14 @@ trait WorkspaceComponent {
 
     def findWorkspaceUsersByAccessLevel(workspaceId: UUID): ReadAction[Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel]] = {
       val userQuery = for {
-        access <- workspaceAccessQuery if access.workspaceId === workspaceId
+        access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
       } yield {
         (user.userSubjectId, access.accessLevel)
       }
 
       val subGroupQuery = for {
-        access <- workspaceAccessQuery if access.workspaceId === workspaceId
+        access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === access.groupName
       } yield {
         (subGroup.childGroupName, access.accessLevel)
