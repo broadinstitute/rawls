@@ -19,7 +19,7 @@ import scala.util.{Random, Success => TrySuccess}
 /**
  * Created by abaumann on 5/21/15.
  */
-class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent {
+class ExpressionParserTest extends FunSuite with TestDriverComponent {
   import driver.api._
 
   def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
