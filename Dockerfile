@@ -7,7 +7,7 @@ EXPOSE 5050
 ADD . /rawls
 
 # catch sbt issues separately
-RUN cd /rawls && sbt update && echo "sbt updated successfully."
+RUN cd /rawls && pwd && sbt update && echo "sbt updated successfully."
 
 RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
 
