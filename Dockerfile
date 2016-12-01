@@ -1,4 +1,4 @@
-FROM broadinstitute/scala-baseimage:scala-2.11.8
+FROM broadinstitute/scala-baseimage
 
 # Rawls' default port
 EXPOSE 8080
@@ -9,7 +9,7 @@ ENV GIT_MODEL_HASH $GIT_MODEL_HASH
 ADD . /rawls
 
 # catch sbt issues separately
-RUN cd /rawls && pwd && sbt update && echo "sbt updated successfully."
+RUN cd /rawls && sbt update && echo "sbt updated successfully."
 
 RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
 
