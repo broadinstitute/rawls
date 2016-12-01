@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import com.sun.xml.internal.ws.encoding.soap.DeserializationException
 import org.broadinstitute.dsde.rawls.model._
-import spray.json.JsonParser.ParsingException
 import spray.json._
 
 import scala.util.{Success, Try}
