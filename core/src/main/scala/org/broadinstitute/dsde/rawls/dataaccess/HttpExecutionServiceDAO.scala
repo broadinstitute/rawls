@@ -36,7 +36,7 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
   }
 
   override def callLevelMetadata(id: String, userInfo: UserInfo): Future[ExecutionMetadata] = {
-    val url = executionServiceURL + s"/workflows/v1/${id}/metadata?includeKey=executionStatus&includeKey=executionEvents"
+    val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionMetadata]
     retry(when500) { () => pipeline(Get(url)) }
