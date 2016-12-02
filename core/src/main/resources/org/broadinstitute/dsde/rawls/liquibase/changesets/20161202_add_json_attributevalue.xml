@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet id="add_json_entity_attribute" author="hussein" logicalFilePath="dummy">
+        <sql>
+            ALTER TABLE ENTITY_ATTRIBUTE ADD COLUMN value_json LONGTEXT;
+        </sql>
+    </changeSet>
+
+    <changeSet id="add_json_workspace_attribute" author="hussein" logicalFilePath="dummy">
+        <sql>
+            ALTER TABLE WORKSPACE_ATTRIBUTE ADD COLUMN value_json LONGTEXT;
+        </sql>
+    </changeSet>
+
+    <changeSet id="add_json_submission_attribute" author="hussein" logicalFilePath="dummy">
+        <sql>
+            ALTER TABLE SUBMISSION_ATTRIBUTE ADD COLUMN value_json LONGTEXT;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

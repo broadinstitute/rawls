@@ -65,7 +65,7 @@ trait EntityComponent {
         val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None)
 
         val attributeIdOption: Option[Long] = r.<<
-        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption

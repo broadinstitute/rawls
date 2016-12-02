@@ -29,4 +29,5 @@
     <include file="changesets/20161005_refactor_project_users.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161025_billing_account.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161026_superowner_workspace_acls.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20161202_add_json_attributevalue.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
