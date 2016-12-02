@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.expressions
 
-import com.sun.xml.internal.ws.encoding.soap.DeserializationException
 import org.broadinstitute.dsde.rawls.model._
 import spray.json._
 
-import scala.util.{Success, Try}
+import scala.util.Try
 
 object JsonExpressionParsing {
   def evaluate(expression: String): Try[Iterable[AttributeValue]] = {
@@ -20,6 +19,10 @@ object JsonExpressionParsing {
       case av: AttributeValue => Seq(av)
       case avl: AttributeValueList => avl.list
       case AttributeValueEmptyList => Seq.empty
+
+      //we should never get here, because there's no way to deserialize an empty reference list with the plain array parser
+      //but if we skip this, the compiler warns
+      case AttributeEntityReferenceEmptyList => Seq.empty
     } recover {
       //DeserializationException will be thrown if the user gives us JSON that we fail to parse as one of our
       //Attribute types, but is still legit JSON. In this case we treat it as raw JSON, because it is.
