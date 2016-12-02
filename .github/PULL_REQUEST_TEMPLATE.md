@@ -1,4 +1,5 @@
 - [ ] **Submitter**: Include the JIRA issue number in the PR description
+- [ ] **Submitter**: Check that the **Product Owner** has signed off on any user-facing changes
 - [ ] **Submitter**: Make sure Swagger is updated if API changes
   - [ ] **...and Orchestration's Swagger too!**
 - [ ] **Submitter**: If updating admin endpoints, also update [firecloud-admin-cli](https://github.com/broadinstitute/firecloud-admin-cli)
@@ -34,7 +35,6 @@
   * Submitter **reassigns to LR** for further feedback
 - [ ] **TL** sign off
 - [ ] **LR** sign off
-- [ ] **Product Owner** sign off
 - [ ] **Assign to submitter** to finalize
 - [ ] **Submitter**: Verify all tests go green, including CI tests
 - [ ] **Submitter**: Squash commits and merge to develop
