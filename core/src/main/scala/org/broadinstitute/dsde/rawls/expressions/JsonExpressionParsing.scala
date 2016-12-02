@@ -16,6 +16,7 @@ object JsonExpressionParsing {
       //turn it back into raw JSON.
       case _: AttributeEntityReference => Seq(AttributeValueRawJson(jsonExprT.get))
       case _: AttributeEntityReferenceList => Seq(AttributeValueRawJson(jsonExprT.get))
+      case AttributeNull => Seq.empty
       case av: AttributeValue => Seq(av)
       case avl: AttributeValueList => avl.list
       case AttributeValueEmptyList => Seq.empty
