@@ -533,7 +533,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   "ExecutionService" should "parse unsupported output data types" in {
     val workflowId = "8afafe21-2b70-4180-a565-748cb573e10c"
-    assertResult(ExecutionServiceOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data.output_array" -> Right(UnsupportedOutputType(JsArray(Vector(
+    assertResult(ExecutionServiceOutputs(workflowId, Map("aggregate_data_workflow.aggregate_data.output_array" -> Left(AttributeValueRawJson(JsArray(Vector(
       JsArray(Vector(JsString("foo"), JsString("bar"))),
       JsArray(Vector(JsString("baz"), JsString("qux")))))))))) {
 
