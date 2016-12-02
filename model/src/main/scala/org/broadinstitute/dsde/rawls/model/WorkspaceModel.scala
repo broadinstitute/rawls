@@ -275,6 +275,10 @@ object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],S
 
 case class ApplicationVersion(gitHash: String, buildNumber: String, version: String)
 
+case object AttributeValueRawJson {
+  def apply(str: String) : AttributeValueRawJson = AttributeValueRawJson(str.parseJson)
+}
+
 sealed trait Attribute
 sealed trait AttributeListElementable extends Attribute //terrible name for "this type can legally go in an attribute list"
 sealed trait AttributeValue extends AttributeListElementable
