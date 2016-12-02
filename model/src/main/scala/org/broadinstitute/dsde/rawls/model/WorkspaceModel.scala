@@ -312,7 +312,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): SortDirection = json match {
       case JsString(dir) => SortDirections.fromString(dir)
-      case _ => throw new DeserializationException("unexpected json type")
+      case _ => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -321,7 +321,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): AttributeName = json match {
       case JsString(name) => AttributeName.fromDelimitedName(name)
-      case _ => throw new DeserializationException("unexpected json type")
+      case _ => throw DeserializationException("unexpected json type")
     }
   }
 
