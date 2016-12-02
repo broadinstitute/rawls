@@ -4,6 +4,8 @@ FROM broadinstitute/scala-baseimage
 EXPOSE 8080
 EXPOSE 5050
 
+ENV GIT_MODEL_HASH $GIT_MODEL_HASH
+
 ADD . /rawls
 
 # catch sbt issues separately
