@@ -324,7 +324,7 @@ trait AttributeComponent {
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_SCRATCH ta
                 on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
-                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
+                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_json=ta.value_json, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
 
       def clearAttributeScratchTableAction(transactionId: String) = {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
