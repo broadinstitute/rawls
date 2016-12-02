@@ -5,11 +5,17 @@
         <sql>
             ALTER TABLE ENTITY_ATTRIBUTE ADD COLUMN value_json LONGTEXT;
         </sql>
+        <sql>
+            ALTER TABLE ENTITY_ATTRIBUTE_SCRATCH ADD COLUMN value_json LONGTEXT;
+        </sql>
     </changeSet>
 
     <changeSet id="add_json_workspace_attribute" author="hussein" logicalFilePath="dummy">
         <sql>
             ALTER TABLE WORKSPACE_ATTRIBUTE ADD COLUMN value_json LONGTEXT;
+        </sql>
+        <sql>
+            ALTER TABLE WORKSPACE_ATTRIBUTE_SCRATCH ADD COLUMN value_json LONGTEXT;
         </sql>
     </changeSet>
 

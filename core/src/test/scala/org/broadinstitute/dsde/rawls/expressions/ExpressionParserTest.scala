@@ -321,19 +321,28 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
     }
   }
 
+  test("null literal") {
+    withTestWorkspace { workspaceContext =>
+
+      assertResult(Map("sample1" ->TrySuccess(Seq())), "(null failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """null"""))
+      }
+    }
+  }
+
   test("array literals") {
     withTestWorkspace { workspaceContext =>
 
-      assertResult(Map("sample1" ->TrySuccess(Seq(AttributeValueEmptyList))), "(empty array failed)") {
+      assertResult(Map("sample1" ->TrySuccess(Seq())), "(empty array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[]"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2)))))), "(numeric array failed)") {
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeNumber(2)))), "(numeric array failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[1,2]"))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeValueList(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three")))))), "(heterogeneous value typed array failed)") {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,"three"]"""))
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three"), AttributeNull))), "(heterogeneous value typed array failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,"three", null]"""))
       }
     }
   }

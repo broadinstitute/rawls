@@ -420,7 +420,7 @@ trait SubmissionComponent {
       def action(submissionId: UUID) = {
         sql"""select w.ID, w.EXTERNAL_ID, w.SUBMISSION_ID, w.STATUS, w.STATUS_LAST_CHANGED, w.ENTITY_ID, w.record_version, w.EXEC_SERVICE_KEY,
               sv.id, sv.ERROR_TEXT, sv.INPUT_NAME,
-              sa.id, sa.namespace, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_entity_ref, sa.list_index, sa.list_length
+              sa.id, sa.namespace, sa.name, sa.value_string, sa.value_number, sa.value_boolean, sa.value_json, sa.value_entity_ref, sa.list_index, sa.list_length
         from WORKFLOW w
         left outer join SUBMISSION_VALIDATION sv on sv.workflow_id = w.id
         left outer join SUBMISSION_ATTRIBUTE sa on sa.owner_id = sv.id
