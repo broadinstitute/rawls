@@ -54,6 +54,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
+    lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
@@ -426,6 +427,49 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Write,
       testData.userReader.userEmail.value -> WorkspaceAccessLevels.Read), "Remove ACL should actually do so") {
       removedACLs
+    }
+  }
+
+  it should "patch realm ACLs when the owner is also a project owner" in withTestDataServices { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    runAndWait(rawlsUserQuery.save(user))
+
+    //create the billing project google group
+    Await.result(services.gcsDAO.createGoogleGroup(testData.billingProject.groups(ProjectRoles.Owner)), Duration.Inf)
+    //create the regular workspace access groups
+    testData.controlledWorkspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
+    //create the intersection workspace access groups
+    testData.controlledWorkspace.realmACLs.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
+
+    //add the owner as an owner on the billing project
+    Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.controlledWorkspace.namespace), ProjectAccessUpdate("owner-access", ProjectRoles.Owner)), Duration.Inf)
+
+    //add dbGapAuthorizedUsers group to ACL
+    val aclAdd = Seq(WorkspaceACLUpdate(testData.dbGapAuthorizedUsersGroup.groupEmail.value, WorkspaceAccessLevels.Read))
+    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.controlledWorkspace.toWorkspaceName, aclAdd), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdate])]]
+    val responseFromAdd = Seq(WorkspaceACLUpdate(testData.dbGapAuthorizedUsersGroup.groupName.value, WorkspaceAccessLevels.Read))
+
+    assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
+      aclAddResponse.response
+    }
+
+    //add a member of dbGapAuthorizedUsers as a writer on the workspace
+    val aclAdd2 = Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Write))
+    val aclAddResponse2 = Await.result(services.workspaceService.updateACL(testData.controlledWorkspace.toWorkspaceName, aclAdd2), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, List[WorkspaceACLUpdate])]]
+    val responseFromAdd2 = Seq(WorkspaceACLUpdate(testData.userReader.userSubjectId.value, WorkspaceAccessLevels.Write))
+
+    assertResult((StatusCodes.OK, responseFromAdd2), "Add ACL shouldn't error") {
+      aclAddResponse2.response
+    }
+
+    val getACLResponse = Await.result(services.workspaceService.getACL(testData.controlledWorkspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+
+    //realm ACLs should be maintained and this should return successfully
+    assertResult(StatusCodes.OK) {
+      getACLResponse.response._1
     }
   }
 
