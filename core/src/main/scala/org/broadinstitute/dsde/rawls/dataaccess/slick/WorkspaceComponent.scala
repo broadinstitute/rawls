@@ -385,7 +385,6 @@ trait WorkspaceComponent {
 
     def findWorkspaceUsersByAccessLevel(workspaceId: UUID): ReadAction[Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel]] = {
       val userQuery = for {
-
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
       } yield {
