@@ -1,9 +1,11 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import java.sql.Timestamp
+
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsGroupRecord(groupName: String, groupEmail: String)
+case class RawlsGroupRecord(groupName: String, groupEmail: String, updatedDate: Option[Timestamp])
 case class GroupUsersRecord(userSubjectId: String, groupName: String)
 case class GroupSubgroupsRecord(parentGroupName: String, childGroupName: String)
 
@@ -16,8 +18,10 @@ trait RawlsGroupComponent {
   class RawlsGroupTable(tag: Tag) extends Table[RawlsGroupRecord](tag, "GROUP") {
     def groupName = column[String]("NAME", O.PrimaryKey, O.Length(254))
     def groupEmail = column[String]("EMAIL", O.Length(254))
+    def updatedDate = column[Option[Timestamp]]("UPDATED_DATE", O.SqlType("TIMESTAMP(6)"))
+    def synchronizedDate = column[Option[Timestamp]]("SYNCHRONIZED_DATE", O.SqlType("TIMESTAMP(6)"))
 
-    def * = (groupName, groupEmail) <> (RawlsGroupRecord.tupled, RawlsGroupRecord.unapply)
+    def * = (groupName, groupEmail, updatedDate) <> (RawlsGroupRecord.tupled, RawlsGroupRecord.unapply)
 
     def uniqueEmail = index("IDX_GROUP_EMAIL", groupEmail, unique = true)
   }
@@ -68,6 +72,16 @@ trait RawlsGroupComponent {
 
       val actions = groupInsert andThen userDeletes andThen DBIO.seq(userInserts: _*) andThen subGroupDeletes andThen DBIO.seq(subgroupInserts: _*)
       actions map { _ => rawlsGroup }
+    }
+
+    def updateSynchronizedDate(rawlsGroupRef: RawlsGroupRef): WriteAction[Int] = {
+      findGroupByName(rawlsGroupRef.groupName.value).map(_.synchronizedDate).update(Option(nowTimestamp))
+    }
+
+    def overwriteGroupUsers(rawlsGroupRef: RawlsGroupRef, users: Set[RawlsUserRef]) = {
+      val userDeletes = findUsersByGroupName(rawlsGroupRef.groupName.value).delete
+      val userInserts = groupUsersQuery ++= users.toSeq.map { marshalGroupUsers(_, rawlsGroupRef) }
+      userDeletes andThen userInserts andThen findGroupByName(rawlsGroupRef.groupName.value).map(_.updatedDate).update(Option(nowTimestamp))
     }
 
     def load(groupRef: RawlsGroupRef): ReadAction[Option[RawlsGroup]] = {
@@ -261,14 +275,14 @@ trait RawlsGroupComponent {
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
-      RawlsGroupRecord(group.groupName.value, group.groupEmail.value)
+      RawlsGroupRecord(group.groupName.value, group.groupEmail.value, Option(nowTimestamp))
     }
 
-    private def marshalGroupUsers(ref: RawlsUserRef, rawlsGroup: RawlsGroup): GroupUsersRecord = {
+    private def marshalGroupUsers(ref: RawlsUserRef, rawlsGroup: RawlsGroupRef): GroupUsersRecord = {
       GroupUsersRecord(ref.userSubjectId.value, rawlsGroup.groupName.value)
     }
 
-    private def marshalGroupSubgroups(child: RawlsGroupRef, parent: RawlsGroup): GroupSubgroupsRecord = {
+    private def marshalGroupSubgroups(child: RawlsGroupRef, parent: RawlsGroupRef): GroupSubgroupsRecord = {
       GroupSubgroupsRecord(parent.groupName.value, child.groupName.value)
     }
 

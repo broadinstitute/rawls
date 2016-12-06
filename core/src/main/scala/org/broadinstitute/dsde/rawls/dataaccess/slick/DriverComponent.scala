@@ -58,6 +58,9 @@ trait DriverComponent {
     DBIO.seq(records.grouped(batchSize).map(tableQuery ++= _).toSeq:_*)
   }
 
+  def nowTimestamp: Timestamp = {
+    new Timestamp(System.currentTimeMillis())
+  }
 }
 
 /**

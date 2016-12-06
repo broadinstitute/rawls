@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
+import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.RequestComplete
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -157,6 +157,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+      val gpsDAO = new MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         slickDataSource
@@ -169,8 +170,12 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        directoryDAO
+        directoryDAO,
+        gpsDAO,
+        "test-topic-name"
       )_
+
+      val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
 
       val execServiceBatchSize = 3
       val workspaceServiceConstructor = WorkspaceService.constructor(
@@ -190,6 +195,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       finally {
         // for failed tests we also need to poison pill
         submissionSupervisor ! PoisonPill
+        bucketDeletionMonitor ! PoisonPill
+        googleGroupSyncMonitorSupervisor ! PoisonPill
       }
     }
   }

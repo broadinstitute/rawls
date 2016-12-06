@@ -25,10 +25,10 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -523,7 +523,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
         check {
-          assertResult(StatusCodes.Created) {
+          assertResult(StatusCodes.Created, response.entity.asString) {
             status
           }
         }
@@ -826,31 +826,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when importing users" in withTestDataApiServices { services =>
-    runAndWait(rawlsUserQuery.save(userNoBilling))
-
-    val user1 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("1"), RawlsUserEmail("owner-access2")), Seq(testData.billingProject.projectName))
-    val user2 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("2"), RawlsUserEmail("writer-access2")), Seq.empty)
-    val user3 = RawlsUserInfo(RawlsUser(RawlsUserSubjectId("3"), RawlsUserEmail("reader-access2")), Seq.empty)
-    val newUsers = Seq(user1, user2, user3)
-
-    val userInfoList = RawlsUserInfoList(newUsers)
-    Post("/admin/users", httpJson(userInfoList)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
-          status
-        }
-      }
-
-    Get("/admin/users") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        val expected = testDataUsers ++ newUsers.map(_.user)
-        assertSameElements(expected, responseAs[RawlsUserInfoList].userInfoList.map(_.user))
-      }
-  }
-
   it should "return 404 when adding a member that doesn't exist" in withTestDataApiServices { services =>
     val group = RawlsGroupRef(RawlsGroupName("test_group"))
 
@@ -963,6 +938,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
+
+    services.gpsDAO.messageLog.clear()
     Put(s"/admin/allUserReadAccess/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -975,12 +952,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
 
     val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
-
-    assertResult(Some(true)) {
-      Await.result(services.gcsDAO.listGroupMembers(group), Duration.Inf).map { members =>
-        members.contains(Right(UserService.allUsersGroupRef))
-      }
-    }
+    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
 
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -998,14 +970,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.NotFound, response.entity.asString) { status }
       }
-
-    val group2 = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
-
-      assertResult(Some(false)) {
-        Await.result(services.gcsDAO.listGroupMembers(group2), Duration.Inf).map { members =>
-          members.contains(Right(UserService.allUsersGroupRef))
-        }
-      }
+    assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
 
     Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
       sealRoute(services.workspaceRoutes) ~>

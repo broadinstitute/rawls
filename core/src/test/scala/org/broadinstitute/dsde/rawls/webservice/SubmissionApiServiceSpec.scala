@@ -18,14 +18,14 @@ import org.joda.time.DateTime
  */
 class SubmissionApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 
     val gcsDAO = new MockGoogleServicesDAO("test")
     gcsDAO.storeToken(userInfo, "test_token")
 
-    val apiService = new TestApiService(dataSource, gcsDAO)
+    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {

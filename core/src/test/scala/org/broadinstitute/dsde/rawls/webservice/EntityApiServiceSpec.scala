@@ -20,10 +20,10 @@ import scala.util.Random
  */
 class EntityApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {

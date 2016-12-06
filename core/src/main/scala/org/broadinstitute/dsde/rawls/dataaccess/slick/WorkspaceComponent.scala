@@ -28,6 +28,9 @@ case class WorkspaceRecord(
 
 case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLevel: String, isRealmAcl: Boolean)
 
+/** result class for workspaceQuery.findAssociatedGroupsToIntersect, target = group1 intersect group2 */
+case class GroupsToIntersect(target: RawlsGroupRef, group1: RawlsGroupRef, group2: RawlsGroupRef)
+
 trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
@@ -362,25 +365,46 @@ trait WorkspaceComponent {
       query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString(), WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
     }
 
-    def findWorkspacesForGroup(group: RawlsGroupRef): ReadAction[Seq[Workspace]] = {
-      val byAccessGroupAction: ReadAction[Seq[WorkspaceRecord]] = for {
+    /**
+     * Find the intersection groups that need to be recomputed given the change in group and the groups that
+     * should be used in the intersection
+     * @param group group that has changed to trigger the recompute
+     * @return
+     */
+    def findAssociatedGroupsToIntersect(group: RawlsGroupRef): ReadAction[Seq[(GroupsToIntersect)]] = {
+      def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
+        for {
+          workspaceAccess <- workspaceAccessQuery if workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false
+          workspace <- workspaceQuery if workspaceAccess.workspaceId === workspace.id && workspace.realmGroupName.isDefined
+        } yield workspace
+      }
+
+      def findWorkspacesForRealms(groups: Set[RawlsGroupRecord]) = {
+        for {
+          workspace <- workspaceQuery if workspace.realmGroupName.inSetBind(groups.map(_.groupName)) && workspace.realmGroupName.isDefined
+        } yield workspace
+      }
+
+      for {
         groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
         allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
-        workspaceRecs <- findWorkspacesForGroups(allGroups).result
-      } yield workspaceRecs
+        workspaceRecsForGroups <- findWorkspacesForGroups(allGroups).result
+        workspaceRecsForRealms <- findWorkspacesForRealms(allGroups).result
+        realmedWorkspaceRecs = (workspaceRecsForGroups ++ workspaceRecsForRealms)
+        accessGroupRecs <- workspaceAccessQuery.filter(rec => rec.workspaceId.inSetBind(realmedWorkspaceRecs.map(_.id))).result
+      } yield {
+        val indexedAccessGroups = accessGroupRecs.map(rec => (rec.workspaceId, rec.accessLevel, rec.isRealmAcl) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
 
-      val byRealmAction: ReadAction[Seq[WorkspaceRecord]] = for {
-        groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
-        allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
-        workspaceRecs <- findWorkspacesForRealms(allGroups).result
-      } yield workspaceRecs
-
-      val workspaceRecs = for {
-        byAccessGroup <- byAccessGroupAction
-        byRealm <- byRealmAction
-      } yield (byAccessGroup.toSet ++ byRealm).toSeq
-
-      workspaceRecs.flatMap(recs => loadWorkspaces(findByIdsQuery(recs.map(_.id))))
+        for {
+          workspaceRec <- realmedWorkspaceRecs
+          accessLevel <- WorkspaceAccessLevels.groupAccessLevelsAscending
+        } yield {
+          GroupsToIntersect(
+            indexedAccessGroups((workspaceRec.id, accessLevel.toString, true)),
+            indexedAccessGroups((workspaceRec.id, accessLevel.toString, false)),
+            RawlsGroupRef(RawlsGroupName(workspaceRec.realmGroupName.get)))
+        }
+      }
     }
 
     def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] = {
@@ -408,19 +432,6 @@ trait WorkspaceComponent {
       } yield {
         (users ++ subGroups).toSet
       }
-    }
-
-    private def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
-      for {
-        workspaceAccess <- workspaceAccessQuery if (workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false)
-        workspace <- workspaceQuery if (workspaceAccess.workspaceId === workspace.id)
-      } yield workspace
-    }
-
-    private def findWorkspacesForRealms(groups: Set[RawlsGroupRecord]) = {
-      for {
-        workspace <- workspaceQuery if (workspace.realmGroupName.inSetBind(groups.map(_.groupName)))
-      } yield workspace
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {

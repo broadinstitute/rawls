@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
+import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.{ContentTypes, HttpEntity, StatusCodes}
@@ -73,6 +73,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
   trait ApiServices extends AdminApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with UserApiService with WorkspaceApiService with BillingApiService {
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
+    val gpsDAO: MockGooglePubSubDAO
 
     def actorRefFactory = system
 
@@ -92,11 +93,17 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     val directoryDAO = new MockUserDirectoryDAO
 
+    val googleGroupSyncTopic = "test-topic-name"
+
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO
+      directoryDAO,
+      gpsDAO,
+      googleGroupSyncTopic
     )_
+
+    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))
 
     val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
@@ -124,6 +131,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
+      googleGroupSyncMonitorSupervisor ! PoisonPill
+      bucketDeletionMonitor ! PoisonPill
     }
   }
 
