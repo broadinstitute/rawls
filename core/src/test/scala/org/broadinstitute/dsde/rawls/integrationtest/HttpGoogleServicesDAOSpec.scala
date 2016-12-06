@@ -49,8 +49,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("billingSecrets"))),
     gcsConfig.getString("billingPemEmail"),
     gcsConfig.getString("pathToBillingPem"),
-    gcsConfig.getString("billingEmail")
-
+    gcsConfig.getString("billingEmail"),
+    gcsConfig.getInt("bucketLogsMaxAge")
   )
 
   slickDataSource.initWithLiquibase(liquibaseChangeLog, Map.empty)
@@ -148,6 +148,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
 
     val projectOwnerMembers = Await.result(retry(when500)(() => Future { directory.members().list(projectOwnerGroup.groupEmail.value).execute() }), Duration.Inf)
     projectOwnerMembers.getMembers.map(_.getEmail) should be { Seq(projectOwnerGoogleGroup.groupEmail.value) }
+
+    // should return 0, not raise an error due to storage logs not being written yet
+    val usage = Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), s"fc-$testWorkspaceId"), Duration.Inf)
 
     // delete the workspace bucket and groups. confirm that the corresponding groups are deleted
     Await.result(deleteWorkspaceGroupsAndBucket(googleWorkspaceInfo, bucketDeletionMonitor), Duration.Inf)
@@ -349,7 +352,8 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("billingSecrets"))),
       gcsConfig.getString("billingPemEmail"),
       gcsConfig.getString("pathToBillingPem"),
-      gcsConfig.getString("billingEmail")
+      gcsConfig.getString("billingEmail"),
+      gcsConfig.getInt("bucketLogsMaxAge")
       )
 
     val userInfo = UserInfo("owner-access", OAuth2BearerToken("token"), 123, "123456789876543212345")
@@ -376,9 +380,19 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       val projectServices = gcsConfig.getStringList("projectTemplate.services")
       val project = RawlsBillingProject(projectName, Map(ProjectRoles.Owner -> ownerGroup), "", CreationStatuses.Creating, Option(billingAccount.accountName))
       Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
+
       Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
         gcsDAO.setupProject(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices), Map.empty).map(_.get)
       }, 6 minutes)
+
+      val bucket = Await.result(gcsDAO.getBucket(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
+      bucket.getLifecycle.getRule.length should be (1)
+      val rule = bucket.getLifecycle.getRule.head
+      rule.getAction.getType should be ("Delete")
+      rule.getCondition.getAge should be (180)
+      val bucketAcl = Await.result(gcsDAO.getBucketACL(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
+      bucketAcl.count(bac =>
+        bac.getEntity == "group-cloud-storage-analytics@google.com" && bac.getRole == "WRITER") should be (1)
     } finally {
       gcsDAO.deleteGoogleGroup(ownerGroup)
       gcsDAO.deleteProject(projectName)
@@ -412,13 +426,67 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     bucketDeletionMonitor ! DeleteBucket(bucketName)
   }
 
-  private def insertObject(bucketName: String, objectName: String, content: String): Unit = {
+  it should "determine bucket usage" in {
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+
+    val projectName = RawlsBillingProjectName(testProject)
+    val logBucketName = gcsDAO.getStorageLogsBucketName(projectName)
+    val bucketName = "services-dao-spec-" + UUID.randomUUID.toString
+
+    try {
+
+      // add some log files for the test bucket, including storage and usage logs
+      for (i <- 1 to 2) {
+        // storage logs
+        insertObject(logBucketName, s"${bucketName}_storage_2016_11_0${i}_08_00_00_0a1b2_v0", bucketStorageFileContent(bucketName, 240 * i))
+        // usage logs
+        insertObject(logBucketName, s"${bucketName}_usage_2016_11_0${i}_08_00_00_0a1b2_v0", "BOOM!")
+        // storage logs for some other bucket that has a name that will come after the requested bucket
+        insertObject(logBucketName, s"z${bucketName}_storage_2016_11_0${i}_08_00_00_0a1b2_v0", bucketStorageFileContent(bucketName, 0))
+      }
+
+      val usage = Await.result(gcsDAO.getBucketUsage(projectName, bucketName, Some(1L)), Duration.Inf)
+
+      // 240 bytes per day, 2 days of logs, 24 hours per day
+      // 240 * 2 / 24 = 20
+      usage should be (20)
+
+    } finally {
+      try {
+        for (i <- 1 to 2) {
+          Await.result(retry(when500)(() => Future {
+            storage.objects().delete(logBucketName, s"${bucketName}_storage_2016_11_0${i}_08_00_00_0a1b2_v0").execute() }), Duration.Inf)
+          Await.result(retry(when500)(() => Future {
+            storage.objects().delete(logBucketName, s"${bucketName}_usage_2016_11_0${i}_08_00_00_0a1b2_v0").execute() }), Duration.Inf)
+          Await.result(retry(when500)(() => Future {
+            storage.objects().delete(logBucketName, s"z${bucketName}_storage_2016_11_0${i}_08_00_00_0a1b2_v0").execute() }), Duration.Inf)
+        }
+      } catch {
+        case ignore: Throwable => Unit
+      }
+    }
+  }
+
+  it should "fail to get usage when there are no storage logs" in {
+    intercept[GoogleStorageLogException] {
+      Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), "no-bucket-here-" + UUID.randomUUID.toString), Duration.Inf)
+    }
+  }
+
+  private def insertObject(bucketName: String, objectName: String, content: String): String = {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
     val o = new StorageObject().setName(objectName)
     val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(content.getBytes))
     val inserter = storage.objects().insert(bucketName, o, stream)
     inserter.getMediaHttpUploader.setDirectUploadEnabled(true)
     Await.result(retry(when500)(() => Future { inserter.execute() }), Duration.Inf)
+    objectName
+  }
+
+  private def bucketStorageFileContent(bucketName: String, storageByteHours: Int): String = {
+    return s""""bucket","storage_byte_hours"
+               |"$bucketName","$storageByteHours"
+               |""".stripMargin
   }
 
   private def when500( throwable: Throwable ): Boolean = {

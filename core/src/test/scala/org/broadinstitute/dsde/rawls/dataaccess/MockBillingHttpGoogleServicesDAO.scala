@@ -27,7 +27,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   billingClientSecrets: GoogleClientSecrets,
   billingPemEmail: String,
   billingPemFile: String,
-  billingEmail: String)
+  billingEmail: String,
+  bucketLogsMaxAge: Int)
   (implicit override val system: ActorSystem, implicit override val executionContext: ExecutionContext)
   extends HttpGoogleServicesDAO(
     true,
@@ -43,7 +44,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     billingClientSecrets,
     billingPemEmail,
     billingPemFile,
-    billingEmail)(system, executionContext) {
+    billingEmail,
+    bucketLogsMaxAge)(system, executionContext) {
 
   private var token: String = null
   private var tokenDate: DateTime = null

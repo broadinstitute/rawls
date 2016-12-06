@@ -1991,5 +1991,47 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 404 when requesting bucket size for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}x/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 404 when a no-access user requests bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "not allow a reader-access user to request bucket usage" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
+    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+  }
+
+  for (access <- Seq("owner-access", "writer-access")) {
+    it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(access) { services =>
+      Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(BucketUsageResponse(BigInt(42))) {
+            responseAs[BucketUsageResponse]
+          }
+        }
+    }
+  }
 }
 

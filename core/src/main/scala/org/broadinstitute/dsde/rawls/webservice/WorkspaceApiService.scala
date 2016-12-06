@@ -99,6 +99,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
             WorkspaceService.UnlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
         }
       }
+    } ~
+    path("workspaces" / Segment / Segment / "bucketUsage" ) { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GetBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)))
+      }
     }
   }
 }

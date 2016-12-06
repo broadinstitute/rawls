@@ -10,7 +10,7 @@ import com.typesafe.config.ConfigFactory
 trait IntegrationTestConfig {
   // get config defined by Jenkins, which is where integration tests usually run.
   // as a fallback, get config from the usual rawls.conf
-  val etcConf = ConfigFactory.parseFile(new File("/etc/rawls.conf"))
+  val etcConf = ConfigFactory.load()
   val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
 
   val methodRepoConfig = jenkinsConf.withFallback(etcConf).getConfig("methodrepo")
