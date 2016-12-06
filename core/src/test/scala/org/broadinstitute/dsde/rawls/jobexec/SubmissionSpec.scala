@@ -524,7 +524,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       subTestData.wsName,
       subTestData.submissionTestAbortGoodWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
-    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, ExecutionMetadata)]].response
+    val (status, data) = Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, JsObject)]].response
 
     assertResult(StatusCodes.OK) {
       status

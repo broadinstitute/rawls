@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
+import spray.json.JsObject
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -36,7 +37,7 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus] =
     getMember(workflowRec).status(workflowRec.externalId.get, userInfo)
 
-  def callLevelMetadata(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionMetadata] =
+  def callLevelMetadata(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[JsObject] =
     getMember(workflowRec).callLevelMetadata(workflowRec.externalId.get, userInfo)
 
   def outputs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceOutputs] =
