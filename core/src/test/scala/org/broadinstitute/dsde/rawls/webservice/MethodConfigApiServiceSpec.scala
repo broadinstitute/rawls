@@ -17,10 +17,10 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   // intermittent failures occur on requests not completing in time
   override implicit val routeTestTimeout = RouteTestTimeout(500.seconds)
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"))
+    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {

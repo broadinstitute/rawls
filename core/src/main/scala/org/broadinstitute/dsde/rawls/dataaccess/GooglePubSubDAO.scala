@@ -1,0 +1,64 @@
+package org.broadinstitute.dsde.rawls.dataaccess
+
+import com.google.api.client.auth.oauth2.Credential
+import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO._
+
+import scala.concurrent.{ExecutionContext, Future}
+
+/**
+ * Created by dvoet on 12/7/16.
+ */
+object GooglePubSubDAO {
+  sealed trait AckStatus
+
+  case object MessageAcknowledged extends AckStatus
+  case object MessageNotAcknowledged extends AckStatus
+
+  sealed trait HandledStatus
+
+  case object MessageHandled extends HandledStatus
+  case object MessageNotHandled extends HandledStatus
+  case object NoMessage extends HandledStatus
+
+  case class PubSubMessage(ackId: String, contents: String)
+}
+
+trait GooglePubSubDAO {
+  implicit val executionContext: ExecutionContext
+
+  def createTopic(topicName: String): Future[Boolean]
+
+  def deleteTopic(topicName: String): Future[Boolean]
+
+  def createSubscription(topicName: String, subscriptionName: String): Future[Boolean]
+
+  def deleteSubscription(subscriptionName: String): Future[Boolean]
+
+  def publishMessages(topicName: String, messages: Seq[String]): Future[Unit]
+
+  def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]): Future[Unit]
+
+  def acknowledgeMessagesById(subscriptionName: String, ackIds: Seq[String]): Future[Unit]
+
+  def pullMessages(subscriptionName: String, maxMessages: Int): Future[Seq[PubSubMessage]]
+
+  def withMessage(subscriptionName: String)(op: (String) => Future[AckStatus]): Future[HandledStatus] = {
+    withMessages(subscriptionName, 1) {
+      case Seq(msg) => op(msg)
+      case _ => throw new RawlsException(s"Unable to process message from subscription ${subscriptionName}")
+    }
+  }
+
+  def withMessages(subscriptionName: String, maxMessages: Int)(op: (Seq[String]) => Future[AckStatus]): Future[HandledStatus] = {
+    pullMessages(subscriptionName, maxMessages) flatMap {
+      case Seq() => Future.successful(NoMessage)
+      case messages => op(messages.map(msg => msg.contents)) flatMap {
+        case MessageAcknowledged => acknowledgeMessages(subscriptionName, messages).map(_ => MessageHandled)
+        case MessageNotAcknowledged => Future.successful(MessageNotHandled)
+      }
+    }
+  }
+
+  def getPubSubServiceAccountCredential: Credential
+}

@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
+import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
@@ -24,6 +24,7 @@ import spray.testkit.ScalatestRouteTest
 
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
 
@@ -51,13 +52,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   )
 
   case class TestApiService(dataSource: SlickDataSource)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectives {
-    def actorRefFactory = system
-    val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
     lazy val workspaceService: WorkspaceService = TestActorRef(WorkspaceService.props(workspaceServiceConstructor, userInfo)).underlyingActor
     lazy val userService: UserService = TestActorRef(UserService.props(userServiceConstructor, userInfo)).underlyingActor
     val mockServer = RemoteServicesMockServer()
 
+
+    def actorRefFactory = system
+    val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
+
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+    val gpsDAO = new MockGooglePubSubDAO
+
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -70,8 +75,12 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      directoryDAO
+      directoryDAO,
+      gpsDAO,
+      "test-topic-name"
     )_
+
+    val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
 
     val execServiceBatchSize = 3
     val workspaceServiceConstructor = WorkspaceService.constructor(
@@ -87,6 +96,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     def cleanupSupervisor = {
       submissionSupervisor ! PoisonPill
+      bucketDeletionMonitor ! PoisonPill
+      googleGroupSyncMonitorSupervisor ! PoisonPill
     }
   }
 
