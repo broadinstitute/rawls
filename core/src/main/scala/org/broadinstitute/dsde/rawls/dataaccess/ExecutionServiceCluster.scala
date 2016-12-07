@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkflowRecord
 import org.broadinstitute.dsde.rawls.model._
+import spray.json.JsObject
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -20,7 +21,7 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus]
 
-  def callLevelMetadata(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionMetadata]
+  def callLevelMetadata(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[JsObject]
 
   def outputs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceOutputs]
 

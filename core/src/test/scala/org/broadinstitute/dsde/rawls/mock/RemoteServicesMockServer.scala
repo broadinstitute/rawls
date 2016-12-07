@@ -468,7 +468,6 @@ class RemoteServicesMockServer(port:Int) {
               |  "id": "69d1d92f-3895-4a7b-880a-82535e9a096e",
               |  "status": "Unknown",
               |  "submission": "2010-09-10T11:12:13.456Z",
-              |  "inputs": {"test": ["foo", "bar", "baz"]},
               |  "outputs": {"test": ["baz", "bar", "foo"]},
               |  "calls": {}
               |}
@@ -508,7 +507,6 @@ class RemoteServicesMockServer(port:Int) {
               |  "id": "8afafe21-2b70-4180-a565-748cb573e10c",
               |  "status": "Unknown",
               |  "submission": "2010-09-10T11:12:13.456Z",
-              |  "inputs": {"test": ["foo", "bar", "baz"]},
               |  "outputs": {"aggregate_data_workflow.aggregate_data.output_array": [["foo", "bar"], ["baz", "qux"]]},
               |  "calls": {}
               |}

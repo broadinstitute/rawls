@@ -196,18 +196,6 @@ case class CallMetadata(
   stderr: Option[String]
 )
 
-case class ExecutionMetadata
-(
-  id: String,
-  status: String,
-  submission: DateTime,
-  start: Option[DateTime],
-  end: Option[DateTime],
-  inputs: JsObject,
-  outputs: Option[JsObject],
-  calls: Map[String, Seq[CallMetadata]]
-)
-
 case class ActiveSubmission
 (
   workspaceNamespace: String,
@@ -305,8 +293,6 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val SubmissionListResponseFormat = jsonFormat8(SubmissionListResponse)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
-
-  implicit val ExecutionMetadataFormat = jsonFormat8(ExecutionMetadata)
 
   implicit val ActiveSubmissionFormat = jsonFormat3(ActiveSubmission)
 

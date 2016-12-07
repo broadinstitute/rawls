@@ -5,11 +5,13 @@ import akka.util.Timeout
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
+
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
 import spray.http.FormData
 import spray.httpx.SprayJsonSupport._
+import spray.json.JsObject
 
 import scala.util.Try
 
@@ -35,10 +37,10 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     retry(when500) { () => pipeline(Get(url)) }
   }
 
-  override def callLevelMetadata(id: String, userInfo: UserInfo): Future[ExecutionMetadata] = {
+  override def callLevelMetadata(id: String, userInfo: UserInfo): Future[JsObject] = {
     val url = executionServiceURL + s"/workflows/v1/${id}/metadata"
     import system.dispatcher
-    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionMetadata]
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[JsObject]
     retry(when500) { () => pipeline(Get(url)) }
   }
 
