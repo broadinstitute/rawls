@@ -436,7 +436,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
           dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).map { emailsAndAccess =>
             // toMap below will drop duplicate keys, keeping the last entry only
             // sort by access level to make sure higher access levels remain in the resulting map
@@ -459,7 +459,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val overwriteGroupMessagesFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
           determineCompleteNewAcls(aclUpdates, dataAccess, workspaceContext)
         }
       }
@@ -569,7 +569,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def lockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
           dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
             if (!submissions.forall(_.status.isTerminated)) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
@@ -584,7 +584,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def unlockWorkspace(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireOwnerIgnoreLock(workspaceContext.workspace, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
           dataAccess.workspaceQuery.unlock(workspaceContext.workspace.toWorkspaceName).map(_ => RequestComplete(StatusCodes.NoContent))
         }
       }
@@ -1515,8 +1515,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getBucketUsage(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
     for {
       bucketName <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          DBIO.successful(workspaceContext.workspace.bucketName)
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Write, dataAccess) {
+            DBIO.successful(workspaceContext.workspace.bucketName)
+          }
         }
       }
       usage <- gcsDAO.getBucketUsage(RawlsBillingProjectName(workspaceName.namespace), bucketName)
@@ -1658,8 +1660,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def requireOwnerIgnoreLock[T](workspace: Workspace, dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    requireAccess(workspace.copy(isLocked = false),WorkspaceAccessLevels.Owner, dataAccess)(op)
+  private def requireAccessIgnoreLock[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+    requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
   }
 
   private def withEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
@@ -1668,8 +1670,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       case Some(entity) => op(entity)
     }
   }
-
-
 
   private def withSubmission(workspaceContext: SlickWorkspaceContext, submissionId: String, dataAccess: DataAccess)(op: (Submission) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
     Try {
