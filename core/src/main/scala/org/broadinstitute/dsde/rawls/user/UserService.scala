@@ -811,7 +811,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
 
                   } yield {
                     RequestComplete(StatusCodes.Created)

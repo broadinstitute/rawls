@@ -213,6 +213,9 @@ class BillingApiServiceSpec extends ApiServiceSpec {
           case None => fail("project does not exist in db")
           case Some(project) =>
             assert(project.groups(ProjectRoles.User).users.isEmpty && project.groups(ProjectRoles.Owner).users.size == 1 && project.groups(ProjectRoles.Owner).users.head.userSubjectId.value == "123456789876543212345")
+            assertResult("gs://" + services.gcsDAO.getCromwellAuthBucketName(projectName)) {
+              project.cromwellAuthBucketUrl
+            }
         }
       }
   }
