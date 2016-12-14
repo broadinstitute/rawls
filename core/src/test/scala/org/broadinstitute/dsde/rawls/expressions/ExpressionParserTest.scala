@@ -348,12 +348,29 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
   }
 
   test("raw json literals") {
-    //TODO:
-    // - json for entity references should be parsed as RawJson
-    // - json for lists of entity references should be parsed as RawJson
-    // - json for lists of numbers and entity references (i.e. a mix of attribute val and ref) should be parsed as RawJson
-    // - json for objects of any kind should be parsed as RawJson
-    // - the special json of itemsType/items that represents arrays should be parsed as RawJson
+    withTestWorkspace { workspaceContext =>
+      // - json for entity references should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"entityType\":\"sample\",\"entityName\":\"sample2\"}"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """{"entityType":"sample","entityName":"sample2"}"""))
+      }
+      // - json for lists of entity references should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"}]"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"}]"""))
+      }
+      // - json for lists of numbers and entity references (i.e. a mix of attribute val and ref) should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"},9]"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"},9]"""))
+      }
+      // - json for objects of any kind should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(Vector(AttributeNumber(9), AttributeNumber(0))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "[9,0]"))
+      }
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"foo\":\"bar\"}"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "{\"foo\":\"bar\"}"))
+      }
+      // - the special json of itemsType/items that represents arrays should be parsed as RawJson
+
+    }
   }
 
   test("reserved attribute expression") {
