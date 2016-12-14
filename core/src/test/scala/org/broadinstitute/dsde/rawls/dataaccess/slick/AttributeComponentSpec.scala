@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -40,6 +41,63 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", Option("test"), None, None, None, None, None, None))
   }
+
+
+  "AttributeComponent" should "insert string attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("\"thisshouldbelegitright\"")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("\"thisshouldbelegitright\""), None, None, None))
+
+  }
+
+  "AttributeComponent" should "insert number attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("95")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("95"), None, None, None))
+
+  }
+
+  "AttributeComponent" should "insert boolean attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("true")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("true"), None, None, None))
+
+  }
+
+  "AttributeComponent" should "insert number list attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("[9, 3]")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[9, 3]"), None, None, None))
+
+  }
+
+
+  "AttributeComponent" should "insert mixed list attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("[\"foo,\"bar\",true, 54]")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[\"foo,\"bar\",true, 54]"), None, None, None))
+
+  }
+
+  "AttributeComponent" should "insert mixed list attribute as json" in withEmptyTestDatabase {
+    val testAttribute = AttributeValueRawJson("{\"field1\":5,\"field2\":false,\"field3\":\"hiiii\",\"field4\":{\"subfield1\":[4,true,\"ohno\"],\"subfield2\":false}}")
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("{\"field1\":5,\"field2\":false,\"field3\":\"hiiii\",\"field4\":{\"subfield1\":[4,true,\"ohno\"],\"subfield2\":false}}"), None, None, None))
+
+  }
+
 
   it should "insert library-namespace attribute" in withEmptyTestDatabase {
     val testAttribute = AttributeString("test")
