@@ -20,7 +20,7 @@ object AttributeUpdateOperations {
 
   case class AddUpdateAttribute(attributeName: AttributeName, addUpdateAttribute: Attribute) extends AttributeUpdateOperation
   case class RemoveAttribute(attributeName: AttributeName) extends AttributeUpdateOperation
-  case class CreateAttributeEntityReferenceList(attributeName: AttributeName) extends AttributeUpdateOperation
+  case class CreateAttributeEntityReferenceList(attributeListName: AttributeName) extends AttributeUpdateOperation
   case class CreateAttributeValueList(attributeName: AttributeName) extends AttributeUpdateOperation
   case class AddListMember(attributeListName: AttributeName, newMember: Attribute) extends AttributeUpdateOperation
   case class RemoveListMember(attributeListName: AttributeName, removeMember: Attribute) extends AttributeUpdateOperation
