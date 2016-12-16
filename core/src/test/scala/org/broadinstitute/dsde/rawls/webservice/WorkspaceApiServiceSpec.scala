@@ -1022,7 +1022,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
     //assert userWriter is not a part of realm writer ACLs
@@ -1573,6 +1573,15 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
         responseAs[Map[String, WorkspaceAccessLevels.WorkspaceAccessLevel]] should contain (testData.userWriter.userEmail.value -> WorkspaceAccessLevels.Read)
+      }
+  }
+
+  it should "not allow ACL updates with a member specified twice" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
       }
   }
 
