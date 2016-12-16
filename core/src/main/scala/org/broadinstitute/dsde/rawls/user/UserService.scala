@@ -71,7 +71,7 @@ object UserService {
   case class GetBillingProjectMembers(projectName: RawlsBillingProjectName) extends UserServiceMessage
 
   case class AdminCreateGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
-  case class AdminListGroupMembers(groupName: String) extends UserServiceMessage
+  case class AdminListGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminDeleteGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminOverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
@@ -120,7 +120,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case ListBillingAccounts => listBillingAccounts() pipeTo sender
 
     case AdminCreateGroup(groupRef) => asFCAdmin { createGroup(groupRef) } pipeTo sender
-    case AdminListGroupMembers(groupName) => asFCAdmin { listGroupMembers(groupName) } pipeTo sender
+    case AdminListGroupMembers(groupRef) => asFCAdmin { listGroupMembers(groupRef) } pipeTo sender
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
@@ -515,10 +515,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def listGroupMembers(groupName: String): Future[PerRequestMessage] = {
+  def listGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(groupName))) flatMap {
-        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupName} does not exist")))
+      dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+        case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupRef.groupName.value} does not exist")))
         case Some(group) =>
           for {
             memberUsers <- dataAccess.rawlsGroupQuery.loadGroupUserEmails(group)

@@ -115,10 +115,12 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
     val bucketName = getBucketName(workspaceId)
 
-    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = groupAccessLevelsAscending.map { accessLevel =>
+    // we do not make a special access group for project owners because the only member would be a single group
+    // we will just use that group directly and avoid potential google problems with a group being in too many groups
+    val accessGroupRefsByLevel: Map[WorkspaceAccessLevel, RawlsGroupRef] = (groupAccessLevelsAscending.filterNot(_ == ProjectOwner)).map { accessLevel =>
       (accessLevel, RawlsGroupRef(RawlsGroupName(workspaceAccessGroupName(workspaceId, accessLevel))))
     }.toMap
 
@@ -144,9 +146,18 @@ class HttpGoogleServicesDAO(
       addMemberToGoogleGroup(ownerGroup, Left(RawlsUser(userInfo))).map(_ => groupsByAccess + (WorkspaceAccessLevels.Owner -> ownerGroup.copy(users = ownerGroup.users + RawlsUser(userInfo))))
     }
 
-    def insertProjectOwners: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
+    def insertRealmProjectOwnerIntersection: (Map[WorkspaceAccessLevel, RawlsGroup]) => Future[Map[WorkspaceAccessLevel, RawlsGroup]] = { groupsByAccess =>
       val projectOwnerGroup = groupsByAccess(WorkspaceAccessLevels.ProjectOwner)
-      addMemberToGoogleGroup(projectOwnerGroup, Right(project.groups(ProjectRoles.Owner))).map(_ => groupsByAccess + (WorkspaceAccessLevels.ProjectOwner -> projectOwnerGroup.copy(subGroups = projectOwnerGroup.subGroups + project.groups(ProjectRoles.Owner))))
+      val inserts = Future.traverse(realmProjectOwnerIntersection.getOrElse(Set.empty)) { userRef =>
+        addEmailToGoogleGroup(projectOwnerGroup.groupEmail.value, toProxyFromUser(userRef.userSubjectId))
+      }
+
+      inserts.map { _ =>
+        groupsByAccess.map {
+          case (ProjectOwner, group) => ProjectOwner -> group.copy(users = realmProjectOwnerIntersection.getOrElse(Set.empty))
+          case otherwise => otherwise
+        }
+      }
     }
 
     def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
@@ -213,10 +224,10 @@ class HttpGoogleServicesDAO(
 
     val bucketInsertion = for {
       accessGroupTries <- accessGroupInserts
-      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember flatMap insertProjectOwners
+      accessGroups <- assertSuccessfulTries(accessGroupTries) flatMap insertOwnerMember map { _ + (ProjectOwner -> project.groups(ProjectRoles.Owner)) }
       intersectionGroupTries <- intersectionGroupInserts
       intersectionGroups <- intersectionGroupTries match {
-        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertProjectOwners map { Option(_) }
+        case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertRealmProjectOwnerIntersection map { Option(_) }
         case None => Future.successful(None)
       }
       inserted <- insertBucket(accessGroups, intersectionGroups)

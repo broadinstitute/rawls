@@ -383,7 +383,7 @@ trait WorkspaceComponent {
       workspaceRecs.flatMap(recs => loadWorkspaces(findByIdsQuery(recs.map(_.id))))
     }
 
-    def findWorkspaceUsersByAccessLevel(workspaceId: UUID): ReadAction[Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel]] = {
+    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] = {
       val userQuery = for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
@@ -406,7 +406,7 @@ trait WorkspaceComponent {
           _.map { case (groupName, accessLevel) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), WorkspaceAccessLevels.withName(accessLevel)) }
         }
       } yield {
-        (users ++ subGroups).toMap
+        (users ++ subGroups).toSet
       }
     }
 
