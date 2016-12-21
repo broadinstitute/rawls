@@ -104,15 +104,15 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
 
   "AttributeComponent" should "insert json number list attribute" in withEmptyTestDatabase {
-    val testAttribute = AttributeValueRawJson("[9, 3]")
+    val testAttribute = AttributeValueRawJson("[9,3]")
 
     runAndWait(workspaceQuery.save(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[9, 3]"), None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[9,3]"), None, None, None))
   }
 
   it should "insert json mixed list attribute" in withEmptyTestDatabase {
-    val testAttribute = AttributeValueRawJson("[\"foo,\"bar\",true, 54]")
+    val testAttribute = AttributeValueRawJson("[\"foo\",\"bar\",true, 54]")
 
     runAndWait(workspaceQuery.save(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))

@@ -301,6 +301,7 @@ object AttributeStringifier {
       case AttributeString(value) => value
       case AttributeNumber(value) => value.toString()
       case AttributeBoolean(value) => value.toString()
+      case AttributeValueRawJson(value) => value.toString()
       case AttributeEntityReference(t, name) => name
       case al: AttributeList[_] => al.list.map(apply).mkString(" ")
     }
