@@ -116,7 +116,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     runAndWait(workspaceQuery.save(workspace))
     runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("test"), testAttribute))
-    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[\"foo,\"bar\",true, 54]"), None, None, None))
+    assertExpectedRecords(WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "test", None, None, None, Option("[\"foo\",\"bar\",true, 54]"), None, None, None))
   }
 
   it should "insert empty value list" in withEmptyTestDatabase {
