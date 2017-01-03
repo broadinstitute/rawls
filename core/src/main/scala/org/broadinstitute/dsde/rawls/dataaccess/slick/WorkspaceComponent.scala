@@ -31,6 +31,14 @@ case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLev
 /** result class for workspaceQuery.findAssociatedGroupsToIntersect, target = group1 intersect group2 */
 case class GroupsToIntersect(target: RawlsGroupRef, group1: RawlsGroupRef, group2: RawlsGroupRef)
 
+case class PendingWorkspaceAccessRecord(
+  workspaceId: UUID,
+  userEmail: String,
+  originSubjectId: String,
+  inviteDate: Timestamp,
+  accessLevel: String
+)
+
 trait WorkspaceComponent {
   this: DriverComponent
     with AttributeComponent
@@ -75,7 +83,23 @@ trait WorkspaceComponent {
     def * = (workspaceId, groupName, accessLevel, isRealmAcl) <> (WorkspaceAccessRecord.tupled, WorkspaceAccessRecord.unapply)
   }
 
+  class PendingWorkspaceAccessTable(tag: Tag) extends Table[PendingWorkspaceAccessRecord](tag, "PENDING_WORKSPACE_ACCESS") {
+    def workspaceId = column[UUID]("workspace_id")
+    def userEmail = column[String]("user_email", O.Length(254))
+    def originSubjectId = column[String]("origin_subject_id", O.Length(254))
+    def inviteDate = column[Timestamp]("invite_date", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
+    def accessLevel = column[String]("access_level", O.Length(254))
+
+    def workspace = foreignKey("FK_PENDING_WS_ACCESS_WORKSPACE", workspaceId, workspaceQuery)(_.id)
+    def originUser = foreignKey("FK_PENDING_WS_ACCESS_ORIGIN_USER", originSubjectId, rawlsUserQuery)(_.userSubjectId)
+
+    def pendingAccessPrimaryKey = primaryKey("PK_PENDING_WORKSPACE_ACCESS", (workspaceId, userEmail)) //only allow one invite per user per workspace
+
+    def * = (workspaceId, userEmail, originSubjectId, inviteDate, accessLevel) <> (PendingWorkspaceAccessRecord.tupled, PendingWorkspaceAccessRecord.unapply)
+  }
+
   protected val workspaceAccessQuery = TableQuery[WorkspaceAccessTable]
+  protected val pendingWorkspaceAccessQuery = TableQuery[PendingWorkspaceAccessTable]
 
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
     private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
@@ -188,6 +212,24 @@ trait WorkspaceComponent {
 
     def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
       findByNameQuery(workspaceName).map(_.isLocked).update(false)
+    }
+
+    def saveInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate): ReadWriteAction[WorkspaceACLUpdate] = {
+      pendingWorkspaceAccessQuery insertOrUpdate(marshalWorkspaceInvite(workspaceId, originUser, invite)) map { _ => invite }
+    }
+
+    def removeInvite(workspaceId: UUID, userEmail: String): ReadWriteAction[Boolean] = {
+      pendingWorkspaceAccessQuery.filter(rec => rec.workspaceId === workspaceId && rec.userEmail === userEmail).delete.map { count => count == 1 }
+    }
+
+    def getInvites(workspaceId: UUID): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
+      (pendingWorkspaceAccessQuery.filter(_.workspaceId === workspaceId).map(rec => (rec.userEmail, rec.accessLevel))).result.map(_.map {case (email, access) =>
+        (email, WorkspaceAccessLevels.withName(access))
+      })
+    }
+
+    def deleteWorkspaceInvites(workspaceId: UUID) = {
+      findWorkspaceInvitesQuery(workspaceId).delete
     }
     
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[(String, WorkspaceAccessLevel)]] = {
@@ -345,6 +387,10 @@ trait WorkspaceComponent {
       filter(rec => rec.namespace === workspaceName.namespace && rec.name === workspaceName.name)
     }
 
+    private def findWorkspaceInvitesQuery(workspaceId: UUID) = {
+      pendingWorkspaceAccessQuery.filter(_.workspaceId === workspaceId)
+    }
+
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
       filter(_.id === workspaceId)
     }
@@ -459,6 +505,10 @@ trait WorkspaceComponent {
           unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty), workspaceGroups.accessGroups, workspaceGroups.realmAcls)
         }
       }
+    }
+
+    private def marshalWorkspaceInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate) = {
+      PendingWorkspaceAccessRecord(workspaceId, invite.email, originUser, new Timestamp(DateTime.now.getMillis), invite.accessLevel.toString)
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {

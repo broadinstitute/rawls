@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="pending-ws-access-1">
+        <sql stripComments="true">
+            create table PENDING_WORKSPACE_ACCESS (
+                workspace_id binary(16) not null,
+                user_email varchar(254) not null,
+                origin_subject_id varchar(254) not null,
+                invite_date timestamp not null,
+                access_level varchar(254) not null,
+                primary key PK_PENDING_WORKSPACE_ACCESS (workspace_id, user_email)
+            )
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="pending-ws-access-2">
+        <sql stripComments="true">
+            alter table PENDING_WORKSPACE_ACCESS add constraint FK_PENDING_WS_ACCESS_WORKSPACE foreign key (workspace_id) references WORKSPACE(ID);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="pending-ws-access-3">
+        <sql stripComments="true">
+            alter table PENDING_WORKSPACE_ACCESS add constraint FK_PENDING_WS_ACCESS_ORIGIN_USER foreign key (origin_subject_id) references USER(SUBJECT_ID);
+        </sql>
+    </changeSet>
+    
+</databaseChangeLog>
