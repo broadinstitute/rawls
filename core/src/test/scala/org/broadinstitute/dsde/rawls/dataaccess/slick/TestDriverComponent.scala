@@ -370,7 +370,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val methodConfigInvalidExprs = MethodConfiguration("dsde", "GoodMethodConfig", "Sample", prerequisites=Map.empty,
       inputs=Map("foo" -> AttributeString("bonk.thing.foo"), "bar" -> AttributeString("workspace.bar")),
-      outputs=Map("foo" -> AttributeString("this.bonk.foo"), "bar" -> AttributeString("foo.bar")),
+      outputs=Map(
+        "foo" -> AttributeString("this.bonk.foo"),
+        "bar" -> AttributeString("foo.bar"),
+        "baz" -> AttributeString("4"),
+        "qux" -> AttributeString("[1,2,3]")),
       MethodRepoMethod("dsde", "three_step", 1))
 
     val methodConfigName = MethodConfigurationName(methodConfig.name, methodConfig.namespace, wsName)

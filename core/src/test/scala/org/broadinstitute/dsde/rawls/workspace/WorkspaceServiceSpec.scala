@@ -312,7 +312,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult(1) { shouldBeInvalid.validInputs.size }
     assertResult(0) { shouldBeInvalid.validOutputs.size }
     assertResult(1) { shouldBeInvalid.invalidInputs.size }
-    assertResult(2) { shouldBeInvalid.invalidOutputs.size }
+    assertResult(4) { shouldBeInvalid.invalidOutputs.size }
   }
 
   it should "retrieve ACLs" in withTestDataServices { services =>
