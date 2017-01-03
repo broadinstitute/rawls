@@ -280,7 +280,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }}
 
         //Gather the Google groups to remove, but don't remove project owners group which is used by other workspaces
-        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.realmACLs.values
+        groupRefsToRemove: Set[RawlsGroupRef] = workspaceContext.workspace.accessLevels.filterKeys(_ != ProjectOwner).values.toSet ++ workspaceContext.workspace.realm.map(_ => workspaceContext.workspace.realmACLs.values).getOrElse(Seq.empty)
         groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace

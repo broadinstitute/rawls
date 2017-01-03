@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -81,40 +82,39 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userWriter = RawlsUser(UserInfo(testData.userWriter.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo(testData.userReader.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
-    val workspaceName = WorkspaceName("ns", "testworkspace")
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
 
-    val workspace2Name = WorkspaceName("ns", "testworkspace2")
+    val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
-    val workspace3Name = WorkspaceName("ns", "testworkspace3")
+    val workspace2Name = WorkspaceName(billingProject.projectName.value, "testworkspace2")
+
+    val workspace3Name = WorkspaceName(billingProject.projectName.value, "testworkspace3")
 
     val defaultRealmGroup = makeRawlsGroup(s"Default Realm", Set.empty)
 
     val workspace1Id = UUID.randomUUID().toString
     val makeWorkspace1 = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
       WorkspaceAccessLevels.Owner -> Set(userOwner),
       WorkspaceAccessLevels.Write -> Set(userWriter),
       WorkspaceAccessLevels.Read -> Set(userReader)
     ))_
-    val (workspace, workspaceGroups) = makeWorkspace1(workspaceName.namespace, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
+    val (workspace, workspaceGroups) = makeWorkspace1(billingProject, workspaceName.name, None, workspace1Id, "bucket1", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("a") -> AttributeString("x")), false)
 
     val makeWorkspace2 = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
       WorkspaceAccessLevels.Owner -> Set.empty,
       WorkspaceAccessLevels.Write -> Set(userOwner),
       WorkspaceAccessLevels.Read -> Set.empty
     ))_
     val workspace2Id = UUID.randomUUID().toString
-    val (workspace2, workspace2Groups) = makeWorkspace2(workspace2Name.namespace, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
+    val (workspace2, workspace2Groups) = makeWorkspace2(billingProject, workspace2Name.name, None, workspace2Id, "bucket2", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("b") -> AttributeString("y")), false)
 
     val makeWorkspace3 = makeWorkspaceWithUsers(Map(
-      WorkspaceAccessLevels.ProjectOwner -> Set(userProjectOwner),
       WorkspaceAccessLevels.Owner -> Set.empty,
       WorkspaceAccessLevels.Write -> Set(userOwner),
       WorkspaceAccessLevels.Read -> Set.empty
     ))_
     val workspace3Id = UUID.randomUUID().toString
-    val (workspace3, workspace3Groups) = makeWorkspace3(workspace3Name.namespace, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
+    val (workspace3, workspace3Groups) = makeWorkspace3(billingProject, workspace3Name.name, Some(defaultRealmGroup), workspace3Id, "bucket3", testDate, testDate, "testUser", Map(AttributeName.withDefaultNS("c") -> AttributeString("z")), false)
 
     val sample1 = Entity("sample1", "sample", Map.empty)
     val sample2 = Entity("sample2", "sample", Map.empty)
@@ -160,6 +160,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsBillingProjectQuery.create(billingProject),
         DBIO.sequence(workspaceGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
@@ -470,7 +472,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
+    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values) - testData.workspace.accessLevels(ProjectOwner)
     workspaceGroupRefs foreach { case groupRef =>
       assertResult(Option(groupRef)) {
         runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef

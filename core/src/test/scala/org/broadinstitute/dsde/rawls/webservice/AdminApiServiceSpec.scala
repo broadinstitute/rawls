@@ -4,6 +4,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -1089,24 +1090,24 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
 
         val expected = Map("GOOGLE_BUCKET_WRITE: aBucket" -> "USER_CAN_WRITE",
-            "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
+            "WORKSPACE_ACCESS_GROUP: PROJECT_myNamespace-Owner" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
             "FIRECLOUD_USER_PROXY: aBucket" -> "NOT_FOUND",
-            "WORKSPACE_USER_ACCESS_LEVEL" -> "OWNER",
-            "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
+            "WORKSPACE_USER_ACCESS_LEVEL" -> "PROJECT_OWNER",
+            "GOOGLE_ACCESS_GROUP: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_ACCESS_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND",
             "GOOGLE_BUCKET: aBucket" -> "FOUND",
-            "GOOGLE_USER_ACCESS_LEVEL: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
+            "GOOGLE_USER_ACCESS_LEVEL: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
             "FIRECLOUD_USER: 123456789876543212345" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_ACCESS_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace READER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER" -> "FOUND",
             "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER" -> "FOUND",
-            "WORKSPACE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER" -> "FOUND",
-            "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace PROJECT_OWNER@example.com" -> "FOUND",
+            "WORKSPACE_INTERSECTION_GROUP: PROJECT_myNamespace-Owner" -> "FOUND",
+            "GOOGLE_INTERSECTION_GROUP: GROUP_PROJECT_myNamespace-Owner@dev.firecloud.org" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace OWNER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace WRITER@example.com" -> "FOUND",
             "GOOGLE_INTERSECTION_GROUP: myNamespace/myWorkspace READER@example.com" -> "FOUND"
@@ -1170,7 +1171,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete workspace groups when deleting a workspace" in withTestDataApiServices { services =>
-    val workspaceGroupRefs = testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values
+    val workspaceGroupRefs = (testData.workspace.accessLevels.values.toSet ++ testData.workspace.realmACLs.values) - testData.workspace.accessLevels(ProjectOwner)
     workspaceGroupRefs foreach { case groupRef =>
       assertResult(Option(groupRef)) {
         runAndWait(rawlsGroupQuery.load(groupRef)) map RawlsGroup.toRef
