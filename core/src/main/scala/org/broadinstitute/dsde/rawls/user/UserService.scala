@@ -567,7 +567,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
    */
   private def updateGroupMembershipInternal(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
     for {
-      (savedGroup, intersectionGroups) <- dataSource.inTransaction { dataAccess =>
+      (savedGroup, intersectionGroups) <- dataSource.inTransaction ({ dataAccess =>
         for {
           groupOption <- dataAccess.rawlsGroupQuery.load(groupRef)
           group = groupOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"group ${groupRef.groupName.value} not found")))
@@ -578,7 +578,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           groupsToIntersects <- dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(savedGroup)
           intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects, dataAccess)
         } yield (savedGroup, intersectionGroups)
-      }
+      }, TransactionIsolation.ReadCommitted)
 
       messages = (intersectionGroups.toSeq :+ RawlsGroup.toRef(savedGroup)).map(_.toJson.compactPrint)
 
