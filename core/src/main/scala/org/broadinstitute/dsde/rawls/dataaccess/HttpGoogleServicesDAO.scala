@@ -402,10 +402,10 @@ class HttpGoogleServicesDAO(
         (Option(result.getItems), Option(result.getNextPageToken))
       }) flatMap {
         case (None, _) =>
+          // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
           retryWhen500orGoogleError(() => {
-            val result: Objects = executeGoogleRequest(fetcher)
-            Option(result.getItems)
+            Option(executeGoogleRequest(fetcher).getItems)
           }) flatMap {
             case None => Future.successful(BigInt(0))
             case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
