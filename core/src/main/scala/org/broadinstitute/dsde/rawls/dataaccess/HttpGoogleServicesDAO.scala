@@ -25,7 +25,7 @@ import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
+import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
@@ -273,10 +273,10 @@ class HttpGoogleServicesDAO(
 
     retryWithRecoverWhen500orGoogleError(() => {
       val bucket = new Bucket().setName(bucketName)
-      val deleteAfterOneYear = new Lifecycle.Rule()
+      val storageLogExpiration = new Lifecycle.Rule()
         .setAction(new Action().setType("Delete"))
         .setCondition(new Condition().setAge(bucketLogsMaxAge))
-      bucket.setLifecycle(new Lifecycle().setRule(List(deleteAfterOneYear)))
+      bucket.setLifecycle(new Lifecycle().setRule(List(storageLogExpiration)))
       val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
       executeGoogleRequest(inserter)
 
@@ -401,7 +401,15 @@ class HttpGoogleServicesDAO(
         val result = executeGoogleRequest(fetcher)
         (Option(result.getItems), Option(result.getNextPageToken))
       }) flatMap {
-        case (None, _) => Future.failed(new GoogleStorageLogException(s"No storage logs available for $bucketName"))
+        case (None, _) =>
+          val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
+          retryWhen500orGoogleError(() => {
+            val result: Objects = executeGoogleRequest(fetcher)
+            Option(result.getItems)
+          }) flatMap {
+            case None => Future.successful(BigInt(0))
+            case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
+          }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
           /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
