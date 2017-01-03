@@ -25,6 +25,17 @@ object ExpressionEvaluator {
       op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
     }
   }
+
+  def validateAttributeExpr(parser: DataAccess)(expression: String): Try[Boolean] = {
+    JsonExpressionParsing.evaluate(expression) match {
+      case Success(parsed) => Success(true)
+      case Failure(regret) => parser.parseAttributeExpr(expression) map (_ => true)
+    }
+  }
+
+  def validateOutputExpr(parser: DataAccess)(expression: String): Try[Boolean] = {
+    parser.parseOutputExpr(expression) map (_ => true)
+  }
 }
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Seq[EntityRecord]) {

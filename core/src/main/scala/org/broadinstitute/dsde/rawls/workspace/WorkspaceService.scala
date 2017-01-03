@@ -939,13 +939,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def validateMCExpressions(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ValidatedMethodConfiguration = {
     val parser = dataAccess  // this makes it compile for some reason (as opposed to inlining parser)
-    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[parser.PipelineQuery] ) = {
+    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Boolean] ) = {
       val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
       ( parsed collect { case (key, Success(_)) => key } toSeq,
         parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
     }
-    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs, parser.parseAttributeExpr)
-    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, parser.parseOutputExpr)
+    val (successInputs, failedInputs)   = parseAndPartition(methodConfiguration.inputs, ExpressionEvaluator.validateAttributeExpr(parser) )
+    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, ExpressionEvaluator.validateOutputExpr(parser) )
 
     ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
   }

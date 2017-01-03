@@ -303,7 +303,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "validate method config expressions" in withTestDataServices { services =>
     val shouldBeValid = services.workspaceService.validateMCExpressions(testData.methodConfigValidExprs, this)
-    assertResult(4) { shouldBeValid.validInputs.size }
+    assertResult(6) { shouldBeValid.validInputs.size }
     assertResult(4) { shouldBeValid.validOutputs.size }
     assertResult(0) { shouldBeValid.invalidInputs.size }
     assertResult(0) { shouldBeValid.invalidOutputs.size }
