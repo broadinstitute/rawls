@@ -84,6 +84,19 @@ trait RawlsGroupComponent {
       userDeletes andThen userInserts andThen findGroupByName(rawlsGroupRef.groupName.value).map(_.updatedDate).update(Option(nowTimestamp))
     }
 
+    def overwriteGroupUsers(groupsWithUsers: Seq[(RawlsGroupRef, Set[RawlsUserRef])]) = {
+      val groupNames = groupsWithUsers.map { case (groupRef, _) => groupRef.groupName.value }
+      val userDeletes = findUsersByGroupNames(groupNames).delete
+
+      val groupUserRecords = for {
+        (groupRef, users) <- groupsWithUsers
+        user <- users
+      } yield marshalGroupUsers(user, groupRef)
+
+      val userInserts = groupUsersQuery ++= groupUserRecords
+      userDeletes andThen userInserts andThen findGroupsByNames(groupNames).map(_.updatedDate).update(Option(nowTimestamp))
+    }
+
     def load(groupRef: RawlsGroupRef): ReadAction[Option[RawlsGroup]] = {
       loadGroup(findGroupByName(groupRef.groupName.value))
     }
@@ -306,6 +319,10 @@ trait RawlsGroupComponent {
 
     private def findUsersByGroupName(groupName: String): GroupUsersQuery = {
       groupUsersQuery.filter(_.groupName === groupName)
+    }
+
+    private def findUsersByGroupNames(names: Seq[String]): GroupUsersQuery = {
+      groupUsersQuery.filter(_.groupName.inSetBind(names))
     }
 
     private def findSubgroupsByGroupName(groupName: String): GroupSubgroupsQuery = {
