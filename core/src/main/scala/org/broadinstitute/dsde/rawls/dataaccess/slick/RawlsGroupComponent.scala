@@ -78,12 +78,6 @@ trait RawlsGroupComponent {
       findGroupByName(rawlsGroupRef.groupName.value).map(_.synchronizedDate).update(Option(nowTimestamp))
     }
 
-    def overwriteGroupUsers(rawlsGroupRef: RawlsGroupRef, users: Set[RawlsUserRef]) = {
-      val userDeletes = findUsersByGroupName(rawlsGroupRef.groupName.value).delete
-      val userInserts = groupUsersQuery ++= users.toSeq.map { marshalGroupUsers(_, rawlsGroupRef) }
-      userDeletes andThen userInserts andThen findGroupByName(rawlsGroupRef.groupName.value).map(_.updatedDate).update(Option(nowTimestamp))
-    }
-
     def overwriteGroupUsers(groupsWithUsers: Set[(RawlsGroupRef, Set[RawlsUserRef])]) = {
       val groupNames = groupsWithUsers.map { case (groupRef, _) => groupRef.groupName.value }
       val userDeletes = findUsersByGroupNames(groupNames).delete
