@@ -463,6 +463,10 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
   }
 
+  /* Google does not write storage logs for empty buckets. If a bucket is empty for long enough, all storage logs
+   * (including the initial log) will expire. If a quick check shows that the bucket is actually empty, the lack of
+   * storage logs can be assumed to be because the bucket has been empty for a long time.
+   */
   it should "return 0 usage when there are no storage logs and the bucket is empty" in {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -481,6 +485,15 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
   }
 
+  /* Google does not write storage logs for empty buckets. If a bucket is empty for long enough, all storage logs
+   * (including the initial log) will expire.
+   *
+   * HOWEVER, if a quick check shows that the bucket is NOT actually empty, the lack of storage logs can mean that
+   * either storage logs are not being correctly written or something has been added to the bucket after being empty for
+   * a long time. Since we can't tell the difference between these 2 cases, we show a "Not Available" message. If there
+   * is not a problem with storage log writing, "Not Available" will be replaced with a real value in the next day or
+   * two.
+   */
   it should "return 'Not Available' when there are no storage logs and the bucket is NOT empty" in {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
