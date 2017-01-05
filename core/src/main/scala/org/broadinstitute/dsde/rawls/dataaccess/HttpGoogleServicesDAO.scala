@@ -615,6 +615,9 @@ class HttpGoogleServicesDAO(
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
           gjre.getDetails.getMessage == "Request had insufficient authentication scopes." =>
+        // This error message is purely informational. A client can determine which scopes it has
+        // been granted, so an insufficiently-scoped request would generally point to a programming
+        // error.
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, BillingAccountScopes(billingScopes).toJson.toString))
     }
   }
