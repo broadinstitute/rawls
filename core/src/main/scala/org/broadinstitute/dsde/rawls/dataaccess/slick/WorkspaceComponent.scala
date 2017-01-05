@@ -371,10 +371,10 @@ trait WorkspaceComponent {
      * @param group group that has changed to trigger the recompute
      * @return
      */
-    def findAssociatedGroupsToIntersect(group: RawlsGroupRef): ReadAction[Seq[(GroupsToIntersect)]] = {
+    def findAssociatedGroupsToIntersect(group: RawlsGroupRef): ReadAction[Set[(GroupsToIntersect)]] = {
       def findWorkspacesForGroups(groups: Set[RawlsGroupRecord]) = {
         for {
-          workspaceAccess <- workspaceAccessQuery if workspaceAccess.groupName.inSetBind(groups.map(_.groupName))  && workspaceAccess.isRealmAcl === false
+          workspaceAccess <- workspaceAccessQuery if workspaceAccess.groupName.inSetBind(groups.map(_.groupName)) && workspaceAccess.isRealmAcl === false
           workspace <- workspaceQuery if workspaceAccess.workspaceId === workspace.id && workspace.realmGroupName.isDefined
         } yield workspace
       }
@@ -387,6 +387,8 @@ trait WorkspaceComponent {
 
       for {
         groupRecs <- rawlsGroupQuery.findGroupByName(group.groupName.value).result
+        // the group in question may be an access group for a workspace, get the workspace access rec if it is
+        workspaceAccessRec <- workspaceAccessQuery.filter(workspaceAccess => workspaceAccess.groupName === group.groupName.value && workspaceAccess.isRealmAcl === false).result.headOption
         allGroups <- rawlsGroupQuery.listParentGroupsRecursive(groupRecs.toSet, groupRecs.toSet)
         workspaceRecsForGroups <- findWorkspacesForGroups(allGroups).result
         workspaceRecsForRealms <- findWorkspacesForRealms(allGroups).result
@@ -395,15 +397,21 @@ trait WorkspaceComponent {
       } yield {
         val indexedAccessGroups = accessGroupRecs.map(rec => (rec.workspaceId, rec.accessLevel, rec.isRealmAcl) -> RawlsGroupRef(RawlsGroupName(rec.groupName))).toMap
 
-        for {
+        val groupsToIntersect = for {
           workspaceRec <- realmedWorkspaceRecs
-          accessLevel <- WorkspaceAccessLevels.groupAccessLevelsAscending
+          // the if clause below makes sure if the group in question is an access group we don't do the intersection
+          // for other access groups of the workspace. The intersections are not required because an access group should
+          // not be a sub group of another access group for the same workspace. But more importantly this prevents a
+          // concurrency issue. Without this guard changing workspace acls can cause multiple concurrent intersections
+          // for all the access groups of a workspace.
+          accessLevel <- WorkspaceAccessLevels.groupAccessLevelsAscending if workspaceAccessRec.isEmpty || workspaceAccessRec.get.workspaceId != workspaceRec.id || (workspaceRec.id == workspaceAccessRec.get.workspaceId && accessLevel == WorkspaceAccessLevels.withName(workspaceAccessRec.get.accessLevel))
         } yield {
           GroupsToIntersect(
             indexedAccessGroups((workspaceRec.id, accessLevel.toString, true)),
             indexedAccessGroups((workspaceRec.id, accessLevel.toString, false)),
             RawlsGroupRef(RawlsGroupName(workspaceRec.realmGroupName.get)))
         }
+        groupsToIntersect.toSet
       }
     }
 
