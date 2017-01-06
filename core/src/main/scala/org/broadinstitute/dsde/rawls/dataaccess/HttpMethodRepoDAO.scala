@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.{Props, ActorContext, ActorRef, ActorSystem}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import scala.concurrent.{Future, Await}
@@ -16,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 /**
  * @author tsharpe
  */
-class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: ActorSystem ) extends MethodRepoDAO with DsdeHttpDAO with Retry {
+class HttpMethodRepoDAO( methodRepoServiceURL: String)( implicit val system: ActorSystem ) extends MethodRepoDAO with DsdeHttpDAO with Retry with LazyLogging {
 
   private def getAgoraEntity( url: String, userInfo: UserInfo ): Future[Option[AgoraEntity]] = {
     import system.dispatcher

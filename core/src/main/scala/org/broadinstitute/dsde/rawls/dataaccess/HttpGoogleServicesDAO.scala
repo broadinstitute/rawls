@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, InputStream, StringReader}
+import java.io._
 import java.util.UUID
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -886,6 +886,7 @@ class HttpGoogleServicesDAO(
       }
       case t: HttpResponseException => t.getStatusCode/100 == 5
       case gse: GoogleServiceException => true
+      case ioe: IOException => true
       case _ => false
     }
   }

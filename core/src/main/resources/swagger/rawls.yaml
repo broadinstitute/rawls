@@ -3593,6 +3593,9 @@ definitions:
       message:
         type: string
         description: what went wrong
+      exceptionClass:
+        type: string
+        description: class of exception thrown
       statusCode:
         type: integer
         description: HTTP status code

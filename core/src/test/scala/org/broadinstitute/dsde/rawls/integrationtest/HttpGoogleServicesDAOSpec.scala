@@ -10,6 +10,7 @@ import com.google.api.services.admin.directory.model.Member
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.Ready
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
@@ -31,7 +32,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 
-class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll {
+class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with Retry with TestDriverComponent with BeforeAndAfterAll with LazyLogging {
 
   implicit val system = ActorSystem("HttpGoogleCloudStorageDAOSpec")
   val gcsDAO = new HttpGoogleServicesDAO(
