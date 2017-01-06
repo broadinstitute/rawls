@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
+import com.typesafe.scalalogging.LazyLogging
 
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
@@ -13,14 +14,17 @@ import akka.pattern._
  * Created by tsharpe on 9/21/15.
  */
 trait Retry {
+  this: LazyLogging =>
   val system: ActorSystem
 
-  def retry[T](pred: (Throwable) => Boolean = always)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
-    retry(allBackoffIntervals)(op,pred)
+  val defaultErrorMessage = "retry-able operation failed"
+
+  def retry[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+    retry(allBackoffIntervals)(op, pred, failureLogMessage)
   }
 
-  def retryExponentially[T](pred: (Throwable) => Boolean = always)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
-    retry(exponentialBackOffIntervals)(op,pred)
+  def retryExponentially[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+    retry(exponentialBackOffIntervals)(op, pred, failureLogMessage)
   }
 
   /**
@@ -33,16 +37,27 @@ trait Retry {
    * @tparam T
    * @return
    */
-  def retryUntilSuccessOrTimeout[T](pred: (Throwable) => Boolean = always)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
+  def retryUntilSuccessOrTimeout[T](pred: (Throwable) => Boolean = always, failureLogMessage: String = defaultErrorMessage)(interval: FiniteDuration, timeout: FiniteDuration)(op: () => Future[T])(implicit executionContext: ExecutionContext): Future[T] = {
     val trialCount = Math.ceil(timeout / interval).toInt
-    retry(Seq.fill(trialCount)(interval))(op,pred)
+    retry(Seq.fill(trialCount)(interval))(op, pred, failureLogMessage)
   }
 
-  private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: (Throwable) => Boolean)(implicit executionContext: ExecutionContext): Future[T] = {
+  private def retry[T](remainingBackoffIntervals: Seq[FiniteDuration])(op: => () => Future[T], pred: (Throwable) => Boolean, failureLogMessage: String)(implicit executionContext: ExecutionContext): Future[T] = {
     op().recoverWith {
-      case t if pred(t) && !remainingBackoffIntervals.isEmpty => after(remainingBackoffIntervals.head, system.scheduler) {
-        retry(remainingBackoffIntervals.tail)(op, pred)
-      }
+      case t if pred(t) && !remainingBackoffIntervals.isEmpty =>
+        logger.info(s"$failureLogMessage: ${remainingBackoffIntervals.size} retries remaining, retrying in ${remainingBackoffIntervals.head}", t)
+        after(remainingBackoffIntervals.head, system.scheduler) {
+          retry(remainingBackoffIntervals.tail)(op, pred, failureLogMessage)
+        }
+
+      case t =>
+        if (remainingBackoffIntervals.isEmpty) {
+          logger.info(s"$failureLogMessage: no retries remaining", t)
+        } else {
+          logger.info(s"$failureLogMessage: retries remain but predicate failed, not retrying", t)
+        }
+
+        Future.failed(t)
     }
   }
 
