@@ -26,7 +26,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   // A parsed expression will result in a PipelineQuery. Each step in a query traverses from entity to
   // entity following references. The final step takes the last entity, producing a result dependent on the query
   // (e.g. loading the entity itself, getting an attribute). The root step produces an entity to start the pipeline.
-  // If rootStep is None, steps should also be empty and finalStep does all the work (e.g. literals).
+  // If rootStep is None, steps should also be empty and finalStep does all the work.
   case class PipelineQuery(rootStep: Option[RootFunc], steps: List[PipeFunc], finalStep: FinalFunc)
 
   // starting with just an expression context produces a PipeResult
@@ -36,7 +36,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
   type PipeFunc = (SlickExpressionContext, PipeType) => PipeType
 
   // converts the incoming PipeType into the appropriate db action
-  // PipeType may be None when there is no pipeline (e.g. literals, workspace attributes)
+  // PipeType may be None when there is no pipeline (e.g. workspace attributes)
   // Returns a map of entity names to an iterable of the expression result
   type FinalFunc = (SlickExpressionContext, Option[PipeType]) => ReadAction[Map[String, Iterable[Any]]]
 
@@ -62,13 +62,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
     // attributes directly on a workspace: workspace.attribute
     workspaceAttribute ^^ {
       case workspace => PipelineQuery(None, List.empty, workspace)
-    } |
-    //Literal parsing. These should be removed and folded into complex expressions once we support them.
-    literalNum ^^ {
-      case num => PipelineQuery(None, List(), num)
-    } |
-    literalString ^^ {
-      case str => PipelineQuery(None, List(), str)
     }
   }
 
@@ -149,12 +142,6 @@ trait SlickExpressionParser extends JavaTokenParsers {
         if (Attributable.reservedAttributeNames.contains(attrName.name)) entityReservedAttributeFinalFunc(attrName.name)
         else entityAttributeFinalFunc(attrName)
     }
-
-  private def literalString: Parser[FinalFunc] =
-    """^\".*\"$""".r ^^ { case str => stringFunc(str) }
-
-  private def literalNum: Parser[FinalFunc] =
-    floatingPointNumber ^^ { case num => floatFunc(num) }
 
   def parseAttributeExpr(expression: String) = {
     parse(expression, attributeExpression)
@@ -244,7 +231,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
         val attributeIdQuery = queryPipeline.get.filter { case (rootEntityName, entity) =>
           entity.entityType ++ "_id" === attrName.name && LiteralColumn(AttributeName.defaultNamespace) === attrName.namespace
         }.map { case (rootEntityName, entity) =>
-          (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
+          (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[String], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
         }
 
         // we need to do both queries because we don't know the entity type until execution time

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeNameFormat, attributeFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
 import org.scalatest.{Assertions, FreeSpec}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -10,6 +10,8 @@ import spray.json._
 class AttributeSpec extends FreeSpec with Assertions {
 
   "AttributeName model" - {
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.attributeFormat
+
     "when unmarshalling from json" - {
       "should handle namespaces" in {
         val testData = """ "namespace:name" """
@@ -47,6 +49,8 @@ class AttributeSpec extends FreeSpec with Assertions {
   }
 
   "AttributeMap model" - {
+    import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.attributeFormat
+
     "when unmarshalling from json" - {
       "should handle string value" in {
         val testData =
@@ -192,6 +196,46 @@ class AttributeSpec extends FreeSpec with Assertions {
         ))
         assertResult(expected) { attr }
       }
+      "should handle raw json empty array" in {
+        val testData =
+          """
+            | {"testKey" : [] }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        val expected = AttributeValueRawJson(JsArray())
+        assertResult(expected) { attr }
+      }
+      "should handle raw json filled array" in {
+        val testData =
+          """
+            | {"testKey" : [1,2,3] }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        val expected = AttributeValueRawJson(JsArray(JsNumber(1), JsNumber(2), JsNumber(3)))
+        assertResult(expected) { attr }
+      }
+      "should handle raw json empty object" in {
+        val testData =
+          """
+            | {"testKey" : {} }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        val expected = AttributeValueRawJson(JsObject())
+        assertResult(expected) { attr }
+      }
+      "should handle raw json object with items" in {
+        val testData =
+          """
+            | {"testKey" : {"foo" : "bar"} }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        val expected = AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar"))))
+        assertResult(expected) { attr }
+      }
       "should fail if entity reference list contains values" in {
         val testData =
           """
@@ -249,16 +293,17 @@ class AttributeSpec extends FreeSpec with Assertions {
           testData.parseJson.convertTo[AttributeMap]
         }
       }
-      "should fail if list omits type" in {
+      "should return AttributeValueRawJson attribute if list omits type" in {
         val testData =
           """
             | {"testKey" : {
             |   "items" : ["foo", "bar", "baz"]
             | }}
           """.stripMargin
-        intercept[DeserializationException] {
-          testData.parseJson.convertTo[AttributeMap]
-        }
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        val expected = AttributeValueRawJson(JsObject(Map("items" -> JsArray(JsString("foo"), JsString("bar"), JsString("baz")))))
+        assertResult(expected) { attr }
       }
       "should fail if entity reference list contains list" in {
         val testData =
@@ -284,14 +329,10 @@ class AttributeSpec extends FreeSpec with Assertions {
           """
             | {"testKey" : {
             |   "itemsType" : "AttributeValue",
-            |   "items" : [
-            |     {"anotherList" :
-            |       {
-            |         "itemsType" : "AttributeValue",
-            |         "items" : ["foo", "bar", "baz"]
-            |       }
-            |     }
-            |   ]
+            |   "items" : {
+            |     "itemsType" : "AttributeValue",
+            |     "items" : ["foo", "bar", "baz"]
+            |   }
             | }}
           """.stripMargin
         intercept[DeserializationException] {
@@ -477,4 +518,124 @@ class AttributeSpec extends FreeSpec with Assertions {
     }
   }
 
+  "PlainArrayAttributeSerializer" - {
+    import org.broadinstitute.dsde.rawls.model.WDLJsonSupport.attributeFormat
+
+    //i'm only testing the complex types here because the basic types are handled in the above suite.
+    //we should really do it all someday.
+
+    "when unmarshalling from json" - {
+      "should handle empty arrays" in {
+        val testData =
+          """
+            | {"testKey" : [] }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeValueEmptyList) { attr }
+      }
+      "should handle arrays" in {
+        val testData =
+          """
+            | {"testKey" : [1,2,3] }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))) { attr }
+      }
+      "should handle arrays of references as such, even though they're arrays" in {
+        val testData =
+          """
+            | {"testKey" : [{"entityType":"sample", "entityName":"fred"}] }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeEntityReferenceList(Seq(AttributeEntityReference("sample", "fred")))) { attr }
+      }
+      "should treat objects as RawJson" in {
+        val testData =
+          """
+            | {"testKey" : { "foo" : "bar" } }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar"))))) { attr }
+      }
+      "should treat objects as RawJson even if they look like lists in the other serializer" in {
+        val testData =
+          """
+            | {"testKey" : { "itemsType" : "AttributeValue", "items" : [] } }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeValueRawJson(JsObject(Map(
+          "itemsType" -> JsString("AttributeValue"),
+          "items" -> JsArray()
+        )))) { attr }
+      }
+      "should handle references as such even though they're objects" in {
+        val testData =
+          """
+            | {"testKey" : {"entityType":"sample", "entityName":"fred"} }
+          """.stripMargin
+        val obj = testData.parseJson.convertTo[AttributeMap]
+        val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
+        assertResult(AttributeEntityReference("sample", "fred")) { attr }
+      }
+    }
+
+    "when marshalling to json" - {
+      "should handle empty value list" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueEmptyList)
+        val expected =
+          """
+            |{"ns:name":[]}
+          """.stripMargin.trim
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+      "should handle value list" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2))))
+        val expected =
+          """
+            |{"ns:name":[1,2]}
+          """.stripMargin.trim
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+      "should handle empty ref list" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceEmptyList)
+        val expected =
+          """
+            |{"ns:name":[]}
+          """.stripMargin.trim
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+      "should handle ref list" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceList(
+          Seq(AttributeEntityReference("sample", "fred"), AttributeEntityReference("sample", "carol"))))
+        val expected =
+          """
+            |{"ns:name":[{"entityType":"sample", "entityName":"fred"},{"entityType":"sample", "entityName":"carol"}]}
+          """.stripMargin.trim.replace(" ", "").replace("\n","").replace("\r","")
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+      "should handle raw json of heterogeneous list" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueRawJson(
+          JsArray(JsNumber(1), JsObject(Map("foo" -> JsString("bar"))))))
+        val expected =
+          """
+            |{"ns:name":[1,{"foo":"bar"}]}
+          """.stripMargin.trim
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+      "should handle raw json of object" in {
+        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueRawJson(
+          JsObject(Map("foo" -> JsString("bar")))))
+        val expected =
+          """
+            |{"ns:name":{"foo":"bar"}}
+          """.stripMargin.trim
+        assertResult(expected) { testData.toJson.compactPrint }
+      }
+    }
+  }
 }
