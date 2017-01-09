@@ -882,7 +882,8 @@ class HttpGoogleServicesDAO(
       case t: GoogleJsonResponseException => {
         ((t.getStatusCode == 403 || t.getStatusCode == 429) && t.getDetails.getErrors.head.getDomain.equalsIgnoreCase("usageLimits")) ||
           (t.getStatusCode == 400 && t.getDetails.getErrors.head.getReason.equalsIgnoreCase("invalid")) ||
-          (t.getStatusCode == 404)
+          t.getStatusCode == 404 ||
+          t.getStatusCode/100 == 5
       }
       case t: HttpResponseException => t.getStatusCode/100 == 5
       case gse: GoogleServiceException => true
