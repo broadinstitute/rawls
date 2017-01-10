@@ -9,6 +9,7 @@ import java.io.StringReader
 import akka.actor.ActorSystem
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{Retry, _}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
@@ -16,7 +17,7 @@ import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with TestDriverComponent {
+class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with TestDriverComponent with LazyLogging {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
   val gpsDAO = new HttpGooglePubSubDAO(
     GoogleClientSecrets.load(
