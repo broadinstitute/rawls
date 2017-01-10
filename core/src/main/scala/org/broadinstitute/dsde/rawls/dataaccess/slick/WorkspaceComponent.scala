@@ -341,7 +341,7 @@ trait WorkspaceComponent {
     def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
       val query = for {
         workspace <- workspaceQuery if (workspace.namespace === workspaceName.namespace && workspace.name === workspaceName.name)
-        accessGroup <- workspaceAccessQuery if (accessGroup.workspaceId === workspace.id && accessGroup.accessLevel === accessLevel.toString)
+        accessGroup <- workspaceAccessQuery if (accessGroup.workspaceId === workspace.id && accessGroup.accessLevel === accessLevel.toString && accessGroup.isRealmAcl === false)
       } yield accessGroup.groupName
 
       uniqueResult(query.result).map(name => RawlsGroupRef(RawlsGroupName(name.getOrElse(throw new RawlsException(s"Unable to load ${accessLevel} access group for workspace ${workspaceName}")))))
