@@ -5,9 +5,8 @@ import akka.actor.{Actor, Props}
 import akka.pattern._
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, ReadWriteAction, DataAccess}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WriteAction, ReadAction, ReadWriteAction, DataAccess}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
@@ -34,8 +33,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, gpsDAO, gpsGroupSyncTopic)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -50,7 +49,6 @@ object UserService {
   case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
-  case class AdminImportUsers(rawlsUserInfoList: RawlsUserInfoList) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
@@ -80,6 +78,7 @@ object UserService {
   case class AdminRemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -87,7 +86,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
@@ -104,7 +103,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
-    case AdminImportUsers(rawlsUserInfoList) => asFCAdmin { importUsers(rawlsUserInfoList) } pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
@@ -128,11 +126,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
 
     case OverwriteGroupMembers(groupName, memberList) => overwriteGroupMembers(groupName, memberList) to sender
-    case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, AddGroupMembersOp) } to sender
-    case AdminRemoveGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) } to sender
-    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, AddGroupMembersOp) to sender
-    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, memberList, RemoveGroupMembersOp) to sender
-    case AdminSynchronizeGroupMembers(groupRef) => asFCAdmin { synchronizeGroupMembers(groupRef) } pipeTo sender
+    case AdminAddGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, addMemberList = memberList) } to sender
+    case AdminRemoveGroupMembers(groupName, memberList) => asFCAdmin { updateGroupMembers(groupName, removeMemberList = memberList) } to sender
+    case AddGroupMembers(groupName, memberList) => updateGroupMembers(groupName, addMemberList = memberList) to sender
+    case RemoveGroupMembers(groupName, memberList) => updateGroupMembers(groupName, removeMemberList = memberList) to sender
+    case AdminSynchronizeGroupMembers(groupRef) => asFCAdmin { synchronizeGroupMembersApi(groupRef) } pipeTo sender
+    case InternalSynchronizeGroupMembers(groupRef) => synchronizeGroupMembers(groupRef) pipeTo sender
 
     case AdminDeleteRefreshToken(userRef) => asFCAdmin { deleteRefreshToken(userRef) } pipeTo sender
     case AdminDeleteAllRefreshTokens => asFCAdmin { deleteAllRefreshTokens() } pipeTo sender
@@ -174,7 +173,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
     handleFutures(Future.sequence(Seq(
       toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
-      toFutureTry(dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user).flatMap(user => addUsersToAllUsersGroup(Set(user), dataAccess)) }),
+      toFutureTry(for {
+        // these things need to be done in order
+        _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
+        _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
+        _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
+      } yield ()),
       toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
     )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
@@ -195,42 +199,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  //imports the response from the above listUsers
-  def importUsers(rawlsUserInfoList: RawlsUserInfoList): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      val userInfos = rawlsUserInfoList.userInfoList
-      DBIO.sequence(
-        userInfos.map { u =>
-          dataAccess.rawlsUserQuery.save(u.user) flatMap { user =>
-            DBIO.seq(u.billingProjects.map { projectName =>
-              dataAccess.rawlsBillingProjectQuery.load(projectName) map {
-                case Some(project) => updateGroupMembersInternal(project.groups(ProjectRoles.User), Set(user), Set.empty, AddGroupMembersOp, dataAccess)
-                case None => throw new RawlsException(s"Project [${projectName.value}] not found")
-              }
-            }: _*) map (_ => user)
-          }
-        }
-      ) flatMap { users =>
-        addUsersToAllUsersGroup(users.toSet, dataAccess)
-      } map (_ match {
-        case None => RequestComplete(StatusCodes.Created)
-        case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
-      })
-    }
-  }
-
   def getUserGroup(rawlsGroupRef: RawlsGroupRef): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.loadGroupIfMember(rawlsGroupRef, RawlsUser(userInfo)) map {
         case None => RequestComplete(ErrorReport(StatusCodes.NotFound, s"group [${rawlsGroupRef.groupName.value}] not found or member not in group"))
         case Some(group) => RequestComplete(group.toRawlsGroupShort)
       }
-    }
-  }
-
-  private def addUsersToAllUsersGroup(users: Set[RawlsUser], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
-    getOrCreateAllUsersGroup(dataAccess) flatMap { allUsersGroup =>
-      updateGroupMembersInternal(allUsersGroup, users, Set.empty, AddGroupMembersOp, dataAccess)
     }
   }
 
@@ -417,41 +391,42 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way")
-  def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = dataSource.inTransaction { dataAccess =>
-    dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
+  def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) } flatMap {
       case Some(_) =>
-        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
+        Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
       case None =>
         for {
-          groups <- createBillingProjectGroups(dataAccess, projectName)
-          project <- createBillingProjectInternal(dataAccess, projectName, CreationStatuses.Ready, groups) map (_ => RequestComplete(StatusCodes.Created))
-        } yield project
+          groups <- createBillingProjectGroups(projectName)
+          project <- createBillingProjectInternal(projectName, CreationStatuses.Ready, groups)
+        } yield RequestComplete(StatusCodes.Created)
     }
   }
 
   @deprecated
-  private def createBillingProjectGroups(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
-    val createGroups = DBIO.sequence(ProjectRoles.all.map { role =>
-      val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
-      createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
-    }.toSeq)
-
-    createGroups flatMap { groups =>
-      val groupMap = groups.toMap
-      DBIO.sequence(creators.map(dataAccess.rawlsUserQuery.load).toSeq) flatMap { owners =>
-        updateGroupMembersInternal(groupMap(ProjectRoles.Owner), owners.flatten.toSet, Set.empty, AddGroupMembersOp, dataAccess).map(_ => groupMap)
+  private def createBillingProjectGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): Future[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
+    for {
+      groups <- dataSource.inTransaction { dataAccess =>
+        DBIO.sequence(ProjectRoles.all.map { role =>
+          val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
+          createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
+        }.toSeq)
       }
-    }
+      groupMap = groups.toMap
+      _ <- updateGroupMembership(groupMap(ProjectRoles.Owner), addUsers = creators)
+    } yield groupMap
   }
 
   @deprecated
-  private def createBillingProjectInternal(dataAccess: DataAccess, projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): ReadWriteAction[RawlsBillingProject] = {
-    DBIO.from(gcsDAO.createCromwellAuthBucket(projectName)) flatMap { bucketName =>
-      val bucketUrl = "gs://" + bucketName
-
-      val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
-      dataAccess.rawlsBillingProjectQuery.create(billingProject)
-    }
+  private def createBillingProjectInternal(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): Future[RawlsBillingProject] = {
+    for {
+      bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
+      billingProject <- dataSource.inTransaction { dataAccess =>
+        val bucketUrl = "gs://" + bucketName
+        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
+        dataAccess.rawlsBillingProjectQuery.create(billingProject)
+      }
+    } yield billingProject
   }
 
   private def createBillingProjectGroupsNoGoogle(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
@@ -488,30 +463,32 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def addUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
-        case Some(member) => member
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
-      }
-    } map {
-      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
-      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
-    } flatMap { memberList =>
-      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, AddGroupMembersOp)
-    }
+    for {
+      (project, addUsers, addSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
+      _ <- updateGroupMembership(project.groups(projectAccessUpdate.role), addUsers = addUsers, addSubGroups = addSubGroups)
+    } yield RequestComplete(StatusCodes.OK)
   }
 
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[PerRequestMessage] = {
+    for {
+      (project, removeUsers, removeSubGroups) <- loadMembersAndProject(projectName, projectAccessUpdate)
+      _ <- updateGroupMembership(project.groups(projectAccessUpdate.role), removeUsers = removeUsers, removeSubGroups = removeSubGroups)
+    } yield RequestComplete(StatusCodes.OK)
+  }
+
+  def loadMembersAndProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate): Future[(RawlsBillingProject, Set[RawlsUserRef], Set[RawlsGroupRef])] = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
-        case Some(member) => member
-        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
+      for {
+        (addUsers, addSubGroups) <- dataAccess.rawlsGroupQuery.loadFromEmail(projectAccessUpdate.email).map {
+          case Some(Left(user)) => (Set[RawlsUserRef](user), Set.empty[RawlsGroupRef])
+          case Some(Right(group)) => (Set.empty[RawlsUserRef], Set[RawlsGroupRef](group))
+          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Member ${projectAccessUpdate.email} not found"))
+        }
+        projectOption <- dataAccess.rawlsBillingProjectQuery.load(projectName)
+      } yield {
+        (projectOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Project ${projectName.value} not found"))),
+          addUsers, addSubGroups)
       }
-    } map {
-      case Left(user) => RawlsGroupMemberList(userEmails = Some(Seq(user.userEmail.value)))
-      case Right(group) => RawlsGroupMemberList(subGroupEmails = Some(Seq(group.groupEmail.value)))
-    } flatMap { memberList =>
-      updateGroupMembers(RawlsGroupRef(RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, projectAccessUpdate.role))), memberList, RemoveGroupMembersOp)
     }
   }
 
@@ -530,11 +507,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def createGroup(groupRef: RawlsGroupRef) = {
     dataSource.inTransaction { dataAccess =>
-	  dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
-	    case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
-	    case None =>
-	      createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
-	  }
+      dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
+        case None =>
+          createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
+      }
     }
   }
 
@@ -554,47 +531,62 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def overwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
-    dataSource.inTransaction ({ dataAccess =>
-      withGroup(groupRef, dataAccess) { group =>
-        withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
-          val addMembersAction: ReadWriteAction[Option[ErrorReport]] = overwriteGroupMembersInternal(group, users, subGroups, dataAccess)
-
-          // finally report the results
-          addMembersAction.map {
-            case None => RequestComplete(StatusCodes.NoContent)
-            case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
-          }
+    for {
+      (users, groups) <- dataSource.inTransaction({ dataAccess =>
+        withGroup(groupRef, dataAccess) { group =>
+          loadMemberUsersAndGroups(memberList, dataAccess)
         }
-      }
-    }, TransactionIsolation.ReadCommitted) // read committed required to reduce db locks and allow concurrency
+      }, TransactionIsolation.ReadCommitted) // read committed required to reduce db locks and allow concurrency
+
+      _ <- overwriteGroupMembership(groupRef, users.map(RawlsUser.toRef), groups.map(RawlsGroup.toRef))
+    } yield RequestComplete(StatusCodes.NoContent)
   }
 
-  def overwriteGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
-    val usersToRemove = group.users -- users.map(RawlsUser.toRef(_))
-    val subGroupsToRemove = group.subGroups -- subGroups.map(RawlsGroup.toRef(_))
-
-    // first remove members that should be removed
-    val removeMembersAction = for {
-      users <- DBIO.sequence(usersToRemove.map(dataAccess.rawlsUserQuery.load(_).map(_.get)).toSeq)
-      subGroups <- DBIO.sequence(subGroupsToRemove.map(dataAccess.rawlsGroupQuery.load(_).map(_.get)).toSeq)
-      result <- updateGroupMembersInternal(group, users.toSet, subGroups.toSet, RemoveGroupMembersOp, dataAccess)
-    } yield result
-
-    // then if there were no errors, add users that should be added
-    removeMembersAction.flatMap {
-      case Some(errorReport) => DBIO.successful(Option(errorReport))
-      case None =>
-        val usersToAdd = users.filter(user => !group.users.contains(user))
-        val subGroupsToAdd = subGroups.filter(subGroup => !group.subGroups.contains(subGroup))
-
-        // need to reload group cause it changed if members were removed
-        dataAccess.rawlsGroupQuery.load(group).map(_.get) flatMap {
-          updateGroupMembersInternal(_, usersToAdd, subGroupsToAdd, AddGroupMembersOp, dataAccess)
-        }
+  def updateGroupMembership(groupRef: RawlsGroupRef, addUsers: Set[RawlsUserRef] = Set.empty, removeUsers: Set[RawlsUserRef] = Set.empty, addSubGroups: Set[RawlsGroupRef] = Set.empty, removeSubGroups: Set[RawlsGroupRef] = Set.empty): Future[RawlsGroup] = {
+    updateGroupMembershipInternal(groupRef) { group =>
+      group.copy(
+        users = group.users ++ addUsers -- removeUsers,
+        subGroups = group.subGroups ++ addSubGroups -- removeSubGroups
+      )
     }
   }
 
-  private def withMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess)(op: (Set[RawlsUser], Set[RawlsGroup]) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  /** completely overwrites all group members */
+  def overwriteGroupMembership(groupRef: RawlsGroupRef, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): Future[RawlsGroup] = {
+    updateGroupMembershipInternal(groupRef) { group =>
+      group.copy(users = users, subGroups = subGroups)
+    }
+  }
+
+  /**
+   * Internal function to update a group
+   *
+   * @param groupRef group to update
+   * @param update function that takes the existing group as input and should produce an updated version to be saved
+   * @return
+   */
+  private def updateGroupMembershipInternal(groupRef: RawlsGroupRef)(update: RawlsGroup => RawlsGroup): Future[RawlsGroup] = {
+    for {
+      (savedGroup, intersectionGroups) <- dataSource.inTransaction ({ dataAccess =>
+        for {
+          groupOption <- dataAccess.rawlsGroupQuery.load(groupRef)
+          group = groupOption.getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"group ${groupRef.groupName.value} not found")))
+          updatedGroup = update(group)
+          savedGroup <- dataAccess.rawlsGroupQuery.save(updatedGroup)
+
+          // update intersection groups associated with groupRef
+          groupsToIntersects <- dataAccess.workspaceQuery.findAssociatedGroupsToIntersect(savedGroup)
+          intersectionGroups <- updateIntersectionGroupMembers(groupsToIntersects, dataAccess)
+        } yield (savedGroup, intersectionGroups)
+      }, TransactionIsolation.ReadCommitted)
+
+      messages = (intersectionGroups.toSeq :+ RawlsGroup.toRef(savedGroup)).map(_.toJson.compactPrint)
+
+      _ <- gpsDAO.publishMessages(gpsGroupSyncTopic, messages)
+    } yield savedGroup
+  }
+
+  private def loadMemberUsersAndGroups(memberList: RawlsGroupMemberList, dataAccess: DataAccess): ReadAction[(Set[RawlsUser], Set[RawlsGroup])] = {
     val userQueriesByEmail = for {
       email <- memberList.userEmails.getOrElse(Seq.empty)
     } yield dataAccess.rawlsUserQuery.loadUserByEmail(RawlsUserEmail(email)).map((email, _))
@@ -615,55 +607,60 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     val subGroupQueries = DBIO.sequence(groupQueriesByEmail ++ groupQueriesByName)
 
-    // nested function makes following for comprehension easier to read
-    def maybeExecuteOp(users: Iterable[(String, Option[RawlsUser])], subGroups: Iterable[(String, Option[RawlsGroup])]): ReadWriteAction[PerRequestMessage] = {
-      (users.collect { case (email, None) => email }, subGroups.collect { case (email, None) => email }) match {
-        // success case, all users and groups found
-        case (Seq(), Seq()) => op(users.map(_._2.get).toSet, subGroups.map(_._2.get).toSet)
-
-        // failure cases, some users and/or groups not found
-        case (Seq(), missingGroups) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}")))
-        case (missingUsers, Seq()) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}")))
-        case (missingUsers, missingGroups) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}")))
-      }
-    }
-
     for {
       users <- userQueries
       subGroups <- subGroupQueries
-      result <- maybeExecuteOp(users, subGroups)
-    } yield result
-  }
+    } yield {
+      (users.collect { case (email, None) => email }, subGroups.collect { case (email, None) => email }) match {
+        // success case, all users and groups found
+        case (Seq(), Seq()) => (users.map(_._2.get).toSet, subGroups.map(_._2.get).toSet)
 
-  def updateGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList, operation: UpdateGroupMembersOp): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess =>
-      withGroup(groupRef, dataAccess) { group =>
-        withMemberUsersAndGroups(memberList, dataAccess) { (users, subGroups) =>
-          updateGroupMembersInternal(group, users, subGroups, operation, dataAccess) map {
-            case None => RequestComplete(StatusCodes.OK)
-            case Some(error) => throw new RawlsExceptionWithErrorReport(errorReport = error)
-          }
-        }
+        // failure cases, some users and/or groups not found
+        case (Seq(), missingGroups) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some groups not found: ${missingGroups.mkString(", ")}"))
+        case (missingUsers, Seq()) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}"))
+        case (missingUsers, missingGroups) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Some users not found: ${missingUsers.mkString(", ")}. Some groups not found: ${missingGroups.mkString(", ")}"))
       }
     }
   }
 
-  def synchronizeGroupMembers(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
+  def updateGroupMembers(groupRef: RawlsGroupRef, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
+    for {
+      (addUsers, addSubGroups, removeUsers, removeSubGroups) <- dataSource.inTransaction { dataAccess =>
+        for {
+          (addUsers, addSubGroups) <- loadMemberUsersAndGroups(addMemberList, dataAccess)
+          (removeUsers, removeSubGroups) <- loadMemberUsersAndGroups(removeMemberList, dataAccess)
+        } yield (addUsers, addSubGroups, removeUsers, removeSubGroups)
+      }
+      _ <- updateGroupMembership(groupRef,
+        addUsers = addUsers.map(RawlsUser.toRef),
+        addSubGroups = addSubGroups.map(RawlsGroup.toRef),
+        removeUsers = removeUsers.map(RawlsUser.toRef),
+        removeSubGroups = removeSubGroups.map(RawlsGroup.toRef)
+      )
+      
+    } yield RequestComplete(StatusCodes.OK)
+  }
+
+  def synchronizeGroupMembersApi(groupRef: RawlsGroupRef): Future[PerRequestMessage] = {
+    synchronizeGroupMembers(groupRef) map { syncReport =>
+      val statusCode = if (syncReport.items.exists(_.errorReport.isDefined)) {
+        StatusCodes.BadGateway // status 500 is used for all other errors, 502 seems like the best otherwise
+      } else {
+        StatusCodes.OK
+      }
+      RequestComplete(statusCode, syncReport)
+    }
+  }
+
+  def synchronizeGroupMembers(groupRef: RawlsGroupRef): Future[SyncReport] = {
     dataSource.inTransaction { dataAccess =>
       withGroup(groupRef, dataAccess) { group =>
-        synchronizeGroupMembersInternal(group, dataAccess) map { syncReport =>
-          val statusCode = if (syncReport.items.exists(_.errorReport.isDefined)) {
-            StatusCodes.BadGateway // status 500 is used for all other errors, 502 seems like the best otherwise
-          } else {
-            StatusCodes.OK
-          }
-          RequestComplete(statusCode, syncReport)
-        }
+        synchronizeGroupMembersInternal(group, dataAccess)
       }
     }
   }
 
-  def synchronizeGroupMembersInternal(group: RawlsGroup, dataAccess: DataAccess): ReadAction[SyncReport] = {
+  def synchronizeGroupMembersInternal(group: RawlsGroup, dataAccess: DataAccess): ReadWriteAction[SyncReport] = {
     def loadRefs(refs: Set[Either[RawlsUserRef, RawlsGroupRef]]) = {
       DBIO.sequence(refs.map {
         case Left(userRef) => dataAccess.rawlsUserQuery.load(userRef).map(userOption => Left(userOption.getOrElse(throw new RawlsException(s"user $userRef not found"))))
@@ -709,74 +706,26 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         })
       }
 
-      DBIO.sequence(Seq(removeFutures, addFutures)).map(x => SyncReport(x.flatten))
+      for {
+        syncReportItems <- DBIO.sequence(Seq(removeFutures, addFutures))
+        _ <- dataAccess.rawlsGroupQuery.updateSynchronizedDate(group)
+      } yield {
+        SyncReport(group.groupEmail, syncReportItems.flatten)
+      }
     }
   }
 
-  /**
-   * updates the contents of a group. in the event of a failure updating the user in the google group, the user will not be updated in the RawlsGroup.
-   *
-   * @param group the group the update
-   * @param users users to add or remove from the group
-   * @param subGroups sub groups to add or remove from the group
-   * @param operation which update operation to perform
-   * @param dataAccess
-   * @return ReadWriteAction(None) if all went well
-   */
-  private def updateGroupMembersInternal(group: RawlsGroup, users: Set[RawlsUser], subGroups: Set[RawlsGroup], operation: UpdateGroupMembersOp, dataAccess: DataAccess): ReadWriteAction[Option[ErrorReport]] = {
-    // update the google group, each update happens in the future and may or may not succeed.
-    val googleUpdateTrials: Set[Future[Try[Either[RawlsUser, RawlsGroup]]]] = users.map { user =>
-      toFutureTry(operation.updateGoogle(group, Left(user))).map(_ match {
-        case Success(_) => Success(Left(user))
-        case Failure(f) => Failure(new RawlsException(s"Could not update user ${user.userEmail.value}", f))
-      })
-    } ++ subGroups.map { subGroup =>
-      toFutureTry(operation.updateGoogle(group, Right(subGroup))).map(_ match {
-        case Success(_) => Success(Right(subGroup))
-        case Failure(f) => Failure(new RawlsException(s"Could not update group ${subGroup.groupEmail.value}", f))
-      })
+  def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
+    val groups = groupsToIntersect.flatMap { case GroupsToIntersect(target, group1, group2) => Seq(group1, group2) }.toSet
+    val flattenedGroupsAction = DBIO.sequence(groups.map(group => dataAccess.rawlsGroupQuery.flattenGroupMembership(group).map(group -> _)).toSeq).map(_.toMap)
+
+    val intersectionMemberships = flattenedGroupsAction.map { flattenedGroups =>
+      groupsToIntersect.map { case GroupsToIntersect(target, group1, group2) =>
+        (target, flattenedGroups(group1) intersect flattenedGroups(group2))
+      }
     }
 
-    // wait for all google updates to finish then for each successful update change the rawls database
-    DBIO.from(Future.sequence(googleUpdateTrials)).flatMap { tries =>
-      val successfulUsers = tries.collect { case Success(Left(member)) => RawlsUser.toRef(member) }
-      val successfulGroups = tries.collect { case Success(Right(member)) => RawlsGroup.toRef(member) }
-      dataAccess.rawlsGroupQuery.save(operation.updateGroupObject(group, successfulUsers, successfulGroups)) map { _ =>
-        val exceptions = tries.collect { case Failure(t) => ErrorReport(t) }
-        if (exceptions.isEmpty) {
-          None
-        } else {
-          Option(ErrorReport(StatusCodes.BadRequest, "Unable to update the following member(s)", exceptions.toSeq))
-        }
-      }
-    } flatMap { errorReport =>
-      dataAccess.workspaceQuery.findWorkspacesForGroup(group).flatMap { workspaces =>
-        val priorResult: ReadWriteAction[Option[ErrorReport]] = DBIO.successful(errorReport)
-        val instersectionUpdatesResults = workspaces.map(updateIntersectionGroupMembers(_, dataAccess))
-        DBIO.sequence(instersectionUpdatesResults :+ priorResult)
-      }
-    } map(reduceErrorReports)
-  }
-
-  def updateIntersectionGroupMembers(workspace: Workspace, dataAccess:DataAccess): ReadWriteAction[Option[ErrorReport]] = {
-    val actions = workspace.realm match {
-      case None => Seq(DBIO.successful(None))
-      case Some(realm) =>
-        workspace.accessLevels.map {
-          case (accessLevel, group) =>
-            dataAccess.rawlsGroupQuery.load(workspace.realmACLs(accessLevel)) flatMap {
-              case None => DBIO.failed(new RawlsException("Unable to load intersection group"))
-              case Some(intersectionGroup) =>
-                dataAccess.rawlsGroupQuery.intersectGroupMembership(group, realm) flatMap { newMemberRefs =>
-                  DBIO.sequence(newMemberRefs.map(dataAccess.rawlsUserQuery.load(_).map(_.get)).toSeq)
-                } flatMap { newMembers =>
-                  overwriteGroupMembersInternal(intersectionGroup, newMembers.toSet, Set.empty, dataAccess)
-                }
-            }
-        }
-    }
-
-    DBIO.sequence(actions).map(reduceErrorReports)
+    intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
   }
 
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
@@ -870,19 +819,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   private def handleException(message: String)(exceptions: Seq[Throwable]): PerRequestMessage = {
     throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, message, exceptions.map(ErrorReport(_))))
-  }
-
-  private sealed trait UpdateGroupMembersOp {
-    def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
-    def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup
-  }
-  private object AddGroupMembersOp extends UpdateGroupMembersOp {
-    override def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.addMemberToGoogleGroup(group, member)
-    override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users ++ users), subGroups = (group.subGroups ++ subGroups))
-  }
-  private object RemoveGroupMembersOp extends UpdateGroupMembersOp {
-    override def updateGoogle(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit] = gcsDAO.removeMemberFromGoogleGroup(group, member)
-    override def updateGroupObject(group: RawlsGroup, users: Set[RawlsUserRef], subGroups: Set[RawlsGroupRef]): RawlsGroup = group.copy( users = (group.users -- users), subGroups = (group.subGroups -- subGroups))
   }
 }
 

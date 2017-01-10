@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
-import org.broadinstitute.dsde.rawls.monitor.{CreatingBillingProjectMonitor, BootMonitors, BucketDeletionMonitor}
+import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.webservice._
@@ -76,6 +76,13 @@ object Boot extends App with LazyLogging {
       gcsConfig.getInt("bucketLogsMaxAge")
     )
 
+    val pubSubDAO = new HttpGooglePubSubDAO(
+      clientSecrets,
+      gcsConfig.getString("pathToPem"),
+      gcsConfig.getString("appName"),
+      gcsConfig.getString("serviceProject")
+    )
+
     val ldapConfig = conf.getConfig("userLdap")
     val userDirDAO = new JndiUserDirectoryDAO(
       ldapConfig.getString("providerUrl"),
@@ -115,11 +122,21 @@ object Boot extends App with LazyLogging {
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
 
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"))
+
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
+
+    system.actorOf(GoogleGroupSyncMonitorSupervisor.props(
+      toScalaDuration(gcsConfig.getDuration("groupMonitor.pollInterval")),
+      toScalaDuration(gcsConfig.getDuration("groupMonitor.pollIntervalJitter")),
+      pubSubDAO,
+      gcsConfig.getString("groupMonitor.topicName"),
+      gcsConfig.getString("groupMonitor.subscriptionName"),
+      gcsConfig.getInt("groupMonitor.workerCount"),
+      userServiceConstructor))
 
     BootMonitors.restartMonitors(slickDataSource, gcsDAO, submissionSupervisor, bucketDeletionMonitor)
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val genomicsServiceConstructor: (UserInfo) => GenomicsService = GenomicsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val statisticsServiceConstructor: (UserInfo) => StatisticsService = StatisticsService.constructor(slickDataSource, gcsDAO, userDirDAO)
     val methodRepoDAO = new HttpMethodRepoDAO(conf.getConfig("methodrepo").getString("server"))

@@ -151,13 +151,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           UserService.props(userServiceConstructor, userInfo),
           UserService.AdminListUsers)
-      } ~
-      post {
-        entity(as[RawlsUserInfoList]) { userInfoList =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminImportUsers(userInfoList))
-        }
       }
     } ~
     path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
