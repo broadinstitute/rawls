@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -228,6 +229,16 @@ trait WorkspaceComponent {
       })
     }
 
+    def findWorkspaceInvitesForUser(userEmail: RawlsUserEmail): ReadAction[Seq[(WorkspaceName, WorkspaceAccessLevel)]] = {
+      (pendingWorkspaceAccessQuery.filter(_.userEmail === userEmail.value) join workspaceQuery on (_.workspaceId === _.id)).map(rec => (rec._2.namespace, rec._2.name, rec._1.accessLevel)).result.map { namesWithAccessLevel =>
+        namesWithAccessLevel.map{ case (namespace, name, accessLevel) => (WorkspaceName(namespace, name), WorkspaceAccessLevels.withName(accessLevel))}
+      }
+    }
+
+    def deleteWorkspaceInvitesForUser(userEmail: RawlsUserEmail) = {
+      (pendingWorkspaceAccessQuery.filter(_.userEmail === userEmail.value)).delete
+    }
+
     def deleteWorkspaceInvites(workspaceId: UUID) = {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
@@ -325,6 +336,15 @@ trait WorkspaceComponent {
       (subGroupEmailQuery union userEmailQuery).result.map { wsIdAndEmails =>
         wsIdAndEmails.groupBy { case (wsId, email) => wsId }.
           mapValues(_.map { case (wsId, email) => email }) }
+    }
+
+    def loadAccessGroup(workspaceName: WorkspaceName, accessLevel: WorkspaceAccessLevel) = {
+      val query = for {
+        workspace <- workspaceQuery if (workspace.namespace === workspaceName.namespace && workspace.name === workspaceName.name)
+        accessGroup <- workspaceAccessQuery if (accessGroup.workspaceId === workspace.id && accessGroup.accessLevel === accessLevel.toString)
+      } yield accessGroup.groupName
+
+      uniqueResult(query.result).map(name => RawlsGroupRef(RawlsGroupName(name.getOrElse(throw new RawlsException(s"Unable to load ${accessLevel} access group for workspace ${workspaceName}")))))
     }
 
     /**

@@ -121,7 +121,38 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  it should "fully create a user and grant them pending access to a workspace" in withMinimalTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource) { services =>
 
+      // values from MockUserInfoDirectives
+      val user = RawlsUser(RawlsUserSubjectId("123456789876543212345"), RawlsUserEmail("owner-access"))
+
+      assertUserMissing(services, user)
+
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Read)))
+
+      Post("/user") ~>
+        sealRoute(services.createUserRoute) ~>
+        check {
+          assertResult(StatusCodes.Created) {
+            status
+          }
+        }
+
+      assertUserExists(services, user)
+
+      import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceListResponseFormat
+
+      Get(s"/workspaces") ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(Some(WorkspaceAccessLevels.Read)) {
+            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
+          }
+        }
+
+    }
+  }
 
   it should "get a users own status" in withTestDataApiServices { services =>
     Get("/user") ~>

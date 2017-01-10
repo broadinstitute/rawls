@@ -604,6 +604,29 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
   }
 
+  class MinimalTestData() extends TestData {
+    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val ownerGroup = makeRawlsGroup(s"${wsName} OWNER", Set.empty)
+    val writerGroup = makeRawlsGroup(s"${wsName} WRITER", Set.empty)
+    val readerGroup = makeRawlsGroup(s"${wsName} READER", Set.empty)
+    val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map.empty, Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
+    val workspace = Workspace(wsName.namespace, wsName.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", Map.empty,
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup),
+      Map(WorkspaceAccessLevels.Owner -> ownerGroup, WorkspaceAccessLevels.Write -> writerGroup, WorkspaceAccessLevels.Read -> readerGroup))
+
+    override def save() = {
+      DBIO.seq(
+        DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
+        rawlsGroupQuery.save(ownerGroup),
+        rawlsGroupQuery.save(writerGroup),
+        rawlsGroupQuery.save(readerGroup),
+        workspaceQuery.save(workspace),
+        rawlsUserQuery.save(userReader)
+      )
+    }
+  }
+
   /* This test data should remain constant! Changing this data set will likely break
    * many of the tests that rely on it. */
   class ConstantTestData() extends TestData {
@@ -783,6 +806,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   val testData = new DefaultTestData()
   val constantData = new ConstantTestData()
+  val minimalTestData = new MinimalTestData()
 
   def withDefaultTestDatabase[T](testCode: => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode)
@@ -790,6 +814,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   def withDefaultTestDatabase[T](testCode: SlickDataSource => T): T = {
     withCustomTestDatabaseInternal(testData)(testCode(slickDataSource))
+  }
+
+  def withMinimalTestDatabase[T](testCode: SlickDataSource => T): T ={
+    withCustomTestDatabaseInternal(minimalTestData)(testCode(slickDataSource))
   }
 
   def withConstantTestDatabase[T](testCode: => T): T = {

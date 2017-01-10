@@ -171,18 +171,40 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
-    handleFutures(Future.sequence(Seq(
-      toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
-      toFutureTry(for {
+    handleFutures(
+      Future.sequence(Seq(
+        toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
+        toFutureTry(for {
         // these things need to be done in order
-        _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
-        _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
-        _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
-      } yield ()),
-      toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
+          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
+          _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
+          _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
+        } yield ()),
+        toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
-    )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
+      )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ =>
+      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
+  }
+
+  def turnInvitesIntoRealAccess(user: RawlsUser) = {
+    val groupRefs = dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail).flatMap { invites =>
+        DBIO.sequence(invites.map { case (workspaceName, accessLevel) =>
+          dataAccess.workspaceQuery.loadAccessGroup(workspaceName, accessLevel)
+        })
+      }
+    }
+
+    groupRefs.flatMap { refs =>
+      Future.sequence(refs.map { ref =>
+        updateGroupMembers(ref, RawlsGroupMemberList(userSubjectIds = Option(Seq(user.userSubjectId.value))), RawlsGroupMemberList())
+      })
+    } flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.deleteWorkspaceInvitesForUser(user.userEmail)
+      }
+    }
   }
 
   import spray.json.DefaultJsonProtocol._
