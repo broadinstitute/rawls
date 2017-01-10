@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.jobexec
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import slick.dbio
 import slick.dbio.{DBIOAction, NoStream}
-import slick.dbio.Effect.Read
+import slick.dbio.Effect.{Read, Write}
 import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
 import wdl4s.types.WdlArrayType
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
@@ -15,7 +15,7 @@ import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.expressions.SlickExpressionEvaluator
+import org.broadinstitute.dsde.rawls.expressions.{ExpressionEvaluator, JsonExpressionParsing, SlickExpressionEvaluator}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
 object MethodConfigResolver {
@@ -72,7 +72,7 @@ object MethodConfigResolver {
       //no inputs to resolve = just return an empty map back!
       DBIO.successful(entities.map( _.name -> Seq.empty[SubmissionValidationValue] ).toMap)
     } else {
-      SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+      ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
         //Evaluate the results per input and return a seq of DBIO[ Map(entity -> value) ], one per input
         val resultsByInput = inputs.map { input =>
           evaluator.evalFinalAttribute(workspaceContext, input.expression).asTry.map { tryAttribsByEntity =>
