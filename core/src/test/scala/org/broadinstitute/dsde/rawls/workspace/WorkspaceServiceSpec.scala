@@ -351,7 +351,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult(WorkspaceACL(Map(
       testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
       "obama@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false),
       "group@whitehouse.gov" -> AccessEntry(WorkspaceAccessLevels.Owner, false),
       testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false),
@@ -384,7 +384,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult(WorkspaceACL(Map(
       testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
       testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false),
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false),
@@ -408,7 +408,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult(WorkspaceACL(Map(
       testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
       testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false),
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false),
@@ -432,7 +432,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult(WorkspaceACL(Map(
       testData.userProjectOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
-      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
+      testData.userOwner.userEmail.value -> AccessEntry(WorkspaceAccessLevels.ProjectOwner, false),
       user.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Owner, false),
       testData.userWriter.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Write, false),
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false))), "Remove ACL should actually do so") {
@@ -477,8 +477,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "return non-existent users during patch ACLs" in withTestDataServices { services =>
-    testData.workspace.accessLevels.foreach { case (_, groupRef) => Await.result(services.gcsDAO.createGoogleGroup(groupRef), Duration.Inf) }
-
     val aclUpdates = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner))
     val vComplete = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
