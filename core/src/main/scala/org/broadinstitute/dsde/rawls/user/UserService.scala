@@ -715,14 +715,17 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def updateIntersectionGroupMembers(groupsToIntersect: Seq[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
-    DBIO.sequence(groupsToIntersect.map {
-      case GroupsToIntersect(target, group1, group2) =>
-        for {
-          newMembers <- dataAccess.rawlsGroupQuery.intersectGroupMembership(group1, group2)
-          _ <- dataAccess.rawlsGroupQuery.overwriteGroupUsers(target, newMembers)
-        } yield target
-    })
+  def updateIntersectionGroupMembers(groupsToIntersect: Set[GroupsToIntersect], dataAccess:DataAccess): ReadWriteAction[Iterable[RawlsGroupRef]] = {
+    val groups = groupsToIntersect.flatMap { case GroupsToIntersect(target, group1, group2) => Seq(group1, group2) }.toSet
+    val flattenedGroupsAction = DBIO.sequence(groups.map(group => dataAccess.rawlsGroupQuery.flattenGroupMembership(group).map(group -> _)).toSeq).map(_.toMap)
+
+    val intersectionMemberships = flattenedGroupsAction.map { flattenedGroups =>
+      groupsToIntersect.map { case GroupsToIntersect(target, group1, group2) =>
+        (target, flattenedGroups(group1) intersect flattenedGroups(group2))
+      }
+    }
+
+    intersectionMemberships.flatMap(dataAccess.rawlsGroupQuery.overwriteGroupUsers).map(_ => groupsToIntersect.map(_.target))
   }
 
   def deleteRefreshToken(rawlsUserRef: RawlsUserRef): Future[PerRequestMessage] = {
