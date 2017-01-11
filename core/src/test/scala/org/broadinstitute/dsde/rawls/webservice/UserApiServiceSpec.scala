@@ -130,6 +130,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
       assertUserMissing(services, user)
 
       runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Read)))
+      runAndWait(dataSource.dataAccess.workspaceQuery.saveInvite(java.util.UUID.fromString(minimalTestData.workspace2.workspaceId), minimalTestData.userReader.userSubjectId.value, WorkspaceACLUpdate("owner-access", WorkspaceAccessLevels.Write)))
 
       Post("/user") ~>
         sealRoute(services.createUserRoute) ~>
@@ -149,7 +150,13 @@ class UserApiServiceSpec extends ApiServiceSpec {
           assertResult(Some(WorkspaceAccessLevels.Read)) {
             responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace.toWorkspaceName).map(_.accessLevel)
           }
+          assertResult(Some(WorkspaceAccessLevels.Write)) {
+            responseAs[Array[WorkspaceListResponse]].find(r => r.workspace.toWorkspaceName == minimalTestData.workspace2.toWorkspaceName).map(_.accessLevel)
+          }
         }
+
+      val leftoverInvites = runAndWait(dataSource.dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail))
+      assert(leftoverInvites.size == 0)
 
     }
   }
