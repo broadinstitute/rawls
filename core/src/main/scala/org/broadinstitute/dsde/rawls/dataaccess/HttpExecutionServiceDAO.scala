@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.util.FutureSupport
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
-import spray.http.FormData
+import spray.http.{BodyPart, FormData, MultipartFormData}
 import spray.httpx.SprayJsonSupport._
 import spray.json.JsObject
 
@@ -27,8 +27,8 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     import system.dispatcher
 
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
-    val formData = FormData(Seq("wdlSource" -> wdl, "workflowInputs" -> inputs.mkString("[", ",", "]")) ++ options.map("workflowOptions" -> _).toSeq)
-    pipeline(Post(url,formData))
+    val formData = Map("wdlSource" -> BodyPart(wdl), "workflowInputs" -> BodyPart(inputs.mkString("[", ",", "]"))) ++ options.map("workflowOptions" -> BodyPart(_))
+    pipeline(Post(url, MultipartFormData(formData)))
   }
 
   override def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus] = {

@@ -1,22 +1,17 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import slick.dbio
-import slick.dbio.{DBIOAction, NoStream}
-import slick.dbio.Effect.{Read, Write}
-import wdl4s.{FullyQualifiedName, NamespaceWithWorkflow, WorkflowInput}
+import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
 import wdl4s.types.WdlArrayType
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.model.WDLJsonSupport._
 import spray.json._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
-import org.broadinstitute.dsde.rawls.expressions.{ExpressionEvaluator, JsonExpressionParsing, SlickExpressionEvaluator}
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -48,7 +43,7 @@ object MethodConfigResolver {
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
   def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Seq[MethodInput] = {
-    val agoraInputs = NamespaceWithWorkflow.load(wdl).workflow.inputs
+    val agoraInputs = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow.inputs
     val missingInputs = agoraInputs.filter{ case (fqn,workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
     val extraInputs = methodConfig.inputs.filter{ case (name,expression) => !agoraInputs.contains(name) }.keys
     if ( missingInputs.size > 0 || extraInputs.size > 0 ) {
@@ -111,17 +106,17 @@ object MethodConfigResolver {
   ) toString
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {
-    val workflow = NamespaceWithWorkflow.load(wdl).workflow
+    val workflow = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow
     val nothing = AttributeString("expression")
     val inputs = for ( (fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs ) yield fqn.toString -> nothing
-    val outputs = workflow.outputs map (o =>  o.fullyQualifiedName.toString -> nothing)
-    MethodConfiguration("namespace","name","rootEntityType",Map(),inputs.toMap,outputs.toMap,methodRepoMethod)
+    val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
+    MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
   }
 
   def getMethodInputsOutputs(wdl: String) = {
-    val workflow = NamespaceWithWorkflow.load(wdl).workflow
+    val workflow = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow
     MethodInputsOutputs(
       (workflow.inputs map {case (fqn: FullyQualifiedName, wfInput:WorkflowInput) => model.MethodInput(fqn, wfInput.wdlType.toWdlString, wfInput.optional)}).toSeq,
-      workflow.outputs.map(o => MethodOutput(o.fullyQualifiedName, o.wdlType.toWdlString)).toSeq)
+      workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(workflow), o.wdlType.toWdlString)))
   }
 }
