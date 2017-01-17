@@ -1000,6 +1000,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val inGoogleUser = RawlsUser(RawlsUserSubjectId("google"), RawlsUserEmail("google@fc.org"))
     val inBothUser = RawlsUser(RawlsUserSubjectId("both"), RawlsUserEmail("both@fc.org"))
     val inDbUser = RawlsUser(RawlsUserSubjectId("db"), RawlsUserEmail("db@fc.org"))
+    val unknownUserInGoogle = RawlsUser(RawlsUserSubjectId("unknown"), RawlsUserEmail("unknown@fc.org"))
 
     val topGroup = RawlsGroup(
       RawlsGroupName("synctest"),
@@ -1012,6 +1013,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Right(inBothGroup)), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inGoogleUser)), Duration.Inf)
     Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(inBothUser)), Duration.Inf)
+    Await.result(services.gcsDAO.addMemberToGoogleGroup(topGroup, Left(unknownUserInGoogle)), Duration.Inf)
 
     runAndWait(rawlsUserQuery.save(inGoogleUser))
     runAndWait(rawlsUserQuery.save(inBothUser))
@@ -1029,10 +1031,11 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
 
         val expected = Seq(
-          SyncReportItem("added", Option(inDbUser), None, None),
-          SyncReportItem("added", None, Option(inDbGroup.toRawlsGroupShort), None),
-          SyncReportItem("removed", Option(inGoogleUser), None, None),
-          SyncReportItem("removed", None, Option(inGoogleGroup.toRawlsGroupShort), None)
+          SyncReportItem("added", inDbUser.userEmail.value, None),
+          SyncReportItem("added", inDbGroup.groupEmail.value, None),
+          SyncReportItem("removed", inGoogleUser.userEmail.value, None),
+          SyncReportItem("removed", inGoogleGroup.groupEmail.value, None),
+          SyncReportItem("removed", unknownUserInGoogle.userEmail.value, None)
         )
         assertSameElements(expected, responseAs[SyncReport].items)
       }

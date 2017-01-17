@@ -60,9 +60,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   /**
    *
    * @param group
-   * @return None if the google group does not exist, Some(Seq.empty) if there are no members
+   * @return None if the google group does not exist, Some(Map.empty) if there are no members, key is the actual
+   *         email address in the google group, value is the rawls user or group reference or None if neither
    */
-  def listGroupMembers(group: RawlsGroup): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]]
+  def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]]
 
   def createProxyGroup(user: RawlsUser): Future[Unit]
 
