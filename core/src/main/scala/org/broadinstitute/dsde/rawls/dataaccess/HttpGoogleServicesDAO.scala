@@ -116,7 +116,6 @@ class HttpGoogleServicesDAO(
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
-    val bucketName = getBucketName(workspaceId)
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
@@ -160,7 +159,8 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+      val bucketName = getBucketName(workspaceId)
       retryWhen500orGoogleError {
         () => {
 
@@ -169,7 +169,7 @@ class HttpGoogleServicesDAO(
           val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
 
           // bucket ACLs should be:
-          //   project owner - bucker writer
+          //   project owner - bucket writer
           //   workspace owner - bucket writer
           //   workspace writer - bucket writer
           //   workspace reader - bucket reader
@@ -198,17 +198,23 @@ class HttpGoogleServicesDAO(
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
 
+          bucketName
+        }
+      }
+    }
+
+    def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+      retryWhen500orGoogleError {
+        () => {
           // manually insert an initial storage log
           val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
-            """"bucket","storage_byte_hours"
-              |"$bucketName","0"
-              |""".stripMargin.getBytes))
-          // use an object name that will always be superceded by a real storage log
+            s""""bucket","storage_byte_hours"
+                |"$bucketName","0"
+                |""".stripMargin.getBytes))
+          // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
           executeGoogleRequest(objectInserter)
-
-          GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }
       }
     }
@@ -230,8 +236,9 @@ class HttpGoogleServicesDAO(
         case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertRealmProjectOwnerIntersection map { Option(_) }
         case None => Future.successful(None)
       }
-      inserted <- insertBucket(accessGroups, intersectionGroups)
-    } yield inserted
+      bucketName <- insertBucket(accessGroups, intersectionGroups)
+      nothing <- insertInitialStorageLog(bucketName)
+    } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
     bucketInsertion recoverWith {
       case regrets =>
