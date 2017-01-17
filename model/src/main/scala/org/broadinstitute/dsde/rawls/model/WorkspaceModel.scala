@@ -275,6 +275,10 @@ object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],S
 
 case class ApplicationVersion(gitHash: String, buildNumber: String, version: String)
 
+case object AttributeValueRawJson {
+  def apply(str: String) : AttributeValueRawJson = AttributeValueRawJson(str.parseJson)
+}
+
 sealed trait Attribute
 sealed trait AttributeListElementable extends Attribute //terrible name for "this type can legally go in an attribute list"
 sealed trait AttributeValue extends AttributeListElementable
@@ -283,6 +287,7 @@ case object AttributeNull extends AttributeValue
 case class AttributeString(val value: String) extends AttributeValue
 case class AttributeNumber(val value: BigDecimal) extends AttributeValue
 case class AttributeBoolean(val value: Boolean) extends AttributeValue
+case class AttributeValueRawJson(val value: JsValue) extends AttributeValue
 case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list = Seq.empty }
 case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] { val list = Seq.empty }
 case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
@@ -296,6 +301,7 @@ object AttributeStringifier {
       case AttributeString(value) => value
       case AttributeNumber(value) => value.toString()
       case AttributeBoolean(value) => value.toString()
+      case AttributeValueRawJson(value) => value.toString()
       case AttributeEntityReference(t, name) => name
       case al: AttributeList[_] => al.list.map(apply).mkString(" ")
     }
@@ -309,7 +315,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): SortDirection = json match {
       case JsString(dir) => SortDirections.fromString(dir)
-      case _ => throw new DeserializationException("unexpected json type")
+      case _ => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -318,7 +324,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): AttributeName = json match {
       case JsString(name) => AttributeName.fromDelimitedName(name)
-      case _ => throw new DeserializationException("unexpected json type")
+      case _ => throw DeserializationException("unexpected json type")
     }
   }
 

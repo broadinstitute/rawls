@@ -65,7 +65,7 @@ trait EntityComponent {
         val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None)
 
         val attributeIdOption: Option[Long] = r.<<
-        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption
@@ -80,7 +80,7 @@ trait EntityComponent {
       // the where clause for this query is filled in specific to the use case
       val baseEntityAndAttributeSql =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version,
-          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_entity_ref, a.list_index, a.list_length,
+          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length,
           e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
@@ -131,7 +131,7 @@ trait EntityComponent {
             sql"")
           case _ => (
             // select each attribute column and the referenced entity name
-            """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_e_ref.name as sort_field_ref""",
+            """, sort_a.list_length as sort_list_length, sort_a.value_string as sort_field_string, sort_a.value_number as sort_field_number, sort_a.value_boolean as sort_field_boolean, sort_a.value_json as sort_field_json, sort_e_ref.name as sort_field_ref""",
             // join to attribute and entity (for references) table, grab only the named sort attribute and only the first element of a list
             sql"""left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id and sort_a.name = $sortFieldName and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
         }

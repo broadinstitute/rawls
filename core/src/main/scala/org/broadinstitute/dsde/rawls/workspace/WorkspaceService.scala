@@ -791,7 +791,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
-          SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
               //parsing failure
               case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
@@ -939,13 +939,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def validateMCExpressions(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ValidatedMethodConfiguration = {
     val parser = dataAccess  // this makes it compile for some reason (as opposed to inlining parser)
-    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[parser.PipelineQuery] ) = {
+    def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Boolean] ) = {
       val parsed = m map { case (key, attr) => (key, parseFunc(attr.value)) }
       ( parsed collect { case (key, Success(_)) => key } toSeq,
         parsed collect { case (key, Failure(regret)) => (key, regret.getMessage) } )
     }
-    val (successInputs, failedInputs) = parseAndPartition(methodConfiguration.inputs, parser.parseAttributeExpr)
-    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, parser.parseOutputExpr)
+    val (successInputs, failedInputs)   = parseAndPartition(methodConfiguration.inputs, ExpressionEvaluator.validateAttributeExpr(parser) )
+    val (successOutputs, failedOutputs) = parseAndPartition(methodConfiguration.outputs, ExpressionEvaluator.validateOutputExpr(parser) )
 
     ValidatedMethodConfiguration(methodConfiguration, successInputs, failedInputs, successOutputs, failedOutputs)
   }
@@ -1756,7 +1756,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           withSingleEntityRec(submissionRequest.entityType, submissionRequest.entityName, workspaceContext, dataAccess)(op)
         }
       case Some(expression) =>
-        SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
+        ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
           evaluator.evalFinalEntity(workspaceContext, expression).asTry
         } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
           case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))

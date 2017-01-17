@@ -19,7 +19,7 @@ import scala.util.{Random, Success => TrySuccess}
 /**
  * Created by abaumann on 5/21/15.
  */
-class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent {
+class ExpressionParserTest extends FunSuite with TestDriverComponent {
   import driver.api._
 
   def withTestWorkspace[T](testCode: (SlickWorkspaceContext) => T): T = {
@@ -31,14 +31,14 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
   }
 
   def evalFinalEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
-    SlickExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, entityType, entityName) { evaluator =>
+    ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, entityType, entityName) { evaluator =>
       evaluator.evalFinalEntity(workspaceContext, expression)
     }
   }
 
   def evalFinalAttribute(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, expression: String) = {
     entityQuery.findEntityByName(workspaceContext.workspaceId, entityType, entityName).result flatMap { entityRec =>
-      SlickExpressionEvaluator.withNewExpressionEvaluator(this, entityRec) { evaluator =>
+      ExpressionEvaluator.withNewExpressionEvaluator(this, entityRec) { evaluator =>
         evaluator.evalFinalAttribute(workspaceContext, expression)
       }
     }
@@ -50,7 +50,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       //Single sample lookup works
       assertResult("sample1") {
         runAndWait(
-          SlickExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "sample1") { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "sample1") { evaluator =>
             DBIO.successful(evaluator.rootEntities.head.name)
         })
       }
@@ -58,7 +58,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       //Nonexistent sample lookup fails
       intercept[RawlsException] {
         runAndWait(
-          SlickExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "nonexistent") { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, workspaceContext, "Sample", "nonexistent") { evaluator =>
             DBIO.successful(evaluator.rootEntities.head.name)
           })
       }
@@ -139,7 +139,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
       }
 
       val resultsByType = runAndWait(entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-        SlickExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+        ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
           evaluator.evalFinalAttribute(workspaceContext, "this.library:chapter")
         }
       })
@@ -181,7 +181,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       assertResult(allTheTypes) { runAndWait(
         entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          SlickExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.type")
           }
         })
@@ -199,7 +199,7 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       assertResult(allTheTumorTypes) { runAndWait(
         entityQuery.findEntityByType(UUID.fromString(testData.workspace.workspaceId), "Sample").result flatMap { ents =>
-          SlickExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
+          ExpressionEvaluator.withNewExpressionEvaluator(this, ents) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, "this.tumortype")
           }
         })
@@ -279,12 +279,13 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """" str""""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("\"str")))), "(string with quote in it failed)") {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """""str""""))
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("\"str")))), "(string with escaped quote in it failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """"\"str""""))
       }
 
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("\"st\"r")))), "(string with two quotes in it failed)") {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """""st"r""""))
+      intercept[RawlsException] {
+        //the string ""str" is not valid JSON as internal strings should be quoted.
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """""str""""))
       }
 
       intercept[RawlsException] {
@@ -316,6 +317,56 @@ class SlickSimpleExpressionParserTest extends FunSuite with TestDriverComponent 
 
       assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(-4.2)))), "(decimal failed)") {
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """-4.2"""))
+      }
+    }
+  }
+
+  test("null literal") {
+    withTestWorkspace { workspaceContext =>
+
+      assertResult(Map("sample1" ->TrySuccess(Seq())), "(null failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """null"""))
+      }
+    }
+  }
+
+  test("array literals") {
+    withTestWorkspace { workspaceContext =>
+
+      assertResult(Map("sample1" ->TrySuccess(Seq())), "(empty array failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[]"))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeNumber(2)))), "(numeric array failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "[1,2]"))
+      }
+
+      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeNumber(1), AttributeBoolean(true), AttributeString("three"), AttributeNull))), "(heterogeneous value typed array failed)") {
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", """[1,true,"three", null]"""))
+      }
+    }
+  }
+
+  test("raw json literals") {
+    withTestWorkspace { workspaceContext =>
+      // - json for entity references should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"entityType\":\"sample\",\"entityName\":\"sample2\"}"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """{"entityType":"sample","entityName":"sample2"}"""))
+      }
+      // - json for lists of entity references should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"}]"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"}]"""))
+      }
+      // - json for lists of numbers and entity references (i.e. a mix of attribute val and ref) should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("[{\"entityType\":\"sample\",\"entityName\":\"sample2\"},9]"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", """[{"entityType":"sample","entityName":"sample2"},9]"""))
+      }
+      // - json for objects of any kind should be parsed as RawJson
+      assertResult(Map("sset1" -> TrySuccess(Vector(AttributeNumber(9), AttributeNumber(0))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "[9,0]"))
+      }
+      assertResult(Map("sset1" -> TrySuccess(List(AttributeValueRawJson("{\"foo\":\"bar\"}"))))) {
+        runAndWait(evalFinalAttribute(workspaceContext, "SampleSet", "sset1", "{\"foo\":\"bar\"}"))
       }
     }
   }

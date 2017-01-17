@@ -32,4 +32,5 @@
     <include file="changesets/20161128_remove_project_owner_access_groups.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161213_fix_cromwell_auth_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161221_group_dates.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20161202_add_json_attributevalue.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

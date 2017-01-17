@@ -78,7 +78,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
 
     val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: string matching regex `^\\\".*\\\"$' expected but `d' found")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
@@ -371,7 +371,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = newInputs, outputs = newOutputs)
 
     val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: string matching regex `^\\\".*\\\"$' expected but `d' found")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
@@ -446,7 +446,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val theOutputs = Map("good_out" -> AttributeString("this.bar"), "bad_out" -> AttributeString("also.does.not.parse"))
 
     val expectedSuccessInputs = Seq("good_in")
-    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: string matching regex `^\\\".*\\\"$' expected but `d' found")
+    val expectedFailureInputs = Map("bad_in" -> "Failed at line 1, column 1: `workspace.' expected but `d' found")
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
