@@ -469,6 +469,37 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+    def getExistingWorkspaceInvites(workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { pairs =>
+            pairs.map(pair => WorkspaceACLUpdate(pair._1, pair._2))
+          }
+        }
+      }
+    }
+
+    def deleteWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          val removals = invites.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
+          val dedupedRemovals = removals.filter(update => existingInvites.map(_.email).contains(update.email))
+          DBIO.sequence(dedupedRemovals.map(removal => dataAccess.workspaceQuery.removeInvite(workspaceContext.workspaceId, removal.email))) map { _ =>
+            dedupedRemovals
+          }
+        }
+      }
+    }
+
+    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel)))
+          DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
+        }
+      }
+    }
+
     def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
       val usersUpdated = actualChangesToMake.map {
         case (Left(userRef), accessLevel) => WorkspaceACLUpdateResponse(userRef.userSubjectId.value, accessLevel)
@@ -496,37 +527,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           case RequestComplete(StatusCodes.NoContent) => next
           case otherwise => prior
         }
-      }
-    }
-  }
-
-  private def getExistingWorkspaceInvites(workspaceName: WorkspaceName) = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { pairs =>
-          pairs.map(pair => WorkspaceACLUpdate(pair._1, pair._2))
-        }
-      }
-    }
-  }
-
-  private def deleteWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        val removals = invites.filter(_.accessLevel.equals(WorkspaceAccessLevels.NoAccess))
-        val dedupedRemovals = removals.filter(update => existingInvites.map(_.email).contains(update.email))
-        DBIO.sequence(dedupedRemovals.map(removal => dataAccess.workspaceQuery.removeInvite(workspaceContext.workspaceId, removal.email))) map { _ =>
-          dedupedRemovals
-        }
-      }
-    }
-  }
-
-  private def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel)))
-        DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
       }
     }
   }

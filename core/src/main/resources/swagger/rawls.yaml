@@ -4270,7 +4270,7 @@ definitions:
     properties:
       acl:
         $ref: ''
-        description: Map[String,WorkspaceAccessLevel]
+        description: Map[String,WorkspaceAccessEntry]
 
   WorkspaceACLUpdate:
     description: ''
@@ -4284,6 +4284,19 @@ definitions:
       accessLevel:
         type: string
         description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
+
+  WorkspaceAccessEntry:
+    description: ''
+    required:
+      - accessLevel
+      - pending
+    properties:
+      accessLevel:
+        type: string
+        description: The access level granted to this user or group (OWNER, READER, WRITER, NO ACCESS)
+      pending:
+        type: boolean
+        description: The status of the users access
 
   Workspace:
     description: ''
