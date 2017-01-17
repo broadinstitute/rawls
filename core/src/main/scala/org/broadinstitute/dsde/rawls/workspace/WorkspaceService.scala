@@ -506,8 +506,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (Right(groupRef), accessLevel) => WorkspaceACLUpdateResponse(groupRef.groupName.value, accessLevel)
       }.toSeq
 
-      val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).diff(existingInvites)
-      
+      val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
+
       WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, usersNotFound)
     }
 
@@ -517,11 +517,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
-      savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else Future.successful(Seq.empty)
+      savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else {
+        val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
+        saveWorkspaceInvites(invitesToUpdate, existingInvites, workspaceName)
+      }
     } yield {
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
-          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), emailsNotFound, existingInvites))
+          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
         case otherwise => otherwise
       }.reduce { (prior, next) =>
         // this reduce will propagate the first non-NoContent (i.e. error) response

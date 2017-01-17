@@ -485,6 +485,32 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assertResult((StatusCodes.OK, responseFromUpdate), "Add ACL shouldn't error") {
       vComplete.response
     }
+
+    val aclUpdates2 = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner))
+    val vComplete2 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates2, true), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromUpdate2 = WorkspaceACLUpdateResponseList(Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner)), Seq.empty)
+
+    assertResult((StatusCodes.OK, responseFromUpdate2), "Add ACL shouldn't error") {
+      vComplete2.response
+    }
+
+    val aclUpdates3 = Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read))
+    val vComplete3 = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclUpdates3, true), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromUpdate3 = WorkspaceACLUpdateResponseList(Seq.empty, Seq(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Read)), Seq.empty)
+
+    assertResult((StatusCodes.OK, responseFromUpdate3), "Add ACL shouldn't error") {
+      vComplete3.response
+    }
+
+    assertResult(true, "Changing an invitees access level should return them in the invitesUpdated group") {
+      vComplete3.response._2.invitesUpdated.size == 1
+    }
+
+    assertResult(true, "Changing an invitees access level shouldn't return them in the usersNotFound group") {
+      vComplete3.response._2.usersNotFound.size == 0
+    }
   }
 
   it should "invite a user to a workspace" in withTestDataServices { services =>
