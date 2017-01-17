@@ -506,7 +506,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (Right(groupRef), accessLevel) => WorkspaceACLUpdateResponse(groupRef.groupName.value, accessLevel)
       }.toSeq
 
-      WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, (emailsNotFound diff invitesUpdated diff existingInvites))
+      val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).diff(existingInvites)
+      
+      WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, usersNotFound)
     }
 
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
