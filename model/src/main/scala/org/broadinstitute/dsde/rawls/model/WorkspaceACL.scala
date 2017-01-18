@@ -4,9 +4,15 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import spray.json._
 
-case class WorkspaceACL(acl: Map[String, WorkspaceAccessLevel])
+case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean)
+
+case class WorkspaceACL(acl: Map[String, AccessEntry])
 
 case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel)
+
+case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceAccessLevel)
+
+case class WorkspaceACLUpdateResponseList(usersUpdated: Seq[WorkspaceACLUpdateResponse], invitesUpdated: Seq[WorkspaceACLUpdate], usersNotFound: Seq[WorkspaceACLUpdate])
 
 object WorkspaceAccessLevels {
   sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
@@ -68,8 +74,14 @@ object WorkspaceACLJsonSupport extends JsonSupport {
     }
   }
 
+  implicit val AccessEntryFormat = jsonFormat2(AccessEntry)
+
   implicit val WorkspaceACLFormat = jsonFormat1(WorkspaceACL)
 
   implicit val WorkspaceACLUpdateFormat = jsonFormat2(WorkspaceACLUpdate)
+
+  implicit val WorkspaceACLUpdateResponseFormat = jsonFormat2(WorkspaceACLUpdateResponse)
+
+  implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat3(WorkspaceACLUpdateResponseList)
 }
 
