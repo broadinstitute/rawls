@@ -4277,6 +4277,7 @@ definitions:
     required:
       - email
       - accessLevel
+      - canShare
     properties:
       email:
         type: string
@@ -4284,12 +4285,16 @@ definitions:
       accessLevel:
         type: string
         description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
+      canShare:
+        type: boolean
+        description: Set to true if you want this user to be able to share the workspace with other users
 
   WorkspaceAccessEntry:
     description: ''
     required:
       - accessLevel
       - pending
+      - canShare
     properties:
       accessLevel:
         type: string
@@ -4297,6 +4302,9 @@ definitions:
       pending:
         type: boolean
         description: The status of the users access
+      canShare:
+        type: boolean
+        description: True if the user can share the workspace with others, false otherwise
 
   Workspace:
     description: ''
