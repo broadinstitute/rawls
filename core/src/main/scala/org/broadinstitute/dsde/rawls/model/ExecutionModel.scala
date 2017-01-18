@@ -2,15 +2,13 @@ package org.broadinstitute.dsde.rawls.model
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
-import UserModelJsonSupport.RawlsUserRefFormat
-
-import spray.json._
 import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.RawlsException
+import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,7 +23,8 @@ case class SubmissionRequest(
   methodConfigurationName: String,
   entityType: String,
   entityName: String,
-  expression: Option[String]
+  expression: Option[String],
+  callCache: Boolean
 )
 
 // Cromwell's response to workflow submission
@@ -100,7 +99,8 @@ case class Submission(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
-  status: SubmissionStatus
+  status: SubmissionStatus,
+  callCache: Boolean
 )
 
 case class SubmissionStatusResponse(
@@ -250,7 +250,7 @@ object ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
+  implicit val SubmissionRequestFormat = jsonFormat6(SubmissionRequest)
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
@@ -284,7 +284,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat6(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat8(Submission)
+  implicit val SubmissionFormat = jsonFormat9(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 

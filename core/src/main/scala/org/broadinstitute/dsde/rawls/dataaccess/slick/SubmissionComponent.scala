@@ -8,12 +8,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.{DBIOAction, DatabaseAction}
-import slick.dbio.Effect.{Read, Write}
-import slick.driver.H2Driver.api._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
-import slick.profile.{FixedSqlAction, SqlAction}
 
 /**
  * Created by mbemis on 2/18/16.
@@ -25,7 +21,8 @@ case class SubmissionRecord(id: UUID,
                             submitterId: String,
                             methodConfigurationId: Long,
                             submissionEntityId: Long,
-                            status: String
+                            status: String,
+                            callCache: Boolean
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -55,8 +52,9 @@ trait SubmissionComponent {
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
     def submissionEntityId = column[Long]("ENTITY_ID")
     def status = column[String]("STATUS", O.Length(32))
+    def callCache = column[Boolean]("CALL_CACHE")
 
-    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
+    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, callCache) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def submitter = foreignKey("FK_SUB_SUBMITTER", submitterId, rawlsUserQuery)(_.userSubjectId)
@@ -351,7 +349,8 @@ trait SubmissionComponent {
         submission.submitter.userSubjectId.value,
         configId,
         entityId,
-        submission.status.toString)
+        submission.status.toString,
+        submission.callCache)
     }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): Submission = {
@@ -363,7 +362,8 @@ trait SubmissionComponent {
         config.name,
         entity,
         workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
-        SubmissionStatuses.withName(submissionRec.status))
+        SubmissionStatuses.withName(submissionRec.status),
+        submissionRec.callCache)
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): ActiveSubmission = {
