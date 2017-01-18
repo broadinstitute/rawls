@@ -106,8 +106,8 @@ trait WorkspaceComponent {
     def workspaceId = column[UUID]("workspace_id")
     def userSubjectId = column[String]("user_subject_id")
 
-    def workspace = foreignKey("FK_WS_USER_SHARE_WS", workspaceId, workspaceQuery)(_.id)
-    def user = foreignKey("FK_WS_USER_SHARE_GROUP", userSubjectId, rawlsUserQuery)(_.userSubjectId)
+    def workspace = foreignKey("FK_USER_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+    def user = foreignKey("FK_USER_SHARE_PERMS_USER", userSubjectId, rawlsUserQuery)(_.userSubjectId)
 
     def * = (workspaceId, userSubjectId) <> (WorkspaceUserShareRecord.tupled, WorkspaceUserShareRecord.unapply)
   }
@@ -116,8 +116,8 @@ trait WorkspaceComponent {
     def workspaceId = column[UUID]("workspace_id")
     def groupName = column[String]("group_name")
 
-    def workspace = foreignKey("FK_WS_GROUP_SHARE_WS", workspaceId, workspaceQuery)(_.id)
-    def group = foreignKey("FK_WS_GROUP_SHARE_GROUP", groupName, rawlsGroupQuery)(_.groupName)
+    def workspace = foreignKey("FK_GROUP_SHARE_PERMS_WS", workspaceId, workspaceQuery)(_.id)
+    def group = foreignKey("FK_GROUP_SHARE_PERMS_GROUP", groupName, rawlsGroupQuery)(_.groupName)
 
     def * = (workspaceId, groupName) <> (WorkspaceGroupShareRecord.tupled, WorkspaceGroupShareRecord.unapply)
   }
@@ -268,8 +268,18 @@ trait WorkspaceComponent {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
 
-    def getUserSharePerms(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Int] = {
-      workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result
+    def getUserSharePerms(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
+      //here i need to check the groups for each user to see if those groups have share permissions
+      rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { x =>
+        println(x)
+        val groupNames = x.map(_.groupName.value)
+        println(groupNames)
+        workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0) flatMap { y =>
+          println(y)
+          if(y) DBIO.successful(y)
+          else workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0)
+        }
+      }
     }
 
     def listEmailsAndAccessLevel(workspaceContext: SlickWorkspaceContext): ReadAction[(Seq[(String, WorkspaceAccessLevel, Boolean)], Seq[(String, WorkspaceAccessLevel, Boolean)])] = {

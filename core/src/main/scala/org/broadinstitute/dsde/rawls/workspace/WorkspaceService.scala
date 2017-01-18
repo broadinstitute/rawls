@@ -435,7 +435,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Read, dataAccess) {
           dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).flatMap { emailsAndAccess =>
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
@@ -467,12 +467,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         //users of all access levels can theoretically share the workspace. only shut out users with NoAccess
         //TODO: requireAccess and getMaximumAccessLevel are very similar but I need both right now to get the accessLevel back. merge them into one that solves my needs
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
+        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Read, dataAccess) {
           getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
             requireSharePermission(workspaceContext.workspace, accessLevel, dataAccess) {
               // If the user is an owner, we want them to be able to do everything
               // If NoAccess < accessLevel < Owner, and the user has share permissions, allow them to share with users up to their own accessLevel
-              // If  ^            ^             ^ , and the user doesn't have share permissions, silently empty all canShare fields in the aclUpdates
+              // If NoAccess < accessLevel < Owner, and the user doesn't have share permissions, silently empty all canShare fields in the aclUpdates
               if (accessLevel >= WorkspaceAccessLevels.Owner) determineCompleteNewAcls(aclUpdates, dataAccess, workspaceContext)
               else {
                 val correctedAclUpdates = aclUpdates.map(update => WorkspaceACLUpdate(update.email, update.accessLevel, None)).filterNot(_.accessLevel > accessLevel)
@@ -1750,12 +1750,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def getSharePermissions(user: RawlsUser, workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[Boolean] = {
-    dataAccess.workspaceQuery.getUserSharePerms(user.userSubjectId, workspaceContext).map(_ == 1)
+    dataAccess.workspaceQuery.getUserSharePerms(user.userSubjectId, workspaceContext)
   }
 
   private def requireSharePermission[T](workspace: Workspace, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    getSharePermissions(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { canShare =>
-      if (canShare || accessLevel >= WorkspaceAccessLevels.Owner) codeBlock
+    if(accessLevel >= WorkspaceAccessLevels.Owner) codeBlock
+    else getSharePermissions(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { canShare =>
+      if (canShare) codeBlock
       else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
     }
   }
