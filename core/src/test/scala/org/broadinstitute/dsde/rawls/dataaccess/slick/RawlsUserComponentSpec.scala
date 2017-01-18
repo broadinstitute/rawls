@@ -90,13 +90,25 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val email2 = RawlsUserEmail("two.emails@are.better.than.one")
     val user2 = RawlsUser(subjId2, email2)
 
+    val subjId3 = RawlsUserSubjectId("A Third Subject")
+    val email3 = RawlsUserEmail("three.emails@are.better.than.two")
+    val user3 = RawlsUser(subjId3, email3)
 
-    //    val testUser2 = testUser.copy(userSubjectId = RawlsUserSubjectId("dummy-ID2"), userEmail = RawlsUserEmail("dummy-email2@example.com"))
+
+    /* Group structure built below
+     *
+     * G5 - G3 - G2 - G1 - U1
+     *            \- U2
+     *
+     * G4 - G1 - U1
+     */
     val group1 = makeRawlsGroup("Group One", Set(user1))
     val group2 = makeRawlsGroup("Group Two", Set(user2)).copy(subGroups = Set(group1))
     val group3 = makeRawlsGroup("Group Three", Set.empty).copy(subGroups = Set(group2))
     val group4 = makeRawlsGroup("Group Four", Set.empty).copy(subGroups = Set(group1))
     val group5 = makeRawlsGroup("Group Five", Set.empty).copy(subGroups = Set(group3))
+
+
 
     runAndWait(rawlsUserQuery.save(user1))
     runAndWait(rawlsUserQuery.save(user2))
@@ -106,8 +118,12 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     runAndWait(rawlsGroupQuery.save(group4))
     runAndWait(rawlsGroupQuery.save(group5))
 
-    assertResult(Set(RawlsGroupRef(RawlsGroupName("Group Two")),RawlsGroupRef(RawlsGroupName("Group Two")),RawlsGroupRef(RawlsGroupName("Group Three")),RawlsGroupRef(RawlsGroupName("Group Five")))) {
+    assertResult(Set(RawlsGroupRef(RawlsGroupName("Group Two")),RawlsGroupRef(RawlsGroupName("Group Three")),RawlsGroupRef(RawlsGroupName("Group Five")))) {
       runAndWait(rawlsGroupQuery.listGroupsForUser(user2))
+    }
+    
+    assertResult(Set()) {
+      runAndWait(rawlsGroupQuery.listGroupsForUser(user3))
     }
   }
 
