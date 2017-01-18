@@ -690,17 +690,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }.toSeq)
     }
 
-    def toSyncReportItem(operation: String, member: Either[RawlsUser, RawlsGroup], result: Try[Unit]) = {
+    def toSyncReportItem(operation: String, email: String, result: Try[Unit]) = {
       SyncReportItem(
         operation,
-        member match {
-          case Left(user) => Option(user)
-          case _ => None
-        },
-        member match {
-          case Right(group) => Option(group.toRawlsGroupShort)
-          case _ => None
-        },
+        email,
         result match {
           case Success(_) => None
           case Failure(t) => Option(ErrorReport(t))
@@ -709,22 +702,29 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     DBIO.from(gcsDAO.listGroupMembers(group)) flatMap {
-      case None => DBIO.from(gcsDAO.createGoogleGroup(group) map (_ => Seq.empty[Either[RawlsUserRef, RawlsGroupRef]]))
+      case None => DBIO.from(gcsDAO.createGoogleGroup(group) map (_ => Map.empty[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]))
       case Some(members) => DBIO.successful(members)
-    } flatMap { members =>
+    } flatMap { membersByEmail =>
 
-      val toRemove = members.toSet -- group.users.map(Left(_)) -- group.subGroups.map(Right(_))
-      val removeFutures = loadRefs(toRemove) flatMap { removeMembers =>
-        DBIO.sequence(removeMembers map { removeMember =>
-          DBIO.from(toFutureTry(gcsDAO.removeMemberFromGoogleGroup(group, removeMember)).map(toSyncReportItem("removed", removeMember, _)))
-        })
-      }
+      val knownEmailsByMember = membersByEmail.collect { case (email, Some(member)) => (member, email) }
+      val unknownEmails = membersByEmail.collect { case (email, None) => email }
+
+      val toRemove = knownEmailsByMember.keySet -- group.users.map(Left(_)) -- group.subGroups.map(Right(_))
+      val emailsToRemove = unknownEmails ++ toRemove.map(knownEmailsByMember)
+      val removeFutures = DBIO.sequence(emailsToRemove map { removeMember =>
+        DBIO.from(toFutureTry(gcsDAO.removeEmailFromGoogleGroup(group.groupEmail.value, removeMember)).map(toSyncReportItem("removed", removeMember, _)))
+      })
+
 
       val realMembers: Set[Either[RawlsUserRef, RawlsGroupRef]] = group.users.map(Left(_)) ++ group.subGroups.map(Right(_))
-      val toAdd = realMembers -- members
+      val toAdd = realMembers -- knownEmailsByMember.keySet
       val addFutures = loadRefs(toAdd) flatMap { addMembers =>
         DBIO.sequence(addMembers map { addMember =>
-          DBIO.from(toFutureTry(gcsDAO.addMemberToGoogleGroup(group, addMember)).map(toSyncReportItem("added", addMember, _)))
+          val memberEmail = addMember match {
+            case Left(user) => user.userEmail.value
+            case Right(subGroup) => subGroup.groupEmail.value
+          }
+          DBIO.from(toFutureTry(gcsDAO.addMemberToGoogleGroup(group, addMember)).map(toSyncReportItem("added", memberEmail, _)))
         })
       }
 

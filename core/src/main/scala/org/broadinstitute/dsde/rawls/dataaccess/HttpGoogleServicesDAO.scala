@@ -444,7 +444,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = {
+  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
     val proxyPattern = s"PROXY_(.+)@${appsDomain}".r
     val groupPattern = s"GROUP_(.+)@${appsDomain}".r
 
@@ -452,10 +452,10 @@ class HttpGoogleServicesDAO(
       membersOption match {
         case None => None
         case Some(emails) => Option(emails map {
-          case proxyPattern(subjectId) => Left(RawlsUserRef(RawlsUserSubjectId(subjectId)))
-          case groupPattern(groupName) => Right(RawlsGroupRef(RawlsGroupName(groupName)))
-          case other => throw new RawlsException(s"Group member is neither a proxy or sub group: [$other]")
-        } toSet)
+          case email@proxyPattern(subjectId) => email -> Option(Left(RawlsUserRef(RawlsUserSubjectId(subjectId))))
+          case email@groupPattern(groupName) => email -> Option(Right(RawlsGroupRef(RawlsGroupName(groupName))))
+          case email => email -> None
+        } toMap)
       }
     }
   }

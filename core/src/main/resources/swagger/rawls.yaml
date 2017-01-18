@@ -4613,10 +4613,8 @@ definitions:
     properties:
       operation:
         type: string
-      user:
-        $ref: '#/definitions/RawlsUser'
-      subGroup:
-        $ref: '#/definitions/RawlsGroupShort'
+      email:
+        type: string
       errorReport:
         $ref: '#/definitions/ErrorReport'
   SyncReport:
