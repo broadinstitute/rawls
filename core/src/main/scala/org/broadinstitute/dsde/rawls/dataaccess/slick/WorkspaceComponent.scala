@@ -268,15 +268,11 @@ trait WorkspaceComponent {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
 
-    def getUserSharePerms(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
-      //here i need to check the groups for each user to see if those groups have share permissions
-      rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { x =>
-        println(x)
-        val groupNames = x.map(_.groupName.value)
-        println(groupNames)
-        workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0) flatMap { y =>
-          println(y)
-          if(y) DBIO.successful(y)
+    def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
+      rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
+        val groupNames = userGroups.map(_.groupName.value)
+        workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0) flatMap { canShareViaGroup =>
+          if(canShareViaGroup) DBIO.successful(canShareViaGroup)
           else workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0)
         }
       }
@@ -297,18 +293,22 @@ trait WorkspaceComponent {
         subGroup <- rawlsGroupQuery if (subGroup.groupName === subGroupGroup.childGroupName)
       } yield (access, subGroup)).map { case (access, subGroup) => (access.accessLevel, subGroup.groupEmail, subGroup.groupName) }
 
+      /*  The left join here is on purpose. Since we are only going to store share-permission records for users and groups that have been
+          explicitly granted that ability, we want to be able to return all users and groups even if they don't have share permissions.
+          If there was a null, a traditional join wouldn't return the rows with the null column.
+          Here, a null column equates to false, and a non-null column equates to true. This conversion is done with permission.isDefined
+       */
       val userPermissionQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined) }
       val groupPermissionQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupShareQuery).on(_._3 === _.groupName).map { case (groupInfo, permission) => (groupInfo._1, groupInfo._2, permission.isDefined) }
 
-      //todo: rewrite
       userPermissionQuery.result.map(_.map { case (access, email, canShare) =>
         val accessLevel = WorkspaceAccessLevels.withName(access)
-        //sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
+        // Sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
         (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
       }).flatMap { userResults =>
         groupPermissionQuery.result.map(_.map { case (access, email, canShare) =>
           val accessLevel = WorkspaceAccessLevels.withName(access)
-          //sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
+          // Sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
           (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
         }).map { groupResults =>
           (userResults, groupResults)
