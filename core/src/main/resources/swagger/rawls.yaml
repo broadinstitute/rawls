@@ -3313,7 +3313,12 @@ paths:
       responses:
         '200':
           description: Successful Request
-      description: "get the list of groups the user belong to"
+          schema:
+            type: array
+            description: list of the user's groups
+            items:
+              type: string
+      description: Get the list of groups the user belongs to
       tags:
         - users
       summary: Get groups for user
