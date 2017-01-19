@@ -398,6 +398,25 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return groups for a user" in withTestDataApiServices { services =>
+    val group3 = RawlsGroup(RawlsGroupName("testgroupname3"), RawlsGroupEmail("testgroupname3@foo.bar"), Set[RawlsUserRef](RawlsUser(userInfo)), Set.empty[RawlsGroupRef])
+    val group2 = RawlsGroup(RawlsGroupName("testgroupname2"), RawlsGroupEmail("testgroupname2@foo.bar"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    val group1 = RawlsGroup(RawlsGroupName("testgroupname1"), RawlsGroupEmail("testgroupname1@foo.bar"), Set.empty[RawlsUserRef], Set[RawlsGroupRef](group3))
+
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group1))
+
+    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    Get("/user/groups") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+        val expected = Seq(group3.groupName.value, group1.groupName.value)
+        assertResult(expected) { responseAs[Seq[String]].intersect(expected) }
+      }
+  }
+
   it should "get not details of a group that does not exist" in withTestDataApiServices { services =>
     Get("/user/group/blarg") ~>
       sealRoute(services.userRoutes) ~>
