@@ -435,21 +435,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Read, dataAccess) {
-          getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
-            requireSharePermission(workspaceContext.workspace, accessLevel, dataAccess) {
-              dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).flatMap { emailsAndAccess =>
-                dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
-                  // toMap below will drop duplicate keys, keeping the last entry only
-                  // sort by access level to make sure higher access levels remain in the resulting map
-                  val grantedUsers = emailsAndAccess._1.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
-                  val grantedGroups = emailsAndAccess._2.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
+        requireSharePermission(workspaceContext.workspace, dataAccess) { _ =>
+          dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).flatMap { emailsAndAccess =>
+            dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
+              // toMap below will drop duplicate keys, keeping the last entry only
+              // sort by access level to make sure higher access levels remain in the resulting map
+              val grantedUsers = emailsAndAccess._1.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
+              val grantedGroups = emailsAndAccess._2.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
 
-                  val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
+              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
 
-                  RequestComplete(StatusCodes.OK, WorkspaceACL((grantedUsers ++ grantedGroups ++ pending).toMap))
-                }
-              }
+              RequestComplete(StatusCodes.OK, WorkspaceACL((grantedUsers ++ grantedGroups ++ pending).toMap))
             }
           }
         }
@@ -469,21 +465,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val overwriteGroupMessagesFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        // In theory, a user of any access level can share the workspace. If they have an access level lower than OWNER, they
-        // will need to have been granted the ability to share a workspace.
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Read, dataAccess) {
-          getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
-            requireSharePermission(workspaceContext.workspace, accessLevel, dataAccess) {
-              // If the user is an owner, we want them to be able to do everything
-              // If NoAccess < accessLevel < Owner, and the user has share permissions, allow them to share with users up to their own accessLevel
-              // If NoAccess < accessLevel < Owner, and the user doesn't have share permissions, silently empty all canShare fields in the aclUpdates
-              if (accessLevel >= WorkspaceAccessLevels.Owner) determineCompleteNewAcls(aclUpdates, dataAccess, workspaceContext)
-              else {
-                val correctedAclUpdates = aclUpdates.map(update => WorkspaceACLUpdate(update.email, update.accessLevel, None)).filterNot(_.accessLevel > accessLevel)
-                determineCompleteNewAcls(correctedAclUpdates, dataAccess, workspaceContext)
-              }
-            }
-          }
+        requireSharePermission(workspaceContext.workspace, dataAccess) { accessLevel =>
+          determineCompleteNewAcls(aclUpdates, accessLevel, dataAccess, workspaceContext)
         }
       }
     }
@@ -518,6 +501,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+//    def saveWorkspaceSharePermissions()
 
     def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
       val usersUpdated = actualChangesToMake.map {
@@ -563,7 +548,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -589,6 +574,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       if (!membersWithTooManyEntries.isEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Only 1 entry per email allowed. Emails with more than one entry: $membersWithTooManyEntries"))
       }
+
+      val membersWithHigherAccessLevelThanGranter = aclUpdates.filter(_.accessLevel > userAccessLevel)
+
+      if (!membersWithHigherAccessLevelThanGranter.isEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant higher access than your own access level. Please correct these entries: ${membersWithHigherAccessLevelThanGranter.map(_.email)}"))
+      }
+
+      val membersWithSharePermission = aclUpdates.filter(_.canShare == Some(true))
+
+      if(!membersWithSharePermission.isEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant share permission to users unless you are a workspace owner. Please correct these entries: ${membersWithHigherAccessLevelThanGranter.map(_.email)}"))
+      }
+
       val actualChangesToMakeByMember = actualChangesToMake.toMap
 
       // some security checks
@@ -1753,11 +1751,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
   }
 
-  private def requireSharePermission[T](workspace: Workspace, accessLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(codeBlock: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    if(accessLevel >= WorkspaceAccessLevels.Owner) codeBlock
-    else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), SlickWorkspaceContext(workspace)) flatMap { canShare =>
-      if (canShare) codeBlock
-      else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+  private def requireSharePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: (WorkspaceAccessLevel) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+      if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock(userLevel)
+      else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), SlickWorkspaceContext(workspace)) flatMap { canShare =>
+        if (canShare) codeBlock(userLevel)
+        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+      }
     }
   }
 

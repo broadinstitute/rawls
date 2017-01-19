@@ -268,6 +268,10 @@ trait WorkspaceComponent {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
 
+//    def saveUserSharePermissions(workspaceId: UUID, userSubjectIds: Seq[RawlsUserSubjectId]) = {
+//
+//    }
+
     def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
       rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
         val groupNames = userGroups.map(_.groupName.value)
@@ -295,8 +299,7 @@ trait WorkspaceComponent {
 
       /*  The left join here is on purpose. Since we are only going to store share-permission records for users and groups that have been
           explicitly granted that ability, we want to be able to return all users and groups even if they don't have share permissions.
-          If there was a null, a traditional join wouldn't return the rows with the null column.
-          Here, a null column equates to false, and a non-null column equates to true. This conversion is done with permission.isDefined
+          After the join, a null column equates to false, and a non-null column equates to true. This conversion is done with permission.isDefined
        */
       val userPermissionQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined) }
       val groupPermissionQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupShareQuery).on(_._3 === _.groupName).map { case (groupInfo, permission) => (groupInfo._1, groupInfo._2, permission.isDefined) }
