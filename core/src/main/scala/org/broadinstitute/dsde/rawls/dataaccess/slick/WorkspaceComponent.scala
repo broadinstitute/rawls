@@ -537,7 +537,7 @@ trait WorkspaceComponent {
       }
     }
 
-    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] = {
+    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] = {
       val userQuery = for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
@@ -552,12 +552,18 @@ trait WorkspaceComponent {
         (subGroup.childGroupName, access.accessLevel)
       }
 
+
+      //val userPermissionQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined) }
+
+      val q1 = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined)}
+      val q2 = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case (groupInfo, permission) => (groupInfo._1, groupInfo._2, permission.isDefined)}
+
       for {
-        users <- userQuery.result.map {
-          _.map { case (subjectId, accessLevel) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), WorkspaceAccessLevels.withName(accessLevel)) }
+        users <- q1.result.map {
+          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), (WorkspaceAccessLevels.withName(accessLevel), canShare)) }
         }
-        subGroups <- subGroupQuery.result.map {
-          _.map { case (groupName, accessLevel) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), WorkspaceAccessLevels.withName(accessLevel)) }
+        subGroups <- q2.result.map {
+          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), (WorkspaceAccessLevels.withName(accessLevel), canShare)) }
         }
       } yield {
         (users ++ subGroups).toSet

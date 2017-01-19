@@ -556,8 +556,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val emailsNotFound = aclUpdates.filterNot(aclChange => refsToUpdateByEmail.keySet.contains(aclChange.email))
 
       // match up elements of aclUpdates and refsToUpdateByEmail ignoring unfound emails
-      val refsToUpdateAndAccessLevel = aclUpdates.map { aclUpdate => refsToUpdateByEmail.get(aclUpdate.email) -> aclUpdate.accessLevel }.collect {
-        case (Some(ref), accessLevel) => ref -> accessLevel
+      val refsToUpdateAndAccessLevel = aclUpdates.map { aclUpdate => (refsToUpdateByEmail.get(aclUpdate.email), aclUpdate.accessLevel, aclUpdate.canShare.getOrElse(false)) }.collect {
+        case (Some(ref), accessLevel, canShare) => ref -> (accessLevel, canShare)
       }.toSet
 
       // remove everything that is not changing
@@ -608,16 +608,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // we are not updating ProjectOwner acls here, if any are added we threw an exception above
       // any user/group that is already a project owner and is added to another level should end up in both levels
       // so lets ignore all the existing project owners, we should not update by mistake
-      val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, level) => level == ProjectOwner }
+      val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, (level, _)) => level == ProjectOwner }
 
       // update levels for all existing refs, add refs that don't exist, remove all no access levels
       val updatedRefsAndLevels =
-        (existingRefsAndLevelsExcludingPO.map { case (ref, level) => ref -> actualChangesToMakeByMember.getOrElse(ref, level) } ++
-          actualChangesToMakeByMember).filterNot { case (_, level) => level == WorkspaceAccessLevels.NoAccess }
+        (existingRefsAndLevelsExcludingPO.map { case (ref, (level, canShare)) => ref -> actualChangesToMakeByMember.getOrElse(ref, (level, canShare)) } ++
+          actualChangesToMakeByMember).filterNot { case (_, (level, canShare)) => level == WorkspaceAccessLevels.NoAccess }
 
       // formulate the UserService.OverwriteGroupMembers messages to send - 1 per level with users and groups separated
-      val updatedRefsByLevel: Map[WorkspaceAccessLevel, Set[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]] =
-        updatedRefsAndLevels.toSet.groupBy { case (_, level) => level }
+      val updatedRefsByLevel: Map[WorkspaceAccessLevel, Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] =
+        updatedRefsAndLevels.toSet.groupBy { case (_, (level, canShare)) => level }
 
       // the above transformations drop empty groups so add those back in
       val emptyLevels = Seq(WorkspaceAccessLevels.Owner, WorkspaceAccessLevels.Write, WorkspaceAccessLevels.Read).map(_ -> Set.empty[(Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel)]).toMap
