@@ -124,9 +124,10 @@ case class SubmissionListResponse(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   status: SubmissionStatus,
-  workflowStatuses: Map[String, Int]
+  workflowStatuses: Map[String, Int],
+  callCache: Boolean
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.callCache)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -290,7 +291,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusResponseFormat = jsonFormat8(SubmissionStatusResponse)
 
-  implicit val SubmissionListResponseFormat = jsonFormat8(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat9(SubmissionListResponse)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 
