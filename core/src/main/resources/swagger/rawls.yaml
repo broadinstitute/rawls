@@ -3315,6 +3315,26 @@ paths:
             - openid
             - email
             - profile
+  '/api/user/groups':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of the user's groups
+            items:
+              type: string
+      description: Get the list of groups the user belongs to
+      tags:
+        - users
+      summary: Get groups for user
+      operationId: listGroupsForUser
+      security:
+        - authorization:
+           - openid
+           - email
+           - profile
   '/api/user/refreshToken':
     put:
       responses:

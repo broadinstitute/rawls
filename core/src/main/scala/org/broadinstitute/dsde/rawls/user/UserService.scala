@@ -49,6 +49,7 @@ object UserService {
   case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
+  case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
@@ -103,6 +104,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
+    case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
@@ -261,6 +263,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
 
     )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
+  }
+
+  def listGroupsForUser(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withUser(userEmail, dataAccess) { user =>
+        for {
+          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+        } yield {
+          groups map {ref => ref.groupName.value}
+        }
+      }
+    } map(RequestComplete(_))
   }
 
   def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
