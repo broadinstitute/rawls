@@ -268,9 +268,30 @@ trait WorkspaceComponent {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
 
-//    def saveUserSharePermissions(workspaceId: UUID, userSubjectIds: Seq[RawlsUserSubjectId]) = {
-//
-//    }
+    def updateUserSharePermissions(workspaceId: UUID, users: Map[RawlsUserRef, Option[Boolean]]) = {
+      //rewrite
+      val usersToChange = users.filter(_._2.isDefined).map(x => x._1 -> x._2.get)
+      val usersToGrant = usersToChange.filter(_._2)
+      val usersToRevoke = usersToChange.filterNot(_._2)
+
+      (workspaceUserShareQuery ++= usersToGrant.map(user => WorkspaceUserShareRecord(workspaceId, user._1.userSubjectId.value))) andThen
+        workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSet(usersToRevoke.map(_._1.userSubjectId.value))).delete
+    }
+
+    def updateGroupSharePermissions(workspaceId: UUID, groups: Map[RawlsGroupRef, Option[Boolean]]) = {
+      //rewrite
+      val groupsToChange = groups.filter(_._2.isDefined).map(x => x._1 -> x._2.get)
+      val groupsToGrant = groupsToChange.filter(_._2)
+      val groupsToRevoke = groupsToChange.filterNot(_._2)
+
+      (workspaceGroupShareQuery ++= groupsToGrant.map(group => WorkspaceGroupShareRecord(workspaceId, group._1.groupName.value))) andThen
+        workspaceGroupShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSet(groupsToRevoke.map(_._1.groupName.value))).delete
+    }
+
+    def deleteWorkspaceSharePermissions(workspaceId: UUID) = {
+      workspaceUserShareQuery.filter(_.workspaceId === workspaceId).delete andThen
+        workspaceGroupShareQuery.filter(_.workspaceId === workspaceId).delete
+    }
 
     def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
       rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
@@ -537,7 +558,7 @@ trait WorkspaceComponent {
       }
     }
 
-    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Boolean))]] = {
+    def findWorkspaceUsersAndAccessLevel(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Option[Boolean]))]] = {
       val userQuery = for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
@@ -552,18 +573,15 @@ trait WorkspaceComponent {
         (subGroup.childGroupName, access.accessLevel)
       }
 
-
-      //val userPermissionQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined) }
-
       val q1 = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined)}
       val q2 = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case (groupInfo, permission) => (groupInfo._1, groupInfo._2, permission.isDefined)}
 
       for {
         users <- q1.result.map {
-          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), (WorkspaceAccessLevels.withName(accessLevel), canShare)) }
+          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), (WorkspaceAccessLevels.withName(accessLevel), if(canShare) Option(true) else None)) }
         }
         subGroups <- q2.result.map {
-          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), (WorkspaceAccessLevels.withName(accessLevel), canShare)) }
+          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), (WorkspaceAccessLevels.withName(accessLevel), if(canShare) Option(true) else None)) }
         }
       } yield {
         (users ++ subGroups).toSet
