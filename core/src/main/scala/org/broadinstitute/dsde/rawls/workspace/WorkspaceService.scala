@@ -575,11 +575,11 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (Some(ref), accessLevel, canShare) => ref -> (accessLevel, canShare)
       }.toSet
 
-      val refsToUpdateAndSharePermission = refsToUpdate.map(x => x._1 -> x._2._2)
-      val refsToUpdateAndAccessLevel = refsToUpdate.map(x => x._1 -> x._2._1)
+      val refsToUpdateAndSharePermission = refsToUpdate.map(ref => ref._1 -> ref._2._2)
+      val refsToUpdateAndAccessLevel = refsToUpdate.map(ref => ref._1 -> ref._2._1)
 
-      val existingRefsAndSharePermission = existingRefsAndLevels.map(x => x._1 -> x._2._2)
-      val existingRefsAndAccessLevel = existingRefsAndLevels.map(x => x._1 -> x._2._1)
+      val existingRefsAndSharePermission = existingRefsAndLevels.map(ref => ref._1 -> ref._2._2)
+      val existingRefsAndAccessLevel = existingRefsAndLevels.map(ref => ref._1 -> ref._2._1)
 
       // remove everything that is not changing
       val actualChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndAccessLevel)

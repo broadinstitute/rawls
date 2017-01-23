@@ -2938,6 +2938,8 @@ paths:
       responses:
         '200':
           description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceACLUpdateResponseList'
         '400':
           description: Attempting to change access controls you can't (your own, or public-access group)
           schema:
@@ -4288,6 +4290,35 @@ definitions:
       canShare:
         type: boolean
         description: Set to true if you want this user to be able to share the workspace with other users
+
+  WorkspaceACLUpdateResponseList:
+    description: ''
+    required:
+      - usersUpdated
+      - invitesSent
+      - invitesUpdated
+      - usersNotFound
+    properties:
+      usersUpdated:
+        type: array
+        description: the users or groups who were updated
+        items:
+          $ref: '#/definitions/WorkspaceACLUpdateResponse'
+      invitesSent:
+        type: array
+        description: the list of invites that were sent
+        items:
+          $ref: '#/definitions/WorkspaceACLUpdate'
+      invitesUpdated:
+        type: array
+        description: the list of invites that were updated
+        items:
+          $ref: '#/definitions/WorkspaceACLUpdate'
+      usersNotFound:
+        type: array
+        description: the users or groups who were not found
+        items:
+          $ref: '#/definitions/WorkspaceACLUpdate'
 
   WorkspaceAccessEntry:
     description: ''
