@@ -269,7 +269,7 @@ trait WorkspaceComponent {
     }
 
     def updateUserSharePermissions(workspaceId: UUID, users: Map[RawlsUserRef, Option[Boolean]]) = {
-      val (usersToGrant, usersToRevoke)= users.filter(_._2.isDefined).map{ case(user, canShare) => user -> canShare.get }.partition(_._2)
+      val (usersToGrant, usersToRevoke) = users.filter(_._2.isDefined).map{ case(user, canShare) => user -> canShare.get }.partition(_._2)
 
       (workspaceUserShareQuery ++= usersToGrant.map(user => WorkspaceUserShareRecord(workspaceId, user._1.userSubjectId.value))) andThen
         workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSet(usersToRevoke.map(_._1.userSubjectId.value))).delete
@@ -288,11 +288,13 @@ trait WorkspaceComponent {
     }
 
     def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
-      rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
-        val groupNames = userGroups.map(_.groupName.value)
-        workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0) flatMap { canShareViaGroup =>
-          if(canShareViaGroup) DBIO.successful(canShareViaGroup)
-          else workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0)
+      workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0) flatMap { canShare =>
+        if(canShare) DBIO.successful(canShare)
+        else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
+          val groupNames = userGroups.map(_.groupName.value)
+          workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0) flatMap { canShareViaGroup =>
+            DBIO.successful(canShareViaGroup)
+          }
         }
       }
     }
@@ -321,12 +323,12 @@ trait WorkspaceComponent {
 
       userPermissionQuery.result.map(_.map { case (access, email, canShare) =>
         val accessLevel = WorkspaceAccessLevels.withName(access)
-        // Sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
+        // Sharing is implied for owners and project owners, so the permission may not be in the DB. Rectify that here
         (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
       }).flatMap { userResults =>
         groupPermissionQuery.result.map(_.map { case (access, email, canShare) =>
           val accessLevel = WorkspaceAccessLevels.withName(access)
-          // Sharing is implied for owners and project owners, so the permission may not be in the DB. rectify that here
+          // Sharing is implied for owners and project owners, so the permission may not be in the DB. Rectify that here
           (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
         }).map { groupResults =>
           (userResults, groupResults)

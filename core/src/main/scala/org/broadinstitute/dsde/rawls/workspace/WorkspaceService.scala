@@ -1782,7 +1782,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock(userLevel)
       else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), SlickWorkspaceContext(workspace)) flatMap { canShare =>
         if (canShare) codeBlock(userLevel)
-        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+        else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
       }
     }
   }
