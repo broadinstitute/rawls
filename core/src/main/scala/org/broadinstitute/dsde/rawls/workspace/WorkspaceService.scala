@@ -6,7 +6,6 @@ import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -14,10 +13,9 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -26,6 +24,7 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import spray.http.{StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
@@ -111,7 +110,7 @@ object WorkspaceService {
 
 class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
-
+  import spray.json.DefaultJsonProtocol._
   implicit val timeout = Timeout(5 minutes)
 
   override def receive = {
@@ -1116,7 +1115,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
-          import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+
           DBIO.from(methodRepoDAO.postMethodConfig(
             methodRepoQuery.methodRepoNamespace,
             methodRepoQuery.methodRepoName,
@@ -1210,7 +1209,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows ++ workflowFailures,
-          status = SubmissionStatuses.Submitted
+          status = SubmissionStatuses.Submitted,
+          callCache = submissionRequest.callCache
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
@@ -1345,6 +1345,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listAllActiveSubmissions() = {
+    RequestComplete(StatusCodes.OK, new ActiveSubmission("","", new Submission("", new DateTime(1), new RawlsUserRef(new RawlsUserSubjectId("id")),"","",
+      new AttributeEntityReference("",""), Seq(),SubmissionStatuses.Done, false)))
     dataSource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
     }
