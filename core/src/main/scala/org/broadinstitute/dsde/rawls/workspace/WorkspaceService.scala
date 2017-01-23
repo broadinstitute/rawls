@@ -512,8 +512,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }.toSeq
 
       val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
+      val invitesSent = invitesUpdated.filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
 
-      WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, usersNotFound)
+      WorkspaceACLUpdateResponseList(usersUpdated, invitesSent, invitesUpdated.diff(invitesSent), usersNotFound)
     }
 
     def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
@@ -608,10 +609,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant higher access than your own access level. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
 
-      val membersWithSharePermission = actualShareChangesToMake.filter(_._2.contains(Some(true)))
+      val membersWithSharePermission = actualShareChangesToMake.filter(_._2.isDefined)
 
       if(membersWithSharePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant share permission to users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
 
       val actualChangesToMakeByMember = actualChangesToMake.toMap
