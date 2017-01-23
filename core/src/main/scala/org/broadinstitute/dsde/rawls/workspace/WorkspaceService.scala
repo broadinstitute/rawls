@@ -505,8 +505,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-//    def saveWorkspaceSharePermissions()
-
     def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Option[Boolean])], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
       val usersUpdated = actualChangesToMake.map {
         case (Left(userRef), (accessLevel, canShare)) => WorkspaceACLUpdateResponse(userRef.userSubjectId.value, accessLevel)
@@ -519,20 +517,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], (WorkspaceAccessLevel, Option[Boolean])]) = {
-      val (users, groups) = actualChangesToMake.partition(_._1.isLeft)
-
-      //do this a not-stupid way
-      val foo = users.map {
-        case (Left(user), (_, canShare)) => user -> canShare
-      }
-
-      val bar = groups.map {
-        case (Right(group), (_, canShare)) => group -> canShare
-      }
+      val users = actualChangesToMake.collect{ case (Left(userRef), (_, canShare)) => userRef -> canShare}
+      val groups = actualChangesToMake.collect{ case (Right(groupRef), (_, canShare)) => groupRef -> canShare}
 
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.updateUserSharePermissions(workspaceContext.workspaceId, foo) andThen dataAccess.workspaceQuery.updateGroupSharePermissions(workspaceContext.workspaceId, bar)
+          dataAccess.workspaceQuery.updateUserSharePermissions(workspaceContext.workspaceId, users) andThen dataAccess.workspaceQuery.updateGroupSharePermissions(workspaceContext.workspaceId, groups)
         }
       }
     }
@@ -586,6 +576,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // remove everything that is not changing
       val actualChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndLevels)
 
+      println(refsToUpdateAndAccessLevel)
+      println(existingRefsAndLevels)
+
       val membersWithTooManyEntries = actualChangesToMake.groupBy {
         case (member, _) => member
       }.collect {
@@ -617,6 +610,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
 
       val actualChangesToMakeByMember = actualChangesToMake.toMap
+      //val actualChangesToMakeByMemberWithoutSelf = if(actualChangesToMakeByMember.contains(Left(RawlsUser(userInfo)))) actualChangesToMakeByMember - Left(RawlsUser(userInfo)) else actualChangesToMakeByMember
 
       // some security checks
       if (actualChangesToMakeByMember.contains(Right(UserService.allUsersGroupRef))) {

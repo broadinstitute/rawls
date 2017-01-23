@@ -318,7 +318,7 @@ trait WorkspaceComponent {
         subGroup <- rawlsGroupQuery if (subGroup.groupName === subGroupGroup.childGroupName)
       } yield (access, subGroup)).map { case (access, subGroup) => (access.accessLevel, subGroup.groupEmail, subGroup.groupName) }
 
-      /*  The left join here is on purpose. Since we are only going to store share-permission records for users and groups that have been
+      /*  The left join here is important. Since we are only going to store share-permission records for users and groups that have been
           explicitly granted that ability, we want to be able to return all users and groups even if they don't have share permissions.
           After the join, a null column equates to false, and a non-null column equates to true. This conversion is done with permission.isDefined
        */
