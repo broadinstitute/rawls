@@ -92,7 +92,9 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     super.afterAll()
   }
 
-  "HttpGoogleServicesDAO" should "do all of the things" in {
+  behavior of "HttpGoogleServicesDAO"
+
+  it should "do all of the things" in {
 
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None)
@@ -462,11 +464,60 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     }
   }
 
-  it should "fail to get usage when there are no storage logs" in {
-    intercept[GoogleStorageLogException] {
-      Await.result(gcsDAO.getBucketUsage(RawlsBillingProjectName(testProject), "no-bucket-here-" + UUID.randomUUID.toString), Duration.Inf)
+  /* Google does not write storage logs for empty buckets. If a bucket is empty for long enough, all storage logs
+   * (including the initial log) will expire. If a quick check shows that the bucket is actually empty, the lack of
+   * storage logs can be assumed to be because the bucket has been empty for a long time.
+   */
+  it should "return 0 usage when there are no storage logs and the bucket is empty" in {
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+
+    val projectName = RawlsBillingProjectName(testProject)
+    val logBucketName = gcsDAO.getStorageLogsBucketName(projectName)
+    val bucketName = "services-dao-spec-" + UUID.randomUUID.toString
+    val bucket = new Bucket().setName(bucketName)
+    val bucketInserter = storage.buckets.insert(testProject, bucket)
+    Await.result(retry(when500)(() => Future { bucketInserter.execute() }), Duration.Inf)
+
+    try {
+      val usage = Await.result(gcsDAO.getBucketUsage(projectName, bucketName), Duration.Inf)
+      usage should be (0)
+    } finally {
+      Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
     }
   }
+
+  /* Google does not write storage logs for empty buckets. If a bucket is empty for long enough, all storage logs
+   * (including the initial log) will expire.
+   *
+   * HOWEVER, if a quick check shows that the bucket is NOT actually empty, the lack of storage logs can mean that
+   * either storage logs are not being correctly written or something has been added to the bucket after being empty for
+   * a long time. Since we can't tell the difference between these 2 cases, we show a "Not Available" message. If there
+   * is not a problem with storage log writing, "Not Available" will be replaced with a real value in the next day or
+   * two.
+   */
+  it should "return 'Not Available' when there are no storage logs and the bucket is NOT empty" in {
+    val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
+
+    val projectName = RawlsBillingProjectName(testProject)
+    val logBucketName = gcsDAO.getStorageLogsBucketName(projectName)
+    val bucketName = "services-dao-spec-" + UUID.randomUUID.toString
+    val bucket = new Bucket().setName(bucketName)
+    val bucketInserter = storage.buckets.insert(testProject, bucket)
+    Await.result(retry(when500)(() => Future { bucketInserter.execute() }), Duration.Inf)
+    insertObject(bucketName, "test-object", "test")
+
+    val caught = intercept[GoogleStorageLogException] {
+      try {
+        val usage = Await.result(gcsDAO.getBucketUsage(projectName, bucketName), Duration.Inf)
+        usage should be(0)
+      } finally {
+        Await.result(retry(when500)(() => Future { storage.objects().delete(bucketName, "test-object").execute() }), Duration.Inf)
+        Await.result(gcsDAO.deleteBucket(bucketName, bucketDeletionMonitor), Duration.Inf)
+      }
+    }
+    caught.getMessage should be("Not Available")
+  }
+
 
   private def insertObject(bucketName: String, objectName: String, content: String): String = {
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
