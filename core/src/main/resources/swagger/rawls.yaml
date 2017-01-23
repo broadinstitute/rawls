@@ -2970,6 +2970,12 @@ paths:
           name: workspaceName
           required: true
           type: string
+        - in: query
+          description: true to invite unregistered users, false to ignore
+          name: inviteUsersNotFound
+          required: true
+          default: false
+          type: boolean
         - in: body
           description: Series of ACL updates for workspace
           name: aclUpdates
@@ -2983,6 +2989,7 @@ paths:
             - openid
             - email
             - profile
+
   '/api/workspaces':
     post:
       responses:
@@ -3308,6 +3315,26 @@ paths:
             - openid
             - email
             - profile
+  '/api/user/groups':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            description: list of the user's groups
+            items:
+              type: string
+      description: Get the list of groups the user belongs to
+      tags:
+        - users
+      summary: Get groups for user
+      operationId: listGroupsForUser
+      security:
+        - authorization:
+           - openid
+           - email
+           - profile
   '/api/user/refreshToken':
     put:
       responses:
@@ -4263,7 +4290,7 @@ definitions:
     properties:
       acl:
         $ref: ''
-        description: Map[String,WorkspaceAccessLevel]
+        description: Map[String,WorkspaceAccessEntry]
 
   WorkspaceACLUpdate:
     description: ''
@@ -4277,6 +4304,19 @@ definitions:
       accessLevel:
         type: string
         description: The access level to grant to this user or group (OWNER, READER, WRITER, NO ACCESS)
+
+  WorkspaceAccessEntry:
+    description: ''
+    required:
+      - accessLevel
+      - pending
+    properties:
+      accessLevel:
+        type: string
+        description: The access level granted to this user or group (OWNER, READER, WRITER, NO ACCESS)
+      pending:
+        type: boolean
+        description: The status of the users access
 
   Workspace:
     description: ''
@@ -4593,10 +4633,8 @@ definitions:
     properties:
       operation:
         type: string
-      user:
-        $ref: '#/definitions/RawlsUser'
-      subGroup:
-        $ref: '#/definitions/RawlsGroupShort'
+      email:
+        type: string
       errorReport:
         $ref: '#/definitions/ErrorReport'
   SyncReport:

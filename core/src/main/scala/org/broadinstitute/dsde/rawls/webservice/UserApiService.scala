@@ -90,6 +90,13 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.ListBillingAccounts)
       }
     } ~
+      path("user" / "groups") {
+        get {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.ListGroupsForUser(RawlsUserEmail(userInfo.userEmail)))
+        }
+      } ~
     path("user" / "group" / Segment) { groupName =>
       get {
         requestContext => perRequest(requestContext,

@@ -25,7 +25,7 @@ import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
-import com.google.api.services.storage.model.{Bucket, BucketAccessControl, ObjectAccessControl, StorageObject}
+import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
@@ -116,7 +116,6 @@ class HttpGoogleServicesDAO(
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
   override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
-    val bucketName = getBucketName(workspaceId)
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
@@ -160,7 +159,8 @@ class HttpGoogleServicesDAO(
       }
     }
 
-    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[GoogleWorkspaceInfo] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+    def insertBucket: (Map[WorkspaceAccessLevel, RawlsGroup], Option[Map[WorkspaceAccessLevel, RawlsGroup]]) => Future[String] = { (accessGroupsByLevel, intersectionGroupsByLevel) =>
+      val bucketName = getBucketName(workspaceId)
       retryWhen500orGoogleError {
         () => {
 
@@ -169,7 +169,7 @@ class HttpGoogleServicesDAO(
           val groupsByAccess = intersectionGroupsByLevel getOrElse accessGroupsByLevel
 
           // bucket ACLs should be:
-          //   project owner - bucker writer
+          //   project owner - bucket writer
           //   workspace owner - bucket writer
           //   workspace writer - bucket writer
           //   workspace reader - bucket reader
@@ -198,17 +198,23 @@ class HttpGoogleServicesDAO(
           val inserter = getStorage(getBucketServiceAccountCredential).buckets.insert(project.projectName.value, bucket)
           executeGoogleRequest(inserter)
 
+          bucketName
+        }
+      }
+    }
+
+    def insertInitialStorageLog: (String) => Future[Unit] = { (bucketName) =>
+      retryWhen500orGoogleError {
+        () => {
           // manually insert an initial storage log
           val stream: InputStreamContent = new InputStreamContent("text/plain", new ByteArrayInputStream(
-            """"bucket","storage_byte_hours"
-              |"$bucketName","0"
-              |""".stripMargin.getBytes))
-          // use an object name that will always be superceded by a real storage log
+            s""""bucket","storage_byte_hours"
+                |"$bucketName","0"
+                |""".stripMargin.getBytes))
+          // use an object name that will always be superseded by a real storage log
           val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
           val objectInserter = getStorage(getBucketServiceAccountCredential).objects().insert(getStorageLogsBucketName(project.projectName), storageObject, stream)
           executeGoogleRequest(objectInserter)
-
-          GoogleWorkspaceInfo(bucketName, accessGroupsByLevel, intersectionGroupsByLevel)
         }
       }
     }
@@ -230,8 +236,9 @@ class HttpGoogleServicesDAO(
         case Some(t) => assertSuccessfulTries(t) flatMap insertOwnerMember flatMap insertRealmProjectOwnerIntersection map { Option(_) }
         case None => Future.successful(None)
       }
-      inserted <- insertBucket(accessGroups, intersectionGroups)
-    } yield inserted
+      bucketName <- insertBucket(accessGroups, intersectionGroups)
+      nothing <- insertInitialStorageLog(bucketName)
+    } yield GoogleWorkspaceInfo(bucketName, accessGroups, intersectionGroups)
 
     bucketInsertion recoverWith {
       case regrets =>
@@ -273,10 +280,10 @@ class HttpGoogleServicesDAO(
 
     retryWithRecoverWhen500orGoogleError(() => {
       val bucket = new Bucket().setName(bucketName)
-      val deleteAfterOneYear = new Lifecycle.Rule()
+      val storageLogExpiration = new Lifecycle.Rule()
         .setAction(new Action().setType("Delete"))
         .setCondition(new Condition().setAge(bucketLogsMaxAge))
-      bucket.setLifecycle(new Lifecycle().setRule(List(deleteAfterOneYear)))
+      bucket.setLifecycle(new Lifecycle().setRule(List(storageLogExpiration)))
       val inserter = getStorage(getBucketServiceAccountCredential).buckets().insert(billingProject.value, bucket)
       executeGoogleRequest(inserter)
 
@@ -401,7 +408,15 @@ class HttpGoogleServicesDAO(
         val result = executeGoogleRequest(fetcher)
         (Option(result.getItems), Option(result.getNextPageToken))
       }) flatMap {
-        case (None, _) => Future.failed(new GoogleStorageLogException(s"No storage logs available for $bucketName"))
+        case (None, _) =>
+          // No storage logs, so make sure that the bucket is actually empty
+          val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
+          retryWhen500orGoogleError(() => {
+            Option(executeGoogleRequest(fetcher).getItems)
+          }) flatMap {
+            case None => Future.successful(BigInt(0))
+            case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
+          }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
           /* Objects are returned "in alphabetical order" (http://stackoverflow.com/a/36786877/244191). Because of the
@@ -444,7 +459,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listGroupMembers(group: RawlsGroup): Future[Option[Set[Either[RawlsUserRef, RawlsGroupRef]]]] = {
+  override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = {
     val proxyPattern = s"PROXY_(.+)@${appsDomain}".r
     val groupPattern = s"GROUP_(.+)@${appsDomain}".r
 
@@ -452,10 +467,10 @@ class HttpGoogleServicesDAO(
       membersOption match {
         case None => None
         case Some(emails) => Option(emails map {
-          case proxyPattern(subjectId) => Left(RawlsUserRef(RawlsUserSubjectId(subjectId)))
-          case groupPattern(groupName) => Right(RawlsGroupRef(RawlsGroupName(groupName)))
-          case other => throw new RawlsException(s"Group member is neither a proxy or sub group: [$other]")
-        } toSet)
+          case email@proxyPattern(subjectId) => email -> Option(Left(RawlsUserRef(RawlsUserSubjectId(subjectId))))
+          case email@groupPattern(groupName) => email -> Option(Right(RawlsGroupRef(RawlsGroupName(groupName))))
+          case email => email -> None
+        } toMap)
       }
     }
   }

@@ -235,6 +235,12 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
+case class WorkspaceInvite(workspaceNamespace: String,
+                           workspaceName: String,
+                           userEmail: String,
+                           originSubjectId: String,
+                           accessLevel: WorkspaceAccessLevel)
+
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
 case class BucketUsageResponse(usageInBytes: BigInt)

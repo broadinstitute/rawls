@@ -80,4 +80,52 @@ class RawlsUserComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       runAndWait(rawlsUserQuery.countUsers())
     }
   }
+
+  it should "list groups user belongs to" in withEmptyTestDatabase {
+    val subjId1 = RawlsUserSubjectId("Subject Number One")
+    val email1 = RawlsUserEmail("email@one-direction.net")
+    val user1 = RawlsUser(subjId1, email1)
+
+    val subjId2 = RawlsUserSubjectId("A Second Subject")
+    val email2 = RawlsUserEmail("two.emails@are.better.than.one")
+    val user2 = RawlsUser(subjId2, email2)
+
+    val subjId3 = RawlsUserSubjectId("A Third Subject")
+    val email3 = RawlsUserEmail("three.emails@are.better.than.two")
+    val user3 = RawlsUser(subjId3, email3)
+
+
+    /* Group structure built below
+     *
+     * G5 - G3 - G2 - G1 - U1
+     *            \- U2
+     *
+     * G4 - G1 - U1
+     */
+    val group1 = makeRawlsGroup("Group One", Set(user1))
+    val group2 = makeRawlsGroup("Group Two", Set(user2)).copy(subGroups = Set(group1))
+    val group3 = makeRawlsGroup("Group Three", Set.empty).copy(subGroups = Set(group2))
+    val group4 = makeRawlsGroup("Group Four", Set.empty).copy(subGroups = Set(group1))
+    val group5 = makeRawlsGroup("Group Five", Set.empty).copy(subGroups = Set(group3))
+
+
+
+    runAndWait(rawlsUserQuery.save(user1))
+    runAndWait(rawlsUserQuery.save(user2))
+    runAndWait(rawlsGroupQuery.save(group1))
+    runAndWait(rawlsGroupQuery.save(group2))
+    runAndWait(rawlsGroupQuery.save(group3))
+    runAndWait(rawlsGroupQuery.save(group4))
+    runAndWait(rawlsGroupQuery.save(group5))
+
+    assertResult(Set(RawlsGroupRef(RawlsGroupName("Group Two")),RawlsGroupRef(RawlsGroupName("Group Three")),RawlsGroupRef(RawlsGroupName("Group Five")))) {
+      runAndWait(rawlsGroupQuery.listGroupsForUser(user2))
+    }
+    
+    assertResult(Set()) {
+      runAndWait(rawlsGroupQuery.listGroupsForUser(user3))
+    }
+  }
+
+
 }

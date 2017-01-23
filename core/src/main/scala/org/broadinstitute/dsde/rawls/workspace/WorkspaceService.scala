@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -49,7 +50,7 @@ object WorkspaceService {
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
-  case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]) extends WorkspaceServiceMessage
+  case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UnlockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CheckBucketReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -123,7 +124,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
-    case UpdateACL(workspaceName, aclUpdates) => pipe(updateACL(workspaceName, aclUpdates)) to sender
+    case UpdateACL(workspaceName, aclUpdates, inviteUsersNotFound) => pipe(updateACL(workspaceName, aclUpdates, inviteUsersNotFound)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
     case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
     case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
@@ -282,6 +283,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
         _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
 
         // Delete groups
         _ <- DBIO.seq(groupRefsToRemove.map { group => dataAccess.rawlsGroupQuery.delete(group) }.toSeq: _*)
@@ -428,10 +430,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
-          dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).map { emailsAndAccess =>
-            // toMap below will drop duplicate keys, keeping the last entry only
-            // sort by access level to make sure higher access levels remain in the resulting map
-            RequestComplete(StatusCodes.OK, emailsAndAccess.sortBy { case (_, accessLevel) => accessLevel }.toMap)
+          dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).flatMap { emailsAndAccess =>
+            dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
+              // toMap below will drop duplicate keys, keeping the last entry only
+              // sort by access level to make sure higher access levels remain in the resulting map
+              val granted = emailsAndAccess.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, false)}
+              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true)}
+
+              RequestComplete(StatusCodes.OK, WorkspaceACL((granted ++ pending).toMap))
+            }
           }
         }
       }
@@ -444,7 +451,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    *                   Seq, use NoAccess to remove an entry, all other preexisting accesses remain unchanged
    * @return
    */
-  def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate]): Future[PerRequestMessage] = {
+  def updateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean): Future[PerRequestMessage] = {
 
     import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 
@@ -456,31 +463,63 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+    def getExistingWorkspaceInvites(workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { pairs =>
+            pairs.map(pair => WorkspaceACLUpdate(pair._1, pair._2))
+          }
+        }
+      }
+    }
+
+    def deleteWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          val removals = invites.filter(_.accessLevel == WorkspaceAccessLevels.NoAccess)
+          val dedupedRemovals = removals.filter(update => existingInvites.map(_.email).contains(update.email))
+          DBIO.sequence(dedupedRemovals.map(removal => dataAccess.workspaceQuery.removeInvite(workspaceContext.workspaceId, removal.email))) map { _ =>
+            dedupedRemovals
+          }
+        }
+      }
+    }
+
+    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel)))
+          DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
+        }
+      }
+    }
+
+    def getUsersUpdatedResponse(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], WorkspaceAccessLevel], invitesUpdated: Seq[WorkspaceACLUpdate], emailsNotFound: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate]): WorkspaceACLUpdateResponseList = {
+      val usersUpdated = actualChangesToMake.map {
+        case (Left(userRef), accessLevel) => WorkspaceACLUpdateResponse(userRef.userSubjectId.value, accessLevel)
+        case (Right(groupRef), accessLevel) => WorkspaceACLUpdateResponse(groupRef.groupName.value, accessLevel)
+      }.toSeq
+
+      val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
+
+      WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, usersNotFound)
+    }
+
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
     for {
       (overwriteGroupMessages, emailsNotFound, actualChangesToMake) <- overwriteGroupMessagesFuture
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
+      existingInvites <- getExistingWorkspaceInvites(workspaceName)
+      deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
+      savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else {
+        val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
+        saveWorkspaceInvites(invitesToUpdate, existingInvites, workspaceName)
+      }
     } yield {
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
-          val emailNotFoundReports = emailsNotFound.map( email => ErrorReport( StatusCodes.NotFound, email ) )
-
-          if (emailNotFoundReports.isEmpty) {
-            val changesMade = actualChangesToMake.map { case (member, accessLevel) =>
-              member match {
-                case Left(userRef) => WorkspaceACLUpdate(userRef.userSubjectId.value, accessLevel)
-                case Right(groupRef) => WorkspaceACLUpdate(groupRef.groupName.value, accessLevel)
-              }
-            }.toList
-            RequestComplete(StatusCodes.OK, changesMade)
-          } else {
-            //this is a case where we don't want to rollback the transaction in the event of getting an error.
-            //we will process the emails that are valid, and report any others as invalid
-            RequestComplete( ErrorReport(StatusCodes.NotFound, s"Couldn't find some users/groups by email", emailNotFoundReports) )
-          }
-
+          RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
         case otherwise => otherwise
-
       }.reduce { (prior, next) =>
         // this reduce will propagate the first non-NoContent (i.e. error) response
         prior match {
@@ -499,12 +538,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[String], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
     } yield {
-      val emailsNotFound = aclUpdates.map(_.email).diff(refsToUpdateByEmail.keySet.toSeq)
+      val emailsNotFound = aclUpdates.filterNot(aclChange => refsToUpdateByEmail.keySet.contains(aclChange.email))
 
       // match up elements of aclUpdates and refsToUpdateByEmail ignoring unfound emails
       val refsToUpdateAndAccessLevel = aclUpdates.map { aclUpdate => refsToUpdateByEmail.get(aclUpdate.email) -> aclUpdate.accessLevel }.collect {
@@ -1077,7 +1116,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
-
+          import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
           DBIO.from(methodRepoDAO.postMethodConfig(
             methodRepoQuery.methodRepoNamespace,
             methodRepoQuery.methodRepoName,
@@ -1171,8 +1210,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows ++ workflowFailures,
-          status = SubmissionStatuses.Submitted,
-          callCache = submissionRequest.callCache
+          status = SubmissionStatuses.Submitted
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>

@@ -49,6 +49,7 @@ object UserService {
   case class AdminAddToLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case class AdminRemoveFromLDAP(userSubjectId: RawlsUserSubjectId) extends UserServiceMessage
   case object AdminListUsers extends UserServiceMessage
+  case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
@@ -103,6 +104,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminAddToLDAP(userSubjectId) => asFCAdmin { addToLDAP(userSubjectId) } pipeTo sender
     case AdminRemoveFromLDAP(userSubjectId) => asFCAdmin { removeFromLDAP(userSubjectId) } pipeTo sender
     case AdminListUsers => asFCAdmin { listUsers() } pipeTo sender
+    case ListGroupsForUser(userEmail) => listGroupsForUser(userEmail) pipeTo sender
     case GetUserGroup(groupRef) => getUserGroup(groupRef) pipeTo sender
 
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
@@ -171,18 +173,40 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     // if there is any error, may leave user in weird state which can be seen with getUserStatus
     // retrying this call will retry the failures, failures due to already created groups/entries are ok
-    handleFutures(Future.sequence(Seq(
-      toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
-      toFutureTry(for {
+    handleFutures(
+      Future.sequence(Seq(
+        toFutureTry(gcsDAO.createProxyGroup(user) flatMap( _ => gcsDAO.addUserToProxyGroup(user))),
+        toFutureTry(for {
         // these things need to be done in order
-        _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
-        _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
-        _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
-      } yield ()),
-      toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
+          _ <- dataSource.inTransaction { dataAccess => dataAccess.rawlsUserQuery.save(user) }
+          _ <- dataSource.inTransaction { dataAccess => getOrCreateAllUsersGroup(dataAccess) }
+          _ <- updateGroupMembership(allUsersGroupRef, addUsers = Set(user))
+        } yield ()),
+        toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
-    )))(_ => RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
+      )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ =>
+      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
     )
+  }
+
+  def turnInvitesIntoRealAccess(user: RawlsUser) = {
+    val groupRefs = dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.findWorkspaceInvitesForUser(user.userEmail).flatMap { invites =>
+        DBIO.sequence(invites.map { case (workspaceName, accessLevel) =>
+          dataAccess.workspaceQuery.loadAccessGroup(workspaceName, accessLevel)
+        })
+      }
+    }
+
+    groupRefs.flatMap { refs =>
+      Future.sequence(refs.map { ref =>
+        updateGroupMembers(ref, RawlsGroupMemberList(userSubjectIds = Option(Seq(user.userSubjectId.value))), RawlsGroupMemberList())
+      })
+    } flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.deleteWorkspaceInvitesForUser(user.userEmail)
+      }
+    }
   }
 
   import spray.json.DefaultJsonProtocol._
@@ -239,6 +263,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }
 
     )))(statuses => RequestComplete(UserStatus(user, statuses.toMap)), handleException("Error checking if a user is enabled"))
+  }
+
+  def listGroupsForUser(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withUser(userEmail, dataAccess) { user =>
+        for {
+          groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
+        } yield {
+          groups map {ref => ref.groupName.value}
+        }
+      }
+    } map(RequestComplete(_))
   }
 
   def enableUser(userRef: RawlsUserRef): Future[PerRequestMessage] = {
@@ -668,17 +704,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       }.toSeq)
     }
 
-    def toSyncReportItem(operation: String, member: Either[RawlsUser, RawlsGroup], result: Try[Unit]) = {
+    def toSyncReportItem(operation: String, email: String, result: Try[Unit]) = {
       SyncReportItem(
         operation,
-        member match {
-          case Left(user) => Option(user)
-          case _ => None
-        },
-        member match {
-          case Right(group) => Option(group.toRawlsGroupShort)
-          case _ => None
-        },
+        email,
         result match {
           case Success(_) => None
           case Failure(t) => Option(ErrorReport(t))
@@ -687,22 +716,29 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
 
     DBIO.from(gcsDAO.listGroupMembers(group)) flatMap {
-      case None => DBIO.from(gcsDAO.createGoogleGroup(group) map (_ => Seq.empty[Either[RawlsUserRef, RawlsGroupRef]]))
+      case None => DBIO.from(gcsDAO.createGoogleGroup(group) map (_ => Map.empty[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]))
       case Some(members) => DBIO.successful(members)
-    } flatMap { members =>
+    } flatMap { membersByEmail =>
 
-      val toRemove = members.toSet -- group.users.map(Left(_)) -- group.subGroups.map(Right(_))
-      val removeFutures = loadRefs(toRemove) flatMap { removeMembers =>
-        DBIO.sequence(removeMembers map { removeMember =>
-          DBIO.from(toFutureTry(gcsDAO.removeMemberFromGoogleGroup(group, removeMember)).map(toSyncReportItem("removed", removeMember, _)))
-        })
-      }
+      val knownEmailsByMember = membersByEmail.collect { case (email, Some(member)) => (member, email) }
+      val unknownEmails = membersByEmail.collect { case (email, None) => email }
+
+      val toRemove = knownEmailsByMember.keySet -- group.users.map(Left(_)) -- group.subGroups.map(Right(_))
+      val emailsToRemove = unknownEmails ++ toRemove.map(knownEmailsByMember)
+      val removeFutures = DBIO.sequence(emailsToRemove map { removeMember =>
+        DBIO.from(toFutureTry(gcsDAO.removeEmailFromGoogleGroup(group.groupEmail.value, removeMember)).map(toSyncReportItem("removed", removeMember, _)))
+      })
+
 
       val realMembers: Set[Either[RawlsUserRef, RawlsGroupRef]] = group.users.map(Left(_)) ++ group.subGroups.map(Right(_))
-      val toAdd = realMembers -- members
+      val toAdd = realMembers -- knownEmailsByMember.keySet
       val addFutures = loadRefs(toAdd) flatMap { addMembers =>
         DBIO.sequence(addMembers map { addMember =>
-          DBIO.from(toFutureTry(gcsDAO.addMemberToGoogleGroup(group, addMember)).map(toSyncReportItem("added", addMember, _)))
+          val memberEmail = addMember match {
+            case Left(user) => user.userEmail.value
+            case Right(subGroup) => subGroup.groupEmail.value
+          }
+          DBIO.from(toFutureTry(gcsDAO.addMemberToGoogleGroup(group, addMember)).map(toSyncReportItem("added", memberEmail, _)))
         })
       }
 
