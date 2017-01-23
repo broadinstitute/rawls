@@ -1117,6 +1117,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
+    import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
@@ -1358,7 +1359,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, dataAccess)
         }
       }

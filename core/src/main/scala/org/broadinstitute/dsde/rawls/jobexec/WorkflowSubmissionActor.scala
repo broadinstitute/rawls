@@ -6,23 +6,18 @@ import akka.actor._
 import akka.pattern._
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, MethodWiths}
-import _root_.slick.dbio.DBIOAction
-import _root_.slick.dbio.Effect.{Read, Write}
-import org.joda.time.DateTime
-import spray.http.{OAuth2BearerToken, StatusCodes}
-import spray.json._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
-import spray.httpx.SprayJsonSupport._
+import spray.json._
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future}
 
 
 object WorkflowSubmissionActor {
@@ -141,7 +136,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject) = {
+  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject, callCache: Boolean) = {
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
@@ -149,7 +144,8 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       token,
       billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
-      runtimeOptions
+      runtimeOptions,
+      callCache
     )
   }
 
@@ -215,7 +211,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
 
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, userCredentials.getRefreshToken, billingProject)
+        val wfOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, userCredentials.getRefreshToken, billingProject, submissionRec.callCache)
 
         val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {
