@@ -425,7 +425,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+  def getACL(workspaceName: WorkspaceName): Future[PerRequestMessage] = {
+    import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
@@ -433,8 +434,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
-              val granted = emailsAndAccess.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, false)}
-              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true)}
+              val granted = emailsAndAccess.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, false) }
+              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true) }
 
               RequestComplete(StatusCodes.OK, WorkspaceACL((granted ++ pending).toMap))
             }
@@ -442,6 +443,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+  }
 
   /**
    * updates acls for a workspace
@@ -819,32 +821,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] =
+  def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[PerRequestMessage] = {
+    import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
-            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
-              //parsing failure
-              case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
-              case Success(valuesByEntity) =>
-                if (valuesByEntity.size != 1) {
-                  //wrong number of entities?!
-                  throw new RawlsException(s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead")
-                } else {
-                  assert(valuesByEntity.head._1 == entityName)
-                  valuesByEntity.head match {
-                    case (_, Success(result)) => RequestComplete(StatusCodes.OK, result.toSeq)
-                    case (_, Failure(regret)) =>
-                      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
+            evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity =>
+              tryValuesByEntity match {
+                //parsing failure
+                case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
+                case Success(valuesByEntity) =>
+                  if (valuesByEntity.size != 1) {
+                    //wrong number of entities?!
+                    throw new RawlsException(s"Expression parsing should have returned a single entity for ${entityType}/$entityName $expression, but returned ${valuesByEntity.size} entities instead")
+                  } else {
+                    assert(valuesByEntity.head._1 == entityName)
+                    valuesByEntity.head match {
+                      case (_, Success(result)) => RequestComplete(StatusCodes.OK, result.toSeq)
+                      case (_, Failure(regret)) =>
+                        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "Unable to evaluate expression '${expression}' on ${entityType}/${entityName} in ${workspaceName}", ErrorReport(regret)))
+                    }
                   }
-                }
               }
             }
           }
         }
       }
     }
+  }
 
   /**
    * Applies the sequence of operations in order to the entity.
@@ -1345,8 +1350,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def listAllActiveSubmissions() = {
-    RequestComplete(StatusCodes.OK, new ActiveSubmission("","", new Submission("", new DateTime(1), new RawlsUserRef(new RawlsUserSubjectId("id")),"","",
-      new AttributeEntityReference("",""), Seq(),SubmissionStatuses.Done, false)))
     dataSource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.listAllActiveSubmissions().map(RequestComplete(StatusCodes.OK, _))
     }
