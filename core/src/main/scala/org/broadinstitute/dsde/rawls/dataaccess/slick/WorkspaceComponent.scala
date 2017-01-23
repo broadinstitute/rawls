@@ -567,15 +567,23 @@ trait WorkspaceComponent {
         (subGroup.childGroupName, access.accessLevel)
       }
 
-      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case (userInfo, permission) => (userInfo._1, userInfo._2, permission.isDefined)}
-      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case (groupInfo, permission) => (groupInfo._1, groupInfo._2, permission.isDefined)}
+      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case (userInfo, permission) =>
+        (userInfo._1, userInfo._2, permission.isDefined)
+      }
+      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case (groupInfo, permission) =>
+        (groupInfo._1, groupInfo._2, permission.isDefined)
+      }
 
       for {
         users <- usersWithSharePermission.result.map {
-          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))), (WorkspaceAccessLevels.withName(accessLevel), if(canShare) Option(true) else None)) }
+          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))),
+            (WorkspaceAccessLevels.withName(accessLevel),
+              if((WorkspaceAccessLevels.withName(accessLevel) >= WorkspaceAccessLevels.Owner) || canShare)  Option(true) else Option(false))) }
         }
         subGroups <- groupsWithSharePermission.result.map {
-          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))), (WorkspaceAccessLevels.withName(accessLevel), if(canShare) Option(true) else None)) }
+          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))),
+            (WorkspaceAccessLevels.withName(accessLevel),
+              if((WorkspaceAccessLevels.withName(accessLevel) >= WorkspaceAccessLevels.Owner) || canShare) Option(true) else Option(false))) }
         }
       } yield {
         (users ++ subGroups).toSet
