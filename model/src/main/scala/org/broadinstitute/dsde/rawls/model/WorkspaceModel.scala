@@ -228,10 +228,15 @@ case class MethodRepoConfigurationExport(
 case class ConflictingEntities(conflicts: Seq[String])
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
-                                 canShare: Boolean,
                                  workspace: Workspace,
                                  workspaceSubmissionStats: WorkspaceSubmissionStats,
                                  owners: Seq[String])
+
+case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
+                             canShare: Boolean,
+                             workspace: Workspace,
+                             workspaceSubmissionStats: WorkspaceSubmissionStats,
+                             owners: Seq[String])
 
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
@@ -383,7 +388,9 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat5(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
+
+  implicit val WorkspaceResponseFormat = jsonFormat5(WorkspaceResponse)
 
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
 

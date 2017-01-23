@@ -203,7 +203,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
                 owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
               } yield {
-                RequestComplete(StatusCodes.OK, WorkspaceListResponse(accessLevel, canShare, workspaceContext.workspace, stats, owners))
+                RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, workspaceContext.workspace, stats, owners))
               }
             }
           }
@@ -368,7 +368,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
                 else WorkspaceAccessLevels.NoAccess
             }
             val wsId = UUID.fromString(workspace.workspaceId)
-            WorkspaceListResponse(trueAccessLevel, false, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty)) //TODO: canShare permissions are useless in the listWorkspaces context so change the response type instead of putting in dummy false
+            WorkspaceListResponse(trueAccessLevel, workspace, submissionSummaryStats(wsId), ownerEmails.getOrElse(wsId, Seq.empty))
           }
         }
       }
