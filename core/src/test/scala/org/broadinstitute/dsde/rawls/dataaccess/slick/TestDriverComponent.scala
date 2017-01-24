@@ -200,6 +200,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
     val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
+    val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
+    val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
     val dbGapAuthorizedUsersGroup = makeRawlsGroup("dbGapAuthorizedUsers", Set(userOwner, userReader))
@@ -276,6 +278,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     // Workspace with realms, with aborted and successful submissions
     val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+    // Standard workspace to test grant permissions
+    val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspace(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -489,7 +493,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       workspaceFailedSubmission,
       workspaceSubmittedSubmission,
       workspaceMixedSubmissions,
-      workspaceTerminatedSubmissions)
+      workspaceTerminatedSubmissions,
+      workspaceToTestGrant)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
     override def save() = {
@@ -520,7 +525,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
         saveAllWorkspacesAction,
+        workspaceQuery.updateUserSharePermissions(workspaceToTestGrantId, Map(RawlsUserRef(userWriter.userSubjectId) -> Some(true))),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),

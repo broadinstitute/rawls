@@ -18,7 +18,6 @@
             CREATE TABLE `WORKSPACE_GROUP_SHARE` (
                 `workspace_id` binary(16) NOT NULL,
                 `group_name` varchar(254) NOT NULL,
-                `can_share` bit(1) NULL DEFAULT FALSE,
                 PRIMARY KEY (`group_name`, `workspace_id`),
                 CONSTRAINT `FK_GROUP_SHARE_PERMS_WS` FOREIGN KEY (`workspace_id`) REFERENCES `WORKSPACE` (`ID`) ON DELETE NO ACTION ON UPDATE NO ACTION,
                 CONSTRAINT `FK_GROUP_SHARE_PERMS_USER` FOREIGN KEY (`group_name`) REFERENCES `GROUP` (`NAME`) ON DELETE NO ACTION ON UPDATE NO ACTION

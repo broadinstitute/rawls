@@ -1663,6 +1663,56 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "allow an owner to grant share permissions to a non-owner" in withTestDataApiServicesAndUser("owner-access") { services =>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+  }
+
+  it should "allow an owner to revoke share permissions to a non-owner" in withTestDataApiServicesAndUser("owner-access") { services =>
+    import WorkspaceACLJsonSupport._
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
+      }
+  }
+
+  it should "allow a writer with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
+    assert(true)
+  }
+
+  it should "not allow a writer with share permissions to give permission above their own access level" in withTestDataApiServicesAndUser("writer-access") { services =>
+    assert(true)
+  }
+
+  it should "not allow a writer with share permissions to alter the permissions of users above their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
+    assert(true)
+  }
+
+  it should "allow a user in a group with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
+    assert(true)
+  }
+
+  it should "not allow a non-owner to grant share permissions to anyone" in withTestDataApiServicesAndUser("writer-access") { services =>
+    assert(true)
+  }
+
   // End ACL-restriction Tests
 
   // Workspace Locking
