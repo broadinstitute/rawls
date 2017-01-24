@@ -268,18 +268,24 @@ trait WorkspaceComponent {
       findWorkspaceInvitesQuery(workspaceId).delete
     }
 
-    def updateUserSharePermissions(workspaceId: UUID, users: Map[RawlsUserRef, Option[Boolean]]) = {
-      val (usersToGrant, usersToRevoke) = users.filter { case (_, canShare) => canShare.isDefined }.map{ case (user, canShare) => user -> canShare.get }.partition(_._2)
-
-      (workspaceUserShareQuery ++= usersToGrant.map { case (userRef, _) => WorkspaceUserShareRecord(workspaceId, userRef.userSubjectId.value) }) andThen
-        workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSet(usersToRevoke.map(_._1.userSubjectId.value))).delete
+    def insertUserSharePermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
+      val recordsToInsert = userRefs.map(userRef => WorkspaceUserShareRecord(workspaceId, userRef.userSubjectId.value))
+      (workspaceUserShareQuery ++= recordsToInsert)
     }
 
-    def updateGroupSharePermissions(workspaceId: UUID, groups: Map[RawlsGroupRef, Option[Boolean]]) = {
-      val (groupsToGrant, groupsToRevoke) = groups.filter { case (_, canShare) => canShare.isDefined }.map{ case (group, canShare) => group -> canShare.get }.partition(_._2)
+    def insertGroupSharePermissions(workspaceId: UUID, groupRefs: Seq[RawlsGroupRef]) = {
+      val recordsToInsert = groupRefs.map(groupRef => WorkspaceGroupShareRecord(workspaceId, groupRef.groupName.value))
+      (workspaceGroupShareQuery ++= recordsToInsert)
+    }
 
-      (workspaceGroupShareQuery ++= groupsToGrant.map { case (groupRef, _) => WorkspaceGroupShareRecord(workspaceId, groupRef.groupName.value) }) andThen
-        workspaceGroupShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSet(groupsToRevoke.map(_._1.groupName.value))).delete
+    def deleteUserSharePermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
+      val usersToRemove = userRefs.map(_.userSubjectId.value)
+      (workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSet(usersToRemove))).delete
+    }
+
+    def deleteGroupSharePermissions(workspaceId: UUID, groupRefs: Seq[RawlsGroupRef]) = {
+      val groupsToRemove = groupRefs.map(_.groupName.value)
+      (workspaceGroupShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSet(groupsToRemove))).delete
     }
 
     def deleteWorkspaceSharePermissions(workspaceId: UUID) = {
