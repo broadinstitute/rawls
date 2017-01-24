@@ -1216,7 +1216,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows ++ workflowFailures,
           status = SubmissionStatuses.Submitted,
-          callCache = submissionRequest.callCache
+          readFromCache = submissionRequest.readFromCache
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>

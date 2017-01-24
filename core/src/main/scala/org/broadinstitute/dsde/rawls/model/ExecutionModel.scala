@@ -24,7 +24,7 @@ case class SubmissionRequest(
   entityType: String,
   entityName: String,
   expression: Option[String],
-  callCache: Boolean
+  readFromCache: Boolean
 )
 
 // Cromwell's response to workflow submission
@@ -101,7 +101,7 @@ case class Submission(
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
-  callCache: Boolean
+  readFromCache: Boolean
 )
 
 case class SubmissionStatusResponse(
@@ -126,9 +126,9 @@ case class SubmissionListResponse(
   submissionEntity: AttributeEntityReference,
   status: SubmissionStatus,
   workflowStatuses: Map[String, Int],
-  callCache: Boolean
+  readFromCache: Boolean
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.callCache)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.readFromCache)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config

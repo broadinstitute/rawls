@@ -136,7 +136,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
   }
 
-  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject, callCache: Boolean) = {
+  def buildWorkflowOpts(workspace: WorkspaceRecord, submissionId: UUID, user: RawlsUser, token: String, billingProject: RawlsBillingProject, readFromCache: Boolean) = {
     ExecutionServiceWorkflowOptions(
       s"gs://${workspace.bucketName}/${submissionId}",
       workspace.namespace,
@@ -145,7 +145,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       billingProject.cromwellAuthBucketUrl,
       s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
       runtimeOptions,
-      callCache
+      readFromCache
     )
   }
 
@@ -211,7 +211,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         wdl <- getWdl(methodConfig, userCredentials)
       } yield {
 
-        val wfOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, userCredentials.getRefreshToken, billingProject, submissionRec.callCache)
+        val wfOpts = buildWorkflowOpts(workspaceRec, submissionId, submitter, userCredentials.getRefreshToken, billingProject, submissionRec.readFromCache)
 
         val wfInputsBatch = workflowBatch map { wf =>
           val methodProps = wf.inputResolutions map {

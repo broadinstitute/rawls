@@ -22,7 +22,7 @@ case class SubmissionRecord(id: UUID,
                             methodConfigurationId: Long,
                             submissionEntityId: Long,
                             status: String,
-                            callCache: Boolean
+                            readFromCache: Boolean
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -52,9 +52,9 @@ trait SubmissionComponent {
     def methodConfigurationId = column[Long]("METHOD_CONFIG_ID")
     def submissionEntityId = column[Long]("ENTITY_ID")
     def status = column[String]("STATUS", O.Length(32))
-    def callCache = column[Boolean]("CALL_CACHE")
+    def readFromCache = column[Boolean]("READ_FROM_CACHE")
 
-    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, callCache) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
+    def * = (id, workspaceId, submissionDate, submitterId, methodConfigurationId, submissionEntityId, status, readFromCache) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def submitter = foreignKey("FK_SUB_SUBMITTER", submitterId, rawlsUserQuery)(_.userSubjectId)
@@ -350,7 +350,7 @@ trait SubmissionComponent {
         configId,
         entityId,
         submission.status.toString,
-        submission.callCache)
+        submission.readFromCache)
     }
 
     private def unmarshalSubmission(submissionRec: SubmissionRecord, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): Submission = {
@@ -363,7 +363,7 @@ trait SubmissionComponent {
         entity,
         workflows.toList.sortBy(wf => wf.workflowEntity.entityName),
         SubmissionStatuses.withName(submissionRec.status),
-        submissionRec.callCache)
+        submissionRec.readFromCache)
     }
 
     private def unmarshalActiveSubmission(submissionRec: SubmissionRecord, workspace: Workspace, config: MethodConfiguration, entity: AttributeEntityReference, workflows: Seq[Workflow]): ActiveSubmission = {

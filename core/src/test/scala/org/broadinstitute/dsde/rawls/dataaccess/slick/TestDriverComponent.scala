@@ -79,7 +79,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
   def createTestSubmission(workspace: Workspace, methodConfig: MethodConfiguration, submissionEntity: Entity, rawlsUserRef: RawlsUserRef
                            , workflowEntities: Seq[Entity], inputResolutions: Map[Entity, Seq[SubmissionValidationValue]]
                            , failedWorkflowEntities: Seq[Entity], failedInputResolutions: Map[Entity, Seq[SubmissionValidationValue]],
-                           status: WorkflowStatus = WorkflowStatuses.Submitted, callCache: Boolean = false): Submission = {
+                           status: WorkflowStatus = WorkflowStatuses.Submitted, readFromCache: Boolean = false): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if(status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
@@ -87,7 +87,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     }
 
     Submission(UUID.randomUUID.toString, testDate, rawlsUserRef, methodConfig.namespace, methodConfig.name, submissionEntity.toReference,
-      workflows, SubmissionStatuses.Submitted, callCache)
+      workflows, SubmissionStatuses.Submitted, readFromCache)
   }
 
   def generateBillingGroups(projectName: RawlsBillingProjectName, users: Map[ProjectRoles.ProjectRole, Set[RawlsUserRef]], subGroups: Map[ProjectRoles.ProjectRole, Set[RawlsGroupRef]]): Map[ProjectRoles.ProjectRole, RawlsGroup] = {
