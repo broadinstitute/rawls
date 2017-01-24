@@ -443,12 +443,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
-              val grantedUsers = emailsAndAccess._1.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
-              val grantedGroups = emailsAndAccess._2.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
-
+              val granted = emailsAndAccess.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
               val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
 
-              RequestComplete(StatusCodes.OK, WorkspaceACL((grantedUsers ++ grantedGroups ++ pending).toMap))
+              RequestComplete(StatusCodes.OK, WorkspaceACL((granted ++ pending).toMap))
             }
           }
         }
@@ -575,17 +573,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         case (Some(ref), accessLevel, canShare) => ref -> (accessLevel, canShare)
       }.toSet
 
-      val refsToUpdateAndSharePermission = refsToUpdate.map(ref => ref._1 -> ref._2._2)
-      val refsToUpdateAndAccessLevel = refsToUpdate.map(ref => ref._1 -> ref._2._1)
+      val refsToUpdateAndSharePermission = refsToUpdate.map { case (ref, (_, canShare)) => ref -> canShare }
+      val refsToUpdateAndAccessLevel = refsToUpdate.map { case (ref, (accessLevel, _)) => ref -> accessLevel }
 
-      val existingRefsAndSharePermission = existingRefsAndLevels.map(ref => ref._1 -> ref._2._2)
-      val existingRefsAndAccessLevel = existingRefsAndLevels.map(ref => ref._1 -> ref._2._1)
+      val existingRefsAndSharePermission = existingRefsAndLevels.map { case (ref, (_, canShare))  => ref -> canShare }
+      val existingRefsAndAccessLevel = existingRefsAndLevels.map { case (ref, (accessLevel, _)) => ref -> accessLevel }
 
       // remove everything that is not changing
-      val actualChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndAccessLevel)
-      val actualShareChangesToMake = refsToUpdateAndSharePermission.filter(_._2.isDefined).diff(existingRefsAndSharePermission)
+      val actualAccessChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndAccessLevel)
+      val actualShareChangesToMake = refsToUpdateAndSharePermission.filter{ case (_, canShare) => canShare.isDefined }
+        .diff(existingRefsAndSharePermission.map { case (ref, canShare) => ref -> Option(canShare)})
 
-      val membersWithTooManyEntries = actualChangesToMake.groupBy {
+      val membersWithTooManyEntries = actualAccessChangesToMake.groupBy {
         case (member, _) => member
       }.collect {
         case (member, entries) if entries.size > 1 => refsToUpdateByEmail.collect {
@@ -597,25 +596,26 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Only 1 entry per email allowed. Emails with more than one entry: $membersWithTooManyEntries"))
       }
 
-      val membersWithHigherExistingAccessLevelThanGranter = existingRefsAndLevels.filterNot(_._2._1 == WorkspaceAccessLevels.ProjectOwner).filter(member => actualChangesToMake.map(_._1).contains(member._1)).filter(_._2._1 > userAccessLevel)
+      val membersWithHigherExistingAccessLevelThanGranter = existingRefsAndLevels.filterNot { case (_, (accessLevel, _)) => accessLevel == WorkspaceAccessLevels.ProjectOwner }
+        .filter { case (member, _) => actualAccessChangesToMake.map { case(ref, _) => ref }.contains(member) }.filter { case (_, (accessLevel, _)) => accessLevel > userAccessLevel }
 
       if (membersWithHigherExistingAccessLevelThanGranter.nonEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself. Please correct these entries: $membersWithHigherExistingAccessLevelThanGranter"))
       }
 
-      val membersWithHigherAccessLevelThanGranter = actualChangesToMake.filter(_._2 > userAccessLevel)
+      val membersWithHigherAccessLevelThanGranter = actualAccessChangesToMake.filter { case (_, accessLevel) => accessLevel > userAccessLevel }
 
       if (membersWithHigherAccessLevelThanGranter.nonEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant higher access than your own access level. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
 
-      val membersWithSharePermission = actualShareChangesToMake.filter(_._2.isDefined)
+      val membersWithSharePermission = actualShareChangesToMake.filter { case (_, canShare) => canShare.isDefined }
 
       if(membersWithSharePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
       }
 
-      val actualChangesToMakeByMember = actualChangesToMake.toMap
+      val actualChangesToMakeByMember = actualAccessChangesToMake.toMap
       val actualShareChangesToMakeByMember = actualShareChangesToMake.toMap
 
       // some security checks
