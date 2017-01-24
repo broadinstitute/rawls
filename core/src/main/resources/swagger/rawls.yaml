@@ -3042,7 +3042,7 @@ paths:
           schema:
             type: array
             items:
-              $ref: '#/definitions/WorkspaceListResponse'
+              $ref: '#/definitions/WorkspaceResponse'
         '500':
           description: Rawls Internal Error
           schema:
@@ -4493,6 +4493,21 @@ definitions:
         type: date-time
         description: When the event finished
 
+  WorkspaceResponse:
+    description: ''
+    properties:
+      accessLevel:
+        $ref: '#/definitions/WorkspaceAccessLevel'
+      canShare:
+        type: boolean
+      workspace:
+        $ref: '#/definitions/Workspace'
+      workspaceSubmissionStats:
+        $ref: '#/definitions/WorkspaceSubmissionStats'
+      owners:
+        type: array
+        items:
+          type: string
   WorkspaceListResponse:
     description: ''
     properties:
