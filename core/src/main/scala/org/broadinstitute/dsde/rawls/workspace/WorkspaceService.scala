@@ -517,16 +517,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
       val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), canShare) => userRef -> canShare }
-        .filter { case (_, canShare) => canShare.isDefined }.map{ case (user, canShare) => user -> canShare.get }.toSeq.partition(_._2)
+        .filter { case (_, canShare) => canShare.isDefined }.map{ case (user, canShare) => user -> canShare.get }.toSeq.partition { case (_, canShare) => canShare }
       val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), canShare) => groupRef -> canShare }
-        .filter { case (_, canShare) => canShare.isDefined }.map{ case (group, canShare) => group -> canShare.get }.toSeq.partition(_._2)
+        .filter { case (_, canShare) => canShare.isDefined }.map{ case (group, canShare) => group -> canShare.get }.toSeq.partition { case (_, canShare) => canShare }
 
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.insertUserSharePermissions(workspaceContext.workspaceId, usersToAdd.map(_._1)) andThen
-            dataAccess.workspaceQuery.deleteUserSharePermissions(workspaceContext.workspaceId, usersToRemove.map(_._1)) andThen
-              dataAccess.workspaceQuery.insertGroupSharePermissions(workspaceContext.workspaceId, groupsToAdd.map(_._1)) andThen
-                dataAccess.workspaceQuery.deleteGroupSharePermissions(workspaceContext.workspaceId, groupsToRemove.map(_._1))
+          dataAccess.workspaceQuery.insertUserSharePermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef } ) andThen
+            dataAccess.workspaceQuery.deleteUserSharePermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef } ) andThen
+              dataAccess.workspaceQuery.insertGroupSharePermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef } ) andThen
+                dataAccess.workspaceQuery.deleteGroupSharePermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef } )
         }
       }
     }
