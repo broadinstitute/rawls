@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
+import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -379,7 +379,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
 
       Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
-        gcsDAO.setupProject(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices), Map.empty).map(_.get)
+        gcsDAO.beginProjectSetup(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices), Map.empty).map(_.get)
       }, 6 minutes)
 
       val bucket = Await.result(gcsDAO.getBucket(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
@@ -546,4 +546,15 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       case _ => false
     }
   }
+
+//  it should "foo" in {
+//    val credential = GoogleCredential.getApplicationDefault();
+//    val cloudresourcemanagerService =
+//      new CloudResourceManager.Builder(gcsDAO.httpTransport, gcsDAO.jsonFactory, credential)
+//        .setApplicationName("Google Cloud Platform Sample")
+//        .build();
+//
+//    val execute1 = cloudresourcemanagerService.operations().get("operations/pc.2305654183227435173").execute()
+//    println(execute1)
+//  }
 }

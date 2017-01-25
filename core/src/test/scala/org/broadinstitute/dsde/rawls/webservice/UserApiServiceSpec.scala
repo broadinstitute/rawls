@@ -226,7 +226,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         override val datasource: SlickDataSource = services.dataSource
         override val projectTemplate: ProjectTemplate = null
         override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
+          override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = Future.successful(scala.util.Failure(new RuntimeException()))
         }
       }
 
@@ -281,7 +281,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.setupProject(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -310,7 +310,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.setupProject(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
 
     Put(s"/billing/${project1.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.billingRoutes) ~>
@@ -351,7 +351,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Await.result(services.gcsDAO.setupProject(project1, null, Map.empty), Duration.Inf)
+    Await.result(services.gcsDAO.beginProjectSetup(project1, null, Map.empty), Duration.Inf)
 
     Delete(s"/admin/billing/${project1.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>

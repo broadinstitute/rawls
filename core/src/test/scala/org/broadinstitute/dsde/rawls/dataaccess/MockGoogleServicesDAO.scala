@@ -6,6 +6,7 @@ import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.joda.time.DateTime
@@ -263,10 +264,15 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
     Future.successful(Some("""{"foo":"bar"}""".parseJson.asJsObject))
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit] = Future.successful(Unit)
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] =
+    Future.successful(RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, "opid", true, None))
+
+  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
+    Future.successful(rawlsBillingProjectOperation)
+  }
 
   override def deleteProject(projectName: RawlsBillingProjectName): Future[Unit] = Future.successful(Unit)
-  override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = Future.successful {
+  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = Future.successful {
     project.groups.values.foreach(group => createGoogleGroup(group))
     Try(Unit)
   }

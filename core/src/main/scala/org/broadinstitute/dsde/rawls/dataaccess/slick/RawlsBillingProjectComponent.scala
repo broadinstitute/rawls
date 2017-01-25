@@ -4,8 +4,9 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 
-case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String])
+case class RawlsBillingProjectRecord(projectName: String, cromwellAuthBucketUrl: String, creationStatus: String, billingAccount: Option[String], message: Option[String])
 case class RawlsBillingProjectGroupRecord(projectName: String, groupName: String, role: String)
+case class RawlsBillingProjectOperationRecord(projectName: String, operationName: String, operationId: String, done: Boolean, errorMessage: Option[String], api: String)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent
@@ -19,8 +20,9 @@ trait RawlsBillingProjectComponent {
     def cromwellAuthBucketUrl = column[String]("CROMWELL_BUCKET_URL", O.Length(128))
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
+    def message = column[Option[String]]("MESSAGE")
 
-    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, cromwellAuthBucketUrl, creationStatus, billingAccount, message) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
   }
 
   class RawlsBillingProjectGroupTable(tag: Tag) extends Table[RawlsBillingProjectGroupRecord](tag, "BILLING_PROJECT_GROUP") {
@@ -35,7 +37,22 @@ trait RawlsBillingProjectComponent {
     def * = (projectName, groupName, role) <> (RawlsBillingProjectGroupRecord.tupled, RawlsBillingProjectGroupRecord.unapply)
   }
 
+  class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
+    def projectName = column[String]("PROJECT_NAME", O.Length(254))
+    def operationName = column[String]("OPERATION_NAME", O.Length(254))
+    def operationId = column[String]("OPERATION_ID", O.Length(254))
+    def done = column[Boolean]("DONE")
+    def errorMessage = column[Option[String]]("ERROR_MESSAGE")
+    def api = column[String]("API")
+
+    def projectRef = foreignKey("FK_PROJECT_NAME", projectName, rawlsBillingProjectQuery)(_.projectName)
+    def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
+
+    def * = (projectName, operationName, operationId, done, errorMessage, api) <> (RawlsBillingProjectOperationRecord.tupled, RawlsBillingProjectOperationRecord.unapply)
+  }
+
   protected val rawlsBillingProjectGroupQuery = TableQuery[RawlsBillingProjectGroupTable]
+  protected val rawlsBillingProjectOperationQuery = TableQuery[RawlsBillingProjectOperationTable]
 
   private type RawlsBillingProjectQuery = Query[RawlsBillingProjectTable, RawlsBillingProjectRecord, Seq]
   private type RawlsBillingProjectGroupQuery = Query[RawlsBillingProjectGroupTable, RawlsBillingProjectGroupRecord, Seq]
@@ -55,6 +72,10 @@ trait RawlsBillingProjectComponent {
 
     def updateCreationStatus(projectNames: Seq[RawlsBillingProjectName], newStatus: CreationStatuses.CreationStatus): WriteAction[Int] = {
       filter(_.projectName inSetBind(projectNames.map(_.value))).map(_.creationStatus).update(newStatus.toString)
+    }
+
+    def updateBillingProjects(projects: Traversable[RawlsBillingProject]): WriteAction[Seq[Int]] = {
+      DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.update(marshalBillingProject(project))).toSeq)
     }
 
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] = {
@@ -161,6 +182,18 @@ trait RawlsBillingProjectComponent {
       }
     }
 
+    def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
+      (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
+    }
+
+    def updateOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Seq[Int]] = {
+      DBIO.sequence(operations.map(rec => rawlsBillingProjectOperationQuery.update(rec)))
+    }
+
+    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
+      rawlsBillingProjectOperationQuery.filter(_.projectName.inSetBind(projectNames.map(_.value))).result
+    }
+
     // does not recurse
     private def findDirectProjectUsers(projectName: RawlsBillingProjectName) = {
       for {
@@ -180,11 +213,11 @@ trait RawlsBillingProjectComponent {
     }
 
     private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value))
+      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.cromwellAuthBucketUrl, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message)
     }
 
     private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord, groups: Map[ProjectRoles.ProjectRole, RawlsGroup]): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), groups, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName))
+      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), groups, projectRecord.cromwellAuthBucketUrl, CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message)
     }
 
     private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {

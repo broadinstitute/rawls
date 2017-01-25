@@ -30,7 +30,7 @@ object RawlsGroup {
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName])
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
@@ -63,13 +63,16 @@ object CreationStatuses {
   def withName(name: String): CreationStatus = name.toLowerCase match {
     case "creating" => Creating
     case "ready" => Ready
+    case "error" => Error
     case _ => throw new RawlsException(s"invalid CreationStatus [${name}]")
   }
 
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
+  case object Error extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready)
+  val all: Set[CreationStatus] = Set(Creating, Ready, Error)
+  val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
@@ -109,7 +112,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat6(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 

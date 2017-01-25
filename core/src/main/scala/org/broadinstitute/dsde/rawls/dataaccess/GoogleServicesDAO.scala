@@ -4,6 +4,7 @@ import akka.actor.ActorRef
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.storage.model.{BucketAccessControl, Bucket}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
@@ -13,6 +14,8 @@ import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   override val errorReportSource = "google"
+
+  val CREATE_PROJECT_OPERATION = "create_project"
 
   val billingEmail: String
 
@@ -142,7 +145,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    * @param billingAccount
    * @return
    */
-  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit]
+  def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
   def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
@@ -153,7 +156,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
    *                         (note that this is not required for users because we can infer their proxy group from subject id)
    * @return
    */
-  def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]]
+  def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]]
+  def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]]
+  def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])
