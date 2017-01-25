@@ -72,8 +72,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
     for {
       updatedOperations <- Future.traverse(operations) { operation =>
         operation match {
-          case RawlsBillingProjectOperationRecord(_, _, _, true, _) => Future.successful(operation)
-          case RawlsBillingProjectOperationRecord(_, _, _, false, _) => gcsDAO.pollOperation(operation)
+          case RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => Future.successful(operation)
+          case RawlsBillingProjectOperationRecord(_, _, _, false, _, _) => gcsDAO.pollOperation(operation)
         }
       }
 
@@ -91,7 +91,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             // for some reason there are no operations, mark it as an error
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option("Internal error: no operations created")))
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None)) =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
             gcsDAO.beginProjectSetup(project, projectTemplate, groupEmailsByRef).flatMap {
               case util.Failure(t) =>
@@ -102,7 +102,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
               }
             }
 
-          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error))) =>
+          case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, Some(error), _)) =>
             // create project operation finished with an error
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option(error)))
 
@@ -118,7 +118,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done) =>
             // all operations completed but some failed
             val messages = operations.collect {
-              case RawlsBillingProjectOperationRecord(_, operationName, _, true, error) => s"Failure enabling api $operationName: ${error.getOrElse("Unknown error")}"
+              case RawlsBillingProjectOperationRecord(_, operationName, _, true, error, _) => s"Failure enabling api $operationName: ${error.getOrElse("Unknown error")}"
             }
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option(messages.mkString("[", "], [", "]"))))
         }

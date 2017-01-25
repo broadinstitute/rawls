@@ -459,7 +459,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
       billingProject <- dataSource.inTransaction { dataAccess =>
         val bucketUrl = "gs://" + bucketName
-        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
+        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None, None)
         dataAccess.rawlsBillingProjectQuery.create(billingProject)
       }
     } yield billingProject
@@ -796,7 +796,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 case None =>
                   for {
                     groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                     _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
 
                   } yield {

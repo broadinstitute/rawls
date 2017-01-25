@@ -784,7 +784,7 @@ class HttpGoogleServicesDAO(
 
   }
 
-  def toErrorMessage(message: String, code: Int): String = {
+  private def toErrorMessage(message: String, code: Int): String = {
     s"${Option(message).getOrElse("")} - code ${code}"
   }
 
@@ -890,7 +890,7 @@ class HttpGoogleServicesDAO(
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
-      - <- retryWhen500orGoogleError(() => {
+      _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(resMgr.projects().delete(projectNameString))
       })
     } yield {
@@ -914,29 +914,6 @@ class HttpGoogleServicesDAO(
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager = {
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
-  }
-
-  private def enableServiceApi(projectName: String, service: String, credential: Credential): Future[HttpResponse] = {
-    import spray.json._
-    import GoogleRequestJsonSupport._
-
-    // note that I could not find a google client library for this end point but I know how to http
-    val url = s"https://servicemanagement.googleapis.com/v1/services/$service:enable"
-    val pipeline = addHeader(Authorization(OAuth2BearerToken(credential.getAccessToken))) ~> sendReceive
-    val payload = s"""{"consumerId": "project:$projectName"}"""
-    val start = System.currentTimeMillis()
-    pipeline(Post(url, payload)).recover {
-      case t: Throwable =>
-        logger.debug(GoogleRequest("POST", url, Option(payload.parseJson), System.currentTimeMillis() - start, None, Option(ErrorReport(t))).toJson(GoogleRequestFormat).compactPrint)
-        throw t
-    } map { response =>
-      logger.debug(GoogleRequest("POST", url, Option(payload.parseJson), System.currentTimeMillis() - start, Option(response.status.intValue), None).toJson(GoogleRequestFormat).compactPrint)
-      if (response.status.isFailure) {
-        throw new GoogleServiceException(s"failure enabling service $service for project $projectName: status ${response.status}, response: ${response.entity.asString}")
-      } else {
-        response
-      }
-    }
   }
 
   private def updateBindings(bindings: Seq[Binding], template: ProjectTemplate) = {

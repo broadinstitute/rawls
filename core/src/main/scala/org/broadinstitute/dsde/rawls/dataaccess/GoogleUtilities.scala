@@ -31,7 +31,6 @@ trait GoogleUtilities extends LazyLogging with Retry {
           t.getStatusCode/100 == 5
       }
       case t: HttpResponseException => t.getStatusCode/100 == 5
-      case gse: GoogleServiceException => true
       case ioe: IOException => true
       case _ => false
     }
@@ -122,8 +121,6 @@ trait GoogleUtilities extends LazyLogging with Retry {
     val GoogleRequestFormat = jsonFormat6(GoogleRequest)
   }
 }
-
-class GoogleServiceException(message: String) extends RawlsException(message)
 
 /**
  * from https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
