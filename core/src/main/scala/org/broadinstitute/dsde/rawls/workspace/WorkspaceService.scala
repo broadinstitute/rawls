@@ -443,6 +443,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
+
               // Note: we only store share permissions in the database if a user explicitly sets them. Since owners and project owners
               // have implicit sharing permissions, we rectify that with ((accessLevel >= WorkspaceAccessLevels.Owner) || hasSharePermission) so
               // the response from getACL returns canShare = true for owners and project owners
@@ -519,10 +520,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
-      val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), canShare) => userRef -> canShare }
-        .filter { case (_, canShare) => canShare.isDefined }.map{ case (user, canShare) => user -> canShare.get }.toSeq.partition { case (_, canShare) => canShare }
-      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), canShare) => groupRef -> canShare }
-        .filter { case (_, canShare) => canShare.isDefined }.map{ case (group, canShare) => group -> canShare.get }.toSeq.partition { case (_, canShare) => canShare }
+      val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), Some(canShare)) => userRef -> canShare }.toSeq
+        .partition { case (_, canShare) => canShare }
+      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), Some(canShare)) => groupRef -> canShare }.toSeq
+        .partition { case (_, canShare) => canShare }
 
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
