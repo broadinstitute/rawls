@@ -327,13 +327,11 @@ trait WorkspaceComponent {
 
       userShareQuery.result.map(_.map { case (access, email, canShare) =>
         val accessLevel = WorkspaceAccessLevels.withName(access)
-        // Sharing is implied for owners and project owners, so the permission may not be in the DB. Rectify that here
-        (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
+        (email, accessLevel, canShare)
       }).flatMap { userResults =>
         groupShareQuery.result.map(_.map { case (access, email, canShare) =>
           val accessLevel = WorkspaceAccessLevels.withName(access)
-          // Sharing is implied for owners and project owners, so the permission may not be in the DB. Rectify that here
-          (email, accessLevel, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare))
+          (email, accessLevel, canShare)
         }).map { groupResults =>
           userResults ++ groupResults
         }

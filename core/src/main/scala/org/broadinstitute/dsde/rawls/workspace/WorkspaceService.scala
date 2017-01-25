@@ -443,7 +443,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
-              val granted = emailsAndAccess.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, canShare) }
+              val granted = emailsAndAccess.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, canShare) => email -> AccessEntry(accessLevel, false, ((accessLevel >= WorkspaceAccessLevels.Owner) || canShare)) }
               val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
 
               RequestComplete(StatusCodes.OK, WorkspaceACL((granted ++ pending).toMap))
