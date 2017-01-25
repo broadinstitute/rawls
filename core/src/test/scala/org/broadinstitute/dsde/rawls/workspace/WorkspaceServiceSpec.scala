@@ -664,7 +664,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels have been deleted
-    assertResult((Vector(),Vector())) {
+    assertResult(Vector()) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
@@ -719,7 +719,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels have been deleted
-    assertResult((Vector(),Vector())) {
+    assertResult(Vector()) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission)))
     }
 
@@ -775,7 +775,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels have been deleted
-    assertResult((Vector(),Vector())) {
+    assertResult(Vector()) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission)))
     }
 
@@ -830,7 +830,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels have been deleted
-    assertResult((Vector(),Vector())) {
+    assertResult(Vector()) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions)))
     }
 

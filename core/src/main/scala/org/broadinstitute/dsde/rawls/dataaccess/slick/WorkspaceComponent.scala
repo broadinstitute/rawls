@@ -294,8 +294,8 @@ trait WorkspaceComponent {
     }
 
     def getUserSharePermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
-      workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0) flatMap { canShare =>
-        if(canShare) DBIO.successful(canShare)
+      workspaceUserShareQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0) flatMap { hasSharePermission =>
+        if(hasSharePermission) DBIO.successful(hasSharePermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
           workspaceGroupShareQuery.filter(rec => (rec.groupName) inSet(groupNames)).countDistinct.result.map(rows => rows > 0)
@@ -325,13 +325,13 @@ trait WorkspaceComponent {
       val userShareQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case ((accessLevel, userEmail, _), shareRecord) => (accessLevel, userEmail, shareRecord.isDefined) }
       val groupShareQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupShareQuery).on(_._3 === _.groupName).map { case ((accessLevel, groupEmail, _), shareRecord) => (accessLevel, groupEmail, shareRecord.isDefined) }
 
-      userShareQuery.result.map(_.map { case (access, email, canShare) =>
+      userShareQuery.result.map(_.map { case (access, email, hasSharePermission) =>
         val accessLevel = WorkspaceAccessLevels.withName(access)
-        (email, accessLevel, canShare)
+        (email, accessLevel, hasSharePermission)
       }).flatMap { userResults =>
-        groupShareQuery.result.map(_.map { case (access, email, canShare) =>
+        groupShareQuery.result.map(_.map { case (access, email, hasSharePermission) =>
           val accessLevel = WorkspaceAccessLevels.withName(access)
-          (email, accessLevel, canShare)
+          (email, accessLevel, hasSharePermission)
         }).map { groupResults =>
           userResults ++ groupResults
         }
@@ -571,23 +571,21 @@ trait WorkspaceComponent {
         (subGroup.childGroupName, access.accessLevel)
       }
 
-      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case ((subjectId, accessLevel), permission) =>
-        (subjectId, accessLevel, permission.isDefined)
+      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case ((subjectId, accessLevel), hasSharePermission) =>
+        (subjectId, accessLevel, hasSharePermission.isDefined)
       }
-      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case ((groupName, accessLevel), permission) =>
-        (groupName, accessLevel, permission.isDefined)
+      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case ((groupName, accessLevel), hasSharePermission) =>
+        (groupName, accessLevel, hasSharePermission.isDefined)
       }
 
       for {
         users <- usersWithSharePermission.result.map {
-          _.map { case (subjectId, accessLevel, canShare) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))),
-            (WorkspaceAccessLevels.withName(accessLevel),
-              ((WorkspaceAccessLevels.withName(accessLevel) >= WorkspaceAccessLevels.Owner) || canShare))) }
+          _.map { case (subjectId, accessLevel, hasSharePermission) => (Left(RawlsUserRef(RawlsUserSubjectId(subjectId))),
+            (WorkspaceAccessLevels.withName(accessLevel), hasSharePermission)) }
         }
         subGroups <- groupsWithSharePermission.result.map {
-          _.map { case (groupName, accessLevel, canShare) => (Right(RawlsGroupRef(RawlsGroupName(groupName))),
-            (WorkspaceAccessLevels.withName(accessLevel),
-              ((WorkspaceAccessLevels.withName(accessLevel) >= WorkspaceAccessLevels.Owner) || canShare))) }
+          _.map { case (groupName, accessLevel, hasSharePermission) => (Right(RawlsGroupRef(RawlsGroupName(groupName))),
+            (WorkspaceAccessLevels.withName(accessLevel), hasSharePermission)) }
         }
       } yield {
         (users ++ subGroups).toSet
