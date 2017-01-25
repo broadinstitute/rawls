@@ -325,15 +325,13 @@ trait WorkspaceComponent {
       val userShareQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery).on(_._3 === _.userSubjectId).map { case ((accessLevel, userEmail, _), shareRecord) => (accessLevel, userEmail, shareRecord.isDefined) }
       val groupShareQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupShareQuery).on(_._3 === _.groupName).map { case ((accessLevel, groupEmail, _), shareRecord) => (accessLevel, groupEmail, shareRecord.isDefined) }
 
-      userShareQuery.result.map(_.map { case (access, email, hasSharePermission) =>
-        val accessLevel = WorkspaceAccessLevels.withName(access)
-        (email, accessLevel, hasSharePermission)
-      }).flatMap { userResults =>
-        groupShareQuery.result.map(_.map { case (access, email, hasSharePermission) =>
+      for {
+        userResults <- userShareQuery.result
+        groupResults <- groupShareQuery.result
+      } yield {
+        (userResults ++ groupResults).map { case (access, email, hasSharePermission) =>
           val accessLevel = WorkspaceAccessLevels.withName(access)
           (email, accessLevel, hasSharePermission)
-        }).map { groupResults =>
-          userResults ++ groupResults
         }
       }
     }

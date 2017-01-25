@@ -636,7 +636,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, true), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, true), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, true), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
+    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission))).toSet
     }
 
@@ -691,7 +691,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, true), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, true), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, true), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
+    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceFailedSubmission))).toSet
     }
 
@@ -747,7 +747,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, true), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, true), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, true), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
+    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceSubmittedSubmission))).toSet
     }
 
@@ -802,7 +802,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check if access levels on workspace exist
-    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, true), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, true), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, true), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
+    assertResult(Set((testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, false), (testData.userOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, false), ("project-owner-access", WorkspaceAccessLevels.ProjectOwner, false), (testData.userReader.userEmail.value,WorkspaceAccessLevels.Read, false), (testData.userWriter.userEmail.value,WorkspaceAccessLevels.Write, false))) {
       runAndWait(workspaceQuery.listEmailsAndAccessLevel(SlickWorkspaceContext(testData.workspaceMixedSubmissions))).toSet
     }
 

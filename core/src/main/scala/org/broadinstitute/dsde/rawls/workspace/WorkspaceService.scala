@@ -443,6 +443,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
+              // Note: we only store share permissions in the database if a user explicitly sets them. Since owners and project owners
+              // have implicit sharing permissions, we rectify that with ((accessLevel >= WorkspaceAccessLevels.Owner) || hasSharePermission) so
+              // the response from getACL returns canShare = true for owners and project owners
               val granted = emailsAndAccess.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, hasSharePermission) => email -> AccessEntry(accessLevel, false, ((accessLevel >= WorkspaceAccessLevels.Owner) || hasSharePermission)) }
               val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
 
