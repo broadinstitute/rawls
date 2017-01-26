@@ -8,7 +8,7 @@ case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canS
 
 case class WorkspaceACL(acl: Map[String, AccessEntry])
 
-case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean])
+case class WorkspaceACLUpdate(email: String, accessLevel: WorkspaceAccessLevel, canShare: Option[Boolean] = None)
 
 case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceAccessLevel)
 
