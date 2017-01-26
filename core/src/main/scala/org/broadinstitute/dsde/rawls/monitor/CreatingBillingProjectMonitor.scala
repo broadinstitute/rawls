@@ -96,7 +96,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
             gcsDAO.beginProjectSetup(project, projectTemplate, groupEmailsByRef).flatMap {
               case util.Failure(t) =>
                 logger.info(s"Failure creating project $project", t)
-                Future.successful(project.copy(message = Option(t.getMessage)))
+                Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))
               case Success(operations) => datasource.inTransaction { dataAccess =>
                 dataAccess.rawlsBillingProjectQuery.insertOperations(operations).map(_ => project)
               }

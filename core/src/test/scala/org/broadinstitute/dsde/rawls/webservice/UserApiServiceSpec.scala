@@ -223,15 +223,25 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      val billingProjectMonitorNotDone = new CreatingBillingProjectMonitor {
-        override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = null
-        override val gcsDAO = new MockGoogleServicesDAO("foo") {
-          override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = Future.successful(scala.util.Failure(new RuntimeException()))
-        }
+      assertResult(1) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
       }
 
-      assertResult(CheckDone(1)) { Await.result(billingProjectMonitorNotDone.checkCreatingProjects(), Duration.Inf) }
+      val billingProjectMonitor = new CreatingBillingProjectMonitor {
+        override val datasource: SlickDataSource = services.dataSource
+        override val projectTemplate: ProjectTemplate = ProjectTemplate(Map.empty, Seq("foo", "bar", "baz"))
+        override val gcsDAO = new MockGoogleServicesDAO("foo")
+      }
+
+      assertResult(CheckDone(1)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
+
+      assertResult(1) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+      }
+
+      assertResult(4) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).size
+      }
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
@@ -245,13 +255,11 @@ class UserApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-      val billingProjectMonitorDone = new CreatingBillingProjectMonitor {
-        override val datasource: SlickDataSource = services.dataSource
-        override val projectTemplate: ProjectTemplate = null
-        override val gcsDAO = services.gcsDAO
-      }
+      assertResult(CheckDone(0)) { Await.result(billingProjectMonitor.checkCreatingProjects(), Duration.Inf) }
 
-      assertResult(CheckDone(0)) { Await.result(billingProjectMonitorDone.checkCreatingProjects(), Duration.Inf) }
+      assertResult(4) {
+        runAndWait(rawlsBillingProjectQuery.loadOperationsForProjects(Seq(project1.projectName))).count(_.done)
+      }
 
       Get("/user/billing") ~>
         sealRoute(services.userRoutes) ~>
