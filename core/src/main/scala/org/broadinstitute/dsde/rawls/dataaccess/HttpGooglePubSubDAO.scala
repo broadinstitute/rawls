@@ -72,11 +72,13 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   override def publishMessages(topicName: String, messages: Seq[String]) = {
-    retryWhen500orGoogleError(() => {
-      val pubsubMessages = messages.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
-      val pubsubRequest = new PublishRequest().setMessages(pubsubMessages)
-      executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
-    })
+    Future.traverse(messages.grouped(1000)) { messageBatch =>
+      retryWhen500orGoogleError(() => {
+        val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
+        val pubsubRequest = new PublishRequest().setMessages(pubsubMessages)
+        executeGoogleRequest(getPubSubDirectory.projects().topics().publish(topicToFullPath(topicName), pubsubRequest))
+      })
+    }.map(_ => ())
   }
 
   override def acknowledgeMessages(subscriptionName: String, messages: Seq[PubSubMessage]) = {
