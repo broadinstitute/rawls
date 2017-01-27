@@ -5,6 +5,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
  */
 
 import java.io.StringReader
+import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -58,6 +59,17 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with IntegrationTes
       }
       Future.successful(GooglePubSubDAO.MessageAcknowledged)
     }, Duration.Inf)
+  }
+
+  it should "submit more than 1000 messages" in {
+    //publish a lot of messages to the topic
+    val numMessages = 2877
+    val messages = Seq.fill(numMessages)("foo")
+    Await.result(gpsDAO.publishMessages(defaultTopicName, messages), Duration.Inf)
+
+    while (Await.result(gpsDAO.withMessages(defaultSubscriptionName, numMessages) { msgs =>
+        Future.successful(GooglePubSubDAO.MessageAcknowledged)
+      }, Duration.Inf) != GooglePubSubDAO.NoMessage) {}
   }
 
   it should "gracefully handle there being no messages in the queue" in {
