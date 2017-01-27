@@ -814,7 +814,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   val userNoBilling = RawlsUser(RawlsUserSubjectId("4637649"), RawlsUserEmail("no-billing-projects@example.com"))
-  val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, userNoBilling)
+  val testDataUsers = Seq(testData.userProjectOwner, testData.userOwner, testData.userWriter, testData.userReader, testData.userReaderViaGroup, userNoBilling)
 
   it should "return 200 when listing users" in withTestDataApiServices { services =>
     runAndWait(rawlsUserQuery.save(userNoBilling))

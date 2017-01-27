@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.Owner
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{WorkspaceAccessLevel, ProjectOwner}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.joda.time.DateTime
@@ -103,10 +103,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   def billingProjectFromName(name: String) = RawlsBillingProject(RawlsBillingProjectName(name), generateBillingGroups(RawlsBillingProjectName(name), Map.empty, Map.empty), "mockBucketUrl", CreationStatuses.Ready, None)
 
-  def makeRawlsGroup(name: String, users: Set[RawlsUserRef]) =
-    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, Set.empty)
+  def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
+    RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
-  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]])(project: RawlsBillingProject,
+  def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
                     name: String,
                     realm: Option[RawlsGroupRef],
                     workspaceId: String,
@@ -118,11 +118,12 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
                     isLocked: Boolean) = {
 
     val intersectionGroupsByLevel = realm.map { _ => usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${level.toString}", users)
-    } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${ProjectOwner.toString}", project.groups(Owner).users)) }
+      level -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${level.toString}", users, groupsByLevel(level))
+    } + (ProjectOwner -> makeRawlsGroup(s"${project.projectName.value}/${name} IG ${ProjectOwner.toString}", project.groups(Owner).users, Set.empty)) }
+
 
     val newAccessGroupsByLevel = usersByLevel.map { case (level, users) =>
-      level -> makeRawlsGroup(s"${project.projectName.value}/${name} ${level.toString}", users)
+      level -> makeRawlsGroup(s"${project.projectName.value}/${name} ${level.toString}", users, groupsByLevel(level))
     }
 
     val accessGroupsByLevel = newAccessGroupsByLevel + (ProjectOwner -> project.groups(Owner))
@@ -192,6 +193,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
+    val userReaderViaGroup = RawlsUser(UserInfo("reader-access-via-group", OAuth2BearerToken("token"), 123, "123456789876543212349"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
@@ -200,9 +202,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val wsName6 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsSubmittedSubmission")
     val wsName7 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSubmission")
     val wsName8 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigsAbortedSuccessfulSubmission")
+    val wsName9 = WorkspaceName("myNamespace", "myWorkspaceToTestGrantPermissions")
+    val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
-    val dbGapAuthorizedUsersGroup = makeRawlsGroup("dbGapAuthorizedUsers", Set(userOwner, userReader))
+    val dbGapAuthorizedUsersGroup = makeRawlsGroup("dbGapAuthorizedUsers", Set(userOwner, userReaderViaGroup))
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
 
@@ -219,6 +223,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       WorkspaceAccessLevels.Owner -> Set(userOwner),
       WorkspaceAccessLevels.Write -> Set(userWriter),
       WorkspaceAccessLevels.Read -> Set(userReader)
+    ))_
+
+    val makeWorkspaceToTestGrant = makeWorkspaceWithUsers(Map(
+      WorkspaceAccessLevels.Owner -> Set(userOwner),
+      WorkspaceAccessLevels.Write -> Set(userWriter),
+      WorkspaceAccessLevels.Read -> Set.empty
+    ),Map(
+      WorkspaceAccessLevels.Owner -> Set.empty,
+      WorkspaceAccessLevels.Write -> Set.empty,
+      WorkspaceAccessLevels.Read -> Set(dbGapAuthorizedUsersGroup)
     ))_
 
     val wsAttrs = Map(
@@ -276,6 +290,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     // Workspace with realms, with aborted and successful submissions
     val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+    // Standard workspace to test grant permissions
+    val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     val sample1 = Entity("sample1", "Sample",
       Map(
@@ -489,7 +505,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       workspaceFailedSubmission,
       workspaceSubmittedSubmission,
       workspaceMixedSubmissions,
-      workspaceTerminatedSubmissions)
+      workspaceTerminatedSubmissions,
+      workspaceToTestGrant)
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.save))
 
     override def save() = {
@@ -498,6 +515,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
+        rawlsUserQuery.save(userReaderViaGroup),
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),
@@ -520,7 +538,10 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceSubmittedSubmissionGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
+        DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
         saveAllWorkspacesAction,
+        workspaceQuery.insertUserSharePermissions(workspaceToTestGrantId, Seq(RawlsUserRef(userWriter.userSubjectId))),
+        workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(RawlsGroupRef(dbGapAuthorizedUsersGroup.groupName))),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
