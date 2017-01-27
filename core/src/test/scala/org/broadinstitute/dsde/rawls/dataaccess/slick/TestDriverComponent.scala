@@ -193,7 +193,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val userOwner = RawlsUser(userInfo)
     val userWriter = RawlsUser(UserInfo("writer-access", OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo("reader-access", OAuth2BearerToken("token"), 123, "123456789876543212347"))
-    val userReader2 = RawlsUser(UserInfo("reader-access-2", OAuth2BearerToken("token"), 123, "123456789876543212348"))
+    val userReaderViaGroup = RawlsUser(UserInfo("reader-access-via-group", OAuth2BearerToken("token"), 123, "123456789876543212349"))
     val wsName = WorkspaceName("myNamespace", "myWorkspace")
     val wsName2 = WorkspaceName("myNamespace", "myWorkspace2")
     val wsName3 = WorkspaceName("myNamespace", "myWorkspacewithRealmsMethodConfigs")
@@ -206,7 +206,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val workspaceToTestGrantId = UUID.randomUUID()
 
     val nestedProjectGroup = makeRawlsGroup("nested project group", Set(userOwner))
-    val dbGapAuthorizedUsersGroup = makeRawlsGroup("dbGapAuthorizedUsers", Set(userOwner, userReader))
+    val dbGapAuthorizedUsersGroup = makeRawlsGroup("dbGapAuthorizedUsers", Set(userOwner, userReaderViaGroup))
 
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), generateBillingGroups(RawlsBillingProjectName(wsName.namespace), Map(ProjectRoles.Owner -> Set(userProjectOwner, userOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
 
@@ -515,7 +515,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         rawlsUserQuery.save(userOwner),
         rawlsUserQuery.save(userWriter),
         rawlsUserQuery.save(userReader),
-        rawlsUserQuery.save(userReader2),
+        rawlsUserQuery.save(userReaderViaGroup),
         rawlsGroupQuery.save(nestedProjectGroup),
         rawlsGroupQuery.save(dbGapAuthorizedUsersGroup),
         DBIO.sequence(billingProject.groups.values.map(rawlsGroupQuery.save).toSeq),

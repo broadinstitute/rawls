@@ -1649,7 +1649,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader2.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden, response.entity.asString) { status }
@@ -1739,9 +1739,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "allow a user in a group with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("reader-access") { services =>
+  it should "allow a user in a group with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("reader-access-via-group") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader2.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1750,7 +1750,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
-        responseAs[WorkspaceACL].acl should contain (testData.userReader2.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
       }
   }
 

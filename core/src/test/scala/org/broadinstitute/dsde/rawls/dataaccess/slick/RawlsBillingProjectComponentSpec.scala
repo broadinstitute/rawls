@@ -49,7 +49,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val expectedUsersProjects = Map(
       testData.userWriter -> Set(testData.testProject1.projectName, testData.testProject2Name),
       testData.userReader -> Set(testData.testProject3Name),
-      testData.userReader2 -> Set.empty,
+      testData.userReaderViaGroup -> Set.empty,
       testData.userOwner -> Set(testData.billingProject.projectName),
       testData.userProjectOwner -> Set(testData.billingProject.projectName, testData.testProject1.projectName, testData.testProject2Name, testData.testProject3Name))
     assertSameElements(expectedUsersProjects, runAndWait(rawlsBillingProjectQuery.loadAllUsersAndTheirProjects).map { case (user, projects) => user -> projects.toSet})
