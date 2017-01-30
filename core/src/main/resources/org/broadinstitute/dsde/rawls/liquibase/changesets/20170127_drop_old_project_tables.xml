@@ -7,25 +7,25 @@
         </sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="share-permissions-2">
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-project-users-2">
         <sql stripComments="true">
             drop table super_owners_temp_no_realm;
         </sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="share-permissions-3">
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-project-users-3">
         <sql stripComments="true">
             drop table super_owners_temp_realm;
         </sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="share-permissions-4">
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-project-users-4">
         <sql stripComments="true">
             drop table super_owners_temp_realm_intersection;
         </sql>
     </changeSet>
 
-    <changeSet logicalFilePath="dummy" author="mbemis" id="share-permissions-5">
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-project-users-5">
         <sql stripComments="true">
             drop table project_owner_groups_to_remove;
         </sql>
