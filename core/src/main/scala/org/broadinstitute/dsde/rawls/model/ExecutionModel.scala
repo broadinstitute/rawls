@@ -2,15 +2,13 @@ package org.broadinstitute.dsde.rawls.model
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
-import UserModelJsonSupport.RawlsUserRefFormat
-
-import spray.json._
 import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.RawlsException
+import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
@@ -68,7 +66,8 @@ case class ExecutionServiceWorkflowOptions(
   refresh_token: String,
   auth_bucket: String,
   final_workflow_log_dir: String,
-  default_runtime_attributes: Option[JsValue]
+  default_runtime_attributes: Option[JsValue],
+  read_from_cache: Boolean = false
 )
 
 // Status of a successfully started workflow
@@ -266,7 +265,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat7(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat8(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
