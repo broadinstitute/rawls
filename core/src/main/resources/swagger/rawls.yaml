@@ -475,7 +475,7 @@ paths:
            name: groupRef
            required: true
            schema:
-             $ref: '#definitions/RawlsGroupRef'
+             $ref: '#/definitions/RawlsGroupRef'
        security:
          - authorization:
              - openid
@@ -669,6 +669,81 @@ paths:
            name: groupName
            required: true
            type: string
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+  '/api/admin/realms':
+     post:
+       responses:
+         '201':
+           description: Realm creation successful
+         '403':
+           description: You must be an admin to create a realm
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '409':
+           description: Realm/group already exists
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively create a realm
+       tags:
+         - admin
+         - groups
+         - realms
+       summary: create a realm
+       operationId: adminCreateRealm
+       parameters:
+         - in: body
+           description: group reference
+           name: groupRef
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupRef'
+       security:
+         - authorization:
+             - openid
+             - email
+             - profile
+     delete:
+       responses:
+         '200':
+           description: Realm deletion successful
+         '403':
+           description: You must be an admin to delete a realm
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '404':
+           description: Realm not found
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '409':
+           description: Cannot delete realm due to workspaces existing in realm
+           schema:
+             $ref: '#/definitions/ErrorReport'
+         '500':
+           description: Rawls Internal Error
+           schema:
+             $ref: '#/definitions/ErrorReport'
+       description: Administratively delete a realm
+       tags:
+         - admin
+         - groups
+         - realms
+       summary: delete a realm
+       operationId: adminDeleteRealm
+       parameters:
+         - in: body
+           description: group reference
+           name: groupRef
+           required: true
+           schema:
+             $ref: '#/definitions/RawlsGroupRef'
        security:
          - authorization:
              - openid
@@ -3544,6 +3619,8 @@ tags:
     description: Billing Project API
   - name: groups
     description: Group manipulation API
+  - name: realms
+    description: Realm manipulation API
 
 securityDefinitions:
   authorization:

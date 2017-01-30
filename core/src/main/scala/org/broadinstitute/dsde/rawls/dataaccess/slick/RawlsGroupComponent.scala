@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model._
 case class RawlsGroupRecord(groupName: String, groupEmail: String, updatedDate: Option[Timestamp])
 case class GroupUsersRecord(userSubjectId: String, groupName: String)
 case class GroupSubgroupsRecord(parentGroupName: String, childGroupName: String)
+case class RealmRecord(groupName: String)
 
 trait RawlsGroupComponent {
   this: DriverComponent
@@ -48,8 +49,17 @@ trait RawlsGroupComponent {
     def pk = primaryKey("PK_GROUP_SUBGROUPS", (parentGroupName, childGroupName))
   }
 
+  class RealmsTable(tag: Tag) extends Table[RealmRecord](tag, "REALM") {
+    def groupName = column[String]("GROUP_NAME", O.Length(254))
+
+    def * = (groupName) <> (RealmRecord.apply _, RealmRecord.unapply)
+
+    def group = foreignKey("FK_REALM_GROUP_NAME", groupName, rawlsGroupQuery)(_.groupName)
+  }
+
   protected val groupUsersQuery = TableQuery[GroupUsersTable]
   protected val groupSubgroupsQuery = TableQuery[GroupSubgroupsTable]
+  protected val realmsQuery = TableQuery[RealmsTable]
   type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
   private type GroupUsersQuery = Query[GroupUsersTable, GroupUsersRecord, Seq]
   private type GroupSubgroupsQuery = Query[GroupSubgroupsTable, GroupSubgroupsRecord, Seq]
@@ -279,6 +289,18 @@ trait RawlsGroupComponent {
             subgroups <- findSubgroupsByGroupName(groupRec.groupName).result
           } yield Option(unmarshalRawlsGroup(groupRec, users, subgroups))
       }
+    }
+
+    def setGroupAsRealm(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
+      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === groupRef.groupName.value)).flatMap {
+        case None => DBIO.successful(0)
+        case Some(groupRec) =>
+          realmsQuery += RealmRecord(groupRef.groupName.value)
+      }
+    }
+
+    def deleteRealmRecord(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
+      (realmsQuery.filter(_.groupName === groupRef.groupName.value)).delete
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {

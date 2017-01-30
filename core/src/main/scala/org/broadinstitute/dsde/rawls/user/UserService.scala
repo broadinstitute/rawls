@@ -80,6 +80,8 @@ object UserService {
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminCreateRealm(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminDeleteRealm(groupRef: RawlsGroupRef) extends UserServiceMessage
 
   case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -123,6 +125,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminListGroupMembers(groupRef) => asFCAdmin { listGroupMembers(groupRef) } pipeTo sender
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+
+    case AdminCreateRealm(groupRef) => asFCAdmin { createRealm(groupRef) } pipeTo sender
+    case AdminDeleteRealm(groupRef) => asFCAdmin { deleteRealm(groupRef) } pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -547,6 +552,32 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
         case None =>
           createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
+      }
+    }
+  }
+
+  def createRealm(groupRef: RawlsGroupRef) = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
+        case None =>
+          createGroupInternal(groupRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(groupRef) map { _ => RequestComplete(StatusCodes.Created) }
+      }
+    }
+  }
+
+  def deleteRealm(groupRef: RawlsGroupRef) = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.listWorkspacesInRealm(groupRef) flatMap {
+        case Seq() =>
+          dataAccess.rawlsGroupQuery.deleteRealmRecord(groupRef) flatMap { _ =>
+            withGroup(groupRef, dataAccess) { group =>
+              dataAccess.rawlsGroupQuery.delete(groupRef) andThen
+                DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
+            }
+          }
+        case workspaceNames =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm ${groupRef.groupName}. You must remove the following workspaces before you can remove the realm: ${workspaceNames}")))
       }
     }
   }
