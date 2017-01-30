@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.mock
 
 import java.util.concurrent.TimeUnit
 
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity,AgoraEntityType}
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.model.{AgoraEntity, AgoraEntityType}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
 import org.mockserver.integration.ClientAndServer._
-import org.mockserver.model.{Parameter, ParameterBody, Header, Delay}
+import org.mockserver.model.{Delay, Header, Parameter, ParameterBody}
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse._
 import spray.http.StatusCodes
@@ -24,7 +25,7 @@ object RemoteServicesMockServer {
   }
 }
 
-class RemoteServicesMockServer(port:Int) {
+class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
   val mockServerBaseUrl = "http://localhost:" + port
 
   val jsonHeader = new Header("Content-Type", "application/json")
@@ -266,7 +267,7 @@ class RemoteServicesMockServer(port:Int) {
       request()
         .withMethod("POST")
         .withPath(submissionBatchPath)
-        .withBody(new ParameterBody(new Parameter("workflowOptions", "two_second_delay")))
+        .withBody(mockServerContains("two_second_delay"))
     ).respond(
       response()
         .withHeaders(jsonHeader)

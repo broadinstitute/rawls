@@ -5,7 +5,9 @@ import java.util.UUID
 import akka.actor._
 import akka.pattern._
 import akka.util.Timeout
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions._
@@ -19,14 +21,20 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 import org.broadinstitute.dsde.rawls.user.UserService
+import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.user.UserService.OverwriteGroupMembers
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
+import AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import spray.http.{StatusCodes, Uri}
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
+import spray.json._
 import spray.httpx.SprayJsonSupport._
 import spray.json._
 
@@ -188,14 +196,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
-          if (accessLevel < WorkspaceAccessLevels.Read)
-            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-          else {
-            for {
-              stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-              owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
-            } yield {
-              RequestComplete(StatusCodes.OK, WorkspaceListResponse(accessLevel, workspaceContext.workspace, stats, owners))
+          getUserSharePermissions(workspaceContext, accessLevel, dataAccess) flatMap { canShare =>
+            if (accessLevel < WorkspaceAccessLevels.Read)
+              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+            else {
+              for {
+                stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
+                owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
+              } yield {
+                RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, workspaceContext.workspace, stats, owners))
+              }
             }
           }
         }
@@ -283,6 +293,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
         _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
 
         // Delete groups
         _ <- DBIO.seq(groupRefsToRemove.map { group => dataAccess.rawlsGroupQuery.delete(group) }.toSeq: _*)
@@ -429,13 +440,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
+        requireSharePermission(workspaceContext.workspace, dataAccess) { _ =>
           dataAccess.workspaceQuery.listEmailsAndAccessLevel(workspaceContext).flatMap { emailsAndAccess =>
             dataAccess.workspaceQuery.getInvites(workspaceContext.workspaceId).map { invites =>
               // toMap below will drop duplicate keys, keeping the last entry only
               // sort by access level to make sure higher access levels remain in the resulting map
-              val granted = emailsAndAccess.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, false) }
-              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true) }
+
+              // Note: we only store share permissions in the database if a user explicitly sets them. Since owners and project owners
+              // have implicit sharing permissions, we rectify that with ((accessLevel >= WorkspaceAccessLevels.Owner) || hasSharePermission) so
+              // the response from getACL returns canShare = true for owners and project owners
+              val granted = emailsAndAccess.sortBy { case (_, accessLevel, _) => accessLevel }.map { case (email, accessLevel, hasSharePermission) => email -> AccessEntry(accessLevel, false, ((accessLevel >= WorkspaceAccessLevels.Owner) || hasSharePermission)) }
+              val pending = invites.sortBy { case (_, accessLevel) => accessLevel }.map { case (email, accessLevel) => email -> AccessEntry(accessLevel, true, false) }
 
               RequestComplete(StatusCodes.OK, WorkspaceACL((granted ++ pending).toMap))
             }
@@ -458,8 +473,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val overwriteGroupMessagesFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        requireAccessIgnoreLock(workspaceContext.workspace, WorkspaceAccessLevels.Owner, dataAccess) {
-          determineCompleteNewAcls(aclUpdates, dataAccess, workspaceContext)
+        requireSharePermission(workspaceContext.workspace, dataAccess) { accessLevel =>
+          determineCompleteNewAcls(aclUpdates, accessLevel, dataAccess, workspaceContext)
         }
       }
     }
@@ -489,7 +504,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel)))
+          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel, None)))
           DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
         }
       }
@@ -502,15 +517,33 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }.toSeq
 
       val usersNotFound = emailsNotFound.filterNot(aclUpdate => invitesUpdated.map(_.email).contains(aclUpdate.email)).filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
+      val invitesSent = invitesUpdated.filterNot(aclUpdate => existingInvites.map(_.email).contains(aclUpdate.email))
 
-      WorkspaceACLUpdateResponseList(usersUpdated, invitesUpdated, usersNotFound)
+      WorkspaceACLUpdateResponseList(usersUpdated, invitesSent, invitesUpdated.diff(invitesSent), usersNotFound)
+    }
+
+    def updateWorkspaceSharePermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Option[Boolean]]) = {
+      val (usersToAdd, usersToRemove) = actualChangesToMake.collect{ case (Left(userRef), Some(canShare)) => userRef -> canShare }.toSeq
+        .partition { case (_, canShare) => canShare }
+      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect{ case (Right(groupRef), Some(canShare)) => groupRef -> canShare }.toSeq
+        .partition { case (_, canShare) => canShare }
+
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+          dataAccess.workspaceQuery.insertUserSharePermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef } ) andThen
+            dataAccess.workspaceQuery.deleteUserSharePermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef } ) andThen
+              dataAccess.workspaceQuery.insertGroupSharePermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef } ) andThen
+                dataAccess.workspaceQuery.deleteGroupSharePermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef } )
+        }
+      }
     }
 
     val userServiceRef = context.actorOf(UserService.props(userServiceConstructor, userInfo))
     for {
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMake) <- overwriteGroupMessagesFuture
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMake, actualShareChangesToMake) <- overwriteGroupMessagesFuture
       overwriteGroupResults <- Future.traverse(overwriteGroupMessages) { message => (userServiceRef ? message).asInstanceOf[Future[PerRequestMessage]] }
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
+      savedPermissions <- updateWorkspaceSharePermissions(actualShareChangesToMake)
       deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
       savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else {
         val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
@@ -539,7 +572,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
    * @param workspaceContext
    * @return tuple: messages to send to UserService to overwrite acl groups, email that were not found in the process
    */
-  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel])] = {
+  private def determineCompleteNewAcls(aclUpdates: Seq[WorkspaceACLUpdate], userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Iterable[OverwriteGroupMembers], Seq[WorkspaceACLUpdate], Map[Either[RawlsUserRef,RawlsGroupRef], WorkspaceAccessLevels.WorkspaceAccessLevel], Map[Either[RawlsUserRef,RawlsGroupRef], Option[Boolean]])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(aclUpdates.map(_.email))
       existingRefsAndLevels <- dataAccess.workspaceQuery.findWorkspaceUsersAndAccessLevel(workspaceContext.workspaceId)
@@ -547,14 +580,23 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       val emailsNotFound = aclUpdates.filterNot(aclChange => refsToUpdateByEmail.keySet.contains(aclChange.email))
 
       // match up elements of aclUpdates and refsToUpdateByEmail ignoring unfound emails
-      val refsToUpdateAndAccessLevel = aclUpdates.map { aclUpdate => refsToUpdateByEmail.get(aclUpdate.email) -> aclUpdate.accessLevel }.collect {
-        case (Some(ref), accessLevel) => ref -> accessLevel
+      val refsToUpdate = aclUpdates.map { aclUpdate => (refsToUpdateByEmail.get(aclUpdate.email), aclUpdate.accessLevel, aclUpdate.canShare) }.collect {
+        case (Some(ref), WorkspaceAccessLevels.NoAccess, _) => ref -> (WorkspaceAccessLevels.NoAccess, Option(false))
+        case (Some(ref), accessLevel, canShare) => ref -> (accessLevel, canShare)
       }.toSet
 
-      // remove everything that is not changing
-      val actualChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndLevels)
+      val refsToUpdateAndSharePermission = refsToUpdate.map { case (ref, (_, canShare)) => ref -> canShare }
+      val refsToUpdateAndAccessLevel = refsToUpdate.map { case (ref, (accessLevel, _)) => ref -> accessLevel }
 
-      val membersWithTooManyEntries = actualChangesToMake.groupBy {
+      val existingRefsAndSharePermission = existingRefsAndLevels.map { case (ref, (_, canShare))  => ref -> canShare }
+      val existingRefsAndAccessLevel = existingRefsAndLevels.map { case (ref, (accessLevel, _)) => ref -> accessLevel }
+
+      // remove everything that is not changing
+      val actualAccessChangesToMake = refsToUpdateAndAccessLevel.diff(existingRefsAndAccessLevel)
+      val actualShareChangesToMake = refsToUpdateAndSharePermission.filter{ case (_, canShare) => canShare.isDefined }
+        .diff(existingRefsAndSharePermission.map { case (ref, canShare) => ref -> Option(canShare)})
+
+      val membersWithTooManyEntries = actualAccessChangesToMake.groupBy {
         case (member, _) => member
       }.collect {
         case (member, entries) if entries.size > 1 => refsToUpdateByEmail.collect {
@@ -562,10 +604,31 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }.flatten
 
-      if (!membersWithTooManyEntries.isEmpty) {
+      if (membersWithTooManyEntries.nonEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Only 1 entry per email allowed. Emails with more than one entry: $membersWithTooManyEntries"))
       }
-      val actualChangesToMakeByMember = actualChangesToMake.toMap
+
+      val membersWithHigherExistingAccessLevelThanGranter = existingRefsAndLevels.filterNot { case (_, (accessLevel, _)) => accessLevel == WorkspaceAccessLevels.ProjectOwner }
+        .filter { case (member, _) => actualAccessChangesToMake.map { case(ref, _) => ref }.contains(member) }.filter { case (_, (accessLevel, _)) => accessLevel > userAccessLevel }
+
+      if (membersWithHigherExistingAccessLevelThanGranter.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the access level of users with higher access than yourself. Please correct these entries: $membersWithHigherExistingAccessLevelThanGranter"))
+      }
+
+      val membersWithHigherAccessLevelThanGranter = actualAccessChangesToMake.filter { case (_, accessLevel) => accessLevel > userAccessLevel }
+
+      if (membersWithHigherAccessLevelThanGranter.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not grant higher access than your own access level. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
+      }
+
+      val membersWithSharePermission = actualShareChangesToMake.filter { case (_, canShare) => canShare.isDefined }
+
+      if(membersWithSharePermission.nonEmpty && userAccessLevel < WorkspaceAccessLevels.Owner) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"You may not alter the share permissions of users unless you are a workspace owner. Please correct these entries: $membersWithHigherAccessLevelThanGranter"))
+      }
+
+      val actualChangesToMakeByMember = actualAccessChangesToMake.toMap
+      val actualShareChangesToMakeByMember = actualShareChangesToMake.toMap
 
       // some security checks
       if (actualChangesToMakeByMember.contains(Right(UserService.allUsersGroupRef))) {
@@ -578,15 +641,15 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       if (actualChangesToMakeByMember.exists { case (_, level) => level == ProjectOwner }) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be added in the billing area of the application."))
       }
-      val existingProjectOwners = existingRefsAndLevels.collect { case (member, ProjectOwner) => member }
-      if (!(actualChangesToMakeByMember.keySet intersect existingProjectOwners).isEmpty) {
+      val existingProjectOwners = existingRefsAndLevels.collect { case (member, (ProjectOwner, _)) => member }
+      if ((actualChangesToMakeByMember.keySet intersect existingProjectOwners).nonEmpty) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Project owners can only be removed in the billing area of the application."))
       }
 
       // we are not updating ProjectOwner acls here, if any are added we threw an exception above
       // any user/group that is already a project owner and is added to another level should end up in both levels
       // so lets ignore all the existing project owners, we should not update by mistake
-      val existingRefsAndLevelsExcludingPO = existingRefsAndLevels.filterNot { case (_, level) => level == ProjectOwner }
+      val existingRefsAndLevelsExcludingPO = existingRefsAndAccessLevel.filterNot { case (_, level) => level == ProjectOwner }
 
       // update levels for all existing refs, add refs that don't exist, remove all no access levels
       val updatedRefsAndLevels =
@@ -607,10 +670,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         UserService.OverwriteGroupMembers(workspaceContext.workspace.accessLevels(level), RawlsGroupMemberList(userSubjectIds = Option(userSubjectIds), subGroupNames = Option(subGroupNames)))
       }
 
-
-
       // voila
-      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember)
+      (overwriteGroupMessages, emailsNotFound, actualChangesToMakeByMember, actualShareChangesToMakeByMember)
     }
   }
 
@@ -1117,11 +1178,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[PerRequestMessage] = {
-    import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, WorkspaceAccessLevels.Read, dataAccess) { workspaceContext =>
         withMethodConfig(workspaceContext, methodRepoQuery.source.namespace, methodRepoQuery.source.name, dataAccess) { methodConfig =>
-
+          import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
           DBIO.from(methodRepoDAO.postMethodConfig(
             methodRepoQuery.methodRepoNamespace,
             methodRepoQuery.methodRepoName,
@@ -1215,8 +1275,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           methodConfigurationName = submissionRequest.methodConfigurationName,
           submissionEntity = AttributeEntityReference(entityType = submissionRequest.entityType, entityName = submissionRequest.entityName),
           workflows = workflows ++ workflowFailures,
-          status = SubmissionStatuses.Submitted,
-          readFromCache = submissionRequest.readFromCache
+          status = SubmissionStatuses.Submitted
         )
 
         dataAccess.submissionQuery.create(workspaceContext, submission) map { _ =>
@@ -1359,7 +1418,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) = {
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
-         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
           abortSubmission(workspaceContext, submissionId, dataAccess)
         }
       }
@@ -1732,6 +1791,22 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   private def requireAccessIgnoreLock[T](workspace: Workspace, requiredLevel: WorkspaceAccessLevel, dataAccess: DataAccess)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     requireAccess(workspace.copy(isLocked = false), requiredLevel, dataAccess)(op)
+  }
+
+  private def requireSharePermission[T](workspace: Workspace, dataAccess: DataAccess)(codeBlock: (WorkspaceAccessLevel) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    getMaximumAccessLevel(RawlsUser(userInfo), SlickWorkspaceContext(workspace), dataAccess) flatMap { userLevel =>
+      if (userLevel >= WorkspaceAccessLevels.Owner) codeBlock(userLevel)
+      else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), SlickWorkspaceContext(workspace)) flatMap { canShare =>
+        if (canShare) codeBlock(userLevel)
+        else if (userLevel >= WorkspaceAccessLevels.Read) DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+        else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+      }
+    }
+  }
+
+  def getUserSharePermissions(workspaceContext: SlickWorkspaceContext, userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess): ReadAction[Boolean] = {
+    if (userAccessLevel >= WorkspaceAccessLevels.Owner) DBIO.successful(true)
+    else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
   }
 
   private def withEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {

@@ -11,10 +11,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
-import org.mockserver.model.{Body, HttpRequest, StringBody}
+import org.mockserver.model.{HttpRequest, StringBody}
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.{BeforeAndAfterAll, FlatSpecLike, Matchers}
-import spray.http.{FormData, StatusCodes}
+import spray.http.StatusCodes
 import spray.httpx.marshalling._
 import spray.json._
 import DefaultJsonProtocol._
@@ -22,6 +22,7 @@ import DefaultJsonProtocol._
 import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.duration._
+import scala.util.matching.Regex
 
 /**
  * Created by dvoet on 5/17/16.
@@ -358,24 +359,19 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
                        |	call aggregate_data
                        |}""".stripMargin
 
-      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson
-      marshal(FormData(Seq("wdlSource" -> arrayWdl, "workflowInputs" -> s"[$inputs]"))) match {
-        case Left(err) => assert(false)
-        case Right(thing) => {
-          val encodedStringWithHeader = thing.asString
-          val index = encodedStringWithHeader.indexOf("wdlSource")
-          val encodedStringNoHeader = encodedStringWithHeader.substring(index)
-          val regexStringBody = new StringBody("^.*" + encodedStringNoHeader.replace("+", "\\+") + ".*$", Body.Type.REGEX)
+      val inputs = Map("test_input_name3" -> List("elem1", "elem2", "elem3")).toJson.toString
 
-          mockServer.mockServer.verify(
-            HttpRequest.request()
-              .withMethod("POST")
-              .withPath("/workflows/v1/batch")
-              .withBody(regexStringBody),
-            VerificationTimes.atLeast(1)
-          )
-        }
-      }
+      // confirm that we have sent to MockServer a request containing the WDL and full set of inputs
+
+      mockServer.mockServer.verify(
+        HttpRequest.request()
+          .withMethod("POST")
+          .withPath("/workflows/v1/batch")
+          .withBody(mockServerContains(arrayWdl))
+          .withBody(mockServerContains(inputs)),
+        VerificationTimes.once()
+      )
+
     }
   }
 }

@@ -675,9 +675,11 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
-        assertResult(MethodInputsOutputs(Seq(MethodInput("three_step.cgrep.pattern","String",false)),Seq(MethodOutput("three_step.ps.procs","File"), MethodOutput("three_step.cgrep.count","Int"), MethodOutput("three_step.wc.count","Int")))) {
-          responseAs[MethodInputsOutputs]
-        }
+        val expectedIn = Seq(MethodInput("three_step.cgrep.pattern","String",false))
+        val expectedOut = Seq(MethodOutput("three_step.ps.procs","File"), MethodOutput("three_step.cgrep.count","Int"), MethodOutput("three_step.wc.count","Int"))
+        val result = responseAs[MethodInputsOutputs]
+        assertSameElements(expectedIn, result.inputs)
+        assertSameElements(expectedOut, result.outputs)
       }
   }
 

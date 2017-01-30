@@ -34,5 +34,6 @@
     <include file="changesets/20161221_group_dates.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161202_add_json_attributevalue.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20161115_pending_workspace_access.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170123_share_permissions.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170123_add_read_call_cache.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
