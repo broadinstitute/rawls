@@ -87,15 +87,15 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           WorkspaceService.AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
       }
     } ~
-    path("admin" / "realms") { //create a realm
-      post {
+    path("admin" / "realms") {
+      post { //create a realm
         entity(as[RawlsGroupRef]) { groupRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
             UserService.AdminCreateRealm(groupRef))
         }
       } ~
-      delete {
+      delete { //delete a realm
         entity(as[RawlsGroupRef]) { groupRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
