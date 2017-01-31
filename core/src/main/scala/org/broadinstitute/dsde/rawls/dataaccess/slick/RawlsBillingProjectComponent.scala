@@ -139,7 +139,7 @@ trait RawlsBillingProjectComponent {
       } yield (project, projectGroup)
 
       query.result.map(_.map { case (project, projectGroup) =>
-        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus))
+        RawlsBillingProjectMembership(RawlsBillingProjectName(project.projectName), ProjectRoles.withName(projectGroup.role), CreationStatuses.withName(project.creationStatus), project.message)
       })
     }
 

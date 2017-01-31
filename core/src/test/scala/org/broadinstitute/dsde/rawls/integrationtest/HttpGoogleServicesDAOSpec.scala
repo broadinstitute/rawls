@@ -13,7 +13,8 @@ import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.Ready
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
-import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
+import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
+import org.broadinstitute.dsde.rawls.monitor.{CreatingBillingProjectMonitor, BucketDeletionMonitor}
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.DeleteBucket
 
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -27,7 +28,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 import spray.http.{OAuth2BearerToken, StatusCodes}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectOperationRecord, TestDriverComponent}
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
@@ -375,12 +376,34 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
       val projectOwners = gcsConfig.getStringList("projectTemplate.owners")
       val projectEditors = gcsConfig.getStringList("projectTemplate.editors")
       val projectServices = gcsConfig.getStringList("projectTemplate.services")
+      val projectTemplate: ProjectTemplate = ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
       val project = RawlsBillingProject(projectName, Map(ProjectRoles.Owner -> ownerGroup), "", CreationStatuses.Creating, Option(billingAccount.accountName), None)
-      Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
 
-      Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
-        gcsDAO.beginProjectSetup(project, ProjectTemplate( Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices), Map.empty).map(_.get)
+      val createOp = Await.result(gcsDAO.createProject(projectName, billingAccount), Duration.Inf)
+
+      val doneCreateOp = Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 1 minutes) { () =>
+        gcsDAO.pollOperation(createOp) map {
+          case op@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => op
+          case _ => throw new RuntimeException("not done")
+        }
+      }, 1 minutes)
+
+      assert(doneCreateOp.errorMessage.isEmpty, createOp.errorMessage)
+
+      val servicesOps = Await.result(gcsDAO.beginProjectSetup(project, projectTemplate, Map.empty), Duration.Inf).get
+
+      val doneServicesOps = Await.result(retryUntilSuccessOrTimeout(always)(10 seconds, 6 minutes) { () =>
+        Future.traverse(servicesOps) { serviceOp =>
+          gcsDAO.pollOperation(serviceOp) map {
+            case op@RawlsBillingProjectOperationRecord(_, _, _, true, _, _) => op
+            case _ => throw new RuntimeException("not done")
+          }
+        }
       }, 6 minutes)
+
+      assert(doneServicesOps.forall(_.errorMessage.isEmpty), doneServicesOps.collect { case op@RawlsBillingProjectOperationRecord(_, _, _, _, Some(_), _) => op })
+
+      Await.result(gcsDAO.completeProjectSetup(project), Duration.Inf).get
 
       val bucket = Await.result(gcsDAO.getBucket(gcsDAO.getStorageLogsBucketName(projectName)), Duration.Inf).get
       bucket.getLifecycle.getRule.length should be (1)

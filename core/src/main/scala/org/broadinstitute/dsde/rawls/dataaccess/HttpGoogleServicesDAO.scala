@@ -749,10 +749,10 @@ class HttpGoogleServicesDAO(
       case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
     } map ( googleOperation => {
-      if (googleOperation.getDone && Option(googleOperation.getError).map(_.getCode == GoogleRpcErrorCodes.ALREADY_EXISTS).getOrElse(false)) {
+      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).map(_.getCode == GoogleRpcErrorCodes.ALREADY_EXISTS).getOrElse(false)) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
       }
-      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, googleOperation.getDone, Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
+      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
     })
   }
 
@@ -769,7 +769,7 @@ class HttpGoogleServicesDAO(
         retryWhen500orGoogleError(() => {
           executeGoogleRequest(cloudResManager.operations().get(rawlsBillingProjectOperation.operationId))
         }).map { op =>
-          rawlsBillingProjectOperation.copy(done = op.getDone, errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
 
       case API_SERVICE_MANAGEMENT =>
@@ -778,11 +778,16 @@ class HttpGoogleServicesDAO(
         retryWhen500orGoogleError(() => {
           executeGoogleRequest(servicesManager.operations().get(rawlsBillingProjectOperation.operationId))
         }).map { op =>
-          rawlsBillingProjectOperation.copy(done = op.getDone, errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
         }
     }
 
   }
+
+  /**
+   * converts a possibly null java boolean to a scala boolean, null is treated as false
+   */
+  private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: Int): String = {
     s"${Option(message).getOrElse("")} - code ${code}"
@@ -835,9 +840,9 @@ class HttpGoogleServicesDAO(
 
       // enable appropriate google apis
       operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
-        executeGoogleRequest(serviceManager.services().enable(service, new EnableServiceRequest().setConsumerId(s"project:$projectName")))
+        executeGoogleRequest(serviceManager.services().enable(service, new EnableServiceRequest().setConsumerId(s"project:${projectName.value}")))
       }) map { googleOperation =>
-        RawlsBillingProjectOperationRecord(projectName.value, service, googleOperation.getName, googleOperation.getDone, Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_SERVICE_MANAGEMENT)
+        RawlsBillingProjectOperationRecord(projectName.value, service, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_SERVICE_MANAGEMENT)
       }})
 
     } yield {

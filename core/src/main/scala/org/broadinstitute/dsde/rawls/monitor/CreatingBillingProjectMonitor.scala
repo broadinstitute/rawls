@@ -118,7 +118,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
           case operations: Seq[RawlsBillingProjectOperationRecord] if operations.forall(rec => rec.done) =>
             // all operations completed but some failed
             val messages = operations.collect {
-              case RawlsBillingProjectOperationRecord(_, operationName, _, true, error, _) => s"Failure enabling api $operationName: ${error.getOrElse("Unknown error")}"
+              case RawlsBillingProjectOperationRecord(_, operationName, _, true, Some(error), _) => s"Failure enabling api $operationName: ${error}"
             }
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option(messages.mkString("[", "], [", "]"))))
         }
