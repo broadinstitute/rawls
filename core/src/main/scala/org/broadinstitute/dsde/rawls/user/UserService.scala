@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, R
 import spray.http.StatusCodes
 import spray.json._
 import spray.httpx.SprayJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -556,7 +557,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createRealm(groupRef: RawlsGroupRef) = {
+  def createRealm(groupRef: RawlsRealmRef) = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
@@ -566,7 +567,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def deleteRealm(groupRef: RawlsGroupRef) = {
+  def deleteRealm(groupRef: RawlsRealmRef) = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.listWorkspacesInRealm(groupRef) flatMap {
         case Seq() =>
@@ -577,7 +578,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             }
           }
         case _ =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm ${groupRef.groupName} because there are workspaces in this realm")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${groupRef.groupName.value}] because there are workspaces in this realm")))
       }
     }
   }
