@@ -576,8 +576,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
                 DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
             }
           }
-        case workspaceNames =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm ${groupRef.groupName}. You must remove the following workspaces before you can remove the realm: ${workspaceNames}")))
+        case _ =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm ${groupRef.groupName} because there are workspaces in this realm")))
       }
     }
   }
