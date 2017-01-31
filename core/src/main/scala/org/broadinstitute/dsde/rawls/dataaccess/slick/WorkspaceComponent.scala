@@ -68,7 +68,7 @@ trait WorkspaceComponent {
     def recordVersion = column[Long]("record_version")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
-    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName.?)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, realmsQuery)(_.groupName.?)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
