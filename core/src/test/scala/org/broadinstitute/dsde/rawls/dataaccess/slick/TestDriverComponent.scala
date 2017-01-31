@@ -250,7 +250,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
       wsAttrs + (AttributeName.withLibraryNS("published") -> AttributeBoolean(true)), Map.empty, Map.empty)
     val workspaceNoAttrs = Workspace(wsName.namespace, wsName.name + "_noattrs", None, UUID.randomUUID().toString, "aBucket4", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
-    val realm = makeRawlsGroup(s"Test-Realm", Set.empty).
+    val realm = makeRawlsGroup(s"Test-Realm", Set.empty)
     val realmWsName = wsName.name + "withRealm"
 
     val realm2 = makeRawlsGroup(s"Test-Realm2", Set.empty)
