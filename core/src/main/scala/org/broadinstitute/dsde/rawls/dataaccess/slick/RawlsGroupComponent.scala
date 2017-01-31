@@ -199,6 +199,14 @@ trait RawlsGroupComponent {
       
       firstLevel.result.map(_.toSet).flatMap(groups => listParentGroupsRecursive(groups, groups).map(_.map(groupRec => RawlsGroupRef(RawlsGroupName(groupRec.groupName)))))
     }
+
+    def listRealmsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsGroupRef]] = {
+      listAllRealms().flatMap { allRealms =>
+        listGroupsForUser(userRef).map { allGroups =>
+          allRealms intersect allGroups
+        }
+      }
+    }
     
     def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
       if (groups.isEmpty) DBIO.successful(cumulativeGroups)
@@ -299,6 +307,10 @@ trait RawlsGroupComponent {
       }
     }
 
+    def listAllRealms(): ReadAction[Set[RawlsGroupRef]] = {
+      (realmsQuery.result.map(recs => recs.map(unmarshalRealm).toSet))
+    }
+
     def deleteRealmRecord(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
       (realmsQuery.filter(_.groupName === groupRef.groupName.value)).delete
     }
@@ -319,6 +331,10 @@ trait RawlsGroupComponent {
       val userRefs = userRecords map { r => RawlsUserRef(RawlsUserSubjectId(r.userSubjectId)) }
       val subGroupRefs = subGroupRecords map { r => RawlsGroupRef(RawlsGroupName(r.childGroupName)) }
       RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
+    }
+
+    private def unmarshalRealm(realmRecord: RealmRecord): RawlsGroupRef = {
+      RawlsGroupRef(RawlsGroupName(realmRecord.groupName))
     }
 
     def findGroupByName(name: String): GroupQuery = {
