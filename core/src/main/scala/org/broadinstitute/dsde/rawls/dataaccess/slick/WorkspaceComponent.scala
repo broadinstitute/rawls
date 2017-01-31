@@ -68,7 +68,7 @@ trait WorkspaceComponent {
     def recordVersion = column[Long]("record_version")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
-    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, realmsQuery)(_.groupName.?)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, realmQuery)(_.groupName.?)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
@@ -240,8 +240,8 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.isLocked).update(false)
     }
 
-    def listWorkspacesInRealm(realmName: RawlsGroupRef): ReadAction[Seq[WorkspaceName]] = {
-      (findWorkspacesInRealm(realmName).result).map(recs => recs.map(rec => WorkspaceName(rec.namespace, rec.name)))
+    def listWorkspacesInRealm(realmRef: RawlsRealmRef): ReadAction[Seq[WorkspaceName]] = {
+      (findWorkspacesInRealm(realmRef).result).map(recs => recs.map(rec => WorkspaceName(rec.namespace, rec.name)))
     }
 
     def saveInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate): ReadWriteAction[WorkspaceACLUpdate] = {
@@ -500,8 +500,8 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
-    def findWorkspacesInRealm(realmName: RawlsGroupRef): WorkspaceQueryType = {
-      filter(_.realmGroupName === realmName.groupName.value)
+    def findWorkspacesInRealm(realmRef: RawlsRealmRef): WorkspaceQueryType = {
+      filter(_.realmGroupName === realmRef.groupName.value)
     }
 
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {

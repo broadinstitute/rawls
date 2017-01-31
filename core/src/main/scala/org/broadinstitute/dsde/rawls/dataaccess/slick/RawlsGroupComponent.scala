@@ -59,7 +59,7 @@ trait RawlsGroupComponent {
 
   protected val groupUsersQuery = TableQuery[GroupUsersTable]
   protected val groupSubgroupsQuery = TableQuery[GroupSubgroupsTable]
-  protected val realmsQuery = TableQuery[RealmTable]
+  protected val realmQuery = TableQuery[RealmTable]
   type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
   private type GroupUsersQuery = Query[GroupUsersTable, GroupUsersRecord, Seq]
   private type GroupSubgroupsQuery = Query[GroupSubgroupsTable, GroupSubgroupsRecord, Seq]
@@ -295,12 +295,12 @@ trait RawlsGroupComponent {
       uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === groupRef.groupName.value)).flatMap {
         case None => DBIO.successful(0)
         case Some(groupRec) =>
-          realmsQuery += RealmRecord(groupRef.groupName.value)
+          realmQuery += RealmRecord(groupRef.groupName.value)
       }
     }
 
     def deleteRealmRecord(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
-      (realmsQuery.filter(_.groupName === groupRef.groupName.value)).delete
+      (realmQuery.filter(_.groupName === groupRef.groupName.value)).delete
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
