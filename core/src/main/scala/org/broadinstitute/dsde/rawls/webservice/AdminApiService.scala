@@ -89,17 +89,17 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
     } ~
     path("admin" / "realms") {
       post { //create a realm
-        entity(as[RawlsGroupRef]) { groupRef =>
+        entity(as[RawlsRealmRef]) { realmRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminCreateRealm(groupRef))
+            UserService.AdminCreateRealm(realmRef))
         }
       } ~
       delete { //delete a realm
-        entity(as[RawlsGroupRef]) { groupRef =>
+        entity(as[RawlsRealmRef]) { realmRef =>
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminDeleteRealm(groupRef))
+            UserService.AdminDeleteRealm(realmRef))
         }
       }
     } ~

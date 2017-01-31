@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -166,6 +167,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         DBIO.sequence(workspace2Groups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspace3Groups.map(rawlsGroupQuery.save).toSeq),
         rawlsGroupQuery.save(defaultRealmGroup),
+        rawlsGroupQuery.setGroupAsRealm(defaultRealmGroup),
 
         workspaceQuery.save(workspace),
         workspaceQuery.save(workspace2),
@@ -245,6 +247,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     runAndWait(rawlsGroupQuery.save(realmGroup))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroup))
 
     Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -853,6 +856,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
 
     runAndWait(rawlsGroupQuery.save(realmGroup))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroup))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -889,6 +893,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroup2 = RawlsGroup(RawlsGroupName(name2), RawlsGroupEmail("king@florin.eu"), Set(testData.userOwner), Set.empty)
 
     runAndWait(rawlsGroupQuery.save(realmGroup1))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroup1))
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,
@@ -937,6 +942,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val realmGroupRef: RawlsGroupRef = realmGroup
 
     runAndWait(rawlsGroupQuery.save(realmGroup))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroup))
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroup), Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
@@ -984,11 +990,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    Post(s"/admin/groups", realmGroup) ~>
+    Post(s"/admin/realms", realmGroup) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -997,7 +1003,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
-    Post(s"/admin/groups/${realmGroup.groupName.value}/members", httpJson(ownerAdd)) ~>
+    Post(s"/admin/groups/${realmGroup.realmName.value}/members", httpJson(ownerAdd)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1075,14 +1081,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     //create the realm group
-    Post(s"/admin/groups", realmGroup) ~>
+    Post(s"/admin/realms", realmGroup) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1201,14 +1207,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     //create the realm group
-    Post(s"/admin/groups", realmGroup) ~>
+    Post(s"/admin/realms", realmGroup) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1989,6 +1995,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     runAndWait(rawlsGroupQuery.save(realm))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(realm))
 
     Post(s"/workspaces", httpJson(request)) ~>
       sealRoute(services.workspaceRoutes) ~>
@@ -2051,6 +2058,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
         runAndWait(rawlsGroupQuery.save(realm))
+        runAndWait(rawlsGroupQuery.setGroupAsRealm(realm))
         Post(s"/workspaces", httpJson(request)) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {

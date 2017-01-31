@@ -704,7 +704,7 @@ paths:
            name: groupRef
            required: true
            schema:
-             $ref: '#/definitions/RawlsGroupRef'
+             $ref: '#/definitions/RawlsRealmRef'
        security:
          - authorization:
              - openid
@@ -743,7 +743,7 @@ paths:
            name: groupRef
            required: true
            schema:
-             $ref: '#/definitions/RawlsGroupRef'
+             $ref: '#/definitions/RawlsRealmRef'
        security:
          - authorization:
              - openid
@@ -4571,6 +4571,13 @@ definitions:
         type: string
         description: ''
       groupEmail:
+        type: string
+        description: ''
+
+  RawlsRealmRef:
+    description: a reference to a realm
+    properties:
+      realmName:
         type: string
         description: ''
 
