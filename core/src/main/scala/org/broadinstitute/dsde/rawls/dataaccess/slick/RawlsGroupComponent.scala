@@ -49,7 +49,7 @@ trait RawlsGroupComponent {
     def pk = primaryKey("PK_GROUP_SUBGROUPS", (parentGroupName, childGroupName))
   }
 
-  class RealmsTable(tag: Tag) extends Table[RealmRecord](tag, "REALM") {
+  class RealmTable(tag: Tag) extends Table[RealmRecord](tag, "REALM") {
     def groupName = column[String]("GROUP_NAME", O.Length(254))
 
     def * = (groupName) <> (RealmRecord.apply _, RealmRecord.unapply)
@@ -59,7 +59,7 @@ trait RawlsGroupComponent {
 
   protected val groupUsersQuery = TableQuery[GroupUsersTable]
   protected val groupSubgroupsQuery = TableQuery[GroupSubgroupsTable]
-  protected val realmsQuery = TableQuery[RealmsTable]
+  protected val realmsQuery = TableQuery[RealmTable]
   type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
   private type GroupUsersQuery = Query[GroupUsersTable, GroupUsersRecord, Seq]
   private type GroupSubgroupsQuery = Query[GroupSubgroupsTable, GroupSubgroupsRecord, Seq]
