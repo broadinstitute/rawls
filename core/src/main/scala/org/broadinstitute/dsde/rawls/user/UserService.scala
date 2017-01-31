@@ -51,6 +51,7 @@ object UserService {
   case object AdminListUsers extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case object ListRealmsForUser extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
@@ -82,6 +83,7 @@ object UserService {
   case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminCreateRealm(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminDeleteRealm(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case object AdminListAllRealms extends UserServiceMessage
 
   case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -128,6 +130,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AdminCreateRealm(groupRef) => asFCAdmin { createRealm(groupRef) } pipeTo sender
     case AdminDeleteRealm(groupRef) => asFCAdmin { deleteRealm(groupRef) } pipeTo sender
+    case AdminListAllRealms => asFCAdmin { listAllRealms } pipeTo sender
+    case ListRealmsForUser => listRealmsForUser pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -578,6 +582,24 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
           }
         case workspaceNames =>
           DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm ${groupRef.groupName}. You must remove the following workspaces before you can remove the realm: ${workspaceNames}")))
+      }
+    }
+  }
+
+  // Lists every realm in the system
+  def listAllRealms() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listAllRealms() map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
+      }
+    }
+  }
+
+  // Lists every realm that the user has access to
+  def listRealmsForUser() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listRealmsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
       }
     }
   }
