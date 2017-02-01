@@ -86,7 +86,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       operationsByProject = updatedOperations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
 
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
-        operationsByProject(project.projectName) match {
+        val nextStepFuture = operationsByProject(project.projectName) match {
           case Seq() =>
             // for some reason there are no operations, mark it as an error
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option("Internal error: no operations created")))
@@ -121,6 +121,16 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
               case RawlsBillingProjectOperationRecord(_, operationName, _, true, Some(error), _) => s"Failure enabling api $operationName: ${error}"
             }
             Future.successful(project.copy(status = CreationStatuses.Error, message = Option(messages.mkString("[", "], [", "]"))))
+
+          case _ =>
+            // still running
+            Future.successful(project)
+        }
+
+        nextStepFuture.recover {
+          case t: Throwable =>
+            logger.error(s"failure processing new project ${project.projectName.value}", t)
+            project.copy(status = CreationStatuses.Error, message = Option(t.getMessage))
         }
       }
 

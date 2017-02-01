@@ -31,12 +31,6 @@
     <changeSet logicalFilePath="dummy" id="project-operation-table-pk" author="dvoet">
         <addPrimaryKey columnNames="PROJECT_NAME, OPERATION_NAME" constraintName="PK_BILLING_PROJECT_OPERATION" tableName="BILLING_PROJECT_OPERATION"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" id="project-operation-table-idx" author="dvoet">
-        <createIndex tableName="BILLING_PROJECT_OPERATION" indexName="IDX_BILLING_PROJECT_OPERATION_ID" unique="true">
-            <column name="OPERATION_ID"/>
-            <column name="API"/>
-        </createIndex>
-    </changeSet>
     <changeSet logicalFilePath="dummy" id="project-operation-table-fk" author="dvoet">
         <addForeignKeyConstraint baseTableName="BILLING_PROJECT_OPERATION"
                                  baseColumnNames="PROJECT_NAME"
