@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http._
 import spray.json._
+import spray.json.DefaultJsonProtocol
 import spray.routing._
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
@@ -989,12 +990,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
+    import UserModelJsonSupport._
+    import spray.json.DefaultJsonProtocol._
 
     val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    Post(s"/admin/realms", realmGroup) ~>
+    Post(s"/admin/realms", httpJson(realmGroup)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1080,6 +1083,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
+    import UserModelJsonSupport._
 
     val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
@@ -1206,6 +1210,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
     import WorkspaceACLJsonSupport._
+    import UserModelJsonSupport._
 
     val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
