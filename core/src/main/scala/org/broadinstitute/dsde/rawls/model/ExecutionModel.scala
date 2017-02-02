@@ -68,8 +68,7 @@ case class ExecutionServiceWorkflowOptions(
   refresh_token: String,
   auth_bucket: String,
   final_workflow_log_dir: String,
-  default_runtime_attributes: Option[JsValue],
-  read_from_cache: Boolean = false
+  default_runtime_attributes: Option[JsValue]
 )
 
 // Status of a successfully started workflow
@@ -267,7 +266,7 @@ object ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat8(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat7(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
