@@ -200,10 +200,10 @@ trait RawlsGroupComponent {
       firstLevel.result.map(_.toSet).flatMap(groups => listParentGroupsRecursive(groups, groups).map(_.map(groupRec => RawlsGroupRef(RawlsGroupName(groupRec.groupName)))))
     }
 
-    def listRealmsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsGroupRef]] = {
+    def listRealmsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsRealmRef]] = {
       listAllRealms().flatMap { allRealms =>
         listGroupsForUser(userRef).map { allGroups =>
-          allRealms intersect allGroups
+          allRealms intersect allGroups.map(ref => RawlsRealmRef(ref.groupName))
         }
       }
     }
@@ -307,7 +307,7 @@ trait RawlsGroupComponent {
       }
     }
 
-    def listAllRealms(): ReadAction[Set[RawlsGroupRef]] = {
+    def listAllRealms(): ReadAction[Set[RawlsRealmRef]] = {
       (realmQuery.result.map(recs => recs.map(unmarshalRealm).toSet))
     }
 
@@ -333,8 +333,8 @@ trait RawlsGroupComponent {
       RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
     }
 
-    private def unmarshalRealm(realmRecord: RealmRecord): RawlsGroupRef = {
-      RawlsGroupRef(RawlsGroupName(realmRecord.groupName))
+    private def unmarshalRealm(realmRecord: RealmRecord): RawlsRealmRef = {
+      RawlsRealmRef(RawlsGroupName(realmRecord.groupName))
     }
 
     def findGroupByName(name: String): GroupQuery = {
