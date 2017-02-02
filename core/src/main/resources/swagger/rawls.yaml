@@ -730,7 +730,7 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Administratively delete a realm
+      description: Administratively delete a realm (can only be done if there are no workspaces in the realm)
       tags:
         - admin
         - groups
@@ -766,7 +766,7 @@ paths:
         - admin
         - groups
         - realms
-      summary: list all realm
+      summary: list all realms
       operationId: adminListRealms
       security:
         - authorization:
