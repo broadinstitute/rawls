@@ -501,7 +501,7 @@ trait WorkspaceComponent {
     }
 
     def findWorkspacesInRealm(realmRef: RawlsRealmRef): WorkspaceQueryType = {
-      filter(_.realmGroupName === realmRef.realmName.value)
+      filter(_.realmGroupName === realmRef.groupName.value)
     }
 
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {

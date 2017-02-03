@@ -312,7 +312,7 @@ trait RawlsGroupComponent {
     }
 
     def deleteRealmRecord(groupRef: RawlsRealmRef): ReadWriteAction[Int] = {
-      (realmQuery.filter(_.groupName === groupRef.realmName.value)).delete
+      (realmQuery.filter(_.groupName === groupRef.groupName.value)).delete
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {

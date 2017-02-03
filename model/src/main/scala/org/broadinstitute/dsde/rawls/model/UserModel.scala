@@ -5,14 +5,22 @@ import spray.json._
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
-case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef
+case class RawlsRealmRef(groupName: RawlsGroupName) extends UserAuthRef
 
 object RawlsGroupRef {
   implicit def toRealmRef(ref: RawlsGroupRef): RawlsRealmRef = RawlsRealmRef(ref.groupName)
 }
 
 object RawlsRealmRef {
-  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.realmName)
+  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.groupName)
+}
+
+object RawlsGroupName {
+  implicit def toRealmName(name: RawlsGroupName): RawlsRealmName = RawlsRealmName(name.value)
+}
+
+object RawlsRealmName {
+  implicit def toGroupName(name: RawlsRealmName): RawlsGroupName = RawlsGroupName(name.value)
 }
 
 sealed trait UserAuthType { val value: String }
@@ -20,6 +28,7 @@ case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
+case class RawlsRealmName(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
@@ -37,8 +46,9 @@ object UserModelJsonSupport extends JsonSupport {
   implicit val RawlsUserEmailFormat = UserModelJsonFormatter(RawlsUserEmail)
   implicit val RawlsUserSubjectIdFormat = UserModelJsonFormatter(RawlsUserSubjectId)
 
-  implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName)
+  implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName.apply)
   implicit val RawlsGroupEmailFormat = UserModelJsonFormatter(RawlsGroupEmail)
+  implicit val RawlsRealmNameFormat = UserModelJsonFormatter(RawlsRealmName.apply)
   implicit val RawlsBillingAccountNameFormat = UserModelJsonFormatter(RawlsBillingAccountName)
   implicit val RawlsBillingProjectNameFormat = UserModelJsonFormatter(RawlsBillingProjectName)
 

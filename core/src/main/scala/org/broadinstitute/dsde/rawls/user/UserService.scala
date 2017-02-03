@@ -564,7 +564,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def createRealm(realmRef: RawlsRealmRef) = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.load(realmRef) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group [${realmRef.realmName.value}] already exists")))
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group [${realmRef.groupName.value}] already exists")))
         case None =>
           createGroupInternal(realmRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(realmRef) map { _ => RequestComplete(StatusCodes.Created) }
       }
@@ -582,7 +582,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             }
           }
         case _ =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${realmRef.realmName.value}] because there are workspaces in this realm")))
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${realmRef.groupName.value}] because there are workspaces in this realm")))
       }
     }
   }
