@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.{Future, ExecutionContext}
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 
 import akka.pattern._
 
@@ -51,6 +52,7 @@ class GoogleGroupSyncMonitorSupervisor(val pollInterval: FiniteDuration, pollInt
   }
 
   def startOne(): Unit = {
+    logger.info("starting GoogleGroupSyncMonitorActor")
     actorOf(GoogleGroupSyncMonitor.props(pollInterval, pollIntervalJitter, pubSubDao, pubSubSubscriptionName, userServiceConstructor))
   }
 
@@ -79,8 +81,8 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
 
   self ! StartMonitorPass
 
-  // fail safe in case this actor is idle too long
-  setReceiveTimeout((pollInterval + pollIntervalJitter) * 10)
+  // fail safe in case this actor is idle too long but not too fast (1 second lower limit)
+  setReceiveTimeout(Seq((pollInterval + pollIntervalJitter) * 10, 1 second).max)
 
   override def receive = {
     case StartMonitorPass =>
@@ -88,6 +90,7 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
       pubSubDao.pullMessages(pubSubSubscriptionName, 1).map(_.headOption) pipeTo self
 
     case Some(message: PubSubMessage) =>
+      logger.debug(s"pulled $message")
       // send a message to the user service, it will send back a SyncReport message
       // note the message ack id used as the actor name
       // note that the UserInfo passed in probably is not used
