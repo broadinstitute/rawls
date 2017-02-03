@@ -1769,6 +1769,61 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "granting and revoking share permissions should update accordingly" in withTestDataApiServicesAndUser("owner-access") { services =>
+    import WorkspaceACLJsonSupport._
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
+      }
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+  }
+
+  // Note that user writer-access has share permissions from another workspace- testData.workspaceToTestGrant
+  // This is set up directly in the test data in TestDriverComponent
+  it should "share permissions should not bleed across workspaces" in withTestDataApiServicesAndUser("writer-access") { services =>
+    import WorkspaceACLJsonSupport._
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
+      }
+  }
+
   // End ACL-restriction Tests
 
   // Workspace Locking
