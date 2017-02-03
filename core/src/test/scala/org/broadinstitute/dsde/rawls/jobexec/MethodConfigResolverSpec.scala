@@ -2,16 +2,20 @@ package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model._
+
 import scala.collection.immutable.Map
-import scala.util.Try
-import org.scalatest.{WordSpecLike, Matchers}
+import org.scalatest.{Matchers, WordSpecLike}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import java.util.UUID
 
+import wdl4s.types.{WdlArrayType, WdlIntegerType, WdlOptionalType}
+import wdl4s.WorkflowInput
+
 import scala.concurrent.ExecutionContext
 
 class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDriverComponent {
+
   import driver.api._
 
   val littleWdl =
@@ -47,6 +51,8 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       |}
     """.stripMargin
 
+  val badWdl = littleWdl.replace("workflow", "not-a-workflow")
+
   val intArgName = "w1.t1.int_arg"
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
@@ -71,25 +77,23 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
     )))
   )
 
-  val configGood = new MethodConfiguration("config_namespace", "configGood", "Sample",
-    Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1))
+  val dummyMethod = MethodRepoMethod("method_namespace", "test_method", 1)
 
-  val configEvenBetter = new MethodConfiguration("config_namespace", "configGood", "Sample",
-    Map.empty, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1))
+  val configGood = MethodConfiguration("config_namespace", "configGood", "Sample",
+    Map.empty, Map(intArgName -> AttributeString("this.blah")), Map.empty, dummyMethod)
 
-  val configMissingExpr = new MethodConfiguration("config_namespace", "configMissingExpr", "Sample",
-    Map.empty, Map.empty, Map.empty,
-   MethodRepoMethod( "method_namespace", "test_method", 1))
+  val configEvenBetter = MethodConfiguration("config_namespace", "configGood", "Sample",
+    Map.empty, Map(intArgName -> AttributeString("this.blah"), intOptName -> AttributeString("this.blah")),
+    Map.empty, dummyMethod)
 
-  val configSampleSet = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
-    Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1))
+  val configMissingExpr = MethodConfiguration("config_namespace", "configMissingExpr", "Sample",
+    Map.empty, Map.empty, Map.empty, dummyMethod)
 
-  val configEmptyArray = new MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
-    Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty,
-    MethodRepoMethod( "method_namespace", "test_method", 1))
+  val configSampleSet = MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
+    Map.empty, Map(intArrayName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
+
+  val configEmptyArray = MethodConfiguration("config_namespace", "configSampleSet", "SampleSet",
+    Map.empty, Map(intArrayName -> AttributeString("this.nonexistent")), Map.empty, dummyMethod)
 
   class ConfigData extends TestData {
     override def save() = {
@@ -110,6 +114,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
       )
     }
   }
+
   val configData = new ConfigData()
 
   def withConfigData[T](testCode: => T): T = {
@@ -120,7 +125,7 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   def testResolveInputs(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration, entity: Entity, wdl: String, dataAccess: DataAccess)
                        (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
     dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceId, entity.entityType, entity.name).result flatMap { entityRecs =>
-      Try(MethodConfigResolver.gatherInputs(methodConfig, wdl)) match {
+      MethodConfigResolver.gatherInputs(methodConfig, wdl) match {
         case scala.util.Failure(exception) =>
           DBIO.failed(exception)
         case scala.util.Success(methodInputs) =>
@@ -163,6 +168,82 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
 
       runAndWait(testResolveInputs(context, configEmptyArray, sampleSet2, arrayWdl, this)) shouldBe
         Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueEmptyList), None, intArrayName)))
+    }
+
+    "parse WDL" in withConfigData {
+      val littleWorkflow = MethodConfigResolver.parseWDL(littleWdl).get
+
+      val expectedLittleInputs = Map(
+        intArgName -> WorkflowInput(intArgName, WdlIntegerType),
+        intOptName -> WorkflowInput(intOptName, WdlOptionalType(WdlIntegerType)))
+
+      assertResult(expectedLittleInputs) {
+        littleWorkflow.inputs
+      }
+      assertResult(Seq()) {
+        littleWorkflow.outputs
+      }
+
+      val arrayWorkflow = MethodConfigResolver.parseWDL(arrayWdl).get
+
+      val expectedArrayInputs = Map(intArrayName -> WorkflowInput(intArrayName, WdlArrayType(WdlIntegerType)))
+
+      assertResult(expectedArrayInputs) {
+        arrayWorkflow.inputs
+      }
+      assertResult(Seq()) {
+        arrayWorkflow.outputs
+      }
+    }
+
+    "catch WDL syntax errors" in withConfigData {
+      val tryParse = MethodConfigResolver.parseWDL(badWdl)
+
+      assert(tryParse.isFailure)
+      intercept[RawlsException] {
+        tryParse.get
+      }
+    }
+
+    "get method config inputs and outputs" in withConfigData {
+      val expectedLittleIO = MethodInputsOutputs(Seq(
+        MethodInput(intArgName, "Int", false),
+        MethodInput(intOptName, "Int?", true)), Seq())
+
+      assertResult(expectedLittleIO) {
+        MethodConfigResolver.getMethodInputsOutputs(littleWdl).get
+      }
+
+      val expectedArrayIO = MethodInputsOutputs(Seq(
+        MethodInput(intArrayName, "Array[Int]", false)), Seq())
+
+      assertResult(expectedArrayIO) {
+        MethodConfigResolver.getMethodInputsOutputs(arrayWdl).get
+      }
+
+      val badIO = MethodConfigResolver.getMethodInputsOutputs(badWdl)
+      assert(badIO.isFailure)
+      intercept[RawlsException] {
+        badIO.get
+      }
+    }
+
+    "create a Method Config from a template" in withConfigData {
+      val expectedLittleInputs = Map(intArgName -> AttributeString(""), intOptName -> AttributeString(""))
+      val expectedLittleTemplate = MethodConfiguration("namespace", "name", "rootEntityType", Map(), expectedLittleInputs, Map(), dummyMethod)
+
+      assertResult(expectedLittleTemplate) { MethodConfigResolver.toMethodConfiguration(littleWdl, dummyMethod).get }
+
+      val expectedArrayInputs = Map(intArrayName -> AttributeString(""))
+      val expectedArrayTemplate = MethodConfiguration("namespace", "name", "rootEntityType", Map(), expectedArrayInputs, Map(), dummyMethod)
+
+      assertResult(expectedArrayTemplate) { MethodConfigResolver.toMethodConfiguration(arrayWdl, dummyMethod).get }
+
+      val badTemplate = MethodConfigResolver.toMethodConfiguration(badWdl, dummyMethod)
+      assert(badTemplate.isFailure)
+      intercept[RawlsException] {
+        badTemplate.get
+      }
     }
   }
 }

@@ -683,7 +683,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
+  it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices { services =>
     Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -691,11 +691,27 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 getting method inputs and outputs from a bogus method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
+  it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 400 when generating a method config template from an invalid method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
+      }
+  }
+
+  it should "return 400 getting method inputs and outputs from an invalid method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
       }
   }
 
