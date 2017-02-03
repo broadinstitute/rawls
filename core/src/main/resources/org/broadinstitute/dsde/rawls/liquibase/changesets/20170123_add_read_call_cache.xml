@@ -3,7 +3,7 @@
 
     <changeSet id="add_read_call_cache" author="ansingh" logicalFilePath="dummy">
         <addColumn tableName="SUBMISSION">
-            <column name="READ_FROM_CACHE" type="BIT(1)" defaultValue="1"/>
+            <column name="READ_FROM_CACHE" type="BIT(1)" defaultValue="0"/>
         </addColumn>
     </changeSet>
 
