@@ -15,20 +15,11 @@ object RawlsRealmRef {
   implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.groupName)
 }
 
-object RawlsGroupName {
-  implicit def toRealmName(name: RawlsGroupName): RawlsRealmName = RawlsRealmName(name.value)
-}
-
-object RawlsRealmName {
-  implicit def toGroupName(name: RawlsRealmName): RawlsGroupName = RawlsGroupName(name.value)
-}
-
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType
 case class RawlsGroupEmail(value: String) extends UserAuthType
-case class RawlsRealmName(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
@@ -48,7 +39,6 @@ object UserModelJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName.apply)
   implicit val RawlsGroupEmailFormat = UserModelJsonFormatter(RawlsGroupEmail)
-  implicit val RawlsRealmNameFormat = UserModelJsonFormatter(RawlsRealmName.apply)
   implicit val RawlsBillingAccountNameFormat = UserModelJsonFormatter(RawlsBillingAccountName)
   implicit val RawlsBillingProjectNameFormat = UserModelJsonFormatter(RawlsBillingProjectName)
 
