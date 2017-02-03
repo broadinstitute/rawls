@@ -421,6 +421,86 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 201 when creating a new realm" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+    import spray.json.DefaultJsonProtocol._
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    //check that the realm is actually there and categorized as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain(group)
+      }
+  }
+
+  it should "return 201 when deleting a realm" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+    import spray.json.DefaultJsonProtocol._
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    Delete(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+      }
+
+    //check that the realm is actually there and categorized as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain(group)
+      }
+  }
+
+  it should "return 201 when listing all realms" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2)
+
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+      }
+  }
+
+  it should "not return regular groups in the list of all realms" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
+
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2)
+    val group = new RawlsGroupRef(RawlsGroupName("test_realm"))
+
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+      }
+
+    Post(s"/admin/groups", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    //check that the regular group that was just created is not returned as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain group
+      }
+
+  }
+
   it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 

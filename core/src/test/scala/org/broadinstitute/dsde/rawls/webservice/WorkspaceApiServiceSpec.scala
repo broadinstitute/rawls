@@ -993,11 +993,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
 
-    val foo: RawlsRealmRef = realmGroup
-    println(foo)
-
-    //val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
-
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
     Post(s"/admin/realms", httpJson(realmGroup)) ~>

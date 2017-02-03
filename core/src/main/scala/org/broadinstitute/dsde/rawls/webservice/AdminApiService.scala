@@ -95,7 +95,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
       } ~
       post { //create a realm
         entity(as[RawlsRealmRef]) { realmRef =>
-          println(realmRef)
           requestContext => perRequest(requestContext,
             UserService.props(userServiceConstructor, userInfo),
             UserService.AdminCreateRealm(realmRef))
