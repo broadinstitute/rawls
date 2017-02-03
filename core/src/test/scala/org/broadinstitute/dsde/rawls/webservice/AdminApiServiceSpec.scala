@@ -498,7 +498,31 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       check {
         responseAs[Seq[RawlsRealmRef]] should not contain group
       }
+  }
 
+  it should "return 409 when trying to create a realm that already exists" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
+  it should "return 409 when trying to delete a realm that has workspaces in it" in withTestDataApiServices { services =>
+    val realm: RawlsRealmRef = testData.dbGapAuthorizedUsersGroup
+
+    Delete(s"/admin/realms", httpJson(realm)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
   }
 
   it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
