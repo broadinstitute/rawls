@@ -218,7 +218,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[ErrorReport].message
+        val errorText = responseAs[CErrorReport].message
         assert(errorText.contains(invalidAttrNamespace))
       }
   }
@@ -260,7 +260,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[ErrorReport].message
+        val errorText = responseAs[CErrorReport].message
         assert(errorText.contains(AttributeName.libraryNamespace))
       }
   }
@@ -274,7 +274,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(1) {
-          responseAs[ErrorReport].causes.length
+          responseAs[CErrorReport].causes.length
         }
       }
   }
@@ -342,7 +342,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(2) {
-          responseAs[ErrorReport].causes.length
+          responseAs[CErrorReport].causes.length
         }
       }
   }
@@ -355,7 +355,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.Forbidden, responseAs[CErrorReport]) {
           status
         }
       }
@@ -387,7 +387,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.Forbidden, responseAs[CErrorReport]) {
           status
         }
       }
@@ -402,7 +402,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(1) {
-          responseAs[ErrorReport].causes.length
+          responseAs[CErrorReport].causes.length
         }
       }
   }
@@ -416,7 +416,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
         assertResult(1) {
-          responseAs[ErrorReport].causes.length
+          responseAs[CErrorReport].causes.length
         }
       }
   }
@@ -443,7 +443,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.Forbidden, responseAs[CErrorReport]) {
           status
         }
       }
@@ -475,7 +475,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.Forbidden, responseAs[CErrorReport]) {
           status
         }
       }
@@ -583,7 +583,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[ErrorReport].message
+        val errorText = responseAs[CErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
@@ -617,7 +617,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[ErrorReport].message
+        val errorText = responseAs[CErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
@@ -650,7 +650,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[ErrorReport].message
+        val errorText = responseAs[CErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
