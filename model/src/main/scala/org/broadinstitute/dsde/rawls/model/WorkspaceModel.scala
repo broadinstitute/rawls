@@ -310,7 +310,8 @@ object AttributeStringifier {
       case AttributeBoolean(value) => value.toString()
       case AttributeValueRawJson(value) => value.toString()
       case AttributeEntityReference(t, name) => name
-      case al: AttributeList[_] => al.list.map(apply).mkString(" ")
+      case al: AttributeList[_] =>
+        WDLJsonSupport.attributeFormat.write(al).toString()
     }
   }
 }
