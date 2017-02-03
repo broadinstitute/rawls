@@ -107,7 +107,7 @@ object MethodConfigResolver {
 
   def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {
     val workflow = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow
-    val nothing = AttributeString("expression")
+    val nothing = AttributeString("")
     val inputs = for ( (fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs ) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
     MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)

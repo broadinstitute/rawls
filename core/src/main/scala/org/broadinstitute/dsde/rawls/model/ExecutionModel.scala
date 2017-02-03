@@ -2,13 +2,15 @@ package org.broadinstitute.dsde.rawls.model
 
 import java.util.UUID
 
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.joda.time.DateTime
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
+import UserModelJsonSupport.RawlsUserRefFormat
+
 import spray.json._
+import org.joda.time.DateTime
+import org.broadinstitute.dsde.rawls.RawlsException
 
 import scala.util.{Failure, Success, Try}
 
