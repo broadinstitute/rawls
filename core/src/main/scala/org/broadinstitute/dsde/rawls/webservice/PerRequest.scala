@@ -6,7 +6,7 @@ import akka.actor.SupervisorStrategy.Stop
 import akka.event.Logging
 import akka.event.Logging.LogLevel
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.ErrorReport
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
@@ -80,7 +80,7 @@ trait PerRequest extends Actor {
         logResponse(newResponse._1, newResponse._2)
         //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
-      case errorReport: ErrorReport =>
+      case errorReport: CErrorReport =>
         val newResponse = (errorReport.statusCode.getOrElse(StatusCodes.InternalServerError), errorReport)
         logResponse(newResponse._1, newResponse._2)
         //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller

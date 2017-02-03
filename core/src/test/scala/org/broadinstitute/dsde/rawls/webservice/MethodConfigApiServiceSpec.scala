@@ -173,7 +173,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[ErrorReport]
+        val errRpt = responseAs[CErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -436,7 +436,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[ErrorReport]
+        val errRpt = responseAs[CErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -546,7 +546,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[ErrorReport]
+        val errRpt = responseAs[CErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -651,7 +651,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[ErrorReport]
+        val errRpt = responseAs[CErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }

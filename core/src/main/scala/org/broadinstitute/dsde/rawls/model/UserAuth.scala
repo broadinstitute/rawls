@@ -74,7 +74,7 @@ object CreationStatuses {
 
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
 
-case class SyncReportItem(operation: String, email: String, errorReport: Option[ErrorReport])
+case class SyncReportItem(operation: String, email: String, errorReport: Option[CErrorReport])
 case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 
 case class BillingAccountScopes(requiredScopes: Seq[String])

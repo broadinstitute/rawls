@@ -233,7 +233,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   "Submission requests" should "400 when given an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Individual", "indiv1", Some("this.is."))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission( testData.wsName, submissionRq ), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -315,7 +315,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset_empty", Some("this.samples"))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -351,7 +351,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "400 when given an entity expression that evaluates to an entity of the wrong type" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", Some("this.pairs"))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -361,7 +361,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "400 when given no entity expression and an entity of the wrong type" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", None)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -392,7 +392,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   "Submission validation requests" should "report a BadRequest for an unparseable entity expression" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Individual", "indiv1", Some("this.is."))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -426,7 +426,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "400 when given an entity expression that evaluates to an empty set of entities" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "SampleSet", "sset_empty", Some("this.samples"))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -460,7 +460,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "report errors for an entity expression that evaluates to an entity of the wrong type" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", Some("this.pairs"))
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -470,7 +470,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   it should "report an error when given no entity expression and the entity is of the wrong type" in withWorkspaceService { workspaceService =>
     val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "PairSet", "ps1", None)
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.validateSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.BadRequest) {
       rqComplete.errorReport.statusCode.get
@@ -479,7 +479,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   "Aborting submissions" should "404 if the workspace doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345"), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.abortSubmission(WorkspaceName(name = "nonexistent", namespace = "workspace"), "12345"), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.NotFound) {
       rqComplete.errorReport.statusCode.get
@@ -488,7 +488,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
   it should "404 if the submission doesn't exist" in withSubmissionTestWorkspaceService { workspaceService =>
     val rqComplete = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.abortSubmission(subTestData.wsName, "12345"), Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]]
+      Await.result(workspaceService.abortSubmission(subTestData.wsName, "12345"), Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]]
     }
     assertResult(StatusCodes.NotFound) {
       rqComplete.errorReport.statusCode.get
@@ -520,7 +520,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       subTestData.submissionTestAbortTerminalWorkflow.submissionId,
       subTestData.existingWorkflowId.get)
     val errorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[CErrorReport]].response
     }
 
     assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}

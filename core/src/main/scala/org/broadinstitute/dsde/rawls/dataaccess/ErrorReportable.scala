@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
-import org.broadinstitute.dsde.rawls.model.ErrorReport
+import org.broadinstitute.dsde.rawls.model._
 import spray.http.StatusCodes
 import spray.httpx.UnsuccessfulResponseException
 
