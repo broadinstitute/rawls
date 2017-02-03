@@ -1747,9 +1747,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(RawlsBillingProjectName(workspaceRequest.namespace), RawlsUser(userInfo), ProjectRoles.all) flatMap {
       case true =>
         workspaceRequest.realm match {
-          case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
-            case Some(_) => op
+          case Some(realm) => dataAccess.rawlsGroupQuery.listRealmsForUser(RawlsUser(userInfo)) flatMap { realms =>
+            if(realms.contains(realm)) op
+            else DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
           }
           case None => op
         }

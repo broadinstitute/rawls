@@ -963,10 +963,48 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
+    Post(s"/admin/realms", realmGroup) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
+
+  }
+
+  it should "return 403 when creating a workspace and pointing the realmRef to a regular group" in withTestDataApiServices { services =>
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set.empty, Set.empty)
+
+    services.gcsDAO.adminList += testData.userOwner.userEmail.value
+
     Post(s"/admin/groups", realmGroup) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"/admin/groups/${realmGroup.groupName.value}/members", RawlsGroupMemberList(userEmails = Some(Seq("owner-access")))) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
           status
         }
       }
