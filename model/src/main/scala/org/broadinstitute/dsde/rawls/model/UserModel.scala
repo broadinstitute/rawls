@@ -37,7 +37,7 @@ object UserModelJsonSupport extends JsonSupport {
   implicit val RawlsUserEmailFormat = UserModelJsonFormatter(RawlsUserEmail)
   implicit val RawlsUserSubjectIdFormat = UserModelJsonFormatter(RawlsUserSubjectId)
 
-  implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName.apply)
+  implicit val RawlsGroupNameFormat = UserModelJsonFormatter(RawlsGroupName)
   implicit val RawlsGroupEmailFormat = UserModelJsonFormatter(RawlsGroupEmail)
   implicit val RawlsBillingAccountNameFormat = UserModelJsonFormatter(RawlsBillingAccountName)
   implicit val RawlsBillingProjectNameFormat = UserModelJsonFormatter(RawlsBillingProjectName)
