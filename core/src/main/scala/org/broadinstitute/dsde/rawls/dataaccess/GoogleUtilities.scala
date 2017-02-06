@@ -8,7 +8,7 @@ import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport, CErrorReport}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport}
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._
@@ -93,7 +93,7 @@ trait GoogleUtilities extends LazyLogging with Retry {
     }
   }
 
-  private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, statusCode: Option[Int], errorReport: Option[CErrorReport]): Unit = {
+  private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, statusCode: Option[Int], errorReport: Option[ErrorReport]): Unit = {
     import spray.json._
     import GoogleRequestJsonSupport._
 
@@ -115,7 +115,7 @@ trait GoogleUtilities extends LazyLogging with Retry {
     logger.debug(GoogleRequest(request.getRequestMethod, request.buildHttpRequestUrl().toString, payload, System.currentTimeMillis() - startTime, statusCode, errorReport).toJson(GoogleRequestFormat).compactPrint)
   }
 
-  protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[CErrorReport])
+  protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
   protected object GoogleRequestJsonSupport extends JsonSupport {
     import WorkspaceJsonSupport.ErrorReportFormat
     val GoogleRequestFormat = jsonFormat6(GoogleRequest)

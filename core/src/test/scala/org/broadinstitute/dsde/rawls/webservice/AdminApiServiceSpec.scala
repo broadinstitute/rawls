@@ -813,7 +813,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           assert {
             import spray.http._
             import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-            responseAs[CErrorReport].message.contains("Cannot delete a user with submissions")
+            responseAs[ErrorReport].message.contains("Cannot delete a user with submissions")
           }
 
         }

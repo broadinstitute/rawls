@@ -551,5 +551,25 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       )
   }
 
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.BadRequest.intValue)
+  )
+
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.BadRequest.intValue)
+  )
+
   def stopServer = mockServer.stop()
 }

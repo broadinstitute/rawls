@@ -876,7 +876,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield { Unit }
   }
 
-  private def reduceErrorReports(errorReportOptions: Iterable[Option[CErrorReport]]): Option[CErrorReport] = {
+  private def reduceErrorReports(errorReportOptions: Iterable[Option[ErrorReport]]): Option[ErrorReport] = {
     val errorReports = errorReportOptions.collect {
       case Some(errorReport) => errorReport
     }.toSeq

@@ -562,7 +562,7 @@ class HttpGoogleServicesDAO(
 
   //add a file to the bucket as the specified user, then remove it
   //returns an ErrorReport if something went wrong, otherwise returns None
-  override def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[CErrorReport]] = {
+  override def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]] = {
     val uuid = UUID.randomUUID.toString
     val so = new StorageObject().setName(uuid)
     val media = new InputStreamContent("text/plain",
@@ -590,7 +590,7 @@ class HttpGoogleServicesDAO(
     result
   }
 
-  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[CErrorReport]] = {
+  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]] = {
     Future {
       val getter = getStorage(getUserCredential(userInfo)).buckets().get(bucketName)
       try {

@@ -80,7 +80,7 @@ trait PerRequest extends Actor {
         logResponse(newResponse._1, newResponse._2)
         //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller
         r.withHttpResponseHeadersMapped(h => h ++ headers).complete(newResponse)(RawlsMessageJsonSupport.fromStatusCodeAndT(s => s, RawlsMessageFormat))
-      case errorReport: CErrorReport =>
+      case errorReport: ErrorReport =>
         val newResponse = (errorReport.statusCode.getOrElse(StatusCodes.InternalServerError), errorReport)
         logResponse(newResponse._1, newResponse._2)
         //we need to explicitly set the marshaller here, otherwise it uses the implicit marshaller
