@@ -299,11 +299,11 @@ trait RawlsGroupComponent {
       }
     }
 
-    def setGroupAsRealm(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
-      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === groupRef.groupName.value)).flatMap {
+    def setGroupAsRealm(realmRef: RawlsGroupRef): ReadWriteAction[Int] = {
+      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === realmRef.groupName.value)).flatMap {
         case None => DBIO.successful(0)
         case Some(groupRec) =>
-          realmQuery += RealmRecord(groupRef.groupName.value)
+          realmQuery += marshalRealm(realmRef)
       }
     }
 
@@ -331,6 +331,10 @@ trait RawlsGroupComponent {
       val userRefs = userRecords map { r => RawlsUserRef(RawlsUserSubjectId(r.userSubjectId)) }
       val subGroupRefs = subGroupRecords map { r => RawlsGroupRef(RawlsGroupName(r.childGroupName)) }
       RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
+    }
+
+    private def marshalRealm(realmRef: RawlsRealmRef): RealmRecord = {
+      RealmRecord(realmRef.groupName.value)
     }
 
     private def unmarshalRealm(realmRecord: RealmRecord): RawlsRealmRef = {
