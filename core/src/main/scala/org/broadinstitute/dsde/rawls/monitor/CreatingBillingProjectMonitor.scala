@@ -86,6 +86,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
       operationsByProject = updatedOperations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
 
       maybeUpdatedProjects <- Future.traverse(projects) { project =>
+        // this match figures out the current state of the project and progresses it to the next step when appropriate
+        // see GoogleServicesDAO.createProject for more details
         val nextStepFuture = operationsByProject(project.projectName) match {
           case Seq() =>
             // for some reason there are no operations, mark it as an error

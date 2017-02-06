@@ -749,7 +749,7 @@ class HttpGoogleServicesDAO(
       case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
     } map ( googleOperation => {
-      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).map(_.getCode == GoogleRpcErrorCodes.ALREADY_EXISTS).getOrElse(false)) {
+      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).exists(_.getCode == GoogleRpcErrorCodes.ALREADY_EXISTS)) {
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
       }
       RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)

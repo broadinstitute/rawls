@@ -235,6 +235,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 for post to workspaces with not ready project" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.billingProject.projectName.value,
+      name = "newWorkspace",
+      None,
+      Map.empty
+    )
+
+    Seq(CreationStatuses.Creating, CreationStatuses.Error).foreach { projectStatus =>
+      runAndWait(rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.billingProject.copy(status = projectStatus))))
+
+      Post(s"/workspaces", httpJson(newWorkspace)) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest, response.entity.asString) {
+            status
+          }
+        }
+    }
+  }
+
   it should "create a workspace with a Realm" in withTestDataApiServices { services =>
     val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
     val workspaceWithRealm = WorkspaceRequest(

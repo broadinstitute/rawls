@@ -140,25 +140,46 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   /**
-   * creates a google project under the specified billing account
+   * The project creation process has 3 steps of which this function is the first:
+   *
+   * - createProject creates the project in google, reserving the name if it does not exist or throwing an exception (usually) if it does.
+   * This returns an asynchronous operation that creates the project which may fail. This function should do nothing else,
+   * it should be fast and just get the process started.
+   *
+   * - beginProjectSetup runs once a project is successfully created. It sets up the billing and security then enables appropriate services.
+   * Enabling a service is another asynchronous operation. There will be an asynchronous operation for each service enabled
+   * but it seems Google is smrt and will group some operations together
+   * so the operation ids may not be unique. All google calls that do NOT require enabled services should go in this function.
+   *
+   * - completeProjectSetup once all the services are enabled (specifically compute and storage) we can create buckets and set the
+   * compute usage export bucket. All google calls that DO require enabled APIs should go in this function.
+   *
    * @param projectName
-   * @param billingAccount
-   * @return
+   * @param billingAccount used for a label on the project
+   * @return an operation for creating the project
    */
   def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord]
-  def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 
   /**
-   * does all the things to make the specified project usable (security, enabling apis, etc.)
+   * Second step of project creation. See createProject for more details.
+   *
    * @param project
    * @param projectTemplate
    * @param groupEmailsByRef emails of any subgroups of the project owner or user groups
    *                         (note that this is not required for users because we can infer their proxy group from subject id)
-   * @return
+   * @return an operation for each service api specified in projectTemplate
    */
   def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]]
+
+  /**
+   * Last step of project creation. See createProject for more details.
+   * @param project
+   * @return
+   */
   def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]]
+
   def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord]
+  def deleteProject(projectName: RawlsBillingProjectName): Future[Unit]
 }
 
 case class GoogleWorkspaceInfo(bucketName: String, accessGroupsByLevel: Map[WorkspaceAccessLevel, RawlsGroup], intersectionGroupsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroup]])

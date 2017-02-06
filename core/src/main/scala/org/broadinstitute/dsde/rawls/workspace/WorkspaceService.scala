@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.{Creating, Ready}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, WorkspaceAccessLevel}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -1744,14 +1745,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
 
   private def requireCreateWorkspaceAccess(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)(op: => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
-    dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(RawlsBillingProjectName(workspaceRequest.namespace), RawlsUser(userInfo), ProjectRoles.all) flatMap {
+    val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
+    dataAccess.rawlsBillingProjectQuery.hasOneOfProjectRole(projectName, RawlsUser(userInfo), ProjectRoles.all) flatMap {
       case true =>
-        workspaceRequest.realm match {
-          case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
-            case Some(_) => op
-          }
-          case None => op
+        dataAccess.rawlsBillingProjectQuery.load(projectName).flatMap {
+          case Some(RawlsBillingProject(_, _, _, CreationStatuses.Ready, _, _)) =>
+            workspaceRequest.realm match {
+              case Some(realm) => dataAccess.rawlsGroupQuery.loadGroupIfMember(realm, RawlsUser(userInfo)) flatMap {
+                case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You cannot create a workspace in realm [${realm.groupName.value}] as you do not have access to it.")))
+                case Some(_) => op
+              }
+              case None => op
+            }
+
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Creating, _, _)) =>
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"${name} is still being created")))
+
+          case Some(RawlsBillingProject(RawlsBillingProjectName(name), _, _, CreationStatuses.Error, _, messageOp)) =>
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Error creating ${name}: ${messageOp.getOrElse("no message")}")))
+
+          case None =>
+            // this can't happen with the current code but a 404 would be the correct response
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${workspaceRequest.toWorkspaceName.namespace} does not exist")))
         }
       case false =>
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))

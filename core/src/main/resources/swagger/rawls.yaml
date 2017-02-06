@@ -3002,7 +3002,7 @@ paths:
               description: The path to the newly created workspace
               type: string
         '400':
-          description: Workspace namespace does not exist
+          description: Workspace namespace is not ready
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
@@ -3190,7 +3190,7 @@ paths:
               description: The path to the newly cloned workspace
               type: string
         '400':
-          description: Workspace namespace does not exist
+          description: Workspace namespace is not ready
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
