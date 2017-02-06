@@ -2,9 +2,8 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import java.util
 import java.util.Collections
-import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.{Terminated, ActorSystem}
+import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.MockGooglePubSubDAO
