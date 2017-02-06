@@ -283,7 +283,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(invalidAttrNamespace))
       }
   }
@@ -333,7 +333,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(AttributeName.libraryNamespace))
       }
   }
@@ -582,7 +582,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
@@ -628,7 +628,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
@@ -661,7 +661,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(name.namespace))
       }
   }
@@ -748,7 +748,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(invalidAttrNamespace))
       }
   }
@@ -804,7 +804,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(AttributeName.libraryNamespace))
       }
   }
@@ -912,7 +912,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.UnprocessableEntity) {
           status
         }
-        val errorText = responseAs[CErrorReport].message
+        val errorText = responseAs[ErrorReport].message
         assert(errorText.contains(workspaceWithRealm.namespace))
         assert(errorText.contains(workspaceWithRealm.name))
         assert(errorText.contains(name1))

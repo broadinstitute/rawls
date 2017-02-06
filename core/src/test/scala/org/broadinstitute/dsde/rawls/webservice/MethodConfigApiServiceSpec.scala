@@ -173,7 +173,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[CErrorReport]
+        val errRpt = responseAs[ErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -271,7 +271,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   /*
    * test disabled until we decide what to do with submissions that reference deleted configs
-   */
+   *//*
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
       sealRoute(services.methodConfigRoutes) ~>
@@ -283,7 +283,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         }
       }
-  }
+  }*/
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
     Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig3.namespace}/${testData.methodConfig3.name}") ~>
@@ -436,7 +436,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[CErrorReport]
+        val errRpt = responseAs[ErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -546,7 +546,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[CErrorReport]
+        val errRpt = responseAs[ErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -651,7 +651,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Forbidden) {
           status
         }
-        val errRpt = responseAs[CErrorReport]
+        val errRpt = responseAs[ErrorReport]
         assert { errRpt.message.contains("Must be library curator")}
       }
   }
@@ -687,7 +687,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
       }
   }
 

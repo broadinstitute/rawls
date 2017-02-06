@@ -251,44 +251,44 @@ case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, S
 
 case class BucketUsageResponse(usageInBytes: BigInt)
 
-case class CErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[CErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
+case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
 
-trait ErrorReportBase {
-  def SOURCE: String
+case class ErrorReportSource(source: String)
 
-  def apply(message: String, cause: CErrorReport) =
-    CErrorReport(SOURCE,message,None,Seq(cause),Seq.empty, None)
+object ErrorReport {
+  def apply(message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq(cause),Seq.empty, None)
 
-  def apply(message: String, causes: Seq[CErrorReport]) =
-    CErrorReport(SOURCE,message,None,causes,Seq.empty, None)
+  def apply(message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,causes,Seq.empty, None)
 
-  def apply(statusCode: StatusCode, throwable: Throwable): CErrorReport =
-    CErrorReport(SOURCE,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(statusCode: StatusCode, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(throwable: Throwable, statusCode: StatusCode): CErrorReport =
-    CErrorReport(SOURCE,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(throwable: Throwable, statusCode: StatusCode)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(statusCode: StatusCode, message: String): CErrorReport =
-    CErrorReport(SOURCE,message,Option(statusCode),Seq.empty,Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq.empty,Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, throwable: Throwable): CErrorReport =
-    CErrorReport(SOURCE, message, Option(statusCode), causes(throwable), throwable.getStackTrace, None)
+  def apply(statusCode: StatusCode, message: String, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, Option(statusCode), causes(throwable), throwable.getStackTrace, None)
 
-  def apply(statusCode: StatusCode, message: String, cause: CErrorReport): CErrorReport =
-    CErrorReport(SOURCE,message,Option(statusCode),Seq(cause),Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq(cause),Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, causes: Seq[CErrorReport]): CErrorReport =
-    CErrorReport(SOURCE,message,Option(statusCode),causes,Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),causes,Seq.empty, None)
 
-  def apply(throwable: Throwable): CErrorReport =
-    CErrorReport(SOURCE,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[CErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]]) =
-    CErrorReport(source, message, statusCode, causes, stackTrace, exceptionClass)
+  def apply(message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, statusCode, causes, stackTrace, exceptionClass)
 
   def message(throwable: Throwable): String = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
 
-  def causes(throwable: Throwable): Array[CErrorReport] = causeThrowables(throwable).map(apply)
+  def causes(throwable: Throwable)(implicit source: ErrorReportSource): Array[ErrorReport] = causeThrowables(throwable).map(apply)
 
   private def causeThrowables(throwable: Throwable) = {
     if (throwable.getSuppressed.nonEmpty || throwable.getCause == null) throwable.getSuppressed
@@ -451,7 +451,7 @@ object WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val ErrorReportFormat: RootJsonFormat[CErrorReport] = rootFormat(lazyFormat(jsonFormat(CErrorReport.apply,"source","message","statusCode","causes","stackTrace","exceptionClass")))
+  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport.apply,"source","message","statusCode","causes","stackTrace","exceptionClass")))
 
   implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }

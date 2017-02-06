@@ -12,7 +12,7 @@ import scala.concurrent.Future
 import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
-  override val errorReportSource = "google"
+  val errorReportSource = ErrorReportSource("google")
 
   val billingEmail: String
 
@@ -102,9 +102,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
-  def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[CErrorReport]]
+  def diagnosticBucketWrite(user: RawlsUser, bucketName: String): Future[Option[ErrorReport]]
 
-  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[CErrorReport]]
+  def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
   def addMemberToGoogleGroup(group: RawlsGroup, member: Either[RawlsUser, RawlsGroup]): Future[Unit]
 
