@@ -319,7 +319,6 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     runAndWait(rawlsGroupQuery.setGroupAsRealm(realm))
 
     assertResult(Some(realm)) {
-      // note that group1 has not first been saved
       runAndWait(rawlsGroupQuery.load(realm))
     }
 
