@@ -520,7 +520,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Seq(RawlsRealmRef(RawlsGroupName(dbGapAuthorizedUsers)))) {
+        assertResult(Seq(RawlsRealmRef(RawlsGroupName("dbGapAuthorizedUsers")))) {
           responseAs[Seq[RawlsRealmRef]]
         }
       }
