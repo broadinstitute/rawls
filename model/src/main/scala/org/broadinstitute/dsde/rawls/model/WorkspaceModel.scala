@@ -251,6 +251,9 @@ case class ErrorReport(source: String, message: String, statusCode: Option[Statu
 case class ErrorReportSource(source: String)
 
 object ErrorReport {
+  def apply(message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq.empty,Seq.empty, None)
+
   def apply(message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
     ErrorReport(source.source,message,None,Seq(cause),Seq.empty, None)
 
