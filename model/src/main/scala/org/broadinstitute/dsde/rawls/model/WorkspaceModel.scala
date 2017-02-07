@@ -260,9 +260,6 @@ object ErrorReport {
   def apply(statusCode: StatusCode, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
     ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(throwable: Throwable, statusCode: StatusCode)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
-
   def apply(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource): ErrorReport =
     ErrorReport(source.source,message,Option(statusCode),Seq.empty,Seq.empty, None)
 
