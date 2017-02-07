@@ -118,7 +118,7 @@ trait PerRequest extends Actor {
     import spray.httpx.SprayJsonSupport._
     e match {
       case e: RawlsExceptionWithErrorReport => complete(e.errorReport)
-      case _ => complete(ErrorReport(e, InternalServerError))
+      case _ => complete(ErrorReport(InternalServerError, e))
     }
   }
 }

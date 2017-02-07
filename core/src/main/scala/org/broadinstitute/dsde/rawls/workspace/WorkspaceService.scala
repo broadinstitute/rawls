@@ -886,7 +886,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
           ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, entities) { evaluator =>
             evaluator.evalFinalAttribute(workspaceContext, expression).asTry map { tryValuesByEntity => tryValuesByEntity match {
               //parsing failure
-              case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest))
+              case Failure(regret) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret))
               case Success(valuesByEntity) =>
                 if (valuesByEntity.size != 1) {
                   //wrong number of entities?!
@@ -1867,7 +1867,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         ExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, submissionRequest.entityType, submissionRequest.entityName) { evaluator =>
           evaluator.evalFinalEntity(workspaceContext, expression).asTry
         } flatMap { //gotta close out the expression evaluator to wipe the EXPREVAL_TEMP table
-          case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(regret, StatusCodes.BadRequest)))
+          case Failure(regret) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, regret)))
           case Success(entityRecords) =>
             if (entityRecords.isEmpty) {
               DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, "No entities eligible for submission were found.")))

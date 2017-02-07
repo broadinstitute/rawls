@@ -164,7 +164,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     }).recover {
       case t: TokenResponseException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(t, t.getStatusCode))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(t.getStatusCode, t))
     }
   }
 
@@ -364,7 +364,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(tryIsFCAdmin(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(b) => b match {
         case true => RequestComplete(StatusCodes.OK)
         case false => RequestComplete(StatusCodes.NotFound)
@@ -374,7 +374,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def isLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.isLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(b) => b match {
         case true => RequestComplete(StatusCodes.OK)
         case false => RequestComplete(StatusCodes.NotFound)
@@ -384,14 +384,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def addLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.addLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }
 
   def removeLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.removeLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }

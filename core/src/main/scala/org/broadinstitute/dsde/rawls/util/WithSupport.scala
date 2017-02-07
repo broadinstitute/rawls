@@ -46,7 +46,7 @@ trait MethodWiths {
     val methodRepoMethod = methodConfig.methodRepoMethod
     withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
       withWdl(method) { wdl => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
+        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
         case Success(methodInputs) => op(wdl,methodInputs)
       }}
     }
