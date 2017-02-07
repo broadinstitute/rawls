@@ -82,7 +82,9 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
   self ! StartMonitorPass
 
   // fail safe in case this actor is idle too long but not too fast (1 second lower limit)
-  setReceiveTimeout(Seq((pollInterval + pollIntervalJitter) * 10, 1 second).max)
+  setReceiveTimeout(max((pollInterval + pollIntervalJitter) * 10, 1 second))
+
+  private def max(durations: FiniteDuration*): FiniteDuration = durations.max
 
   override def receive = {
     case StartMonitorPass =>
