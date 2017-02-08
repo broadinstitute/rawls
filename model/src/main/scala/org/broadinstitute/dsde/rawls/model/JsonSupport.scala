@@ -92,53 +92,57 @@ trait TypedAttributeListSerializer extends AttributeListSerializer {
   }
 }
 
-/**
- * NOTE: When subclassing this, you may want to define your own implicit val attributeFormat with an AttributeListSerializer mixin
- * if you want e.g. the plain old JSON array attribute list serialization strategy
- */
-class JsonSupport extends DefaultJsonProtocol {
+object AttributeFormat {
   //Magic strings we use in JSON serialization
 
   //Entity refs get serialized to e.g. { "entityType" : "sample", "entityName" : "theBestSample" }
   val ENTITY_TYPE_KEY = "entityType"
   val ENTITY_NAME_KEY = "entityName"
   val ENTITY_OBJECT_KEYS = Set(ENTITY_TYPE_KEY, ENTITY_NAME_KEY)
+}
 
-  trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerializer {
+trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerializer {
+  import AttributeFormat._
 
-    override def write(obj: Attribute): JsValue = writeAttribute(obj)
-    def writeAttribute(obj: Attribute): JsValue = obj match {
-      //vals
-      case AttributeNull => JsNull
-      case AttributeBoolean(b) => JsBoolean(b)
-      case AttributeNumber(n) => JsNumber(n)
-      case AttributeString(s) => JsString(s)
-      case AttributeValueRawJson(j) => j
-      //ref
-      case AttributeEntityReference(entityType, entityName) => JsObject(Map(ENTITY_TYPE_KEY -> JsString(entityType), ENTITY_NAME_KEY -> JsString(entityName)))
-      //list types
-      case x: AttributeList[_] => writeListType(x)
+  override def write(obj: Attribute): JsValue = writeAttribute(obj)
+  def writeAttribute(obj: Attribute): JsValue = obj match {
+    //vals
+    case AttributeNull => JsNull
+    case AttributeBoolean(b) => JsBoolean(b)
+    case AttributeNumber(n) => JsNumber(n)
+    case AttributeString(s) => JsString(s)
+    case AttributeValueRawJson(j) => j
+    //ref
+    case AttributeEntityReference(entityType, entityName) => JsObject(Map(ENTITY_TYPE_KEY -> JsString(entityType), ENTITY_NAME_KEY -> JsString(entityName)))
+    //list types
+    case x: AttributeList[_] => writeListType(x)
 
-      case _ => throw new SerializationException("AttributeFormat doesn't know how to write JSON for type " + obj.getClass.getSimpleName)
-    }
-
-    override def read(json: JsValue): Attribute = readAttribute(json)
-    def readAttribute(json: JsValue): Attribute = json match {
-      case JsNull => AttributeNull
-      case JsString(s) => AttributeString(s)
-      case JsBoolean(b) => AttributeBoolean(b)
-      case JsNumber(n) => AttributeNumber(n)
-      //NOTE: we handle AttributeValueRawJson in readComplexType below
-
-      case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet => (members(ENTITY_TYPE_KEY), members(ENTITY_NAME_KEY)) match {
-        case (JsString(typeKey), JsString(nameKey)) => AttributeEntityReference(typeKey, nameKey)
-        case _ => throw new RawlsException(s"the values for $ENTITY_TYPE_KEY and $ENTITY_NAME_KEY must be strings")
-      }
-
-      case _ => readComplexType(json)
-    }
+    case _ => throw new SerializationException("AttributeFormat doesn't know how to write JSON for type " + obj.getClass.getSimpleName)
   }
 
+  override def read(json: JsValue): Attribute = readAttribute(json)
+  def readAttribute(json: JsValue): Attribute = json match {
+    case JsNull => AttributeNull
+    case JsString(s) => AttributeString(s)
+    case JsBoolean(b) => AttributeBoolean(b)
+    case JsNumber(n) => AttributeNumber(n)
+    //NOTE: we handle AttributeValueRawJson in readComplexType below
+
+    case JsObject(members) if ENTITY_OBJECT_KEYS subsetOf members.keySet => (members(ENTITY_TYPE_KEY), members(ENTITY_NAME_KEY)) match {
+      case (JsString(typeKey), JsString(nameKey)) => AttributeEntityReference(typeKey, nameKey)
+      case _ => throw new RawlsException(s"the values for $ENTITY_TYPE_KEY and $ENTITY_NAME_KEY must be strings")
+    }
+
+    case _ => readComplexType(json)
+  }
+}
+
+/**
+ * NOTE: When subclassing this, you may want to define your own implicit val attributeFormat with an AttributeListSerializer mixin
+ * if you want e.g. the plain old JSON array attribute list serialization strategy
+ */
+class JsonSupport extends DefaultJsonProtocol {
+  import AttributeFormat._
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
 
   implicit object AttributeStringFormat extends RootJsonFormat[AttributeString] {

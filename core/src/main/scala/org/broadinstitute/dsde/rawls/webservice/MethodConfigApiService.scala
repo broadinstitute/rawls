@@ -64,8 +64,11 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
     path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
       put {
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)))
+          requestContext => {
+            val copyMC = newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)
+            perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)))
+          }
         }
       }
     } ~
