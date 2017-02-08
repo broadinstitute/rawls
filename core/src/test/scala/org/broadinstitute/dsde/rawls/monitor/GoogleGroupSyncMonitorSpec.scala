@@ -79,10 +79,13 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val workerCount = 10
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(100 milliseconds, 0 milliseconds, pubsubDao, topic, "subscription", workerCount, userServiceConstructor))
 
-    val testGroups = (for(i <- 0 until workerCount*4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
-    pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint))
+    // GoogleGroupSyncMonitorSupervisor creates the topic, need to wait for it to exist before publishing messages
+    awaitCond(pubsubDao.topics.contains(topic), 10 seconds)
 
-    awaitCond(pubsubDao.subscriptionsByName("subscription").queue.isEmpty, 10 seconds)
+    val testGroups = (for(i <- 0 until workerCount*4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
+    Await.result(pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint)), Duration.Inf)
+
+    awaitAssert(assert(pubsubDao.subscriptionsByName("subscription").queue.isEmpty), 10 seconds)
     assertResult(0) {
       pubsubDao.acks.size()
     }
