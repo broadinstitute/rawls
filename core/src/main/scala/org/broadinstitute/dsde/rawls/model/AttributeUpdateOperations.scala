@@ -7,6 +7,8 @@ import spray.json._
  * Created by mbemis on 7/23/15.
  */
 object AttributeUpdateOperations {
+  import spray.json.DefaultJsonProtocol._
+
   sealed trait AttributeUpdateOperation {
     def name: AttributeName = this match {
       case AddUpdateAttribute(attributeName, _) => attributeName

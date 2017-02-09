@@ -11,7 +11,9 @@ case class SingleStatistic(value: Double) extends Statistic
 case class SummaryStatistics(min: Double, max: Double, mean: Double, stddev: Double) extends Statistic
 case class StatisticsReport(startDate: String, endDate: String, statistics: Map[String, Statistic])
 
-object StatisticsJsonSupport extends JsonSupport {
+class StatisticsJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
   implicit val SingleStatisticFormat = jsonFormat1(SingleStatistic)
   implicit val SummaryStatisticsFormat = jsonFormat4(SummaryStatistics)
 
@@ -25,3 +27,5 @@ object StatisticsJsonSupport extends JsonSupport {
 
   implicit val StatisticsReportFormat = jsonFormat3(StatisticsReport)
 }
+
+object StatisticsJsonSupport extends StatisticsJsonSupport

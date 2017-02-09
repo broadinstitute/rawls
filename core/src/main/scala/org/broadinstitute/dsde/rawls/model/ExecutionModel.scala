@@ -215,7 +215,9 @@ case class SubmissionWorkflowStatusResponse(
   workflowStatus: String,
   count: Int)
 
-object ExecutionJsonSupport extends JsonSupport {
+class ExecutionJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
   type OutputType = Either[Attribute, UnsupportedOutputType]
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
@@ -372,3 +374,5 @@ object SubmissionStatuses {
   case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
 }
+
+object ExecutionJsonSupport extends ExecutionJsonSupport

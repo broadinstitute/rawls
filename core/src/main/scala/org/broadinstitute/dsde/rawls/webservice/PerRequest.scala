@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.{BasicToResponseMarshallers, ToResponseMarshaller}
-import spray.json.DefaultJsonProtocol
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
@@ -21,7 +20,8 @@ import scala.language.postfixOps
 
 case class RawlsMessage(message: String)
 
-object RawlsMessageJsonSupport extends DefaultJsonProtocol with BasicToResponseMarshallers {
+object RawlsMessageJsonSupport extends BasicToResponseMarshallers {
+  import spray.json.DefaultJsonProtocol._
 
   implicit val RawlsMessageFormat = jsonFormat1(RawlsMessage)
 

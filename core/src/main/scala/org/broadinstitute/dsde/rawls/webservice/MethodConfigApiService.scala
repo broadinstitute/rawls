@@ -5,6 +5,8 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.ExecutionContext
 
@@ -14,9 +16,6 @@ import scala.concurrent.ExecutionContext
 
 trait MethodConfigApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   implicit val executionContext: ExecutionContext
-
-  import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-  import spray.httpx.SprayJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 

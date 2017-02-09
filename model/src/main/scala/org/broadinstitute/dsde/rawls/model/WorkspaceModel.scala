@@ -327,7 +327,8 @@ object AttributeStringifier {
   }
 }
 
-object WorkspaceJsonSupport extends JsonSupport {
+class WorkspaceJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -452,3 +453,5 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }
+
+object WorkspaceJsonSupport extends WorkspaceJsonSupport

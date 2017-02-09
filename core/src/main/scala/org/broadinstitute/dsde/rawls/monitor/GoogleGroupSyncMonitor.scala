@@ -18,6 +18,7 @@ import scala.concurrent.duration._
 import akka.pattern._
 
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
 /**

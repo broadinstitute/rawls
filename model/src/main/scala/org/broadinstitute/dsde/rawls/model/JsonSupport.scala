@@ -141,8 +141,10 @@ trait AttributeFormat extends RootJsonFormat[Attribute] with AttributeListSerial
  * NOTE: When subclassing this, you may want to define your own implicit val attributeFormat with an AttributeListSerializer mixin
  * if you want e.g. the plain old JSON array attribute list serialization strategy
  */
-class JsonSupport extends DefaultJsonProtocol {
+class JsonSupport {
+  import spray.json.DefaultJsonProtocol._
   import AttributeFormat._
+
   implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
 
   implicit object AttributeStringFormat extends RootJsonFormat[AttributeString] {

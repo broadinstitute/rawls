@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
+
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -16,6 +17,7 @@ import spray.http._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import spray.routing._
+
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
 
@@ -24,8 +26,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
  */
 class WorkspaceApiServiceSpec extends ApiServiceSpec {
   import driver.api._
-
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
@@ -529,6 +529,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) {
           status
         }
+
         val dateTime = currentTime()
         assertResult(Set(
           WorkspaceListResponse(WorkspaceAccessLevels.Owner, testWorkspaces.workspace.copy(lastModified = dateTime), WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2), Seq(testData.userOwner.userEmail.value)),
@@ -1052,7 +1053,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
     val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
@@ -1143,9 +1143,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
@@ -1269,9 +1267,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-
-    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 
@@ -1451,7 +1447,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1459,7 +1455,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1472,7 +1468,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1617,7 +1613,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
   it should "allow a project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    import WorkspaceACLJsonSupport._
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1633,7 +1628,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    import WorkspaceACLJsonSupport._
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1649,7 +1643,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow ACL updates with a member specified twice" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    import WorkspaceACLJsonSupport._
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1660,7 +1653,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "not allow an project-owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
     runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-    import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -1673,7 +1665,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "not allow an owner-access user to update an ACL with all users group" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
     runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
-    import WorkspaceACLJsonSupport._
     WorkspaceAccessLevels.all.foreach { accessLevel =>
       Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -1684,7 +1675,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow an owner-access user to downgrade project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    import WorkspaceACLJsonSupport._
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1701,7 +1691,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow an owner-access user to add project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    import WorkspaceACLJsonSupport._
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
@@ -1710,7 +1699,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1727,7 +1716,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1937,7 +1926,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq.empty[AttributeUpdateOperation].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1960,7 +1949,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty.toJson.toString)) ~>
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
