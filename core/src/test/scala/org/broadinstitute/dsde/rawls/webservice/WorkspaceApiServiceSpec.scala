@@ -3,7 +3,9 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -12,7 +14,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
 import spray.http._
 import spray.json._
-import spray.json.DefaultJsonProtocol
+import spray.json.DefaultJsonProtocol._
 import spray.routing._
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
@@ -959,7 +961,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when creating a workspace in a realm that you don't have access to" in withTestDataApiServices { services =>
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set.empty, Set.empty)
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
@@ -1027,13 +1031,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
-    import WorkspaceACLJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
 
-    Post(s"/admin/realms", httpJson(realmGroup)) ~>
+    Post(s"/admin/realms", realmGroup) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -1118,9 +1122,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-    import WorkspaceACLJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
@@ -1244,9 +1248,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
-    import WorkspaceACLJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 

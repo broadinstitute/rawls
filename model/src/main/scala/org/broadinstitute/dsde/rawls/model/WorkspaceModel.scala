@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing

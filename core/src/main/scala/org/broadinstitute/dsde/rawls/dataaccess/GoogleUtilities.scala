@@ -9,6 +9,7 @@ import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport}
+import spray.json.DefaultJsonProtocol._
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._

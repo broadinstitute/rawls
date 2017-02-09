@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.{Descending, Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import spray.json.DefaultJsonProtocol._
 import spray.http._
 
 import scala.concurrent.ExecutionContext

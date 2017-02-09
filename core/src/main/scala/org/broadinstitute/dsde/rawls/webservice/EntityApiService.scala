@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.StatusCodes
+import spray.json.DefaultJsonProtocol._
 import spray.routing.Directive.pimpApply
 import spray.routing._
 

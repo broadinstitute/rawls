@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 case class AccessEntry(accessLevel: WorkspaceAccessLevel, pending: Boolean, canShare: Boolean)
 

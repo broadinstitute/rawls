@@ -1,18 +1,19 @@
 package org.broadinstitute.dsde.rawls.model
 
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
-case class RawlsRealmRef(groupName: RawlsGroupName) extends UserAuthRef
+case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef
 
-object RawlsGroupRef {
+object RawlsGroupRef extends UserAuthRef {
   implicit def toRealmRef(ref: RawlsGroupRef): RawlsRealmRef = RawlsRealmRef(ref.groupName)
 }
 
-object RawlsRealmRef {
-  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.groupName)
+object RawlsRealmRef extends UserAuthRef {
+  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.realmName)
 }
 
 sealed trait UserAuthType { val value: String }
@@ -43,6 +44,6 @@ object UserModelJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectNameFormat = UserModelJsonFormatter(RawlsBillingProjectName)
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
-  implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef.apply)
-  implicit val RawlsRealmRefFormat = jsonFormat1(RawlsRealmRef.apply)
+  implicit val RawlsGroupRefFormat = jsonFormat1[RawlsGroupName, RawlsGroupRef](RawlsGroupRef.apply)
+  implicit val RawlsRealmRefFormat = jsonFormat1[RawlsGroupName, RawlsRealmRef](RawlsRealmRef.apply)
 }

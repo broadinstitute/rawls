@@ -29,6 +29,7 @@ import spray.http.{StatusCodes, Uri}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import spray.httpx.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._

@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.httpx.SprayJsonSupport._
 import spray.routing._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration

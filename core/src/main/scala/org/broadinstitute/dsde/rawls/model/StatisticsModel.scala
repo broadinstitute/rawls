@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 /**
  * Created by mbemis on 7/20/16.

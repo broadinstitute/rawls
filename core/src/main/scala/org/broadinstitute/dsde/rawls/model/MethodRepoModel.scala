@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.joda.time.format.{ISODateTimeFormat, DateTimeFormatter}
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import org.joda.time.DateTime
 
 object AgoraEntityType extends Enumeration {
