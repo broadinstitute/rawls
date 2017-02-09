@@ -365,7 +365,7 @@ trait WorkspaceComponent {
         updateLastModified(workspaceId)
     }
 
-    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {
+    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsRealmRef]]] = {
       val realmQuery = for {
         workspace <- workspaceQuery if workspace.id.inSetBind(workspaceIds.map(UUID.fromString))
       } yield workspace.realmGroupName
@@ -373,10 +373,10 @@ trait WorkspaceComponent {
       realmQuery.result flatMap { allRealms =>
         val flatRealms = allRealms.flatten.toSet
         DBIO.sequence(flatRealms.toSeq.map { realm =>
-          val groupRef = RawlsGroupRef(RawlsGroupName(realm))
-          rawlsGroupQuery.loadGroupIfMember(groupRef, user) flatMap {
+          val realmRef = RawlsRealmRef(RawlsGroupName(realm))
+          rawlsGroupQuery.loadGroupIfMember(realmRef, user) flatMap {
             case None => DBIO.successful(None)
-            case Some(_) => DBIO.successful(Some(groupRef))
+            case Some(_) => DBIO.successful(Some(realmRef))
           }
         })
       }
