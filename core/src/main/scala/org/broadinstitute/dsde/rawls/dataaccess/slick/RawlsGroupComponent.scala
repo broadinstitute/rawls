@@ -300,7 +300,7 @@ trait RawlsGroupComponent {
     }
 
     def setGroupAsRealm(realmRef: RawlsGroupRef): ReadWriteAction[Int] = {
-      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === realmRef.groupName.value)).flatMap {
+      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === realmRef.realmName.value)).flatMap {
         case None => DBIO.successful(0)
         case Some(groupRec) =>
           realmQuery += marshalRealm(realmRef)
@@ -311,8 +311,8 @@ trait RawlsGroupComponent {
       (realmQuery.result.map(recs => recs.map(unmarshalRealm).toSet))
     }
 
-    def deleteRealmRecord(groupRef: RawlsRealmRef): ReadWriteAction[Int] = {
-      (realmQuery.filter(_.groupName === groupRef.groupName.value)).delete
+    def deleteRealmRecord(realmRef: RawlsRealmRef): ReadWriteAction[Int] = {
+      (realmQuery.filter(_.groupName === realmRef.realmName.value)).delete
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {

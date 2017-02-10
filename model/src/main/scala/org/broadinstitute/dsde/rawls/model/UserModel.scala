@@ -8,11 +8,11 @@ case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef
 
-object RawlsGroupRef extends UserAuthRef {
+object RawlsGroupRef {
   implicit def toRealmRef(ref: RawlsGroupRef): RawlsRealmRef = RawlsRealmRef(ref.groupName)
 }
 
-object RawlsRealmRef extends UserAuthRef {
+object RawlsRealmRef {
   implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.realmName)
 }
 
