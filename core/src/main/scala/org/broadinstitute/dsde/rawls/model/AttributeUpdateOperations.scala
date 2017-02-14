@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 /**
  * Created by mbemis on 7/23/15.

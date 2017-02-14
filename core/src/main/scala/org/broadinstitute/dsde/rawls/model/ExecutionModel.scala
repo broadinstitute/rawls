@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFor
 import UserModelJsonSupport.RawlsUserRefFormat
 
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 import org.joda.time.DateTime
 import org.broadinstitute.dsde.rawls.RawlsException
 

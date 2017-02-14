@@ -96,7 +96,7 @@ trait TypedAttributeListSerializer extends AttributeListSerializer {
  * NOTE: When subclassing this, you may want to define your own implicit val attributeFormat with an AttributeListSerializer mixin
  * if you want e.g. the plain old JSON array attribute list serialization strategy
  */
-class JsonSupport {
+class JsonSupport extends DefaultJsonProtocol {
   //Magic strings we use in JSON serialization
 
   //Entity refs get serialized to e.g. { "entityType" : "sample", "entityName" : "theBestSample" }

@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
-import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._

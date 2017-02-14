@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import spray.json.DefaultJsonProtocol._
 import spray.routing.Directive.pimpApply
 import spray.routing._
 

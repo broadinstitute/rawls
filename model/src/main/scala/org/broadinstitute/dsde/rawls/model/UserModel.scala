@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef

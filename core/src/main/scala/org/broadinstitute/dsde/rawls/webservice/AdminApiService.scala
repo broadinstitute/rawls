@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.statistics.StatisticsService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.joda.time.DateTime
-import spray.json.DefaultJsonProtocol._
 import spray.routing._
 
 import scala.concurrent.ExecutionContext

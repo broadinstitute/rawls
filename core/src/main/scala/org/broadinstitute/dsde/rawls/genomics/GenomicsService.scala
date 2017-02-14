@@ -11,7 +11,6 @@ import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete}
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
-import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
 
