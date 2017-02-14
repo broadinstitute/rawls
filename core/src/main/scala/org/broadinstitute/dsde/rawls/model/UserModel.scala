@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.joda.time.DateTime
 import UserAuthJsonSupport._
-import spray.json.DefaultJsonProtocol._
 import spray.httpx.SprayJsonSupport._
 
 /**
