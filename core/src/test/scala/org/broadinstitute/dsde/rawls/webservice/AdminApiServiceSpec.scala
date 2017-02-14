@@ -425,6 +425,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
     import spray.json.DefaultJsonProtocol._
 
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain(group)
+      }
+
     Post(s"/admin/realms", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -449,13 +455,20 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) { status }
       }
 
+    //check that the realm is actually there and categorized as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain(group)
+      }
+
     Delete(s"/admin/realms", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    //check that the realm is actually there and categorized as a realm
+    //check that the realm is no longer there
     Get(s"/admin/realms") ~>
       sealRoute(services.adminRoutes) ~>
       check {
