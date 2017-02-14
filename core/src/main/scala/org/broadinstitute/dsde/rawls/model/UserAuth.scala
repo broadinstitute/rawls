@@ -26,7 +26,7 @@ case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, us
 
 object RawlsGroup {
   implicit def toRef(g: RawlsGroup): RawlsGroupRef = RawlsGroupRef(g.groupName)
-  implicit def toRealmRef(g: RawlsGroup): RawlsRealmRef = RawlsRealmRef(g.groupName)
+  //implicit def toRealmRef(g: RawlsGroup): RawlsRealmRef = RawlsRealmRef(g.groupName)
 }
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)

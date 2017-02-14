@@ -465,7 +465,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 when listing all realms" in withTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
-    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2)
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
 
     Get(s"/admin/realms") ~>
       sealRoute(services.adminRoutes) ~>
@@ -477,7 +477,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   it should "not return regular groups in the list of all realms" in withTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
 
-    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2)
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
     val group = new RawlsGroupRef(RawlsGroupName("test_realm"))
 
     Get(s"/admin/realms") ~>
@@ -516,7 +516,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 when trying to delete a realm that has workspaces in it" in withTestDataApiServices { services =>
-    val realm: RawlsRealmRef = testData.dbGapAuthorizedUsersGroup
+    val realm: RawlsRealmRef = RawlsRealmRef(testData.dbGapAuthorizedUsersGroup.groupName)
 
     Delete(s"/admin/realms", httpJson(realm)) ~>
       sealRoute(services.adminRoutes) ~>

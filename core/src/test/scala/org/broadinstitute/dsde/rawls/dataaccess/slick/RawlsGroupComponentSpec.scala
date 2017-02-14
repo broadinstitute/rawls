@@ -316,7 +316,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     runAndWait(rawlsGroupQuery.save(realm))
 
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(realm))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
 
     assertResult(Some(realm)) {
       runAndWait(rawlsGroupQuery.load(realm))
@@ -329,7 +329,7 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val realm = makeRawlsGroup("A relam", Set.empty)
 
     assertResult(0) {
-      runAndWait(rawlsGroupQuery.setGroupAsRealm(realm))
+      runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
     }
   }
 

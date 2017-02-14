@@ -896,12 +896,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     // attempt to copy an entity to a workspace with the wrong Realm
 
     val newRealm = RawlsGroup(RawlsGroupName("a-new-realm-for-testing"), RawlsGroupEmail("president@realm.example.com"), Set(testData.userOwner), Set.empty)
-    val newRealmRef: RawlsRealmRef = newRealm
+    val newRealmRef: RawlsRealmRef = RawlsRealmRef(newRealm.groupName)
 
     runAndWait(rawlsGroupQuery.save(newRealm))
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(newRealm))
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(newRealmRef))
 
-    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealm), Map.empty)
+    val wrongRealmCloneRequest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "copy_add_realm", Option(newRealmRef), Map.empty)
     Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(wrongRealmCloneRequest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {

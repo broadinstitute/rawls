@@ -6,15 +6,17 @@ import spray.json.DefaultJsonProtocol._
 sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
-case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef
-
-object RawlsGroupRef {
-  implicit def toRealmRef(ref: RawlsGroupRef): RawlsRealmRef = RawlsRealmRef(ref.groupName)
+case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef {
+  def toUserGroupRef: RawlsGroupRef = RawlsGroupRef(realmName)
 }
 
-object RawlsRealmRef {
-  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.realmName)
-}
+//object RawlsGroupRef {
+//  implicit def toRealmRef(ref: RawlsGroupRef): RawlsRealmRef = RawlsRealmRef(ref.groupName)
+//}
+//
+//object RawlsRealmRef {
+//  implicit def toGroupRef(ref: RawlsRealmRef): RawlsGroupRef = RawlsGroupRef(ref.realmName)
+//}
 
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
