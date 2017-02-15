@@ -4503,7 +4503,7 @@ definitions:
         type: string
         description: The name of the workspace
       realm:
-        $ref: '#/definitions/RawlsGroupRef'
+        $ref: '#/definitions/RawlsRealmRef'
         description: An optional realm for the workspace
       workspaceId:
         type: string
@@ -4566,7 +4566,7 @@ definitions:
         type: string
         description: The name of the workspace
       realm:
-        $ref: '#/definitions/RawlsGroupRef'
+        $ref: '#/definitions/RawlsRealmRef'
         description: An optional realm for the workspace
       attributes:
         $ref: ''
