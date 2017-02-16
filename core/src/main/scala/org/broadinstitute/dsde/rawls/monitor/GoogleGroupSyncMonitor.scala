@@ -98,6 +98,7 @@ class GoogleGroupSyncMonitorActor(val pollInterval: FiniteDuration, pollInterval
       // note that the UserInfo passed in probably is not used
       import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsGroupRefFormat
       val userServiceRef = actorOf(UserService.props(userServiceConstructor, UserInfo.buildFromTokens(pubSubDao.getPubSubServiceAccountCredential)), message.ackId)
+      logger.debug(s"received sync message: ${message.contents}")
       userServiceRef ! UserService.InternalSynchronizeGroupMembers(message.contents.parseJson.convertTo[RawlsGroupRef])
 
     case None =>

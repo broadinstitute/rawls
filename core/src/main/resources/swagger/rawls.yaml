@@ -3002,7 +3002,7 @@ paths:
               description: The path to the newly created workspace
               type: string
         '400':
-          description: Workspace namespace does not exist
+          description: Workspace namespace is not ready
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
@@ -3190,7 +3190,7 @@ paths:
               description: The path to the newly cloned workspace
               type: string
         '400':
-          description: Workspace namespace does not exist
+          description: Workspace namespace is not ready
           schema:
             $ref: '#/definitions/ErrorReport'
         '403':
@@ -4788,7 +4788,10 @@ definitions:
         description: the role of the current user in the project
       status:
         type: string
-        enum: ["Creating", "Ready"]
+        enum: ["Creating", "Ready", "Error"]
+      message:
+        type: string
+        description: informational message about the project
   RawlsBillingProjectMember:
     description: an element of a list of project users and their role
     required:

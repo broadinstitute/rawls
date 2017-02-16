@@ -72,6 +72,7 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   override def publishMessages(topicName: String, messages: Seq[String]) = {
+    logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
     Future.traverse(messages.grouped(1000)) { messageBatch =>
       retryWhen500orGoogleError(() => {
         val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))

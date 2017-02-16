@@ -82,7 +82,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userWriter = RawlsUser(UserInfo(testData.userWriter.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo(testData.userReader.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
@@ -233,6 +233,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           header("Location")
         }
       }
+  }
+
+  it should "return 400 for post to workspaces with not ready project" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.billingProject.projectName.value,
+      name = "newWorkspace",
+      None,
+      Map.empty
+    )
+
+    Seq(CreationStatuses.Creating, CreationStatuses.Error).foreach { projectStatus =>
+      runAndWait(rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.billingProject.copy(status = projectStatus))))
+
+      Post(s"/workspaces", httpJson(newWorkspace)) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest, response.entity.asString) {
+            status
+          }
+        }
+    }
   }
 
   it should "create a workspace with a Realm" in withTestDataApiServices { services =>

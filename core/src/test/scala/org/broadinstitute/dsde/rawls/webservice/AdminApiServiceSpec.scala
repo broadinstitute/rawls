@@ -620,7 +620,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready, None)
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready, None, None)
 
       project.groups.map { case (_,g) =>
         runAndWait(rawlsGroupQuery.save(g))
