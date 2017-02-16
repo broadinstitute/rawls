@@ -125,7 +125,7 @@ class HttpGoogleServicesDAO(
 
     val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = realm map { realmGroupRef =>
       groupAccessLevelsAscending.map { accessLevel =>
-        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef, accessLevel))))
+        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef.toUserGroupRef, accessLevel))))
       }.toMap
     }
 

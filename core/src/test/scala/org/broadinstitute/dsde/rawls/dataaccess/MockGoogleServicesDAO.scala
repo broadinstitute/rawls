@@ -109,7 +109,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
           case WorkspaceAccessLevels.ProjectOwner => realmProjectOwnerIntersection.getOrElse(Set.empty)
           case _ => Set.empty
         }
-        accessLevel -> intersectionGroup(workspaceId, realmGroupRef.groupName.value, accessLevel, users)
+        accessLevel -> intersectionGroup(workspaceId, realmGroupRef.realmName.value, accessLevel, users)
       }.toMap
     }
 

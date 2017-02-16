@@ -52,6 +52,7 @@ object UserService {
   case object AdminListUsers extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case object ListRealmsForUser extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
@@ -83,6 +84,7 @@ object UserService {
   case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class AdminCreateRealm(groupRef: RawlsRealmRef) extends UserServiceMessage
   case class AdminDeleteRealm(groupRef: RawlsRealmRef) extends UserServiceMessage
+  case object AdminListAllRealms extends UserServiceMessage
 
   case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -129,6 +131,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
     case AdminCreateRealm(realmRef) => asFCAdmin { createRealm(realmRef) } pipeTo sender
     case AdminDeleteRealm(realmRef) => asFCAdmin { deleteRealm(realmRef) } pipeTo sender
+    case AdminListAllRealms => asFCAdmin { listAllRealms } pipeTo sender
+    case ListRealmsForUser => listRealmsForUser pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -432,7 +436,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way")
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) } flatMap {
       case Some(_) =>
@@ -445,7 +449,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  @deprecated
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   private def createBillingProjectGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): Future[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
     for {
       groups <- dataSource.inTransaction { dataAccess =>
@@ -459,7 +463,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield groupMap
   }
 
-  @deprecated
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   private def createBillingProjectInternal(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): Future[RawlsBillingProject] = {
     for {
       bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
@@ -559,10 +563,10 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def createRealm(realmRef: RawlsRealmRef) = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.load(realmRef) flatMap {
+      dataAccess.rawlsGroupQuery.load(realmRef.toUserGroupRef) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group [${realmRef.realmName.value}] already exists")))
         case None =>
-          createGroupInternal(realmRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(realmRef) map { _ => RequestComplete(StatusCodes.Created) }
+          createGroupInternal(realmRef.toUserGroupRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(realmRef) map { _ => RequestComplete(StatusCodes.Created) }
       }
     }
   }
@@ -572,13 +576,31 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       dataAccess.workspaceQuery.listWorkspacesInRealm(realmRef) flatMap {
         case Seq() =>
           dataAccess.rawlsGroupQuery.deleteRealmRecord(realmRef) flatMap { _ =>
-            withGroup(realmRef, dataAccess) { group =>
-              dataAccess.rawlsGroupQuery.delete(realmRef) andThen
+            withGroup(realmRef.toUserGroupRef, dataAccess) { group =>
+              dataAccess.rawlsGroupQuery.delete(realmRef.toUserGroupRef) andThen
                 DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
             }
           }
         case _ =>
           DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${realmRef.realmName.value}] because there are workspaces in this realm")))
+      }
+    }
+  }
+
+  // Lists every realm in the system
+  def listAllRealms() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listAllRealms() map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
+      }
+    }
+  }
+
+  // Lists every realm that the user has access to
+  def listRealmsForUser() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listRealmsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
       }
     }
   }

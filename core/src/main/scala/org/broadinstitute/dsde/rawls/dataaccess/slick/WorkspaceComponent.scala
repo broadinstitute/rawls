@@ -365,7 +365,7 @@ trait WorkspaceComponent {
         updateLastModified(workspaceId)
     }
 
-    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {
+    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsRealmRef]]] = {
       val realmQuery = for {
         workspace <- workspaceQuery if workspace.id.inSetBind(workspaceIds.map(UUID.fromString))
       } yield workspace.realmGroupName
@@ -373,10 +373,10 @@ trait WorkspaceComponent {
       realmQuery.result flatMap { allRealms =>
         val flatRealms = allRealms.flatten.toSet
         DBIO.sequence(flatRealms.toSeq.map { realm =>
-          val groupRef = RawlsGroupRef(RawlsGroupName(realm))
-          rawlsGroupQuery.loadGroupIfMember(groupRef, user) flatMap {
+          val realmRef = RawlsRealmRef(RawlsGroupName(realm))
+          rawlsGroupQuery.loadGroupIfMember(realmRef.toUserGroupRef, user) flatMap {
             case None => DBIO.successful(None)
-            case Some(_) => DBIO.successful(Some(groupRef))
+            case Some(_) => DBIO.successful(Some(realmRef))
           }
         })
       }
@@ -622,7 +622,7 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value), 0)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.realmName.value), 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
