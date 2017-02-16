@@ -45,6 +45,7 @@ object Dependencies {
     "com.google.apis" % "google-api-services-plus" % "v1-rev381-1.20.0",
     "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.20.0",
     "com.google.apis" % "google-api-services-pubsub" % "v1-rev14-1.22.0",
+    "com.google.apis" % "google-api-services-servicemanagement" % "v1-rev17-1.22.0",
     "com.google.guava" % "guava" % "19.0",
     "com.typesafe.slick" %% "slick" % slickV,
     "com.typesafe.slick" %% "slick-hikaricp" % slickV,

@@ -567,20 +567,20 @@ trait WorkspaceComponent {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         user <- groupUsersQuery if user.groupName === access.groupName
       } yield {
-        (user.userSubjectId, access.accessLevel)
+        (access.workspaceId, user.userSubjectId, access.accessLevel)
       }
 
       val subGroupQuery = for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceId && access.isRealmAcl === false
         subGroup <- groupSubgroupsQuery if subGroup.parentGroupName === access.groupName
       } yield {
-        (subGroup.childGroupName, access.accessLevel)
+        (access.workspaceId, subGroup.childGroupName, access.accessLevel)
       }
 
-      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on(_._1 === _.userSubjectId).map { case ((subjectId, accessLevel), hasSharePermission) =>
+      val usersWithSharePermission = userQuery.joinLeft(workspaceUserShareQuery).on((accessQuery, shareQuery) => accessQuery._2 === shareQuery.userSubjectId && accessQuery._1 === shareQuery.workspaceId).map { case ((_, subjectId, accessLevel), hasSharePermission) =>
         (subjectId, accessLevel, hasSharePermission.isDefined)
       }
-      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on(_._1 === _.groupName).map { case ((groupName, accessLevel), hasSharePermission) =>
+      val groupsWithSharePermission = subGroupQuery.joinLeft(workspaceGroupShareQuery).on((accessQuery, shareQuery) => accessQuery._2 === shareQuery.groupName && accessQuery._1 === shareQuery.workspaceId).map { case ((_, groupName, accessLevel), hasSharePermission) =>
         (groupName, accessLevel, hasSharePermission.isDefined)
       }
 

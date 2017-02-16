@@ -86,7 +86,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val userWriter = RawlsUser(UserInfo(testData.userWriter.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212346"))
     val userReader = RawlsUser(UserInfo(testData.userReader.userEmail.value, OAuth2BearerToken("token"), 123, "123456789876543212347"))
 
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None)
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("ns"), generateBillingGroups(RawlsBillingProjectName("ns"), Map(ProjectRoles.Owner -> Set(userProjectOwner), ProjectRoles.User -> Set.empty), Map.empty), "testBucketUrl", CreationStatuses.Ready, None, None)
 
     val workspaceName = WorkspaceName(billingProject.projectName.value, "testworkspace")
 
@@ -238,6 +238,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           header("Location")
         }
       }
+  }
+
+  it should "return 400 for post to workspaces with not ready project" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = testData.billingProject.projectName.value,
+      name = "newWorkspace",
+      None,
+      Map.empty
+    )
+
+    Seq(CreationStatuses.Creating, CreationStatuses.Error).foreach { projectStatus =>
+      runAndWait(rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.billingProject.copy(status = projectStatus))))
+
+      Post(s"/workspaces", httpJson(newWorkspace)) ~>
+        sealRoute(services.workspaceRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest, response.entity.asString) {
+            status
+          }
+        }
+    }
   }
 
   it should "create a workspace with a Realm" in withTestDataApiServices { services =>
@@ -1815,6 +1836,61 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         responseAs[WorkspaceACL].acl should not contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+  }
+
+  it should "granting and revoking share permissions should update accordingly" in withTestDataApiServicesAndUser("owner-access") { services =>
+    import WorkspaceACLJsonSupport._
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
+      }
+
+    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+      }
+
+    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+        responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
+      }
+  }
+
+  // Note that user writer-access has share permissions from another workspace- testData.workspaceToTestGrant
+  // This is set up directly in the test data in TestDriverComponent
+  it should "share permissions should not bleed across workspaces" in withTestDataApiServicesAndUser("writer-access") { services =>
+    import WorkspaceACLJsonSupport._
+
+    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) { status }
       }
   }
 

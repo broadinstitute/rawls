@@ -469,7 +469,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
       billingProject <- dataSource.inTransaction { dataAccess =>
         val bucketUrl = "gs://" + bucketName
-        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
+        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None, None)
         dataAccess.rawlsBillingProjectQuery.create(billingProject)
       }
     } yield billingProject
@@ -844,13 +844,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess =>
           for {
-            _ <- gcsDAO.createProject(projectName, billingAccount)
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount)
             result <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
                   for {
                     groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                    _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
 
                   } yield {
                     RequestComplete(StatusCodes.Created)
