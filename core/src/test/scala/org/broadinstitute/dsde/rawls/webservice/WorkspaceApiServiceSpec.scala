@@ -5,7 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
@@ -1053,7 +1053,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
-
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
     val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
@@ -1143,7 +1143,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
@@ -1267,7 +1269,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
-    val realmGroup = RawlsGroup(RawlsGroupName("realm-for-testing"), RawlsGroupEmail("king@realm.example.com"), Set(testData.userOwner), Set.empty)
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+
+    val realmGroup = RawlsRealmRef(RawlsGroupName("realm-for-testing"))
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 
