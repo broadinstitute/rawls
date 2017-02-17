@@ -169,7 +169,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
     val projectOwnerGoogleGroup = Await.result(gcsDAO.createGoogleGroup(RawlsGroupRef(RawlsGroupName(UUID.randomUUID.toString))), Duration.Inf)
     val project = RawlsBillingProject(RawlsBillingProjectName(testProject), Map(ProjectRoles.Owner -> projectOwnerGoogleGroup), "", Ready, None, None)
 
-    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm), Option(Set(RawlsUserRef(RawlsUserSubjectId(testCreator.userSubjectId))))), Duration.Inf)
+    val googleWorkspaceInfo = Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(RawlsRealmRef(testRealm.groupName)), Option(Set(RawlsUserRef(RawlsUserSubjectId(testCreator.userSubjectId))))), Duration.Inf)
 
     val storage = gcsDAO.getStorage(gcsDAO.getBucketServiceAccountCredential)
 
@@ -254,7 +254,7 @@ class HttpGoogleServicesDAOSpec extends FlatSpec with Matchers with IntegrationT
   it should "handle failures setting up workspace" in {
     val project = RawlsBillingProject(RawlsBillingProjectName("not a project"), Map(ProjectRoles.Owner -> RawlsGroup(RawlsGroupName("foo"), RawlsGroupEmail("foo"), Set.empty, Set.empty)), "", Ready, None, None)
     intercept[GoogleJsonResponseException] {
-      Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(testRealm), None), Duration.Inf)
+      Await.result(gcsDAO.setupWorkspace(testCreator, project, testWorkspaceId, testWorkspace, Option(RawlsRealmRef(testRealm.groupName)), None), Duration.Inf)
     }
 
     val groups: Seq[RawlsGroup] = groupAccessLevelsAscending flatMap { accessLevel =>

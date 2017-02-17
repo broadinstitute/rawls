@@ -108,7 +108,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
   def makeWorkspaceWithUsers(usersByLevel: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, Set[RawlsUserRef]], groupsByLevel: Map[WorkspaceAccessLevel, Set[RawlsGroupRef]] = Map(WorkspaceAccessLevels.Owner -> Set.empty, WorkspaceAccessLevels.Write -> Set.empty, WorkspaceAccessLevels.Read -> Set.empty))(project: RawlsBillingProject,
                     name: String,
-                    realm: Option[RawlsGroupRef],
+                    realm: Option[RawlsRealmRef],
                     workspaceId: String,
                     bucketName: String,
                     createdDate: DateTime,
@@ -266,29 +266,29 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val realm7 = makeRawlsGroup(s"Test-Realm7", Set.empty)
 
-    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, realmWsName, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceWithRealm, workspaceWithRealmGroups) = makeWorkspace(billingProject, realmWsName, Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, "test-tcga", Option(dbGapAuthorizedUsersGroup), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (controlledWorkspace, controlledWorkspaceGroups) = makeWorkspace(billingProject, "test-tcga", Option(RawlsRealmRef(dbGapAuthorizedUsersGroup.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
-    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(billingProject, realmWs2Name, Option(realm2), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (otherWorkspaceWithRealm, otherWorkspaceWithRealmGroups) = makeWorkspace(billingProject, realmWs2Name, Option(RawlsRealmRef(realm2.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, without submissions
     val (workspaceNoSubmissions, workspaceNoSubmissionsGroups) = makeWorkspace(billingProject, wsName3.name, None, UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with successful submission
-    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(billingProject, wsName4.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSuccessfulSubmission, workspaceSuccessfulSubmissionGroups) = makeWorkspace(billingProject, wsName4.name , Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with failed submission
-    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(billingProject, wsName5.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceFailedSubmission, workspaceFailedSubmissionGroups) = makeWorkspace(billingProject, wsName5.name , Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with submitted submission
-    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(billingProject, wsName6.name , Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceSubmittedSubmission, workspaceSubmittedSubmissionGroups) = makeWorkspace(billingProject, wsName6.name , Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms with mixed workflows
-    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(billingProject, wsName7.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceMixedSubmissions, workspaceMixedSubmissionsGroups) = makeWorkspace(billingProject, wsName7.name, Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Workspace with realms, with aborted and successful submissions
-    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Option(realm), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspaceTerminatedSubmissions, workspaceTerminatedSubmissionsGroups) = makeWorkspace(billingProject, wsName8.name, Option(RawlsRealmRef(realm.groupName)), UUID.randomUUID().toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
 
     // Standard workspace to test grant permissions
     val (workspaceToTestGrant, workspaceToTestGrantGroups) = makeWorkspaceToTestGrant(billingProject, wsName9.name, None, workspaceToTestGrantId.toString, "aBucket", currentTime(), currentTime(), "testUser", wsAttrs, false)
@@ -539,6 +539,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         DBIO.sequence(workspaceMixedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceTerminatedSubmissionsGroups.map(rawlsGroupQuery.save).toSeq),
         DBIO.sequence(workspaceToTestGrantGroups.map(rawlsGroupQuery.save).toSeq),
+        rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)),
+        rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm2.groupName)),
+        rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(dbGapAuthorizedUsersGroup.groupName)),
         saveAllWorkspacesAction,
         workspaceQuery.insertUserSharePermissions(workspaceToTestGrantId, Seq(RawlsUserRef(userWriter.userSubjectId))),
         workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(RawlsGroupRef(dbGapAuthorizedUsersGroup.groupName))),

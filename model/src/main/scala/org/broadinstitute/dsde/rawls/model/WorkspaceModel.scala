@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -71,7 +72,7 @@ object AttributeName {
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsGroupRef],
+                      realm: Option[RawlsRealmRef],
                       attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -81,7 +82,7 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsGroupRef],
+                      realm: Option[RawlsRealmRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
@@ -241,12 +242,6 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
-case class WorkspaceInvite(workspaceNamespace: String,
-                           workspaceName: String,
-                           userEmail: String,
-                           originSubjectId: String,
-                           accessLevel: WorkspaceAccessLevel)
-
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
 case class BucketUsageResponse(usageInBytes: BigInt)
@@ -345,6 +340,8 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val EntityFormat = jsonFormat3(Entity)
 
   implicit val RawlsGroupRefFormat = UserModelJsonSupport.RawlsGroupRefFormat
+
+  implicit val RawlsRealmRefFormat = UserModelJsonSupport.RawlsRealmRefFormat
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 

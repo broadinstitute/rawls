@@ -68,7 +68,7 @@ trait WorkspaceComponent {
     def recordVersion = column[Long]("record_version")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
-    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, rawlsGroupQuery)(_.groupName.?)
+    def realm = foreignKey("FK_WS_REALM_GROUP", realmGroupName, realmQuery)(_.groupName.?)
 
     def * = (namespace, name, id, bucketName, createdDate, lastModified, createdBy, isLocked, realmGroupName, recordVersion) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
   }
@@ -240,6 +240,10 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.isLocked).update(false)
     }
 
+    def listWorkspacesInRealm(realmRef: RawlsRealmRef): ReadAction[Seq[WorkspaceName]] = {
+      (findWorkspacesInRealm(realmRef).result).map(recs => recs.map(rec => WorkspaceName(rec.namespace, rec.name)))
+    }
+
     def saveInvite(workspaceId: UUID, originUser: String, invite: WorkspaceACLUpdate): ReadWriteAction[WorkspaceACLUpdate] = {
       pendingWorkspaceAccessQuery insertOrUpdate(marshalWorkspaceInvite(workspaceId, originUser, invite)) map { _ => invite }
     }
@@ -361,7 +365,7 @@ trait WorkspaceComponent {
         updateLastModified(workspaceId)
     }
 
-    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsGroupRef]]] = {
+    def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsRealmRef]]] = {
       val realmQuery = for {
         workspace <- workspaceQuery if workspace.id.inSetBind(workspaceIds.map(UUID.fromString))
       } yield workspace.realmGroupName
@@ -369,10 +373,10 @@ trait WorkspaceComponent {
       realmQuery.result flatMap { allRealms =>
         val flatRealms = allRealms.flatten.toSet
         DBIO.sequence(flatRealms.toSeq.map { realm =>
-          val groupRef = RawlsGroupRef(RawlsGroupName(realm))
-          rawlsGroupQuery.loadGroupIfMember(groupRef, user) flatMap {
+          val realmRef = RawlsRealmRef(RawlsGroupName(realm))
+          rawlsGroupQuery.loadGroupIfMember(realmRef.toUserGroupRef, user) flatMap {
             case None => DBIO.successful(None)
-            case Some(_) => DBIO.successful(Some(groupRef))
+            case Some(_) => DBIO.successful(Some(realmRef))
           }
         })
       }
@@ -496,6 +500,10 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
+    def findWorkspacesInRealm(realmRef: RawlsRealmRef): WorkspaceQueryType = {
+      filter(_.realmGroupName === realmRef.realmName.value)
+    }
+
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
       val query = for {
         accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
@@ -614,11 +622,11 @@ trait WorkspaceComponent {
     }
 
     private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.groupName.value), 0)
+      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, workspace.realm.map(_.realmName.value), 0)
     }
 
     private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap, accessGroups: Map[WorkspaceAccessLevel, RawlsGroupRef], realmACLs: Map[WorkspaceAccessLevel, RawlsGroupRef]): Workspace = {
-      val realm = workspaceRec.realmGroupName.map(name => RawlsGroupRef(RawlsGroupName(name)))
+      val realm = workspaceRec.realmGroupName.map(name => RawlsRealmRef(RawlsGroupName(name)))
       Workspace(workspaceRec.namespace, workspaceRec.name, realm, workspaceRec.id.toString, workspaceRec.bucketName, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, accessGroups, realmACLs, workspaceRec.isLocked)
     }
 

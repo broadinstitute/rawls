@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import org.joda.time.DateTime
 import org.joda.time.format.{DateTimeFormatter, ISODateTimeFormat}
 

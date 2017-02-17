@@ -36,5 +36,6 @@
     <include file="changesets/20161115_pending_workspace_access.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170123_share_permissions.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170127_drop_old_project_tables.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170130_realms_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170125_project_operations.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
