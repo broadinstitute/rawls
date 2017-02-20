@@ -94,7 +94,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
     //Check that the deleted method has an updated name
-    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-"))
+    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "_"))
 
     //Check that the deleted method has the deleted field set to true
     assertResult(Some(true)) {
