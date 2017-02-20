@@ -43,7 +43,9 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.save(workspaceContext, changed))
 
-    assertResult(Option(changed)) {
+    val newVersion = changed.copy(methodConfigVersion = 2)
+
+    assertResult(Option(newVersion)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
   }
@@ -92,7 +94,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
     //Check that the deleted method has an updated name
-    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
+    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-"))
 
     //Check that the deleted method has the deleted field set to true
     assertResult(Some(true)) {
