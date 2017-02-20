@@ -48,6 +48,12 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     assertResult(Option(newVersion)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
+
+    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+
+    assertResult(1) {
+      list.filter(_.name.contains(testData.methodConfig.name + "_")).size
+    }
   }
 
   it should "list method configs" in withConstantTestDatabase {
