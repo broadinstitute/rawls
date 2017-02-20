@@ -31,7 +31,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "overwrite method configs" in withDefaultTestDatabase {
+  it should "hide old method config and save new method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     val changed = testData.methodConfig.copy(rootEntityType = "goober",
