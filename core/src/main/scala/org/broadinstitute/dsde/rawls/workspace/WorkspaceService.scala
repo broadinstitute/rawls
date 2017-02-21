@@ -1083,7 +1083,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) { methodConfiguration =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, newName) flatMap {
             case None =>
-              dataAccess.methodConfigurationQuery.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName, newName)
+              dataAccess.methodConfigurationQuery.rename(workspaceContext, methodConfigurationNamespace, methodConfigurationName,  methodConfiguration.copy(name = newName))
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Destination ${newName} already exists")))
           } map(_ => RequestComplete(StatusCodes.NoContent))
         }

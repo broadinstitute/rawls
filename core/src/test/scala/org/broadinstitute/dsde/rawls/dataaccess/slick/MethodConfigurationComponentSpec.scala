@@ -43,9 +43,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.save(workspaceContext, changed))
 
-    val newVersion = changed.copy(methodConfigVersion = 2)
-
-    assertResult(Option(newVersion)) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
@@ -53,6 +51,12 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     assertResult(1) {
       list.filter(_.name.contains(testData.methodConfig.name + "_")).size
+    }
+
+    val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
+
+    assertResult(0) {
+      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
     }
   }
 
@@ -64,16 +68,30 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "rename method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val changed = testData.methodConfig.copy(name = "sample", rootEntityType = "Sample")
+    val methodConfigOldName = MethodConfiguration(
+      "ns",
+      "oldName",
+      "sample",
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("output.expr")),
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      MethodRepoMethod("ns-config", "meth2", 2)
+    )
 
-    runAndWait(methodConfigurationQuery.rename(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed.name))
+    runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfigOldName ))
 
-    assertResult(Option(changed)) {
+    val changed = methodConfigOldName.copy(name = "newName")
+
+    runAndWait(methodConfigurationQuery.rename(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
+
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name))
+    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+
+    assertResult(1) {
+      list.filter(_.name.contains(methodConfigOldName.name + "_")).size
     }
   }
 

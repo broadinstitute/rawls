@@ -99,30 +99,34 @@ trait MethodConfigurationComponent {
      */
     def save(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
 
-      def saveMaps(configId: Long) = {
-        val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
-        val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
-        val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }
-
-        (methodConfigurationPrereqQuery ++= prerequisites) andThen
-          (methodConfigurationInputQuery ++= inputs) andThen
-            (methodConfigurationOutputQuery ++= outputs)
-      }
-
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
         case None =>
-          val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, methodConfig))
-          configInsert flatMap { configId =>
-            saveMaps(configId)
+            val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, methodConfig))
+            configInsert flatMap { configId =>
+              saveMaps(methodConfig, configId)
           }
         case Some(methodConfigRec) =>
-          workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-            hideMethodConfigurationAction(methodConfigRec.id, methodConfigRec.name) andThen
-            (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, methodConfig, methodConfigRec.methodConfigVersion + 1)) flatMap { configId =>
-            saveMaps(configId)
-          }
+          saveNewVersion(workspaceContext, methodConfigRec.id, methodConfigRec.name, methodConfigRec.methodConfigVersion, methodConfig)
       }
     } map { _ => methodConfig }
+
+    private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
+      val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
+      val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
+      val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }
+
+      (methodConfigurationPrereqQuery ++= prerequisites) andThen
+        (methodConfigurationInputQuery ++= inputs) andThen
+        (methodConfigurationOutputQuery ++= outputs)
+    }
+
+    def saveNewVersion(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration) = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        hideMethodConfigurationAction(oldId, oldName) andThen
+        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, newMethodConfig, oldConfigVersion + 1)) flatMap { configId =>
+        saveMaps(newMethodConfig, configId)
+      }
+    }
 
     private def marshalMethodConfigNewVersion(workspaceId: UUID, methodConfig: MethodConfiguration, version: Int) = {
       MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, version, methodConfig.deleted)
@@ -136,10 +140,25 @@ trait MethodConfigurationComponent {
       loadMethodConfigurationById(methodConfigurationId)
     }
 
-    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): ReadWriteAction[Int] = {
+    /*def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
+    }*/
+
+    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfig: MethodConfiguration) = {
+      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
+        case Some(methodConfigRec) =>
+          saveNewVersion(workspaceContext, methodConfigRec.id, methodConfigRec.name, methodConfigRec.methodConfigVersion, newMethodConfig)
+      }
     }
+
+    /*def rename2(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration ) = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
+        hideMethodConfigurationAction(oldId, oldName) andThen
+        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, newMethodConfig, oldConfigVersion + 1)) flatMap { configId =>
+        saveMaps(newMethodConfig, configId)
+      }
+    }*/
 
     // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
