@@ -97,6 +97,9 @@ trait MethodConfigurationComponent {
     /*
       the core methods
      */
+
+    // the save method is used for both creating a new method config and updating an edited method config
+    // the save method is not used for renaming a method config, see the rename method for that
     def save(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
 
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
@@ -120,7 +123,7 @@ trait MethodConfigurationComponent {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    def saveNewVersion(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration) = {
+    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         hideMethodConfigurationAction(oldId, oldName) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, newMethodConfig, oldConfigVersion + 1)) flatMap { configId =>
@@ -140,25 +143,15 @@ trait MethodConfigurationComponent {
       loadMethodConfigurationById(methodConfigurationId)
     }
 
-    /*def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String): ReadWriteAction[Int] = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName).map(_.name).update(newName)
-    }*/
-
+    // To rename a method config, we "delete" (or rather hide) the old version of the method config and create a new row for the new method config, with the
+    //  config version # incremented
     def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfig: MethodConfiguration) = {
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
+        case None => DBIO.successful(false)
         case Some(methodConfigRec) =>
           saveNewVersion(workspaceContext, methodConfigRec.id, methodConfigRec.name, methodConfigRec.methodConfigVersion, newMethodConfig)
       }
     }
-
-    /*def rename2(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration ) = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(oldId, oldName) andThen
-        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, newMethodConfig, oldConfigVersion + 1)) flatMap { configId =>
-        saveMaps(newMethodConfig, configId)
-      }
-    }*/
 
     // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
