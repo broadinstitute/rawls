@@ -1,4 +1,4 @@
-FROM broadinstitute/scala-baseimage
+FROM openjdk:8
 
 # Rawls' default port
 EXPOSE 8080
@@ -6,12 +6,10 @@ EXPOSE 5050
 
 ENV GIT_MODEL_HASH $GIT_MODEL_HASH
 
-ADD . /rawls
+RUN mkdir /rawls
+COPY ./rawls.jar /rawls
 
-# catch sbt issues separately
-RUN cd /rawls && sbt update && echo "sbt updated successfully."
-
-RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
+#RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
 
 # Add Rawls as a service (it will start when the container starts)
 RUN mkdir /etc/service/rawls
