@@ -13,7 +13,7 @@ import scala.concurrent.Future
 import scala.util.Try
 
 abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
-  override val errorReportSource = "google"
+  val errorReportSource = ErrorReportSource("google")
 
   val CREATE_PROJECT_OPERATION = "create_project"
 

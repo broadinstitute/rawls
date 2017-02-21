@@ -15,9 +15,13 @@ case class UserStatus(userInfo: RawlsUser, enabled: Map[String, Boolean])
 
 case class UserList(userList: Seq[String])
 
-object UserJsonSupport extends JsonSupport {
+class UserJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
   implicit val UserRefreshTokenFormat = jsonFormat1(UserRefreshToken)
   implicit val UserRefreshTokenDateFormat = jsonFormat1(UserRefreshTokenDate)
   implicit val UserStatusFormat = jsonFormat2(UserStatus)
   implicit val UserListFormat = jsonFormat1(UserList)
 }
+
+object UserJsonSupport extends UserJsonSupport

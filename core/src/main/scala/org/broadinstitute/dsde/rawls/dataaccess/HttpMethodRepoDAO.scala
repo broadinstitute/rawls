@@ -12,6 +12,7 @@ import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 /**

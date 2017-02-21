@@ -82,7 +82,8 @@ case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 
 case class BillingAccountScopes(requiredScopes: Seq[String])
 
-object UserAuthJsonSupport extends JsonSupport {
+class UserAuthJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
   import UserModelJsonSupport._
 
   // need "apply" here so it doesn't choose the companion class
@@ -135,3 +136,5 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 }
+
+object UserAuthJsonSupport extends UserAuthJsonSupport

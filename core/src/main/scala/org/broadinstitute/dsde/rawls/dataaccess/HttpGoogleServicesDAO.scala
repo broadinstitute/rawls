@@ -43,6 +43,7 @@ import spray.client.pipelining._
 import spray.http.HttpHeaders.Authorization
 import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}

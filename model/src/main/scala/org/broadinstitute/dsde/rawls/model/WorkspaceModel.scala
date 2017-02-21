@@ -248,32 +248,43 @@ case class BucketUsageResponse(usageInBytes: BigInt)
 
 case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
 
-object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],Seq[StackTraceElement],Option[Class[_]]) => ErrorReport) {
-  val SOURCE = "rawls"
+case class ErrorReportSource(source: String)
 
-  def apply(statusCode: StatusCode, message: String): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),Seq.empty,Seq.empty, None)
+object ErrorReport {
+  def apply(message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq.empty,Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, cause: ErrorReport): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),Seq(cause),Seq.empty, None)
+  def apply(message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq(cause),Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport]): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),causes,Seq.empty, None)
+  def apply(message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,causes,Seq.empty, None)
 
-  def apply(throwable: Throwable): ErrorReport =
-    new ErrorReport(SOURCE,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(statusCode: StatusCode, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(throwable: Throwable, statusCode: StatusCode): ErrorReport =
-    new ErrorReport(SOURCE,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq.empty,Seq.empty, None)
 
-  def apply(message: String, cause: ErrorReport) =
-    new ErrorReport(SOURCE,message,None,Seq(cause),Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, Option(statusCode), causes(throwable), throwable.getStackTrace, None)
 
-  def apply(message: String, causes: Seq[ErrorReport]) =
-    new ErrorReport(SOURCE,message,None,causes,Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq(cause),Seq.empty, None)
 
-  def message(throwable: Throwable) = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
-  def causes(throwable: Throwable): Array[ErrorReport] = causeThrowables(throwable).map(ErrorReport(_))
+  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),causes,Seq.empty, None)
+
+  def apply(throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+
+  def apply(message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, statusCode, causes, stackTrace, exceptionClass)
+
+  def message(throwable: Throwable): String = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
+
+  def causes(throwable: Throwable)(implicit source: ErrorReportSource): Array[ErrorReport] = causeThrowables(throwable).map(apply)
+
   private def causeThrowables(throwable: Throwable) = {
     if (throwable.getSuppressed.nonEmpty || throwable.getCause == null) throwable.getSuppressed
     else Array(throwable.getCause)
@@ -310,12 +321,14 @@ object AttributeStringifier {
       case AttributeBoolean(value) => value.toString()
       case AttributeValueRawJson(value) => value.toString()
       case AttributeEntityReference(t, name) => name
-      case al: AttributeList[_] => al.list.map(apply).mkString(" ")
+      case al: AttributeList[_] =>
+        WDLJsonSupport.attributeFormat.write(al).toString()
     }
   }
 }
 
-object WorkspaceJsonSupport extends JsonSupport {
+class WorkspaceJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -436,7 +449,9 @@ object WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport,"source","message","statusCode","causes","stackTrace","exceptionClass")))
+  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport.apply,"source","message","statusCode","causes","stackTrace","exceptionClass")))
 
   implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }
+
+object WorkspaceJsonSupport extends WorkspaceJsonSupport

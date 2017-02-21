@@ -11,7 +11,7 @@ import scala.util.Try
   * Created by davidan on 6/14/16.
   */
 trait ExecutionServiceCluster extends ErrorReportable {
-  override val errorReportSource = "cromwell"
+  val errorReportSource = ErrorReportSource("cromwell")
 
   // ====================
   // facade methods
