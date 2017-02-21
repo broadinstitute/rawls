@@ -23,4 +23,6 @@ object Version {
   val modelVersionSettings: Seq[Setting[_]] =
     Seq(version := getVersionString(baseDirectory.value))
 
+  val googleVersionSettings = modelVersionSettings
+
 }

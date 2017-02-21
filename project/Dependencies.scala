@@ -5,6 +5,26 @@ object Dependencies {
   val sprayV = "1.3.2"
   val slickV = "3.1.1"
 
+  val googleDependencies = Seq(
+    "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-genomics" % "v1-rev89-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-storage" % "v1-rev35-1.20.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-cloudresourcemanager" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0",
+    "com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0",
+    "com.google.apis" % "google-api-services-plus" % "v1-rev381-1.20.0",
+    "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.20.0",
+    "com.google.apis" % "google-api-services-pubsub" % "v1-rev14-1.22.0",
+    "com.google.apis" % "google-api-services-servicemanagement" % "v1-rev17-1.22.0",
+    "com.google.guava" % "guava" % "19.0"
+  )
+
   val modelDependencies = Seq(
     "io.spray" %% "spray-json" % "1.3.2",
     "io.spray" %% "spray-http" % sprayV,

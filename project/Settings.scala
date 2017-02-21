@@ -52,6 +52,14 @@ object Settings {
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
+  val googleSettings = commonSettings ++ List(
+    name := "rawls-google",
+    libraryDependencies ++= googleDependencies
+  ) ++ googleVersionSettings ++ googlePublishSettings
+
+  //the full list of settings for the rawlsModel project (see build.sbt)
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
   val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
