@@ -176,11 +176,11 @@ trait MethodConfigurationComponent {
         .update(true, methodConfigName + "_" + DateTime.now().toString("yyyy-MM-dd_HH:mm:ss"))
     }
 
-    // Delete a Method completely from the DB - used when deleting a workspace
-    object DeleteMethodConfigurationQuery extends RawSqlQuery {
+    // performs actual deletion (not hiding) of everything that depends on a method configuration
+    object MethodConfigurationDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcDriver = MethodConfigurationComponent.this.driver
 
-      def deleteAction(workspaceId: UUID) = {
+      def deleteAction(workspaceId: UUID): WriteAction[Seq[Int]] = {
         val tables: Seq[String] = Seq("METHOD_CONFIG_INPUT", "METHOD_CONFIG_OUTPUT", "METHOD_CONFIG_PREREQ")
 
         DBIO.sequence(tables map { table =>
@@ -189,6 +189,12 @@ trait MethodConfigurationComponent {
                 where mc.workspace_id=$workspaceId"""
         })
       }
+    }
+
+    // performs actual deletion (not hiding) of method configuration
+    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
+      MethodConfigurationDependenciesDeletionQuery.deleteAction(workspaceId) andThen
+        filter(_.workspaceId === workspaceId).delete
     }
 
     // includes "deleted" MCs

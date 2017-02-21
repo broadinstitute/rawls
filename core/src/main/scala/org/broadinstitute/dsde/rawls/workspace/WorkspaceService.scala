@@ -292,12 +292,13 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         groupsToRemove <- DBIO.sequence(groupRefsToRemove.toSeq.map(groupRef => dataAccess.rawlsGroupQuery.load(groupRef)))
 
         // Delete components of the workspace
-        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId))
-        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceSubmissions(workspaceContext.workspaceId))
-        _ <- DBIO.seq(dataAccess.workspaceQuery.deleteWorkspaceMethodConfigs(workspaceContext.workspaceId))
-        _ <- dataAccess.workspaceQuery.deleteWorkspaceEntitiesAndAttributes(workspaceContext.workspaceId)
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
+      
+        _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
+        _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
+        _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
 
         // Delete groups
         _ <- DBIO.seq(groupRefsToRemove.map { group => dataAccess.rawlsGroupQuery.delete(group) }.toSeq: _*)

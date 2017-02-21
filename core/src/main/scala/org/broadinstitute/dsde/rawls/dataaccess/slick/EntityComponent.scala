@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
+import slick.profile.SqlAction
 import spray.http.StatusCodes
 
 /**
@@ -354,10 +355,11 @@ trait EntityComponent {
         }
     }
 
-    object DeleteEntityAttributesQuery extends RawSqlQuery {
+    // performs actual deletion (not hiding) of everything that depends on an entity
+    object EntityDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcDriver = EntityComponent.this.driver
 
-      def deleteAction(workspaceId: UUID) =
+      def deleteAction(workspaceId: UUID): WriteAction[Int] =
         sqlu"""delete ea from ENTITY_ATTRIBUTE ea
                inner join ENTITY e
                on ea.owner_id = e.id
@@ -365,6 +367,12 @@ trait EntityComponent {
           """
     }
 
+    // performs actual deletion (not hiding) of an entity
+    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
+      EntityDependenciesDeletionQuery.deleteAction(workspaceId) andThen {
+        filter(_.workspaceId === workspaceId).delete
+      }
+    }
 
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
