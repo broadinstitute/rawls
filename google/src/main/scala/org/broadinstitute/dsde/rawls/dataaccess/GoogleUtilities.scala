@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import java.io.{ByteArrayOutputStream, IOException, InputStream}
+import java.io.{IOException, InputStream, ByteArrayOutputStream}
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{JsonSupport, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport}
 import spray.http.StatusCodes
 import spray.json.JsValue
 

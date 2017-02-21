@@ -12,9 +12,7 @@ import spray.json.JsObject
 import scala.concurrent.Future
 import scala.util.Try
 
-abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
-  val errorReportSource = ErrorReportSource("google")
-
+abstract class GoogleServicesDAO(groupsPrefix: String) {
   val CREATE_PROJECT_OPERATION = "create_project"
 
   val billingEmail: String

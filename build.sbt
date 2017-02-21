@@ -2,6 +2,10 @@ import Settings._
 import Testing._
 
 
+lazy val rawlsUtil = project.in(file("util"))
+  .settings(utilSettings:_*)
+  .withTestSettings
+
 lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
   .withTestSettings
@@ -9,12 +13,14 @@ lazy val rawlsModel = project.in(file("model"))
 lazy val rawlsGoogle = project.in(file("google"))
   .settings(googleSettings:_*)
   .dependsOn(rawlsModel)
+  .dependsOn(rawlsUtil)
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
   .settings(rawlsCoreSettings:_*)
   .dependsOn(rawlsModel)
   .dependsOn(rawlsGoogle)
+  .dependsOn(rawlsUtil)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))

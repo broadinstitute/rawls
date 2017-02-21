@@ -6,6 +6,9 @@ object Dependencies {
   val slickV = "3.1.1"
 
   val googleDependencies = Seq(
+    "io.spray" %% "spray-json" % "1.3.2",
+    "io.spray" %% "spray-http" % sprayV,
+    "com.typesafe.akka" %% "akka-actor" % akkaV,
     "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
       exclude("com.google.guava", "guava-jdk5"),
     "com.google.apis" % "google-api-services-genomics" % "v1-rev89-1.22.0"
@@ -23,6 +26,11 @@ object Dependencies {
     "com.google.apis" % "google-api-services-pubsub" % "v1-rev14-1.22.0",
     "com.google.apis" % "google-api-services-servicemanagement" % "v1-rev17-1.22.0",
     "com.google.guava" % "guava" % "19.0"
+  )
+
+  val utilDependencies = Seq(
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "com.typesafe.akka" %% "akka-actor" % akkaV
   )
 
   val modelDependencies = Seq(
