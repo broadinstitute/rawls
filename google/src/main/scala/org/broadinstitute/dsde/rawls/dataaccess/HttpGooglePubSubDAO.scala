@@ -1,8 +1,16 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.googleapis.auth.oauth2.{GoogleCredential, GoogleClientSecrets}
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.http.HttpResponseException
+import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
+import com.google.api.services.pubsub.model._
 import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO._
 import spray.http.StatusCodes
 
+import scala.collection.JavaConversions._
 import scala.concurrent._
 
 /**
