@@ -5,14 +5,9 @@ package org.broadinstitute.dsde.rawls.integrationtest
  */
 
 import java.io.StringReader
-import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.ActorSystem
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{Retry, _}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.duration.Duration

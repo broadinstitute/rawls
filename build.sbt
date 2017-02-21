@@ -2,17 +2,19 @@ import Settings._
 import Testing._
 
 
-lazy val rawlsGoogle = project.in(file("google"))
+lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
   .withTestSettings
 
-lazy val rawlsModel = project.in(file("model"))
-  .settings(modelSettings:_*)
+lazy val rawlsGoogle = project.in(file("google"))
+  .settings(googleSettings:_*)
+  .dependsOn(rawlsModel)
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
   .settings(rawlsCoreSettings:_*)
   .dependsOn(rawlsModel)
+  .dependsOn(rawlsGoogle)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))
