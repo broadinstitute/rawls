@@ -7,9 +7,7 @@ EXPOSE 5050
 ENV GIT_MODEL_HASH $GIT_MODEL_HASH
 
 RUN mkdir /rawls
-COPY ./rawls.jar /rawls
-
-#RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
+COPY ./rawls-assembly-0.1.jar /rawls
 
 # Add Rawls as a service (it will start when the container starts)
 RUN mkdir /etc/service/rawls
