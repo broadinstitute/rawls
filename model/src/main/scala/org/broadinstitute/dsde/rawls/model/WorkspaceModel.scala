@@ -124,6 +124,10 @@ case class EntityTypeMetadata(
                              attributeNames: Seq[String]
                              )
 
+object EntityDeleteRequest {
+  def apply(entities: Entity*): Seq[AttributeEntityReference] = entities map { _.toReference }
+}
+
 object SortDirections {
   sealed trait SortDirection
   case object Ascending extends SortDirection

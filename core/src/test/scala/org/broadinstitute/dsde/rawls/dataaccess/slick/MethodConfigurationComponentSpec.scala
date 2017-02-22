@@ -91,7 +91,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
 
     assertResult(1) {
-      list.filter(_.name.contains(methodConfigOldName.name + "_")).size
+      list.count(_.name.startsWith(methodConfigOldName.name + "_"))
     }
   }
 

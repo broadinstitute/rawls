@@ -231,7 +231,7 @@ trait SlickExpressionParser extends JavaTokenParsers {
         val attributeIdQuery = queryPipeline.get.filter { case (rootEntityName, entity) =>
           entity.entityType ++ "_id" === attrName.name && LiteralColumn(AttributeName.defaultNamespace) === attrName.namespace
         }.map { case (rootEntityName, entity) =>
-          (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[String], Rep.None[Long], Rep.None[Int], Rep.None[Int]) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
+          (rootEntityName, entity.name, (LiteralColumn(0L), LiteralColumn(0L), LiteralColumn(attrName.namespace), LiteralColumn(attrName.name), entity.name.?, Rep.None[Double], Rep.None[Boolean], Rep.None[String], Rep.None[Long], Rep.None[Int], Rep.None[Int], LiteralColumn(false)) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply))
         }
 
         // we need to do both queries because we don't know the entity type until execution time

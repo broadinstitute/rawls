@@ -14,7 +14,9 @@ import spray.http.StatusCodes
 /**
  * Created by dvoet on 2/4/16.
  */
-case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID, recordVersion: Long, allAttributeValues: Option[String])
+case class EntityRecord(id: Long, name: String, entityType: String, workspaceId: UUID, recordVersion: Long, allAttributeValues: Option[String], deleted: Boolean) {
+  def toReference = AttributeEntityReference(entityType, name)
+}
 
 trait EntityComponent {
   this: DriverComponent
@@ -30,25 +32,27 @@ trait EntityComponent {
     def workspaceId = column[UUID]("workspace_id")
     def version = column[Long]("record_version")
     def allAttributeValues = column[Option[String]]("all_attribute_values")
+    def deleted = column[Boolean]("deleted")
 
     def workspace = foreignKey("FK_ENTITY_WORKSPACE", workspaceId, workspaceQuery)(_.id)
     def uniqueTypeName = index("idx_entity_type_name", (workspaceId, entityType, name), unique = true)
 
-    def * = (id, name, entityType, workspaceId, version, allAttributeValues) <> (EntityRecord.tupled, EntityRecord.unapply)
+    def * = (id, name, entityType, workspaceId, version, allAttributeValues, deleted) <> (EntityRecord.tupled, EntityRecord.unapply)
   }
 
   object entityQuery extends TableQuery(new EntityTable(_)) {
+
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
     type EntityQueryWithAttributesAndRefs =  Query[(EntityTable, Rep[Option[(EntityAttributeTable, Rep[Option[EntityTable]])]]), (EntityRecord, Option[(EntityAttributeRecord, Option[EntityRecord])]), Seq]
 
     private object EntityRecordRawSqlQuery extends RawSqlQuery {
       val driver: JdbcDriver = EntityComponent.this.driver
-      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None) }
+      implicit val getEntityRecord = GetResult { r => EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<) }
 
-      def action(workspaceId: UUID, entities: Traversable[AttributeEntityReference]) = {
-        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { case entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+      def action(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
+        val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
       }
     }
@@ -62,51 +66,59 @@ trait EntityComponent {
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
       implicit val getEntityAndAttributesResult = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
-        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None)
+        val entityRec = EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<)
 
         val attributeIdOption: Option[Long] = r.<<
-        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+        val attributeRecOption = attributeIdOption.map(id => EntityAttributeRecord(id, entityRec.id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
         val refEntityRecOption = for {
           attributeRec <- attributeRecOption
           refId <- attributeRec.valueEntityRef
         } yield {
-            EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None)
-          }
+          EntityRecord(r.<<, r.<<, r.<<, r.<<, r.<<, None, r.<<)
+        }
 
         EntityAndAttributesResult(entityRec, attributeRecOption, refEntityRecOption)
       }
 
       // the where clause for this query is filled in specific to the use case
       val baseEntityAndAttributeSql =
-        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version,
-          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length,
-          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version
+        s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted,
+          a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted,
+          e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted
           from ENTITY e
-          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id
+          left outer join ENTITY_ATTRIBUTE a on a.owner_id = e.id and a.deleted = e.deleted
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
-      def actionForTypeName(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String) = {
+      // includes "deleted" hidden entities when using their hidden names
+      def actionForTypeName(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
       }
 
-      def actionForType(workspaceContext: SlickWorkspaceContext, entityType: String) = {
-        sql"""#$baseEntityAndAttributeSql where e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
+      def actionForType(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[Seq[EntityAndAttributesResult]] = {
+        sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
       }
 
-      def actionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]) = {
-        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
+      // includes "deleted" hidden entities when using their hidden names
+      def actionForRefs(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityAndAttributesResult]] = {
+        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId} and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
         concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityAndAttributesResult]
       }
 
-      def actionForIds(entityIds: Traversable[Long]) = {
-        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id  in ("""
+      // includes "deleted" hidden entities
+      def actionForIds(entityIds: Traversable[Long]): ReadAction[Seq[EntityAndAttributesResult]] = {
+        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
         val entityIdSql = reduceSqlActionsWithDelim(entityIds.map { id => sql"$id" }.toSeq)
         concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
       }
 
-      def actionForWorkspace(workspaceContext: SlickWorkspaceContext) = {
+      def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
+        sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
+      }
+
+      // includes "deleted" hidden entities
+      def actionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
       }
 
@@ -132,7 +144,7 @@ trait EntityComponent {
             sql"""left outer join ENTITY_ATTRIBUTE sort_a on sort_a.owner_id = e.id and sort_a.name = $sortFieldName and ifnull(sort_a.list_index, 0) = 0 left outer join ENTITY sort_e_ref on sort_a.value_entity_ref = sort_e_ref.id """)
         }
 
-        concatSqlActions(sql"""select e.id, e.name, e.all_attribute_values #$sortColumns from ENTITY e """, sortJoin, sql""" where e.entity_type = $entityType and e.workspace_id = $workspaceId """)
+        concatSqlActions(sql"""select e.id, e.name, e.all_attribute_values #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
       }
 
       def actionForPagination(workspaceContext: SlickWorkspaceContext, entityType: String, entityQuery: model.EntityQuery) = {
@@ -184,21 +196,23 @@ trait EntityComponent {
     }
 
     def entityAttributes(entityId: Rep[Long]): EntityAttributeQuery = for {
-      entityAttrRec <- entityAttributeQuery if entityAttrRec.ownerId === entityId
+      entityAttrRec <- entityAttributeQuery if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
     } yield entityAttrRec
 
+    // includes "deleted" hidden entities when using their hidden names
     def findEntityByName(workspaceId: UUID, entityType: String, entityName: String): EntityQuery = {
       filter(entRec => entRec.name === entityName && entRec.entityType === entityType && entRec.workspaceId === workspaceId)
     }
 
     def findEntityByType(workspaceId: UUID, entityType: String): EntityQuery = {
-      filter(entRec => entRec.entityType === entityType && entRec.workspaceId === workspaceId)
+      filter(entRec => entRec.entityType === entityType && entRec.workspaceId === workspaceId && ! entRec.deleted)
     }
 
     def findEntityByWorkspace(workspaceId: UUID): EntityQuery = {
-      filter(_.workspaceId === workspaceId)
+      filter(entRec => entRec.workspaceId === workspaceId && ! entRec.deleted)
     }
 
+    // includes "deleted" hidden entities
     def findEntityById(id: Long): EntityQuery = {
       filter(_.id === id)
     }
@@ -207,6 +221,7 @@ trait EntityComponent {
       filter(rec => rec.id === id && rec.version === version)
     }
 
+    // includes "deleted" hidden entities when using their hidden names
     def lookupEntitiesByNames(workspaceId: UUID, entities: Traversable[AttributeEntityReference]): ReadAction[Seq[EntityRecord]] = {
       if (entities.isEmpty) {
         DBIO.successful(Seq.empty)
@@ -216,7 +231,7 @@ trait EntityComponent {
       }
     }
 
-    /** gets the given entity */
+    // includes "deleted" hidden entities when using their hidden names
     def get(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadAction[Option[Entity]] = {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName)).map(_.headOption)
     }
@@ -338,16 +353,30 @@ trait EntityComponent {
       batchInsertEntities(workspaceContext, newEntityRecs.toSeq)
     }
 
-    /** deletes an entity */
-    def delete(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String): ReadWriteAction[Boolean] = {
+    /** "deletes" entities by hiding and renaming */
+    def hide(workspaceContext: SlickWorkspaceContext, entRefs: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        uniqueResult[EntityRecord](findEntityByName(workspaceContext.workspaceId, entityType, entityName)) flatMap {
-          case None => DBIO.successful(false)
-          case Some(entityRec) =>
-            val deleteActions = deleteEntityAttributes(Seq(entityRec))
-            val deleteEntity = findEntityByName(workspaceContext.workspaceId, entityType, entityName).delete
-            deleteActions andThen deleteEntity.map(_ > 0)
+        lookupEntitiesByNames(workspaceContext.workspaceId, entRefs) flatMap { entRecs =>
+          val hideAction = entRecs map { rec =>
+            hideEntityAttributes(rec.id) andThen
+              hideEntityAction(rec)
+          }
+          DBIO.sequence(hideAction).map(_.sum)
         }
+    }
+
+    private def hideEntityAttributes(entityId: Long): ReadWriteAction[Seq[Int]] = {
+      entityAttributes(entityId).result flatMap { attrRecs =>
+        DBIO.sequence(attrRecs map hideEntityAttribute)
+      }
+    }
+
+    private def hideEntityAttribute(attrRec: EntityAttributeRecord): WriteAction[Int] = {
+      entityAttributeQuery.filter(_.id === attrRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(attrRec.name))
+    }
+
+    private def hideEntityAction(entRec: EntityRecord): WriteAction[Int] = {
+      entityQuery.filter(_.id === entRec.id).map(rec => (rec.deleted, rec.name)).update(true, renameForHiding(entRec.name))
     }
 
     // performs actual deletion (not hiding) of everything that depends on an entity
@@ -374,10 +403,12 @@ trait EntityComponent {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForType(workspaceContext, entityType))
     }
 
+    // includes "deleted" hidden entities when using their hidden names
     def list(workspaceContext: SlickWorkspaceContext, entityRefs: Traversable[AttributeEntityReference]): ReadAction[TraversableOnce[Entity]] = {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForRefs(workspaceContext, entityRefs))
     }
 
+    // includes "deleted" hidden entities
     def listByIds(entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] = {
       unmarshalEntitiesWithIds(EntityAndAttributesRawSqlQuery.actionForIds(entityIds))
     }
@@ -387,12 +418,8 @@ trait EntityComponent {
         findEntityByName(workspaceContext.workspaceId, entityType, oldName).map(_.name).update(newName)
     }
 
-    def getEntityTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[String]] = {
-      filter(_.workspaceId === workspaceContext.workspaceId).map(_.entityType).distinct.result
-    }
-
     def getEntityTypesWithCounts(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Int]] = {
-      filter(_.workspaceId === workspaceContext.workspaceId).groupBy(e => e.entityType).map { case (entityType, entities) =>
+      filter(e => e.workspaceId === workspaceContext.workspaceId && ! e.deleted).groupBy(e => e.entityType).map { case (entityType, entities) =>
         (entityType, entities.length)
       }.result map { result =>
         result.toMap
@@ -401,7 +428,7 @@ trait EntityComponent {
 
     def getAttrNamesAndEntityTypes(workspaceContext: SlickWorkspaceContext): ReadAction[Map[String, Seq[String]]] = {
       val typesAndAttrNames = for {
-        entityRec <- filter(_.workspaceId === workspaceContext.workspaceId)
+        entityRec <- filter(e => e.workspaceId === workspaceContext.workspaceId && ! e.deleted)
         attrib <- entityAttributes(entityRec.id)
       } yield {
         (entityRec.entityType, attrib.name)
@@ -425,12 +452,17 @@ trait EntityComponent {
       }
     }
 
+    def listActiveEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
+      unmarshalEntities(EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext))
+    }
+
+    // includes "deleted" hidden entities
     def listEntitiesAllTypes(workspaceContext: SlickWorkspaceContext): ReadAction[TraversableOnce[Entity]] = {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext))
     }
 
     def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Unit] = {
-      val allEntitiesAction = listEntitiesAllTypes(sourceWorkspaceContext)
+      val allEntitiesAction = listActiveEntitiesAllTypes(sourceWorkspaceContext)
 
       allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _))
     }
@@ -468,32 +500,46 @@ trait EntityComponent {
       }
     }
 
+    sealed trait RecursionDirection
+    case object Up extends RecursionDirection
+    case object Down extends RecursionDirection
+
     /**
-     * Starting with entities specified by entityIds, recursively walk down references accumulating all the ids
+     * Starting with entities specified by entityIds, recursively walk references accumulating all the ids
+     * @param direction whether to walk Down (my object references others) or Up (my object is referenced by others) the graph
      * @param entityIds the ids to start with
      * @param accumulatedIds the ids accumulated from the prior call. If you wish entityIds to be in the overall
      *                       results, start with entityIds == accumulatedIds, otherwise start with Seq.empty but note
      *                       that if there is a cycle some of entityIds may be in the result anyway
      * @return the ids of all the entities referred to by entityIds
      */
-    private def recursiveGetEntityReferenceIds(entityIds: Set[Long], accumulatedIds: Set[Long]): ReadAction[Set[Long]] = {
-      // need to batch because some RDBMSes have a limit on the length of an in clause
-      val batchedEntityIds = createBatches(entityIds)
-
-      val batchQueries = batchedEntityIds.map {
-        idBatch => filter(_.id inSetBind(idBatch)) join
-          entityAttributeQuery on (_.id === _.ownerId) filter(_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef)
+    private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIds: Set[Long]): ReadAction[Set[Long]] = {
+      def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[Long]] = {
+        val query = filter(_.id inSetBind idBatch) join
+          entityAttributeQuery on { (ent, attr) => ent.id === attr.ownerId && ! attr.deleted } filter (_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef.get)
+        query.result.map(_.toSet)
       }
 
-      val referencesResults = DBIO.sequence(batchQueries.map(_.result))
+      def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[Long]] = {
+        val query = entityAttributeQuery filter (_.valueEntityRef.isDefined) filter (_.valueEntityRef inSetBind idBatch) join
+          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map (_._2.id)
+        query.result.map(_.toSet)
+      }
 
-      referencesResults.map(_.reduce(_ ++ _)).flatMap { refIdOptions =>
-        val refIds = refIdOptions.collect { case Some(id) => id }.toSet
+      // need to batch because some RDBMSes have a limit on the length of an in clause
+      val batchedEntityIds: Iterable[Set[Long]] = createBatches(entityIds)
+
+      val batchActions: Iterable[ReadAction[Set[Long]]] = direction match {
+        case Down => batchedEntityIds map oneLevelDown
+        case Up => batchedEntityIds map oneLevelUp
+      }
+
+      DBIO.sequence(batchActions).map(_.flatten.toSet).flatMap { refIds =>
         val untraversedIds = refIds -- accumulatedIds
         if (untraversedIds.isEmpty) {
           DBIO.successful(accumulatedIds)
         } else {
-          recursiveGetEntityReferenceIds(untraversedIds, accumulatedIds ++ refIds)
+          recursiveGetEntityReferenceIds(direction, untraversedIds, accumulatedIds ++ refIds)
         }
       }
     }
@@ -506,7 +552,7 @@ trait EntityComponent {
 
       startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
-        recursiveGetEntityReferenceIds(idSet, idSet)
+        recursiveGetEntityReferenceIds(Down, idSet, idSet)
       } flatMap { ids =>
         unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
       }
@@ -534,16 +580,24 @@ trait EntityComponent {
       DBIO.sequence(entityQueries).map(_.toStream.collect { case Some(e) => e })
     }
 
+    // the opposite of getEntitySubtrees: traverse the graph to retrieve all entities which ultimately refer to these
+
+    def getAllReferringEntities(context: SlickWorkspaceContext, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
+      lookupEntitiesByNames(context.workspaceId, entities) flatMap { entityRecs =>
+        val idSet = entityRecs.map(_.id).toSet
+        recursiveGetEntityReferenceIds(Up, idSet, idSet)
+      } flatMap { ids =>
+        val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
+        entityAction map { _.toSet map { e: Entity => e.toReference } }
+      }
+    }
+
     def marshalNewEntity(entity: Entity, workspaceId: UUID): EntityRecord = {
-      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity))
+      EntityRecord(0, entity.name, entity.entityType, workspaceId, 0, createAllAttributesString(entity), deleted = false)
     }
 
     def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap) = {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
-    }
-
-    def deleteEntityAttributes(entityRecords: Seq[EntityRecord]) = {
-      entityAttributeQuery.filter(_.ownerId.inSetBind(entityRecords.map(_.id))).delete
     }
   }
 

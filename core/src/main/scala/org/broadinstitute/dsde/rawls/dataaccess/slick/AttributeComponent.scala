@@ -27,6 +27,7 @@ trait AttributeRecord[OWNER_ID] {
   val valueEntityRef: Option[Long]
   val listIndex: Option[Int]
   val listLength: Option[Int]
+  val deleted: Boolean
 }
 
 trait AttributeScratchRecord[OWNER_ID] extends AttributeRecord[OWNER_ID] {
@@ -43,7 +44,8 @@ case class EntityAttributeRecord(id: Long,
                                  valueJson: Option[String],
                                  valueEntityRef: Option[Long],
                                  listIndex: Option[Int],
-                                 listLength: Option[Int]) extends AttributeRecord[Long]
+                                 listLength: Option[Int],
+                                 deleted: Boolean) extends AttributeRecord[Long]
 
 case class EntityAttributeScratchRecord(id: Long,
                                      ownerId: Long, // entity id
@@ -56,6 +58,7 @@ case class EntityAttributeScratchRecord(id: Long,
                                      valueEntityRef: Option[Long],
                                      listIndex: Option[Int],
                                      listLength: Option[Int],
+                                     deleted: Boolean,
                                      transactionId: String) extends AttributeScratchRecord[Long]
 
 case class WorkspaceAttributeRecord(id: Long,
@@ -68,7 +71,8 @@ case class WorkspaceAttributeRecord(id: Long,
                                     valueJson: Option[String],
                                     valueEntityRef: Option[Long],
                                     listIndex: Option[Int],
-                                    listLength: Option[Int]) extends AttributeRecord[UUID]
+                                    listLength: Option[Int],
+                                    deleted: Boolean) extends AttributeRecord[UUID]
 
 case class WorkspaceAttributeScratchRecord(id: Long,
                                         ownerId: UUID, // workspace id
@@ -81,6 +85,7 @@ case class WorkspaceAttributeScratchRecord(id: Long,
                                         valueEntityRef: Option[Long],
                                         listIndex: Option[Int],
                                         listLength: Option[Int],
+                                        deleted: Boolean,
                                         transactionId: String) extends AttributeScratchRecord[UUID]
 
 case class SubmissionAttributeRecord(id: Long,
@@ -93,7 +98,8 @@ case class SubmissionAttributeRecord(id: Long,
                                      valueJson: Option[String],
                                      valueEntityRef: Option[Long],
                                      listIndex: Option[Int],
-                                     listLength: Option[Int]) extends AttributeRecord[Long]
+                                     listLength: Option[Int],
+                                     deleted: Boolean) extends AttributeRecord[Long]
 
 trait AttributeComponent {
   this: DriverComponent
@@ -122,6 +128,7 @@ trait AttributeComponent {
     def valueEntityRef = column[Option[Long]]("value_entity_ref")
     def listIndex = column[Option[Int]]("list_index")
     def listLength = column[Option[Int]]("list_length")
+    def deleted = column[Boolean]("deleted")
   }
 
   abstract class AttributeScratchTable[OWNER_ID: TypedType, RECORD <: AttributeScratchRecord[OWNER_ID]](tag: Tag, tableName: String) extends AttributeTable[OWNER_ID, RECORD](tag, tableName) {
@@ -129,7 +136,7 @@ trait AttributeComponent {
   }
 
   class EntityAttributeTable(tag: Tag) extends AttributeTable[Long, EntityAttributeRecord](tag, "ENTITY_ATTRIBUTE") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted) <> (EntityAttributeRecord.tupled, EntityAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_ENTITY_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
@@ -138,7 +145,7 @@ trait AttributeComponent {
   }
 
   class WorkspaceAttributeTable(tag: Tag) extends AttributeTable[UUID, WorkspaceAttributeRecord](tag, "WORKSPACE_ATTRIBUTE") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted) <> (WorkspaceAttributeRecord.tupled, WorkspaceAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_WORKSPACE_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
@@ -147,7 +154,7 @@ trait AttributeComponent {
   }
 
   class SubmissionAttributeTable(tag: Tag) extends AttributeTable[Long, SubmissionAttributeRecord](tag, "SUBMISSION_ATTRIBUTE") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted) <> (SubmissionAttributeRecord.tupled, SubmissionAttributeRecord.unapply)
 
     def uniqueIdx = index("UNQ_SUBMISSION_ATTRIBUTE", (ownerId, namespace, name, listIndex), unique = true)
 
@@ -156,21 +163,21 @@ trait AttributeComponent {
   }
 
   class EntityAttributeScratchTable(tag: Tag) extends AttributeScratchTable[Long, EntityAttributeScratchRecord](tag, "ENTITY_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, transactionId) <> (EntityAttributeScratchRecord.tupled, EntityAttributeScratchRecord.unapply)
   }
 
   class WorkspaceAttributeScratchTable(tag: Tag) extends AttributeScratchTable[UUID, WorkspaceAttributeScratchRecord](tag, "WORKSPACE_ATTRIBUTE_SCRATCH") {
-    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
+    def * = (id, ownerId, namespace, name, valueString, valueNumber, valueBoolean, valueJson, valueEntityRef, listIndex, listLength, deleted, transactionId) <>(WorkspaceAttributeScratchRecord.tupled, WorkspaceAttributeScratchRecord.unapply)
   }
 
   protected object entityAttributeQuery extends AttributeQuery[Long, EntityAttributeRecord, EntityAttributeTable](new EntityAttributeTable(_), EntityAttributeRecord)
   protected object workspaceAttributeQuery extends AttributeQuery[UUID, WorkspaceAttributeRecord, WorkspaceAttributeTable](new WorkspaceAttributeTable(_), WorkspaceAttributeRecord)
   protected object submissionAttributeQuery extends AttributeQuery[Long, SubmissionAttributeRecord, SubmissionAttributeTable](new SubmissionAttributeTable(_), SubmissionAttributeRecord)
 
-  protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], String) => TEMP_RECORD) extends TableQuery[T](cons) {
+  protected abstract class AttributeScratchQuery[OWNER_ID: TypeTag, RECORD <: AttributeRecord[OWNER_ID], TEMP_RECORD <: AttributeScratchRecord[OWNER_ID], T <: AttributeScratchTable[OWNER_ID, TEMP_RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean, String) => TEMP_RECORD) extends TableQuery[T](cons) {
     def batchInsertAttributes(attributes: Seq[RECORD], transactionId: String) = {
       insertInBatches(this, attributes.map { case rec =>
-        createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, transactionId)
+        createRecord(rec.id, rec.ownerId, rec.namespace, rec.name, rec.valueString, rec.valueNumber, rec.valueBoolean, rec.valueJson, rec.valueEntityRef, rec.listIndex, rec.listLength, rec.deleted, transactionId)
       })
     }
   }
@@ -183,7 +190,7 @@ trait AttributeComponent {
    * @tparam OWNER_ID the type of the ownerId field
    * @tparam RECORD the record class
    */
-  protected abstract class AttributeQuery[OWNER_ID: TypeTag: BaseTypedType, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int]) => RECORD) extends TableQuery[T](cons)  {
+  protected abstract class AttributeQuery[OWNER_ID: TypeTag: BaseTypedType, RECORD <: AttributeRecord[OWNER_ID], T <: AttributeTable[OWNER_ID, RECORD]](cons: Tag => T, createRecord: (Long, OWNER_ID, String, String, Option[String], Option[Double], Option[Boolean], Option[String], Option[Long], Option[Int], Option[Int], Boolean) => RECORD) extends TableQuery[T](cons)  {
 
     def marshalAttribute(ownerId: OWNER_ID, attributeName: AttributeName, attribute: Attribute, entityIdsByRef: Map[AttributeEntityReference, Long]): Seq[T#TableElementType] = {
 
@@ -220,12 +227,12 @@ trait AttributeComponent {
     }
 
     def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
-      createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, None, None, Option(0))
+      createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, None, None, Option(0), false)
     }
 
     def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
       val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
-      createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, Option(entityId), listIndex, listLength)
+      createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, Option(entityId), listIndex, listLength, false)
     }
 
     def marshalAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
@@ -247,7 +254,7 @@ trait AttributeComponent {
         case _ => None
       }
 
-      createRecord(0, ownerId, attributeName.namespace, attributeName.name, valueString, valueNumber, valueBoolean, valueJson, None, listIndex, listLength)
+      createRecord(0, ownerId, attributeName.namespace, attributeName.name, valueString, valueNumber, valueBoolean, valueJson, None, listIndex, listLength, false)
     }
 
     def findByNameQuery(attrName: AttributeName) = {
@@ -324,7 +331,7 @@ trait AttributeComponent {
         sql"""update #${baseTableRow.tableName} a
                 join #${baseTableRow.tableName}_SCRATCH ta
                 on (a.namespace,a.name,a.owner_id,ifnull(a.list_index,-2))=(ta.namespace,ta.name,ta.owner_id,ifnull(ta.list_index,-2)) and ta.transaction_id = $transactionId
-                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_json=ta.value_json, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length""".as[Int]
+                set a.value_string=ta.value_string, a.value_number=ta.value_number, a.value_boolean=ta.value_boolean, a.value_json=ta.value_json, a.value_entity_ref=ta.value_entity_ref, a.list_length=ta.list_length, a.deleted=ta.deleted """.as[Int]
 
       def clearAttributeScratchTableAction(transactionId: String) = {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""

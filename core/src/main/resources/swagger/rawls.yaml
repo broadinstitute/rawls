@@ -2189,50 +2189,54 @@ paths:
             - openid
             - email
             - profile
-# Entity delete endpoint commented out until GAWB-422 is complete
-#    delete:
-#      responses:
-#        '204':
-#          description: Successful Request
-#        '404':
-#          description: Workspace or Entity not found
-#          schema:
-#            $ref: '#/definitions/ErrorReport'
-#        '500':
-#          description: Rawls Internal Error
-#          schema:
-#            $ref: '#/definitions/ErrorReport'
-#      description: Delete an entity
-#      tags:
-#        - entities
-#      summary: delete entity in a workspace
-#      operationId: delete_entity
-#      parameters:
-#        - in: path
-#          description: Workspace Namespace
-#          name: workspaceNamespace
-#          required: true
-#          type: string
-#        - in: path
-#          description: Workspace Name
-#          name: workspaceName
-#          required: true
-#          type: string
-#        - in: path
-#          description: Entity Type
-#          name: entityType
-#          required: true
-#          type: string
-#        - in: path
-#          description: Entity Name
-#          name: entityName
-#          required: true
-#          type: string
-#      security:
-#        - authorization:
-#            - openid
-#            - email
-#            - profile
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete':
+    post:
+      responses:
+        '204':
+          description: Successful Request
+        '400':
+          description: Not all Entities exist
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '409':
+          description: Cannot create dangling references when deleting Entities - must specify whole set
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/AttributeEntityReference'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Delete entities
+      tags:
+        - entities
+      summary: delete entities in a workspace
+      operationId: delete_entities
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Set of entities to delete
+          name: entities
+          required: true
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/AttributeEntityReference'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
   /api/workspaces/entities/copy:
     post:
       responses:
@@ -4171,7 +4175,6 @@ definitions:
         description: A list of all attribute names used
         items:
           type: string
-
 
   AttributeUpdateOperation:
     description: ''
