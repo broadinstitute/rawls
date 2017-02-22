@@ -10,7 +10,6 @@ if [ -e "jenkins_env.sh" ]; then
 fi
 
 # Tests are run in jenkins which has a custom mysql instance just for testing
-sbt update 
 sbt -J-Xms4g -J-Xmx4g test -Dmysql.host=mysql -Dmysql.port=3306
 sbt -J-Xms4g -J-Xmx4g assembly
 RAWLS_JAR=$(find target | grep 'rawls.*\.jar')
