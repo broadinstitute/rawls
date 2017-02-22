@@ -7,7 +7,7 @@ import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, WorkspaceJsonSupport, JsonSupport, ErrorReport}
 import spray.http.StatusCodes
 import spray.json.JsValue
 
@@ -20,15 +20,15 @@ import scala.util.{Failure, Success, Try}
  * Created by mbemis on 5/10/16.
  */
 trait GoogleUtilities extends LazyLogging with Retry {
-  val errorReportSource = "google"
+  implicit val errorReportSource = ErrorReportSource("google")
 
   def toErrorReport(throwable: Throwable) = {
     throwable match {
       case gjre: GoogleJsonResponseException =>
         val statusCode = StatusCodes.getForKey(gjre.getStatusCode)
-        ErrorReport(errorReportSource, ErrorReport.message(gjre), statusCode, ErrorReport.causes(gjre), Seq.empty, Option(gjre.getClass))
+        ErrorReport(ErrorReport.message(gjre), statusCode, ErrorReport.causes(gjre), Seq.empty, Option(gjre.getClass))
       case _ =>
-        ErrorReport(errorReportSource, ErrorReport.message(throwable), None, ErrorReport.causes(throwable), throwable.getStackTrace, Option(throwable.getClass))
+        ErrorReport(ErrorReport.message(throwable), None, ErrorReport.causes(throwable), throwable.getStackTrace, Option(throwable.getClass))
     }
   }
 
