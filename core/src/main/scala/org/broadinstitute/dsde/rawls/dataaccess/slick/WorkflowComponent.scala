@@ -585,6 +585,7 @@ trait WorkflowComponent {
   }
 
   object workflowAuditStatusQuery extends TableQuery(new WorkflowAuditStatusTable(_)) {
+    def all = workflowAuditStatusQuery.result
 
     def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] = {
       uniqueResult[WorkflowAuditStatusRecord](workflowAuditStatusQuery.filter(_.status === WorkflowStatuses.Submitted.toString).sortBy(_.timestamp.desc).take(1)).flatMap {
