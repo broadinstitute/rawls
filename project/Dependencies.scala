@@ -42,7 +42,7 @@ object Dependencies {
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
-    "com.google.api-client" % "google-api-client" % "1.22.0",
+    "com.google.api-client" % "google-api-client" % "1.22.0" exclude("com.google.guava", "guava-jdk5"),
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 
