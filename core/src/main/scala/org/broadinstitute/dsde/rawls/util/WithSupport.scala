@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.{Future, ExecutionContext}
-import scala.util.{Try, Failure, Success}
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success}
 
 //Well, this is a joke.
 trait MethodWiths {
@@ -24,6 +24,10 @@ trait MethodWiths {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
       case Some(methodConfiguration) => op(methodConfiguration)
     }
+  }
+
+  def withMethodConfigRec(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess) (op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage])(implicit executionContext: ExecutionContext): ReadWriteAction[PerRequestMessage] = {
+    uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName))
   }
 
   def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {

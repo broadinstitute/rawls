@@ -3,7 +3,7 @@
 
     <changeSet id="method_config_version_column" author="ansingh" logicalFilePath="dummy">
         <addColumn tableName="METHOD_CONFIG">
-            <column name="METHOD_CONFIG_VERSION" type="INT(11)" defaultValue="1" />
+            <column name="METHOD_CONFIG_VERSION" type="INT" defaultValue="1" />
         </addColumn>
     </changeSet>
 

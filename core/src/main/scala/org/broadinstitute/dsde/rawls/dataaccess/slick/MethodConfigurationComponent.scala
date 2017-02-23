@@ -100,18 +100,18 @@ trait MethodConfigurationComponent {
 
     // the save method is used for both creating a new method config and updating an edited method config
     // the save method is not used for renaming a method config, see the rename method for that
-    def save(workspaceContext: SlickWorkspaceContext, methodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
+    def save(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
 
-      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfig.namespace, methodConfig.name)) flatMap {
+      uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
         case None =>
-            val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, methodConfig))
-            configInsert flatMap { configId =>
-              saveMaps(methodConfig, configId)
+          val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig))
+          configInsert flatMap { configId =>
+            saveMaps(newMethodConfig, configId)
           }
         case Some(methodConfigRec) =>
-          saveNewVersion(workspaceContext, methodConfigRec.id, methodConfigRec.name, methodConfigRec.methodConfigVersion, methodConfig)
+          saveNewVersion(workspaceContext, methodConfigRec, newMethodConfig)
       }
-    } map { _ => methodConfig }
+    } map { _ => newMethodConfig }
 
     private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
       val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
@@ -123,10 +123,10 @@ trait MethodConfigurationComponent {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, oldId: Long, oldName: String, oldConfigVersion: Int, newMethodConfig: MethodConfiguration) = {
+    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, methodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(oldId, oldName) andThen
-        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfigNewVersion(workspaceContext.workspaceId, newMethodConfig, oldConfigVersion + 1)) flatMap { configId =>
+        hideMethodConfigurationAction(methodConfigRec.id, methodConfigRec.name) andThen
+        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=methodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
         saveMaps(newMethodConfig, configId)
       }
     }
@@ -145,11 +145,12 @@ trait MethodConfigurationComponent {
 
     // To rename a method config, we "delete" (or rather hide) the old version of the method config and create a new row for the new method config, with the
     //  config version # incremented
-    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfig: MethodConfiguration) = {
+    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) = {
+      // get the current method configuration record
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) =>
-          saveNewVersion(workspaceContext, methodConfigRec.id, methodConfigRec.name, methodConfigRec.methodConfigVersion, newMethodConfig)
+          saveNewVersion(workspaceContext, methodConfigRec, )
       }
     }
 
