@@ -11,7 +11,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.{HttpGooglePubSubDAO, GooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 

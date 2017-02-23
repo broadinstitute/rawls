@@ -6,6 +6,7 @@ import akka.pattern._
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._

@@ -4,8 +4,8 @@ import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO.PubSubMessage
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.{UserInfo, SyncReport, RawlsGroupRef}
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitor.StartMonitorPass
 import org.broadinstitute.dsde.rawls.monitor.GoogleGroupSyncMonitorSupervisor.{Init, Start}

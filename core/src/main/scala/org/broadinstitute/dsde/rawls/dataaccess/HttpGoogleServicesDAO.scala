@@ -32,6 +32,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.{GoogleRpcErrorCodes, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._

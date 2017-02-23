@@ -7,7 +7,8 @@ import java.util.{UUID, Collections}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO.{NoMessage, PubSubMessage, HandledStatus, AckStatus}
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
+import GooglePubSubDAO.{NoMessage, PubSubMessage, HandledStatus, AckStatus}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}

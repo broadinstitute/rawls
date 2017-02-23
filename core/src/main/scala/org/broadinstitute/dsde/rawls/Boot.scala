@@ -16,6 +16,7 @@ import com.typesafe.config.{ConfigRenderOptions, ConfigFactory}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.google.HttpGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{WorkflowSubmissionActor, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, UserInfo}
 import org.broadinstitute.dsde.rawls.monitor._
