@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Run tests and make jar
+# Uses docker.
 
 set -eux
 
