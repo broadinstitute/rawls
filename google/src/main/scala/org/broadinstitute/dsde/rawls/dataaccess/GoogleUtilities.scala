@@ -8,6 +8,7 @@ import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.{ErrorReportSource, WorkspaceJsonSupport, JsonSupport, ErrorReport}
+import org.broadinstitute.dsde.rawls.util.Retry
 import spray.http.StatusCodes
 import spray.json.JsValue
 

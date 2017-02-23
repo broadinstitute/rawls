@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.util
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
