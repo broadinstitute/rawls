@@ -38,9 +38,11 @@ object Dependencies {
   val modelDependencies = Seq(
     "io.spray" %% "spray-json" % "1.3.2",
     "io.spray" %% "spray-http" % sprayV,
+    "io.spray" %% "spray-httpx" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "com.google.api-client" % "google-api-client" % "1.22.0",
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 

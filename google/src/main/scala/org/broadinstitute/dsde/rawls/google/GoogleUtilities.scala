@@ -20,18 +20,6 @@ import scala.util.{Failure, Success, Try}
  * Created by mbemis on 5/10/16.
  */
 trait GoogleUtilities extends LazyLogging with Retry {
-  implicit val errorReportSource = ErrorReportSource("google")
-
-  def toErrorReport(throwable: Throwable) = {
-    throwable match {
-      case gjre: GoogleJsonResponseException =>
-        val statusCode = StatusCodes.getForKey(gjre.getStatusCode)
-        ErrorReport(ErrorReport.message(gjre), statusCode, ErrorReport.causes(gjre), Seq.empty, Option(gjre.getClass))
-      case _ =>
-        ErrorReport(ErrorReport.message(throwable), None, ErrorReport.causes(throwable), throwable.getStackTrace, Option(throwable.getClass))
-    }
-  }
-
   implicit val executionContext: ExecutionContext
 
   protected def when500orGoogleError( throwable: Throwable ): Boolean = {
