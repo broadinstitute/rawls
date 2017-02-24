@@ -108,8 +108,8 @@ trait MethodConfigurationComponent {
           configInsert flatMap { configId =>
             saveMaps(newMethodConfig, configId)
           }
-        case Some(methodConfigRec) =>
-          saveNewVersion(workspaceContext, methodConfigRec, newMethodConfig)
+        case Some(currentMethodConfigRec) =>
+          saveNewVersion(workspaceContext, currentMethodConfigRec, newMethodConfig)
       }
     } map { _ => newMethodConfig }
 
@@ -123,10 +123,10 @@ trait MethodConfigurationComponent {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, methodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
+    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(methodConfigRec.id, methodConfigRec.name) andThen
-        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=methodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
+        hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
+        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
         saveMaps(newMethodConfig, configId)
       }
     }
@@ -149,8 +149,8 @@ trait MethodConfigurationComponent {
       // get the current method configuration record
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
-        case Some(methodConfigRec) =>
-          saveNewVersion(workspaceContext, methodConfigRec, newMethodConfig)
+        case Some(currentMethodConfigRec) =>
+          saveNewVersion(workspaceContext, currentMethodConfigRec, newMethodConfig)
       }
     }
 
