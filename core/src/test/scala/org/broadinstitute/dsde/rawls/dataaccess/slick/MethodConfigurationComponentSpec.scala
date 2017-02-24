@@ -31,7 +31,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
-  it should "overwrite method configs" in withDefaultTestDatabase {
+  it should "hide old method config and save new method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     val changed = testData.methodConfig.copy(rootEntityType = "goober",
@@ -43,8 +43,20 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.save(workspaceContext, changed))
 
-    assertResult(Option(changed)) {
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
+    }
+
+    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+
+    assertResult(1) {
+      list.filter(_.name.contains(testData.methodConfig.name + "_")).size
+    }
+
+    val listActive = runAndWait(methodConfigurationQuery.listActive(workspaceContext))
+
+    assertResult(0) {
+      listActive.filter(_.name.contains(testData.methodConfig.name + "_")).size
     }
   }
 
@@ -56,16 +68,30 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "rename method configs" in withDefaultTestDatabase {
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
-    val changed = testData.methodConfig.copy(name = "sample", rootEntityType = "Sample")
+    val methodConfigOldName = MethodConfiguration(
+      "ns",
+      "oldName",
+      "sample",
+      Map("input.expression" -> AttributeString("this..wont.parse")),
+      Map("output.expression" -> AttributeString("output.expr")),
+      Map("prereq.expression" -> AttributeString("prereq.expr")),
+      MethodRepoMethod("ns-config", "meth2", 2)
+    )
 
-    runAndWait(methodConfigurationQuery.rename(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed.name))
+    runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfigOldName ))
 
-    assertResult(Option(changed)) {
+    val changed = methodConfigOldName.copy(name = "newName")
+
+    runAndWait(methodConfigurationQuery.rename(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
+
+    assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    assertResult(None) {
-      runAndWait(methodConfigurationQuery.get(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name))
+    val list = runAndWait(methodConfigurationQuery.list(workspaceContext))
+
+    assertResult(1) {
+      list.filter(_.name.contains(methodConfigOldName.name + "_")).size
     }
   }
 
@@ -92,7 +118,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
     //Check that the deleted method has an updated name
-    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "-deleted-"))
+    assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "_"))
 
     //Check that the deleted method has the deleted field set to true
     assertResult(Some(true)) {

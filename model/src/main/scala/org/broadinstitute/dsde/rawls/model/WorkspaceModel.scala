@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
-import spray.json.DefaultJsonProtocol._
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -184,7 +183,8 @@ case class MethodConfiguration(
                    prerequisites: Map[String, AttributeString],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
-                   methodRepoMethod:MethodRepoMethod,
+                   methodRepoMethod: MethodRepoMethod,
+                   methodConfigVersion: Int = 1,
                    deleted: Boolean = false
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
@@ -384,7 +384,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
-  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 

@@ -38,4 +38,5 @@
     <include file="changesets/20170127_drop_old_project_tables.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170130_realms_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170125_project_operations.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170219_method_config_versions.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
