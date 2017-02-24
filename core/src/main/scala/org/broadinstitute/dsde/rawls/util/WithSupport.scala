@@ -26,10 +26,6 @@ trait MethodWiths {
     }
   }
 
-  def withMethodConfigRec(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess) (op: (MethodConfiguration) => ReadWriteAction[PerRequestMessage])(implicit executionContext: ExecutionContext): ReadWriteAction[PerRequestMessage] = {
-    uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName))
-  }
-
   def withMethod[T](methodNamespace: String, methodName: String, methodVersion: Int, userInfo: UserInfo)(op: (AgoraEntity) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
     DBIO.from(methodRepoDAO.getMethod(methodNamespace, methodName, methodVersion, userInfo)).asTry.flatMap { agoraEntityOption => agoraEntityOption match {
       case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${methodNamespace}/${methodName}/${methodVersion} from method repo.")))
