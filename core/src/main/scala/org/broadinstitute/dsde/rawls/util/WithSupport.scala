@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.{Future, ExecutionContext}
-import scala.util.{Try, Failure, Success}
+import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 //Well, this is a joke.
 trait MethodWiths {
