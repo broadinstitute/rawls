@@ -207,7 +207,7 @@ trait MethodConfigurationComponent {
     }
 
     private def findActiveByWorkspace(workspaceId: UUID): MethodConfigurationQueryType = {
-      findByWorkspace(workspaceId).filter(rec => !rec.deleted)
+      findByWorkspace(workspaceId).filterNot(_.deleted)
     }
 
     private def findInputsByConfigId(configId: Long): MethodConfigurationInputQueryType = {
