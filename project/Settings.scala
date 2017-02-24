@@ -53,7 +53,7 @@ object Settings {
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
   val googleSettings = commonSettings ++ List(
-    name := "rawls-google",
+    name := "workbench-google",
     libraryDependencies ++= googleDependencies
   ) ++ versionSettings ++ publishSettings
 
@@ -69,7 +69,7 @@ object Settings {
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
   val utilSettings = commonSettings ++ List(
-    name := "rawls-util",
+    name := "workbench-util",
     libraryDependencies ++= utilDependencies
   ) ++ versionSettings ++ publishSettings
 
