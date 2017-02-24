@@ -271,7 +271,6 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     }
     // with items in the queue, estimated time should be calculated from the audit table
     assertResult(expectedEstimateTime) {
-      println( runAndWait(workflowAuditStatusQuery.all) )
       resp2.estimatedQueueTimeMS
     }
 

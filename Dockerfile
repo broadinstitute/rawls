@@ -1,5 +1,7 @@
 FROM openjdk:8
 
+# To run, must build the jar using ./docker/build.sh
+
 # Rawls' default port
 EXPOSE 8080
 EXPOSE 5050
@@ -10,7 +12,7 @@ RUN mkdir /rawls
 COPY ./rawls-assembly-0.1.jar /rawls
 
 # Add Rawls as a service (it will start when the container starts)
-RUN mkdir /etc/service/rawls
+RUN mkdir -p /etc/service/rawls
 ADD docker/run.sh /etc/service/rawls/run
 
 # These next 4 commands are for enabling SSH to the container.
