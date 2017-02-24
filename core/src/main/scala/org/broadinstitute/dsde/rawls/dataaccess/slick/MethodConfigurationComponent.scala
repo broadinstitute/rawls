@@ -145,12 +145,12 @@ trait MethodConfigurationComponent {
 
     // To rename a method config, we "delete" (or rather hide) the old version of the method config and create a new row for the new method config, with the
     //  config version # incremented
-    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newName: String) = {
+    def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfig: MethodConfiguration) = {
       // get the current method configuration record
       uniqueResult[MethodConfigurationRecord](findByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
         case None => DBIO.successful(false)
         case Some(methodConfigRec) =>
-          saveNewVersion(workspaceContext, methodConfigRec, )
+          saveNewVersion(workspaceContext, methodConfigRec, newMethodConfig)
       }
     }
 
