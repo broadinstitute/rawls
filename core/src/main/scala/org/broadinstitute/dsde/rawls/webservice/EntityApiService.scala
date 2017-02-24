@@ -3,12 +3,15 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{EntityUpdateDefinition, AttributeUpdateOperation}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.http.StatusCodes
+import spray.httpx.SprayJsonSupport._
 import spray.routing.Directive.pimpApply
 import spray.routing._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Success, Failure, Try}
@@ -19,9 +22,6 @@ import scala.util.{Success, Failure, Try}
 
 trait EntityApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   implicit val executionContext: ExecutionContext
-
-  import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-  import spray.httpx.SprayJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
 

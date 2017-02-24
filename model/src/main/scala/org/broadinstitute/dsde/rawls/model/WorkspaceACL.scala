@@ -66,7 +66,9 @@ object WorkspaceAccessLevels {
   }
 }
 
-object WorkspaceACLJsonSupport extends JsonSupport {
+class WorkspaceACLJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
   implicit object WorkspaceAccessLevelFormat extends RootJsonFormat[WorkspaceAccessLevel] {
     override def write(value: WorkspaceAccessLevel): JsValue = JsString(value.toString)
     override def read(json: JsValue): WorkspaceAccessLevel = json match {
@@ -86,3 +88,4 @@ object WorkspaceACLJsonSupport extends JsonSupport {
   implicit val WorkspaceACLUpdateResponseListFormat = jsonFormat4(WorkspaceACLUpdateResponseList)
 }
 
+object WorkspaceACLJsonSupport extends WorkspaceACLJsonSupport

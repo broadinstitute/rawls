@@ -12,6 +12,7 @@ import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
 import spray.http.{BodyPart, FormData, MultipartFormData}
 import spray.httpx.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
 import scala.util.Try

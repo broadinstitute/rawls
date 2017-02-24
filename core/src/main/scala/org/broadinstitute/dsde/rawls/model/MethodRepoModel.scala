@@ -23,7 +23,8 @@ case class AgoraEntity(
                         url: Option[String] = None,
                         entityType: Option[AgoraEntityType.EntityType] = None)
 
-object MethodRepoJsonSupport extends JsonSupport {
+class MethodRepoJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   // need to override the default date time format, because Agora uses dateTimeNoMillis instead of dateTime
   implicit object AgoraDateJsonFormat extends RootJsonFormat[DateTime] {
@@ -53,3 +54,5 @@ object MethodRepoJsonSupport extends JsonSupport {
   implicit val AgoraEntityFormat = jsonFormat10(AgoraEntity)
 
 }
+
+object MethodRepoJsonSupport extends MethodRepoJsonSupport

@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.Check
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import spray.http._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Future, Await, ExecutionContext}

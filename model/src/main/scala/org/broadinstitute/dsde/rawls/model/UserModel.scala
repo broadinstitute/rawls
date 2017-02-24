@@ -18,7 +18,8 @@ case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
-object UserModelJsonSupport extends JsonSupport {
+class UserModelJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   case class UserModelJsonFormatter[T <: UserAuthType](create: String => T) extends RootJsonFormat[T] {
     def read(obj: JsValue): T = obj match {
@@ -41,3 +42,5 @@ object UserModelJsonSupport extends JsonSupport {
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
   implicit val RawlsRealmRefFormat = jsonFormat1(RawlsRealmRef)
 }
+
+object UserModelJsonSupport extends UserModelJsonSupport

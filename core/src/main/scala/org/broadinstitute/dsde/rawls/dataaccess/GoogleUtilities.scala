@@ -117,6 +117,7 @@ trait GoogleUtilities extends LazyLogging with Retry {
 
   protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
   protected object GoogleRequestJsonSupport extends JsonSupport {
+    import spray.json.DefaultJsonProtocol._
     import WorkspaceJsonSupport.ErrorReportFormat
     val GoogleRequestFormat = jsonFormat6(GoogleRequest)
   }

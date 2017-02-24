@@ -6,12 +6,11 @@ import akka.actor.SupervisorStrategy.Stop
 import akka.event.Logging
 import akka.event.Logging.LogLevel
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.ErrorReport
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest._
 import spray.http.StatusCodes._
 import spray.httpx.marshalling.{BasicToResponseMarshallers, ToResponseMarshaller}
-import spray.json.DefaultJsonProtocol
 import spray.routing.RequestContext
 import akka.actor.OneForOneStrategy
 import scala.concurrent.duration._
@@ -21,7 +20,8 @@ import scala.language.postfixOps
 
 case class RawlsMessage(message: String)
 
-object RawlsMessageJsonSupport extends DefaultJsonProtocol with BasicToResponseMarshallers {
+object RawlsMessageJsonSupport extends BasicToResponseMarshallers {
+  import spray.json.DefaultJsonProtocol._
 
   implicit val RawlsMessageFormat = jsonFormat1(RawlsMessage)
 
@@ -118,7 +118,7 @@ trait PerRequest extends Actor {
     import spray.httpx.SprayJsonSupport._
     e match {
       case e: RawlsExceptionWithErrorReport => complete(e.errorReport)
-      case _ => complete(ErrorReport(e, InternalServerError))
+      case _ => complete(ErrorReport(InternalServerError, e))
     }
   }
 }

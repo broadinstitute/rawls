@@ -1,16 +1,16 @@
 package org.broadinstitute.dsde.rawls.util
 
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
+import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.PerRequestMessage
 import spray.http.StatusCodes
 
-import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{Future, ExecutionContext}
+import scala.util.{Try, Failure, Success}
 
 //Well, this is a joke.
 trait MethodWiths {
@@ -45,8 +45,8 @@ trait MethodWiths {
     // TODO add Method to model instead of exposing AgoraEntity?
     val methodRepoMethod = methodConfig.methodRepoMethod
     withMethod(methodRepoMethod.methodNamespace, methodRepoMethod.methodName, methodRepoMethod.methodVersion, userInfo) { method =>
-      withWdl(method) { wdl => Try(MethodConfigResolver.gatherInputs(methodConfig,wdl)) match {
-        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(exception,StatusCodes.BadRequest)))
+      withWdl(method) { wdl => MethodConfigResolver.gatherInputs(methodConfig,wdl) match {
+        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
         case Success(methodInputs) => op(wdl,methodInputs)
       }}
     }
