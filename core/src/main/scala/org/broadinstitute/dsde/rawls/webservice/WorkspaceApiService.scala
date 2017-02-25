@@ -54,6 +54,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaces)
       }
     } ~
+      path("workspaces" / "ids") {
+        get {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaceIds)
+        }
+      } ~
     path("workspaces" / Segment / Segment / "clone" ) { (sourceNamespace, sourceWorkspace) =>
       post {
         entity(as[WorkspaceRequest]) { destWorkspace =>

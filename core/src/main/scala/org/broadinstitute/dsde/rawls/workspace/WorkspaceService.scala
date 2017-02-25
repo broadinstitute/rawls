@@ -56,6 +56,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
+  case object ListWorkspaceIds extends WorkspaceServiceMessage
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -131,6 +132,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
+    case ListWorkspaceIds => pipe(listWorkspaceIds()) to sender
     case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
@@ -351,6 +353,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+  def listWorkspaceIds(): Future[PerRequestMessage] =
+    dataSource.inTransaction { dataAccess =>
+      // can this be shorter / neater ?
+      val query = for {
+        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
+      } yield permissionsPairs
+
+      val results = query.map { case (permissionsPairs) =>
+        permissionsPairs.map(_.workspaceId)
+      }
+
+      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+    }
+
 
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
