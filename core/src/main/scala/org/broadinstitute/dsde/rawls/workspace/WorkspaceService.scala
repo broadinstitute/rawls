@@ -356,15 +356,25 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def listWorkspaceIds(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      // can this be shorter / neater ?
       val query = for {
         permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
-      } yield permissionsPairs
+        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
+        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
+      } yield (permissionsPairs, realmsForUser, workspaces)
 
-      val results = query.map { case (permissionsPairs) =>
-        permissionsPairs.map(_.workspaceId)
+      val results = query.map { case (permissionsPairs, realmsForUser, workspaces) =>
+        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
+        permissionsPairs.filter((permissionsPair) =>
+          workspacesById.get(permissionsPair.workspaceId) match {
+            case Some(workspace) => workspace.realm match {
+              case None => true
+              case Some(realm) =>
+                if (realmsForUser.flatten.contains(realm)) true
+                else false
+            }
+            case _ => false
+          }).map(_.workspaceId)
       }
-
       results.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }
 
