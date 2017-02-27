@@ -41,7 +41,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -49,10 +49,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   it should "return 404 Not Found when creating a submission using an Entity that doesn't exist in the workspace" in withTestDataApiServices { services =>
     val mcName = MethodConfigurationName("three_step","dsde", testData.wsName)
     val methodConf = MethodConfiguration(mcName.namespace, mcName.name,"Pattern", Map.empty, Map("three_step.cgrep.pattern"->AttributeString("String")), Map.empty, MethodRepoMethod("dsde","three_step",1))
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/methodconfigs", httpJson(methodConf)) ~>
+    Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -60,7 +60,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   private def createAndMonitorSubmission(wsName: WorkspaceName, methodConf: MethodConfiguration,
                                          submissionEntity: Entity, submissionExpression: Option[String],
                                          services: TestApiService): SubmissionStatusResponse = {
-    Post(s"/workspaces/${wsName.namespace}/${wsName.name}/methodconfigs", httpJson(methodConf)) ~>
+    Post(s"${wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -69,14 +69,14 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       }
 
     val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
-    Post(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions", httpJson(submissionRq)) ~>
+    Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
         val submission = responseAs[SubmissionReport]
-        Get(s"/workspaces/${wsName.namespace}/${wsName.name}/submissions/${submission.submissionId}") ~>
+        Get(s"${wsName.path}/submissions/${submission.submissionId}") ~>
           sealRoute(services.submissionRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
@@ -119,7 +119,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
 
     val submission = createAndMonitorSubmission(wsName, methodConf, testData.sset1, Option("this.samples"), services)
 
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}") ~>
+    Get(s"${testData.wsName.path}") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -139,7 +139,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   )
 
   it should "return 200 on getting a submission" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testData.submission1.submissionId}") ~>
+    Get(s"${testData.wsName.path}/submissions/${testData.submission1.submissionId}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {status}
@@ -148,12 +148,12 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on getting a nonexistent submission" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/unrealSubmission42") ~>
+    Get(s"${testData.wsName.path}/submissions/unrealSubmission42") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}
       }
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${UUID.randomUUID}") ~>
+    Get(s"${testData.wsName.path}/submissions/${UUID.randomUUID}") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {status}
@@ -161,7 +161,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing submissions" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions") ~>
+    Get(s"${testData.wsName.path}/submissions") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
@@ -178,7 +178,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when counting submissions" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissionsCount") ~>
+    Get(s"${testData.wsName.path}/submissionsCount") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {status}
@@ -343,7 +343,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))
 
-    Get(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
+    Get(s"${testData.wsName.path}/submissions/${testSubmission.submissionId}/workflows/${testSubmission.workflows.head.workflowId.get}/outputs") ~>
       sealRoute(services.submissionRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {status}
