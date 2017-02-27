@@ -95,6 +95,6 @@ class MockGooglePubSubDAO extends GooglePubSubDAO {
     credential.setExpiresInSeconds(1000000L) // make sure not to refresh this token
     credential
   }
-}
 
-case class Subscription(name: String, topic: String, queue: ConcurrentLinkedQueue[String])
+  case class Subscription(name: String, topic: String, queue: ConcurrentLinkedQueue[String])
+}
