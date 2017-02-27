@@ -9,11 +9,10 @@ EXPOSE 5050
 ENV GIT_MODEL_HASH $GIT_MODEL_HASH
 
 RUN mkdir /rawls
-COPY ./rawls-assembly-0.1.jar /rawls
+COPY ./rawls*.jar /rawls
 
 # Add Rawls as a service (it will start when the container starts)
-RUN mkdir -p /etc/service/rawls
-ADD docker/run.sh /etc/service/rawls/run
+CMD java $JAVA_OPTS -jar $(find /rawls -name 'rawls*.jar')
 
 # These next 4 commands are for enabling SSH to the container.
 # id_rsa.pub is referenced below, but this should be any public key
