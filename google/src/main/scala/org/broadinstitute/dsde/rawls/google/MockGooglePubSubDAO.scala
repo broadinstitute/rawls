@@ -1,21 +1,17 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.google
 
 import java.util
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.{UUID, Collections}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
+import java.util.{Collections, UUID}
 
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import GooglePubSubDAO.{NoMessage, PubSubMessage, HandledStatus, AckStatus}
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
-
-import scala.collection._
 import scala.collection.convert.decorateAsScala._
-import java.util.concurrent.{ConcurrentLinkedQueue, ConcurrentHashMap}
+import scala.collection.{mutable, _}
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Created by dvoet on 12/7/16.
