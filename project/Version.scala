@@ -20,7 +20,6 @@ object Version {
     if (isSnapshot) s"$version-SNAP" else version
   }
 
-  val modelVersionSettings: Seq[Setting[_]] =
+  val versionSettings: Seq[Setting[_]] =
     Seq(version := getVersionString(baseDirectory.value))
-
 }

@@ -5,7 +5,7 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{Retry, FutureSupport}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration

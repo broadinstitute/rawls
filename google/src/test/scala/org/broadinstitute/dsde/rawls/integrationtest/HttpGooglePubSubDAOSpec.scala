@@ -4,22 +4,28 @@ package org.broadinstitute.dsde.rawls.integrationtest
  * Created by mbemis on 5/10/16.
  */
 
-import java.io.StringReader
-import java.util.concurrent.atomic.AtomicInteger
+import java.io.{File, StringReader}
 
 import akka.actor.ActorSystem
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.jackson2.JacksonFactory
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{Retry, _}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.google.{HttpGooglePubSubDAO, GooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.util.Retry
 import org.scalatest.{BeforeAndAfterAll, FlatSpec, Matchers}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
-class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with IntegrationTestConfig with BeforeAndAfterAll with Retry with TestDriverComponent with LazyLogging {
+class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfterAll with Retry with LazyLogging {
   implicit val system = ActorSystem("HttpGooglePubSubDAOSpec")
+
+  val etcConf = ConfigFactory.load()
+  val jenkinsConf = ConfigFactory.parseFile(new File("jenkins.conf"))
+  val gcsConfig = jenkinsConf.withFallback(etcConf).getConfig("gcs")
+
+  import scala.concurrent.ExecutionContext.Implicits.global
   val gpsDAO = new HttpGooglePubSubDAO(
     GoogleClientSecrets.load(
       JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))),

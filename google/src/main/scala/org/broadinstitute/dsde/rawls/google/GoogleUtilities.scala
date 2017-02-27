@@ -1,18 +1,18 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.google
 
-import java.io.{IOException, InputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayOutputStream, IOException, InputStream}
 
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.googleapis.services.AbstractGoogleClientRequest
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.http.json.JsonHttpContent
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.{WorkspaceJsonSupport, JsonSupport, ErrorReport}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, ErrorReportSource, JsonSupport, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.util.Retry
+import spray.http.StatusCodes
 import spray.json.JsValue
 
 import scala.collection.JavaConversions._
-
 import scala.concurrent._
 import scala.util.{Failure, Success, Try}
 
@@ -94,8 +94,8 @@ trait GoogleUtilities extends LazyLogging with Retry {
   }
 
   private def logGoogleRequest[A](request: AbstractGoogleClientRequest[A], startTime: Long, statusCode: Option[Int], errorReport: Option[ErrorReport]): Unit = {
-    import spray.json._
     import GoogleRequestJsonSupport._
+    import spray.json._
 
     val payload =
       if (logger.underlying.isDebugEnabled) {
@@ -117,8 +117,8 @@ trait GoogleUtilities extends LazyLogging with Retry {
 
   protected case class GoogleRequest(method: String, url: String, payload: Option[JsValue], time_ms: Long, statusCode: Option[Int], errorReport: Option[ErrorReport])
   protected object GoogleRequestJsonSupport extends JsonSupport {
-    import spray.json.DefaultJsonProtocol._
     import WorkspaceJsonSupport.ErrorReportFormat
+    import spray.json.DefaultJsonProtocol._
     val GoogleRequestFormat = jsonFormat6(GoogleRequest)
   }
 }

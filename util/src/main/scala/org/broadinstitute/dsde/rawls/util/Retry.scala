@@ -1,11 +1,9 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.util
 
 import akka.actor.ActorSystem
 import com.typesafe.scalalogging.LazyLogging
 
-import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Try,Success,Failure}
 import scala.concurrent.duration._
 
 import akka.pattern._

@@ -43,11 +43,19 @@ object Settings {
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
-    organization  := "org.broadinstitute",
+    organization  := "org.broadinstitute.dsde",
     scalaVersion  := "2.11.8",
     resolvers ++= commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )
+
+  //the full list of settings for the rawlsGoogle project (see build.sbt)
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
+  val googleSettings = commonSettings ++ List(
+    name := "workbench-google",
+    libraryDependencies ++= googleDependencies
+  ) ++ versionSettings ++ publishSettings
 
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -55,7 +63,15 @@ object Settings {
   val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     libraryDependencies ++= modelDependencies
-  ) ++ modelVersionSettings ++ modelPublishSettings
+  ) ++ versionSettings ++ publishSettings
+
+  //the full list of settings for the rawlsModel project (see build.sbt)
+  //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
+  //thus commonSettings needs to be added first.
+  val utilSettings = commonSettings ++ List(
+    name := "workbench-util",
+    libraryDependencies ++= utilDependencies
+  ) ++ versionSettings ++ publishSettings
 
   //the full list of settings for the rawlsCore project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.

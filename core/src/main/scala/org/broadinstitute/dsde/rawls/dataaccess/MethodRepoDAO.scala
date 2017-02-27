@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.rawls.model.{AgoraEntity, ErrorReportSource, MethodConfiguration, UserInfo}
+import org.broadinstitute.dsde.rawls.model._
 
 import scala.concurrent.Future
 

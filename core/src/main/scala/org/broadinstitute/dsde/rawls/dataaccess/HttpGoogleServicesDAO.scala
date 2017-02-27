@@ -32,11 +32,12 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.{GoogleRpcErrorCodes, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{Retry, FutureSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time
 import spray.client.pipelining._

@@ -5,12 +5,44 @@ object Dependencies {
   val sprayV = "1.3.2"
   val slickV = "3.1.1"
 
+  val googleDependencies = Seq(
+    "io.spray" %% "spray-json" % "1.3.2",
+    "io.spray" %% "spray-http" % sprayV,
+    "com.typesafe.akka" %% "akka-actor" % akkaV,
+    "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-genomics" % "v1-rev89-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-storage" % "v1-rev35-1.20.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-cloudresourcemanager" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-cloudbilling" % "v1-rev7-1.22.0"
+      exclude("com.google.guava", "guava-jdk5"),
+    "com.google.apis" % "google-api-services-compute" % "v1-rev72-1.20.0",
+    "com.google.apis" % "google-api-services-admin-directory" % "directory_v1-rev53-1.20.0",
+    "com.google.apis" % "google-api-services-plus" % "v1-rev381-1.20.0",
+    "com.google.apis" % "google-api-services-oauth2" % "v1-rev112-1.20.0",
+    "com.google.apis" % "google-api-services-pubsub" % "v1-rev14-1.22.0",
+    "com.google.apis" % "google-api-services-servicemanagement" % "v1-rev17-1.22.0",
+    "com.google.guava" % "guava" % "19.0",
+    "com.typesafe.akka" %% "akka-testkit" % akkaV % "test",
+    "org.scalatest" %% "scalatest" % "2.2.4" % "test"
+  )
+
+  val utilDependencies = Seq(
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "com.typesafe.akka" %% "akka-actor" % akkaV
+  )
+
   val modelDependencies = Seq(
     "io.spray" %% "spray-json" % "1.3.2",
     "io.spray" %% "spray-http" % sprayV,
+    "io.spray" %% "spray-httpx" % sprayV,
     "joda-time" % "joda-time" % "2.9.4",
     "org.joda" % "joda-convert" % "1.8",
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+    "com.google.api-client" % "google-api-client" % "1.22.0" exclude("com.google.guava", "guava-jdk5"),
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 
