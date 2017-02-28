@@ -234,6 +234,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
         }
@@ -287,6 +288,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}"))))) {
           header("Location")
         }
@@ -337,6 +339,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
           header("Location")
         }
@@ -755,6 +758,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
           header("Location")
         }
@@ -811,6 +815,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
           header("Location")
         }
@@ -871,6 +876,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
           header("Location")
         }

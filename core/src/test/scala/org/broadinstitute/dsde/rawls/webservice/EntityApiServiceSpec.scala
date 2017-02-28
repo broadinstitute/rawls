@@ -190,6 +190,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
 
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(wsName)))))) {
           header("Location")
         }
@@ -242,6 +243,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[Entity]
         }
 
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(wsName)))))) {
           header("Location")
         }
