@@ -234,7 +234,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
           header("Location")
         }
       }
@@ -287,7 +288,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceWithRealm.path))))) {
           header("Location")
         }
       }
@@ -337,7 +339,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           val ws = responseAs[Workspace]
           WorkspaceRequest(ws.namespace, ws.name, ws.realm, ws.attributes)
         }
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${newWorkspace.namespace}/${newWorkspace.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
           header("Location")
         }
       }
@@ -388,7 +391,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "get a workspace" in withTestWorkspacesApiServices { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -405,7 +408,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 getting a non-existent workspace" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x") ~>
+    Get(testData.workspace.copy(name = "DNE").path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -415,7 +418,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "delete a workspace" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted, response.entity.asString) {
@@ -435,7 +438,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
     }
     // delete the workspace
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted, response.entity.asString) {
@@ -459,7 +462,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
     }
     // delete the workspace
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted, response.entity.asString) {
@@ -483,7 +486,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
     }
     // delete the workspace
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted, response.entity.asString) {
@@ -506,7 +509,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
     }
 
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Delete(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Accepted) {
@@ -542,22 +545,23 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 Not Found on clone if the source workspace cannot be found" in withTestDataApiServices { services =>
-    val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent", None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/nonexistent/clone", httpJson(workspaceCopy)) ~>
+    val cloneSrc = testData.workspace.copy(name = "test_nonexistent_1")
+    val cloneDest = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_nonexistent_2", None, Map.empty)
+    Post(s"${cloneSrc.path}/clone", httpJson(cloneDest)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+    Get(testData.sample2.path(cloneDest)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
       }
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
+    Patch(testData.sample2.path(cloneDest), httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -565,7 +569,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
     //this endpoint is only temporarily returning MethodNotAllowed. When GAWB-422 is complete, it should return NotFound
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}x/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+    Delete(testData.sample2.path(cloneDest)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.MethodNotAllowed) {
@@ -575,7 +579,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -586,7 +590,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -603,7 +607,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val name = AttributeName("invalid", "misc")
     val attr = AttributeString("foo")
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -619,7 +623,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val name = AttributeName(AttributeName.libraryNamespace, "whatever")
     val attr: Attribute = AttributeString("something")
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -630,7 +634,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -649,7 +653,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val name = AttributeName(AttributeName.libraryNamespace, "whatever")
     val attr: Attribute = AttributeString("something")
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -667,7 +671,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // first add as curator
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, responseAs[String]) {
@@ -682,7 +686,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     revokeCuratorRole(services)
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -708,7 +712,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         |}]
       """.stripMargin
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, testPayload)) ~>
+    Patch(testData.workspace.path, HttpEntity(ContentTypes.`application/json`, testPayload)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) {
@@ -719,7 +723,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "concurrently update workspace attributes" in withTestDataApiServices { services =>
     def generator(i: Int): ReadAction[Option[Workspace]] = {
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
+      Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString(s"bang$i")): AttributeUpdateOperation))) ~>
         sealRoute(services.workspaceRoutes) ~> check {
           assertResult(StatusCodes.OK, responseAs[String]) {
             status
@@ -733,7 +737,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "clone a workspace if the source exists" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -755,7 +759,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -769,7 +774,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       name = "test_copy",
       None, Map(AttributeName(invalidAttrNamespace, "attribute") -> AttributeString("foo"))
     )
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -789,7 +794,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       name = "test_copy",
       None, Map(newAttr)
     )
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -811,7 +816,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -825,7 +831,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       name = "test_copy",
       None, Map(AttributeName(AttributeName.libraryNamespace, "attribute") -> AttributeString("foo"))
     )
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -849,7 +855,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // then clone as non-curator
 
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -871,7 +877,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           }
         }
 
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(s"/workspaces/${workspaceCopy.namespace}/${workspaceCopy.name}"))))) {
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(workspaceCopy.path))))) {
           header("Location")
         }
       }
@@ -899,7 +906,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", workspaceWithRealm.realm, Map.empty)
-    Post(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -936,7 +943,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     val workspaceCopy = WorkspaceRequest(namespace = workspaceWithRealm.namespace, name = "test_copy", Option(RawlsRealmRef(realmGroup2.groupName)), Map.empty)
-    Post(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${workspaceWithRealm.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.UnprocessableEntity) {
@@ -952,7 +959,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "set the Realm when cloning a workspace with no Realm" in withTestDataApiServices { services =>
     val workspaceCopyNoRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyNoRealm)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyNoRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -970,7 +977,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.setGroupAsRealm(realmGroupRef))
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", Option(realmGroupRef), Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -1091,7 +1098,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //add userWriter to writer ACLs + add userOwner to owner ACLs
-    Patch(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1235,7 +1242,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     //add group B to the writer ACL + add owner to owner ACL
     val groupBEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(groupB.groupName)).value
-    Patch(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/acl", httpJson(Seq(WorkspaceACLUpdate(groupBEmail, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(groupBEmail, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1361,7 +1368,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
 
     //add userWriter to the writer ACL + add owner to owner ACL
-    Patch(s"/workspaces/${workspaceWithRealm.namespace}/${workspaceWithRealm.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+    Patch(s"${workspaceWithRealm.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None), WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1394,7 +1401,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "add attributes when cloning a workspace" in withTestDataApiServices { services =>
     val workspaceNoAttrs = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy", None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceNoAttrs)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceNoAttrs)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) {
@@ -1411,7 +1418,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     )
 
     val workspaceCopyRealm = WorkspaceRequest(namespace = testData.workspace.namespace, name = "test_copy2", None, newAtts)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopyRealm)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopyRealm)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -1425,7 +1432,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "return 409 Conflict on clone if the destination already exists" in withTestDataApiServices { services =>
     val workspaceCopy = WorkspaceRequest(namespace = testData.workspace.namespace, name = testData.workspaceNoGroups.name, None, Map.empty)
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/clone", httpJson(workspaceCopy)) ~>
+    Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -1435,7 +1442,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when requesting an ACL from an existing workspace" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1443,7 +1450,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when requesting an ACL from a non-existent workspace" in withTestDataApiServices { services =>
-    Get(s"/workspaces/xyzzy/plugh/acl") ~>
+    val nonExistent = WorkspaceName("xyzzy", "plugh")
+    Get(s"${nonExistent.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1451,7 +1459,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when replacing an ACL for an existing workspace" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1459,12 +1467,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "modifying a workspace acl should modify the workspace last modified date" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -1472,7 +1480,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when replacing an ACL on a non-existent workspace" in withTestDataApiServices { services =>
-    Patch(s"/workspaces/xyzzy/plugh/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    val nonExistent = WorkspaceName("xyzzy", "plugh")
+    Patch(s"${nonExistent.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1484,7 +1493,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Get Workspace requires READ access.  Accept if OWNER, WRITE, READ; Reject if NO ACCESS
 
   it should "allow an project-owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1494,7 +1503,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1504,7 +1513,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow a write-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1514,7 +1523,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow a read-access user to get a workspace" in withTestWorkspacesApiServicesAndUser(testData.userReader.userEmail.value) { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1524,7 +1533,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to get a workspace" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}") ~>
+    Get(testWorkspaces.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -1536,7 +1545,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Update Workspace requires WRITE access.  Accept if OWNER or WRITE; Reject if READ or NO ACCESS
 
   it should "allow an project-owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1547,7 +1556,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "check that an update to a workspace modifies the last modified date" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
     var mutableWorkspace: Workspace = testData.workspace.copy()
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1556,14 +1565,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         mutableWorkspace = responseAs[WorkspaceListResponse].workspace
       }
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         val updatedWorkspace: Workspace = responseAs[WorkspaceListResponse].workspace
@@ -1575,7 +1584,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1585,7 +1594,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow a write-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -1595,7 +1604,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a read-access user to update a workspace" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -1605,7 +1614,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to update a workspace" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
+    Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(AttributeName.withDefaultNS("boo")): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -1617,13 +1626,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   // Put ACL requires OWNER access.  Accept if OWNER; Reject if WRITE, READ, NO ACCESS
 
   it should "allow a project-owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userProjectOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
       }
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
@@ -1632,13 +1641,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
       }
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
@@ -1647,7 +1656,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow ACL updates with a member specified twice" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None), WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
@@ -1658,7 +1667,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
     runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     WorkspaceAccessLevels.all.foreach { accessLevel =>
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
+      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(StatusCodes.BadRequest) { status }
@@ -1670,7 +1679,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     val allUsersEmail = RawlsGroupEmail(services.gcsDAO.toGoogleGroupName(UserService.allUsersGroupRef.groupName))
     runAndWait(rawlsGroupQuery.save(RawlsGroup(UserService.allUsersGroupRef.groupName, allUsersEmail, Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])))
     WorkspaceAccessLevels.all.foreach { accessLevel =>
-      Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
+      Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(allUsersEmail.value, accessLevel, None)))) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(StatusCodes.BadRequest) { status }
@@ -1679,13 +1688,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow an owner-access user to downgrade project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userProjectOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest, response.entity.asString ) { status }
       }
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString ) { status }
@@ -1695,7 +1704,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow an owner-access user to add project owner ACL" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.ProjectOwner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
@@ -1703,7 +1712,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a write-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userWriter.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1712,7 +1721,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a read-access user to update an ACL" in withTestDataApiServicesAndUser(testData.userReader.userEmail.value) { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden, response.entity.asString) { status }
@@ -1720,7 +1729,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to update an ACL" in withTestDataApiServicesAndUser("no-access") { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -1729,12 +1738,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "allow an owner to grant share permissions to a non-owner" in withTestDataApiServicesAndUser("owner-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1744,12 +1753,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "allow an owner to revoke share permissions to a non-owner" in withTestDataApiServicesAndUser("owner-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1759,12 +1768,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "allow a writer with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1774,12 +1783,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a writer with share permissions to give permission above their own access level" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Owner, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
       }
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1789,12 +1798,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a writer with share permissions to alter the permissions of users above their access level" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userOwner.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
       }
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1804,12 +1813,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "allow a user in a group with share permissions to share equal to and below their access level" in withTestDataApiServicesAndUser("reader-access-via-group") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1819,12 +1828,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   it should "not allow a non-owner to grant share permissions to anyone" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.BadRequest) { status }
       }
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1835,39 +1844,39 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "granting and revoking share permissions should update accordingly" in withTestDataApiServicesAndUser("owner-access") { services =>
     import WorkspaceACLJsonSupport._
 
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
 
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, true))
       }
 
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(false))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
 
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
         responseAs[WorkspaceACL].acl should contain (testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))
       }
 
-    Patch(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
+    Patch(s"${testData.workspaceToTestGrant.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
       }
 
-    Get(s"/workspaces/${testData.workspaceToTestGrant.namespace}/${testData.workspaceToTestGrant.name}/acl") ~>
+    Get(s"${testData.workspaceToTestGrant.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
@@ -1880,7 +1889,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "share permissions should not bleed across workspaces" in withTestDataApiServicesAndUser("writer-access") { services =>
     import WorkspaceACLJsonSupport._
 
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
+    Patch(s"${testData.workspace.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, None)))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1891,12 +1900,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   // Workspace Locking
   it should "allow an owner to lock (and re-lock) the workspace" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
@@ -1904,24 +1913,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "locking (and unlocking) a workspace should modify the workspace last modified date" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
 
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"${testData.workspace.path}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -1930,7 +1939,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow anyone to write to a workspace when locked"  in withLockedWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}", HttpEntity(ContentTypes.`application/json`, Seq.empty[AttributeUpdateOperation].toJson.toString)) ~>
+    Patch(testData.workspace.path, HttpEntity(ContentTypes.`application/json`, Seq.empty[AttributeUpdateOperation].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -1938,7 +1947,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow a reader to read a workspace, even when locked"  in withLockedWorkspaceApiServices(testData.userReader.userEmail.value) { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1946,14 +1955,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner to retrieve and adjust an the ACL, even when locked"  in withLockedWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl") ~>
+    Get(s"${testData.workspace.path}/acl") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
       }
-    Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
+    Patch(s"${testData.workspace.path}/acl", HttpEntity(ContentTypes.`application/json`, Seq.empty[WorkspaceACLUpdate].toJson.toString)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -1961,7 +1970,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow an owner to lock a workspace with incomplete submissions" in withTestDataApiServicesAndUser(testData.userOwner.userEmail.value) { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) { status }
@@ -1969,17 +1978,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "allow an owner to unlock the workspace (repeatedly)" in withEmptyWorkspaceApiServices(testData.userOwner.userEmail.value) { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"${testData.workspace.path}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"${testData.workspace.path}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) { status }
@@ -1987,12 +1996,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a non-owner to lock or unlock the workspace" in withEmptyWorkspaceApiServices(testData.userWriter.userEmail.value) { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"${testData.workspace.path}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) { status }
@@ -2000,12 +2009,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a no-access user to infer the existence of the workspace by locking or unlocking" in withLockedWorkspaceApiServices("no-access") { services =>
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/lock") ~>
+    Put(s"${testData.workspace.path}/lock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
       }
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/unlock") ~>
+    Put(s"${testData.workspace.path}/unlock") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -2144,21 +2153,21 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     // called both where success and failure are expected to ensure that there are not just typos on the URLs
     def checkWorkspaceAccess(services: TestApiService, expectSuccess: Boolean): Unit = {
-      Get(s"/workspaces/${request.namespace}/${request.name}/entities/${newSample.entityType}/${newSample.name}") ~>
+      Get(newSample.path(request)) ~>
         sealRoute(services.entityRoutes) ~>
         check {
           assertResult(if (expectSuccess) StatusCodes.OK else StatusCodes.NotFound) {
             status
           }
         }
-      Get(s"/workspaces/${request.namespace}/${request.name}/entities") ~>
+      Get(s"${request.path}/entities") ~>
         sealRoute(services.entityRoutes) ~>
         check {
           assertResult(if (expectSuccess) StatusCodes.OK else StatusCodes.NotFound) {
             status
           }
         }
-      Get(s"/workspaces/${request.namespace}/${request.name}") ~>
+      Get(request.path) ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(if (expectSuccess) StatusCodes.OK else StatusCodes.NotFound) {
@@ -2178,7 +2187,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
               status
             }
           }
-        Patch(s"/workspaces/${request.namespace}/${request.name}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
+        Patch(s"${request.path}/acl", httpJson(Seq(WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None)))) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
             assertResult(StatusCodes.OK) {
@@ -2186,7 +2195,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             }
           }
 
-        Post(s"/workspaces/${request.namespace}/${request.name}/entities", httpJson(newSample)) ~>
+        Post(s"${request.path}/entities", httpJson(newSample)) ~>
           sealRoute(services.entityRoutes) ~>
           check {
             assertResult(StatusCodes.Created) {
@@ -2213,7 +2222,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when a user can read a workspace bucket" in withEmptyWorkspaceApiServices(testData.userReader.userEmail.value) { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/checkBucketReadAccess") ~>
+    Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) { status }
@@ -2221,7 +2230,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user can't read the bucket because they dont have workspace access" in withEmptyWorkspaceApiServices("no-access") { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/checkBucketReadAccess") ~>
+    Get(s"${testData.workspace.path}/checkBucketReadAccess") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -2229,7 +2238,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when requesting bucket size for a non-existent workspace" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}x/bucketUsage") ~>
+    Get(s"${testWorkspaces.workspace.copy(name = "DNE").path}/bucketUsage") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
@@ -2237,7 +2246,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a no-access user requests bucket usage" in withTestWorkspacesApiServicesAndUser("no-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -2247,7 +2256,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not allow a reader-access user to request bucket usage" in withTestWorkspacesApiServicesAndUser("reader-access") { services =>
-    Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+    Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -2258,7 +2267,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   for (access <- Seq("owner-access", "writer-access")) {
     it should s"return 200 when workspace with $access requests bucket usage for an existing workspace" in withTestWorkspacesApiServicesAndUser(access) { services =>
-      Get(s"/workspaces/${testWorkspaces.workspace.namespace}/${testWorkspaces.workspace.name}/bucketUsage") ~>
+      Get(s"${testWorkspaces.workspace.path}/bucketUsage") ~>
         sealRoute(services.workspaceRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {

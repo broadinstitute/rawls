@@ -105,14 +105,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   // Referential integrity constraint violation - if we change that behavior we need to fix this test
   ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
-    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
+    Delete(testData.indiv1.path(testData.wsName)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
       }
-    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+    Delete(testData.sample2.path(testData.wsName)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -1069,7 +1069,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
     assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -1087,7 +1087,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
     assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
