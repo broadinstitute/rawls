@@ -94,6 +94,10 @@ trait MethodConfigurationComponent  {
     private type MethodConfigurationOutputQueryType = driver.api.Query[MethodConfigurationOutputTable, MethodConfigurationOutputRecord, Seq]
     private type MethodConfigurationPrereqQueryType = driver.api.Query[MethodConfigurationPrereqTable, MethodConfigurationPrereqRecord, Seq]
 
+    /*
+      the core methods
+     */
+
 
     //Create is used when importing a new method config or cloning a method config from a different workspace.
     // It will first check to see if another method config with that namespace and name exist.
@@ -134,25 +138,6 @@ trait MethodConfigurationComponent  {
     }
 
 
-    /*
-      the core methods
-     */
-
-    // the save method is used for both creating a new method config and updating an edited method config
-    // the save method is not used for renaming a method config, see the rename method for that
-   /* def saveOLD(workspaceContext: SlickWorkspaceContext, newMethodConfig: MethodConfiguration): ReadWriteAction[MethodConfiguration] = {
-
-      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, newMethodConfig.namespace, newMethodConfig.name)) flatMap {
-        case None =>
-          val configInsert = (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) +=  marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig))
-          configInsert flatMap { configId =>
-            saveMaps(newMethodConfig, configId)
-          }
-        case Some(currentMethodConfigRec) =>
-          saveNewVersion(workspaceContext, currentMethodConfigRec, newMethodConfig)
-      }
-    } map { _ => newMethodConfig }*/
-
     private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
       val in = findInputsByConfigId(configId)
 
@@ -165,18 +150,6 @@ trait MethodConfigurationComponent  {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    /*private def saveNewVersion(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
-        (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
-        saveMaps(newMethodConfig, configId)
-      }
-    }*/
-
-    /*private def marshalMethodConfigNewVersion(workspaceId: UUID, methodConfig: MethodConfiguration, version: Int) = {
-      MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, version, methodConfig.deleted)
-    }*/
-
     def get(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadAction[Option[MethodConfiguration]] = {
       loadMethodConfigurationByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)
     }
@@ -184,17 +157,6 @@ trait MethodConfigurationComponent  {
     def get(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationId: Long): ReadAction[Option[MethodConfiguration]] = {
       loadMethodConfigurationById(methodConfigurationId)
     }
-
-    // To rename a method config, we "delete" (or rather hide) the old version of the method config and create a new row for the new method config, with the
-    //  config version # incremented
-   /* def rename(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, newMethodConfig: MethodConfiguration) = {
-      // get the current method configuration record
-      uniqueResult[MethodConfigurationRecord](findActiveByName(workspaceContext.workspaceId, methodConfigurationNamespace, methodConfigurationName)) flatMap {
-        case None => DBIO.successful(false)
-        case Some(currentMethodConfigRec) =>
-          saveNewVersion(workspaceContext, currentMethodConfigRec, newMethodConfig)
-      }
-    }*/
 
     // Delete a method - actually just "hides" the method - used when deleting a method from a workspace
     def delete(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String): ReadWriteAction[Boolean] = {
