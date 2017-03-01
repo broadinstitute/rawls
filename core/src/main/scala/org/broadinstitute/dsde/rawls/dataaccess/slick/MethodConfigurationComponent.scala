@@ -154,6 +154,8 @@ trait MethodConfigurationComponent  {
     } map { _ => newMethodConfig }*/
 
     private def saveMaps(methodConfig: MethodConfiguration, configId: Long) = {
+      val in = findInputsByConfigId(configId)
+
       val prerequisites = methodConfig.prerequisites.map { case (key, value) => marshalConfigPrereq(configId, key, value) }
       val inputs = methodConfig.inputs.map { case (key, value) => marshalConfigInput(configId, key, value) }
       val outputs = methodConfig.outputs.map{ case (key, value) => marshalConfigOutput(configId, key, value) }

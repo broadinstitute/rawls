@@ -2600,10 +2600,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Overwrite method configuration in a workspace
+      description: Update method configuration in a workspace
       tags:
         - methodconfigs
-      summary: Overwrite method configuration in a workspace
+      summary: Update method configuration in a workspace
       operationId: update_method_configuration
       parameters:
         - in: path
