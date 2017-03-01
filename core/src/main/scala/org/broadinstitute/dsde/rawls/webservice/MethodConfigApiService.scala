@@ -65,7 +65,8 @@ trait MethodConfigApiService extends HttpService with PerRequestCreator with Use
         entity(as[MethodConfiguration]) { newMethodConfiguration =>
           requestContext => {
             perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-              WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)))
+              //WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), newMethodConfiguration.copy(namespace = methodConfigurationNamespace, name = methodConfigName)))
+              WorkspaceService.UpdateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration))
           }
         }
       }

@@ -99,7 +99,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     //get the to-be-deleted method config record
-    val method = runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+    val method = runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
 
     //assert that the result is unique (only one method config was returned)
     assertResult(1) {
