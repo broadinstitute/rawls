@@ -478,7 +478,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/realms") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+        assertSameElements(realmRefs, responseAs[Seq[RawlsRealmRef]])
       }
   }
 
@@ -489,7 +489,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/realms") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+        assertSameElements(realmRefs, responseAs[Seq[RawlsRealmRef]])
       }
 
     Post(s"/admin/groups", httpJson(group)) ~>
