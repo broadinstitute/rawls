@@ -797,7 +797,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
       withWorkspaceContext(testWorkspace.workspace) { context =>
         // these are from DefaultTestData, but we're using EmptyWorkspace to init the DB, so save them now
-        runAndWait(methodConfigurationQuery.save(context, testData.methodConfig))
+        runAndWait(methodConfigurationQuery.create(context, testData.methodConfig))
         runAndWait(entityQuery.save(context, testData.sample2))
         runAndWait(entityQuery.save(context, testData.sset2))
         runAndWait(entityQuery.save(context, testData.indiv2))

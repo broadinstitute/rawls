@@ -125,7 +125,7 @@ trait MethodConfigurationComponent  {
     } map { _ => newMethodConfig }
 
     //hides the current method config and adds the new one
-    def save(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
+    private def save(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         hideMethodConfigurationAction(currentMethodConfigRec.workspaceId, currentMethodConfigRec.namespace, currentMethodConfigRec.name) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>

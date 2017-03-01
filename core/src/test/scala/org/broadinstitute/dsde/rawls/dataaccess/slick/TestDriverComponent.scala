@@ -549,16 +549,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
                 entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-                methodConfigurationQuery.save(context, methodConfig),
-                methodConfigurationQuery.save(context, methodConfig2),
-                methodConfigurationQuery.save(context, methodConfig3),
-                methodConfigurationQuery.save(context, methodConfigValid),
-                methodConfigurationQuery.save(context, methodConfigUnparseable),
-                methodConfigurationQuery.save(context, methodConfigNotAllSamples),
-                methodConfigurationQuery.save(context, methodConfigAttrTypeMixup),
-                methodConfigurationQuery.save(context, methodConfigArrayType),
-                methodConfigurationQuery.save(context, methodConfigEntityUpdate),
-                methodConfigurationQuery.save(context, methodConfigWorkspaceLibraryUpdate),
+                methodConfigurationQuery.create(context, methodConfig),
+                methodConfigurationQuery.create(context, methodConfig2),
+                methodConfigurationQuery.create(context, methodConfig3),
+                methodConfigurationQuery.create(context, methodConfigValid),
+                methodConfigurationQuery.create(context, methodConfigUnparseable),
+                methodConfigurationQuery.create(context, methodConfigNotAllSamples),
+                methodConfigurationQuery.create(context, methodConfigAttrTypeMixup),
+                methodConfigurationQuery.create(context, methodConfigArrayType),
+                methodConfigurationQuery.create(context, methodConfigEntityUpdate),
+                methodConfigurationQuery.create(context, methodConfigWorkspaceLibraryUpdate),
 
                 submissionQuery.create(context, submissionTerminateTest),
                 submissionQuery.create(context, submissionNoWorkflows),
@@ -585,8 +585,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.save(context, methodConfig),
-            methodConfigurationQuery.save(context, methodConfig2),
+            methodConfigurationQuery.create(context, methodConfig),
+            methodConfigurationQuery.create(context, methodConfig2),
 
             submissionQuery.create(context, submissionSuccessful1),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -596,7 +596,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.create(context, methodConfig),
 
             submissionQuery.create(context, submissionFailed),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -606,7 +606,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.create(context, methodConfig),
 
             submissionQuery.create(context, submissionSubmitted),
             updateWorkflowExecutionServiceKey("unittestdefault")
@@ -616,7 +616,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.create(context, methodConfig),
 
             submissionQuery.create(context, submissionAborted2),
             submissionQuery.create(context, submissionSuccessful2),
@@ -627,7 +627,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
           DBIO.seq(
             entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
-            methodConfigurationQuery.save(context, methodConfig),
+            methodConfigurationQuery.create(context, methodConfig),
 
             submissionQuery.create(context, submissionAborted1),
             submissionQuery.create(context, submissionMixed),
@@ -810,7 +810,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
 
     val allEntities = Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)
     val allMCs = Seq(methodConfig, methodConfig2, methodConfig3, methodConfigValid, methodConfigUnparseable, methodConfigNotAllSamples, methodConfigAttrTypeMixup, methodConfigEntityUpdate)
-    def saveAllMCs(context: SlickWorkspaceContext) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.save(context, mc) })
+    def saveAllMCs(context: SlickWorkspaceContext) = DBIO.sequence(allMCs map { mc => methodConfigurationQuery.create(context, mc) })
 
     override def save() = {
       DBIO.seq(

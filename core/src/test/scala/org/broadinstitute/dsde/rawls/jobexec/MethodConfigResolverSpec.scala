@@ -106,9 +106,9 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
             entityQuery.save(context, sampleMissingValue),
             entityQuery.save(context, sampleSet),
             entityQuery.save(context, sampleSet2),
-            methodConfigurationQuery.save(context, configGood),
-            methodConfigurationQuery.save(context, configMissingExpr),
-            methodConfigurationQuery.save(context, configSampleSet)
+            methodConfigurationQuery.create(context, configGood),
+            methodConfigurationQuery.create(context, configMissingExpr),
+            methodConfigurationQuery.create(context, configSampleSet)
           )
         }
       )
