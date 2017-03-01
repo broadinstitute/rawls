@@ -1,4 +1,6 @@
-FROM broadinstitute/scala-baseimage
+FROM openjdk:8
+
+# To run, must build the jar using ./docker/build.sh
 
 # Rawls' default port
 EXPOSE 8080
@@ -6,16 +8,11 @@ EXPOSE 5050
 
 ENV GIT_MODEL_HASH $GIT_MODEL_HASH
 
-ADD . /rawls
-
-# catch sbt issues separately
-RUN cd /rawls && sbt update && echo "sbt updated successfully."
-
-RUN ["/bin/bash", "-c", "/rawls/docker/install.sh /rawls"]
+RUN mkdir /rawls
+COPY ./rawls*.jar /rawls
 
 # Add Rawls as a service (it will start when the container starts)
-RUN mkdir /etc/service/rawls
-ADD docker/run.sh /etc/service/rawls/run
+CMD java $JAVA_OPTS -jar $(find /rawls -name 'rawls*.jar')
 
 # These next 4 commands are for enabling SSH to the container.
 # id_rsa.pub is referenced below, but this should be any public key

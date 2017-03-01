@@ -56,3 +56,11 @@ Run tests using mysql similarly to unit tests.
 ```
 sbt clean compile it:test -Dmysql.host=<mysql hostname>
 ```
+
+## Build Rawls docker image
+```
+# make jar 
+./docker/build.sh
+# build image
+docker build -t broadinstitute/rawls:$tag .
+```

@@ -1019,7 +1019,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def saveAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+  def createAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.create(workspaceContext, methodConfiguration) map { _ =>
       validateMCExpressions(methodConfiguration, dataAccess)
     }
@@ -1054,7 +1054,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
             case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${methodConfiguration.name} already exists in ${workspaceName}")))
-            case None => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+            case None => createAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
           } map { validatedMethodConfiguration =>
             RequestCompleteWithLocation((StatusCodes.Created, validatedMethodConfiguration), methodConfiguration.path(workspaceName))
           }
@@ -1086,7 +1086,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def saveAndValidateMCExpressionsNEW(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+  def updateAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
     dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
       validateMCExpressions(methodConfiguration, dataAccess)
     }
@@ -1100,29 +1100,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
        // check permissions
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           // get old method configuration
-          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
+          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
             // if old method config exists, save the new one
-            case Some(_) => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
+            case Some(_) => updateAndValidateMCExpressions(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration, dataAccess)
             // if old method config does not exist, fail
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
+            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfigurationNamespace}/${methodConfigurationName} in ${workspaceName}.")))
           } map (RequestComplete(StatusCodes.OK, _))
         }
       }
     }
   }
-
-   /* def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
-            case Some(_) => saveAndValidateMCExpressions(workspaceContext, methodConfiguration, dataAccess)
-            case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named ${methodConfiguration.namespace}/${methodConfiguration.name} in ${workspaceName}.")))
-          } map (RequestComplete(StatusCodes.OK, _))
-        }
-      }
-    }
-*/
 
   def getMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
@@ -1213,7 +1200,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
       case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
-      case None => saveAndValidateMCExpressions(destContext, target, dataAccess)
+      case None =>  createAndValidateMCExpressions(destContext, target, dataAccess)
     }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
   }
 

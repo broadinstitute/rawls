@@ -127,7 +127,7 @@ trait MethodConfigurationComponent  {
     //hides the current method config and adds the new one
     private def save(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
-        hideMethodConfigurationAction(currentMethodConfigRec.workspaceId, currentMethodConfigRec.namespace, currentMethodConfigRec.name) andThen
+        hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
         saveMaps(newMethodConfig, configId)
       }
@@ -163,13 +163,13 @@ trait MethodConfigurationComponent  {
         (methodConfigurationOutputQuery ++= outputs)
     }
 
-    private def saveNewVersion(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
+    /*private def saveNewVersion(workspaceContext: SlickWorkspaceContext, currentMethodConfigRec: MethodConfigurationRecord, newMethodConfig: MethodConfiguration) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceId) andThen
         hideMethodConfigurationAction(currentMethodConfigRec.id, currentMethodConfigRec.name) andThen
         (methodConfigurationQuery returning methodConfigurationQuery.map(_.id) += marshalMethodConfig(workspaceContext.workspaceId, newMethodConfig.copy(methodConfigVersion=currentMethodConfigRec.methodConfigVersion + 1))) flatMap { configId =>
         saveMaps(newMethodConfig, configId)
       }
-    }
+    }*/
 
     /*private def marshalMethodConfigNewVersion(workspaceId: UUID, methodConfig: MethodConfiguration, version: Int) = {
       MethodConfigurationRecord(0, methodConfig.namespace, methodConfig.name, workspaceId, methodConfig.rootEntityType, methodConfig.methodRepoMethod.methodNamespace, methodConfig.methodRepoMethod.methodName, methodConfig.methodRepoMethod.methodVersion, version, methodConfig.deleted)
@@ -213,7 +213,7 @@ trait MethodConfigurationComponent  {
     }
 
     def hideMethodConfigurationAction(workspaceId: UUID, methodConfigNamespace: String, methodConfigName: String): ReadWriteAction[Int] ={
-      findActiveByName(workspaceId, methodConfigNamespace, methodConfigName).map(rec => (rec.deleted, rec.name))
+      findByName(workspaceId, methodConfigNamespace, methodConfigName).map(rec => (rec.deleted, rec.name))
         .update(true, methodConfigName + "_" + DateTime.now().toString("yyyy-MM-dd_HH:mm:ss"))
     }
 
