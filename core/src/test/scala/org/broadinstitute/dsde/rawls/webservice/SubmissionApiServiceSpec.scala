@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, WorkflowAuditStatusRecord}
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat, WorkflowOutputsFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._

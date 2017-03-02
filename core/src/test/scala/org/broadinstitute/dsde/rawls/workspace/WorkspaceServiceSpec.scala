@@ -6,6 +6,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor

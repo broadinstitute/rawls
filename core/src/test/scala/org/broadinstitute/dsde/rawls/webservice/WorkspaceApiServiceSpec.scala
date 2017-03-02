@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
