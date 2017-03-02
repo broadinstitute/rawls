@@ -227,10 +227,6 @@ trait MethodConfigurationComponent {
       methodConfigurationPrereqQuery.filter(rec => rec.methodConfigId === configId)
     }
 
-    def findByName(workspaceId: UUID, methodNamespace: String, methodName: String): MethodConfigurationQueryType = {
-      filter(rec => rec.namespace === methodNamespace && rec.name === methodName && rec.workspaceId === workspaceId)
-    }
-
     def findActiveByName(workspaceId: UUID, methodNamespace: String, methodName: String): MethodConfigurationQueryType = {
       filter(rec => rec.namespace === methodNamespace && rec.name === methodName && rec.workspaceId === workspaceId && !rec.deleted)
     }
