@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.WorkspaceACLFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -29,7 +29,6 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.joda.time.DateTime
 import spray.http.{StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
-import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport.{AgoraEntityFormat}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -1025,6 +1024,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
+  def updateAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
+    dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
+      validateMCExpressions(methodConfiguration, dataAccess)
+    }
+  }
+
   def validateMCExpressions(methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ValidatedMethodConfiguration = {
     val parser = dataAccess  // this makes it compile for some reason (as opposed to inlining parser)
     def parseAndPartition(m: Map[String, AttributeString], parseFunc:String => Try[Boolean] ) = {
@@ -1085,12 +1090,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
-
-  def updateAndValidateMCExpressions(workspaceContext: SlickWorkspaceContext, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration, dataAccess: DataAccess): ReadWriteAction[ValidatedMethodConfiguration] = {
-    dataAccess.methodConfigurationQuery.update(workspaceContext, methodConfigurationNamespace, methodConfigurationName, methodConfiguration) map { _ =>
-      validateMCExpressions(methodConfiguration, dataAccess)
-    }
-  }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
     withAttributeNamespaceCheck(userInfo, methodConfiguration) {
@@ -1199,7 +1198,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataAccess.methodConfigurationQuery.get(destContext, dest.namespace, dest.name).flatMap {
       case Some(existingMethodConfig) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"A method configuration named ${dest.namespace}/${dest.name} already exists in ${dest.workspaceName}")))
-      case None =>  createAndValidateMCExpressions(destContext, target, dataAccess)
+      case None => createAndValidateMCExpressions(destContext, target, dataAccess)
     }.map(validatedTarget => RequestCompleteWithLocation((StatusCodes.Created, validatedTarget), target.path(dest.workspaceName)))
   }
 

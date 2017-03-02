@@ -24,7 +24,7 @@ case class MethodConfigurationOutputRecord(methodConfigId: Long, id: Long, key: 
 
 case class MethodConfigurationPrereqRecord(methodConfigId: Long, id: Long, key: String, value: String)
 
-trait MethodConfigurationComponent  {
+trait MethodConfigurationComponent {
   this: DriverComponent with WorkspaceComponent =>
 
   import driver.api._
