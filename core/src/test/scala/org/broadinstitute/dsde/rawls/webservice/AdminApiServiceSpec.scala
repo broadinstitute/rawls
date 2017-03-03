@@ -4,27 +4,27 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext}
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 
 import spray.http._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, RawlsGroupRefFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
+import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserStatusFormat, UserListFormat}
+import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, SyncReportFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsRealmRefFormat}
 
 /**
  * Created by tsharpe on 9/28/15.
  */
 class AdminApiServiceSpec extends ApiServiceSpec {
-
-  import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
@@ -93,7 +93,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
 
-    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -105,7 +104,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   // NOTE: we no longer support deleting entities that are tied to an existing submission - this will cause a
   // Referential integrity constraint violation - if we change that behavior we need to fix this test
   ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     Delete(testData.indiv1.path(testData.wsName)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -368,7 +366,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing a user's billing projects" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     val testUser = RawlsUser(RawlsUserSubjectId("test_subject_id"), RawlsUserEmail("test_user_email"))
     val project1 = billingProjectFromName("project1")
 
@@ -424,7 +421,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 when creating a new realm" in withTestDataApiServices { services =>
     val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
-    import spray.json.DefaultJsonProtocol._
 
     Get(s"/admin/realms") ~>
       sealRoute(services.adminRoutes) ~>
@@ -448,7 +444,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 201 when deleting a realm" in withTestDataApiServices { services =>
     val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
-    import spray.json.DefaultJsonProtocol._
 
     Post(s"/admin/realms", httpJson(group)) ~>
       sealRoute(services.adminRoutes) ~>
@@ -478,7 +473,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 when listing all realms" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
 
     Get(s"/admin/realms") ~>
@@ -489,8 +483,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "not return regular groups in the list of all realms" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
-
     val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
     val group = new RawlsGroupRef(RawlsGroupName("test_realm"))
 
@@ -1201,7 +1193,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when listing all workspaces" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1212,7 +1203,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a string attribute" in withConstantTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1222,7 +1212,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a numeric attribute" in withConstantTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1232,7 +1221,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when getting workspaces by a boolean attribute" in withTestDataApiServices { services =>
-    import spray.json.DefaultJsonProtocol._
     Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -1279,7 +1267,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 200 when reading a Google Genomics operation" in withTestDataApiServices { services => {
-    import spray.json.DefaultJsonProtocol._
     Get("/admin/genomics/operations/dummy-job-id") ~>
       sealRoute(services.adminRoutes) ~>
       check {
