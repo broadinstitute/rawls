@@ -28,7 +28,7 @@ class HttpGooglePubSubDAOSpec extends FlatSpec with Matchers with BeforeAndAfter
   import scala.concurrent.ExecutionContext.Implicits.global
   val gpsDAO = new HttpGooglePubSubDAO(
     GoogleClientSecrets.load(
-      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))),
+      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))).getDetails.get("client_email").toString,
     gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appName"),
     gcsConfig.getString("serviceProject")
