@@ -270,7 +270,7 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.isLocked).update(false)
     }
 
-    def listWorkspacesInRealm(realmRef: RawlsRealmRef): ReadAction[Seq[WorkspaceName]] = {
+    def listWorkspacesInRealm(realmRef: RawlsGroupRef): ReadAction[Seq[WorkspaceName]] = {
       findWorkspacesInRealm(realmRef).result.map(recs => recs.map(rec => WorkspaceName(rec.namespace, rec.name)))
     }
 
@@ -573,8 +573,8 @@ trait WorkspaceComponent {
       filter(_.id.inSetBind(workspaceIds))
     }
 
-    def findWorkspacesInRealm(realmRef: RawlsRealmRef): WorkspaceQueryType = {
-      filter(_.realmGroupName === realmRef.realmName.value)
+    def findWorkspacesInRealm(realmRef: RawlsGroupRef): WorkspaceQueryType = {
+      filter(_.realmGroupName === realmRef.groupName.value)
     }
 
     def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {

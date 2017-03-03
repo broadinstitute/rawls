@@ -316,15 +316,15 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
 
     runAndWait(rawlsGroupQuery.save(realm))
 
-    runAndWait(rawlsGroupQuery.listAllRealms()) should not contain(RawlsRealmRef(realm.groupName))
+    runAndWait(rawlsGroupQuery.listAllManagedGroups()) should not contain(RawlsRealmRef(realm.groupName))
 
-    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
+    runAndWait(rawlsGroupQuery.markGroupAsManaged(RawlsRealmRef(realm.groupName)))
 
     assertResult(Some(realm)) {
       runAndWait(rawlsGroupQuery.load(realm))
     }
 
-    runAndWait(rawlsGroupQuery.listAllRealms()) should contain(RawlsRealmRef(realm.groupName))
+    runAndWait(rawlsGroupQuery.listAllManagedGroups()) should contain(RawlsRealmRef(realm.groupName))
   }
 
   it should "not save a non-existent group as a realm" in withEmptyTestDatabase {
@@ -335,10 +335,10 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
 
     assertResult(0) {
-      runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
+      runAndWait(rawlsGroupQuery.markGroupAsManaged(RawlsRealmRef(realm.groupName)))
     }
 
-    runAndWait(rawlsGroupQuery.listAllRealms()) should not contain(RawlsRealmRef(realm.groupName))
+    runAndWait(rawlsGroupQuery.listAllManagedGroups()) should not contain(RawlsRealmRef(realm.groupName))
   }
 
   it should "flatten group membership" in withEmptyTestDatabase {

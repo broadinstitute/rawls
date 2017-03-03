@@ -129,10 +129,8 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
-    case AdminCreateRealm(realmRef) => asFCAdmin { createRealm(realmRef) } pipeTo sender
-    case AdminDeleteRealm(realmRef) => asFCAdmin { deleteRealm(realmRef) } pipeTo sender
-    case AdminListAllRealms => asFCAdmin { listAllRealms } pipeTo sender
-    case ListRealmsForUser => listRealmsForUser pipeTo sender
+    case AdminListAllRealms => asFCAdmin { listAllManagedGroups } pipeTo sender
+    case ListRealmsForUser => listManagedGroupsForUser pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -557,48 +555,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
         case None =>
-          createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
-      }
-    }
-  }
-
-  def createRealm(realmRef: RawlsRealmRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.load(realmRef.toUserGroupRef) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group [${realmRef.realmName.value}] already exists")))
-        case None =>
-          createGroupInternal(realmRef.toUserGroupRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(realmRef) map { _ => RequestComplete(StatusCodes.Created) }
-      }
-    }
-  }
-
-  def deleteRealm(realmRef: RawlsRealmRef) = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.listWorkspacesInRealm(realmRef) flatMap {
-        case Seq() =>
-          dataAccess.rawlsGroupQuery.deleteRealmRecord(realmRef) flatMap { _ =>
-            withGroup(realmRef.toUserGroupRef, dataAccess) { group =>
-              dataAccess.rawlsGroupQuery.delete(realmRef.toUserGroupRef) andThen
-                DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
-            }
-          }
-        case _ =>
-          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${realmRef.realmName.value}] because there are workspaces in this realm")))
+          createGroupInternal(groupRef, dataAccess) andThen dataAccess.rawlsGroupQuery.markGroupAsManaged(groupRef) map { _ => RequestComplete(StatusCodes.Created) }
       }
     }
   }
 
   // Lists every realm in the system
-  def listAllRealms() = {
+  def listAllManagedGroups() = {
     dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsGroupQuery.listAllRealms() map { realms =>
+      dataAccess.rawlsGroupQuery.listAllManagedGroups() map { realms =>
         RequestComplete(StatusCodes.OK, realms)
       }
     }
   }
 
   // Lists every realm that the user has access to
-  def listRealmsForUser() = {
+  def listManagedGroupsForUser() = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsGroupQuery.listRealmsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { realms =>
         RequestComplete(StatusCodes.OK, realms)
@@ -614,9 +586,16 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def deleteGroup(groupRef: RawlsGroupRef) = {
     dataSource.inTransaction { dataAccess =>
-      withGroup(groupRef, dataAccess) { group =>
-        dataAccess.rawlsGroupQuery.delete(groupRef) andThen
-        DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
+      dataAccess.workspaceQuery.listWorkspacesInRealm(groupRef) flatMap {
+        case Seq() =>
+          dataAccess.rawlsGroupQuery.deleteRealmRecord(groupRef) flatMap { _ =>
+            withGroup(groupRef, dataAccess) { group =>
+              dataAccess.rawlsGroupQuery.delete(groupRef) andThen
+                DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
+            }
+          }
+        case _ =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete group [${groupRef.groupName.value}] because there are workspaces associated with this group")))
       }
     }
   }

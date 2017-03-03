@@ -9,6 +9,8 @@ case class RawlsGroupRecord(groupName: String, groupEmail: String, updatedDate: 
 case class GroupUsersRecord(userSubjectId: String, groupName: String)
 case class GroupSubgroupsRecord(parentGroupName: String, childGroupName: String)
 case class RealmRecord(groupName: String)
+//case class RoleGroupRecord(groupName: String)
+//case class RoleGroupRecord(mainGroupName: String, roleGroupName: String, role: String)
 
 trait RawlsGroupComponent {
   this: DriverComponent
@@ -201,13 +203,13 @@ trait RawlsGroupComponent {
     }
 
     def listRealmsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsRealmRef]] = {
-      listAllRealms().flatMap { allRealms =>
+      listAllManagedGroups().flatMap { allRealms =>
         listGroupsForUser(userRef).map { allGroups =>
           allRealms intersect allGroups.map(ref => RawlsRealmRef(ref.groupName))
         }
       }
     }
-    
+
     def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
       if (groups.isEmpty) DBIO.successful(cumulativeGroups)
       else {
@@ -215,7 +217,7 @@ trait RawlsGroupComponent {
           groupSubGroup <- groupSubgroupsQuery if (groupSubGroup.childGroupName.inSetBind(groups.map(_.groupName)))
           parentGroup <- rawlsGroupQuery if (groupSubGroup.parentGroupName === parentGroup.groupName)
         } yield parentGroup
-        
+
         nextLevelUp.result.flatMap { nextGroups =>
           val nextCumulativeGroups = cumulativeGroups ++ nextGroups
           listParentGroupsRecursive(nextGroups.toSet -- cumulativeGroups, nextCumulativeGroups)
@@ -299,20 +301,20 @@ trait RawlsGroupComponent {
       }
     }
 
-    def setGroupAsRealm(realmGroupRef: RawlsRealmRef): ReadWriteAction[Int] = {
-      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === realmGroupRef.realmName.value)).flatMap {
+    def markGroupAsManaged(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
+      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === groupRef.groupName.value)).flatMap {
         case None => DBIO.successful(0)
         case Some(groupRec) =>
-          realmQuery += marshalRealm(realmGroupRef)
+          realmQuery += marshalRealm(groupRef)
       }
     }
 
-    def listAllRealms(): ReadAction[Set[RawlsRealmRef]] = {
+    def listAllManagedGroups(): ReadAction[Set[RawlsRealmRef]] = {
       (realmQuery.result.map(recs => recs.map(unmarshalRealm).toSet))
     }
 
-    def deleteRealmRecord(realmRef: RawlsRealmRef): ReadWriteAction[Int] = {
-      (realmQuery.filter(_.groupName === realmRef.realmName.value)).delete
+    def deleteRealmRecord(realmRef: RawlsGroupRef): ReadWriteAction[Int] = {
+      (realmQuery.filter(_.groupName === realmRef.groupName.value)).delete
     }
 
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
@@ -333,8 +335,8 @@ trait RawlsGroupComponent {
       RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
     }
 
-    private def marshalRealm(realmRef: RawlsRealmRef): RealmRecord = {
-      RealmRecord(realmRef.realmName.value)
+    private def marshalRealm(groupRef: RawlsGroupRef): RealmRecord = {
+      RealmRecord(groupRef.groupName.value)
     }
 
     private def unmarshalRealm(realmRecord: RealmRecord): RawlsRealmRef = {
