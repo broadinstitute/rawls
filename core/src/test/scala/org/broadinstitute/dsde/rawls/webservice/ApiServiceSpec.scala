@@ -96,12 +96,16 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
 
     val googleGroupSyncTopic = "test-topic-name"
 
+    val notificationTopic = "test-notification-topic"
+    gpsDAO.createTopic(notificationTopic)
+
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
       directoryDAO,
       gpsDAO,
-      googleGroupSyncTopic
+      googleGroupSyncTopic,
+      notificationTopic
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, googleGroupSyncTopic, "test-sub-name", 1, userServiceConstructor))
@@ -125,6 +129,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Htt
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
+      gpsDAO,
+      notificationTopic,
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor

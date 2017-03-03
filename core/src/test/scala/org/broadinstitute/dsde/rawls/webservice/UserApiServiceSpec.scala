@@ -2,9 +2,11 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
 
+import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.Notifications.{ActivationNotification, NotificationFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
@@ -17,6 +19,7 @@ import spray.json.DefaultJsonProtocol._
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Future, Await, ExecutionContext}
 import scala.util.{Failure, Try}
+import scala.concurrent.duration._
 
 /**
  * Created by dvoet on 4/24/15.
@@ -123,6 +126,8 @@ class UserApiServiceSpec extends ApiServiceSpec {
             responseAs[UserStatus]
           }
         }
+
+      TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(ActivationNotification(user.userSubjectId.value)).compactPrint}"), 10 seconds)
     }
   }
 

@@ -180,7 +180,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         gcsDAO,
         directoryDAO,
         gpsDAO,
-        "test-topic-name"
+        "test-topic-name",
+        "test-notification-topic"
       )_
 
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -192,6 +193,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
+        gpsDAO,
+        "test-notification-topic",
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor

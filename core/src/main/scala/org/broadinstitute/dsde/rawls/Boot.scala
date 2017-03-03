@@ -121,7 +121,7 @@ object Boot extends App with LazyLogging {
     val projectServices = gcsConfig.getStringList("projectTemplate.services")
     val projectTemplate = ProjectTemplate(Map("roles/owner" -> projectOwners, "roles/editor" -> projectEditors), projectServices)
 
-    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"))
+    val userServiceConstructor: (UserInfo) => UserService = UserService.constructor(slickDataSource, gcsDAO, userDirDAO, pubSubDAO, gcsConfig.getString("groupMonitor.topicName"), gcsConfig.getString("notifications.topicName"))
 
     system.actorOf(CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, projectTemplate))
 
@@ -164,6 +164,8 @@ object Boot extends App with LazyLogging {
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         gcsDAO,
+        pubSubDAO,
+        gcsConfig.getString("notifications.topicName"),
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor),

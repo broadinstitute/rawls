@@ -7,6 +7,8 @@ import java.util.concurrent.TimeUnit
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import akka.testkit.{TestKit, TestActorRef}
+import org.broadinstitute.dsde.rawls.model.Notifications.{WorkspaceRemovedNotification, WorkspaceInvitedNotification, WorkspaceAddedNotification, NotificationFormat}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -63,6 +65,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val gpsDAO = new MockGooglePubSubDAO
 
+    val notificationTopic = "test-notification-topic"
+    gpsDAO.createTopic(notificationTopic)
+
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -77,7 +82,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gcsDAO,
       directoryDAO,
       gpsDAO,
-      "test-topic-name"
+      "test-topic-name",
+      notificationTopic
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -89,6 +95,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
+      gpsDAO,
+      notificationTopic,
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor
@@ -372,6 +380,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Owner.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
+
     val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
 
     assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
@@ -438,6 +449,11 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))), "Remove ACL should actually do so") {
       removedACLs
     }
+
+    // test notifications on remove
+    val aclRemove2 = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
+    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove2, false), Duration.Inf)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
   }
 
   it should "patch realm ACLs when the owner is also a project owner" in withTestDataServices { services =>
@@ -522,6 +538,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     assert(vComplete.response._2.invitesSent.contains(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
+
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification("obama@whitehouse.gov", userInfo.userEmail)).compactPrint}"), 10 seconds)
 
     val vComplete3 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]

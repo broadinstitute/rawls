@@ -40,7 +40,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val syncedGroups = Collections.synchronizedSet(new util.HashSet[RawlsGroupRef]()).asScala
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null) {
         override def receive = {
           case UserService.InternalSynchronizeGroupMembers(rawlsGroupRef) =>
             syncedGroups.add(rawlsGroupRef)
@@ -69,7 +69,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null) {
         override def receive = {
           case _ => throw new RawlsException("I am a failure")
         }
