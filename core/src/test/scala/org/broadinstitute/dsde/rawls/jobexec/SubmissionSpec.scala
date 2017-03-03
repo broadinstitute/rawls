@@ -140,7 +140,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
           DBIO.seq(
             entityQuery.save(context, sample1),
             entityQuery.save(context, sample2),
-            methodConfigurationQuery.save(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionTestAbortMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
             submissionQuery.create(context, submissionTestAbortGoodWorkflow),

@@ -187,7 +187,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             entityQuery.save(ctx, sample6),
             entityQuery.save(ctx, sampleSet),
     
-            methodConfigurationQuery.save(ctx, methodConfig),
+            methodConfigurationQuery.create(ctx, methodConfig),
     
             submissionQuery.create(ctx, submissionSuccess),
             submissionQuery.create(ctx, submissionFail),
@@ -458,7 +458,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // check that length of result is > 0:
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
           testData.methodConfig.name).length.result) > 0
       }
     }
@@ -473,7 +473,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // now you should have no method configs listed
     withWorkspaceContext(testData.workspace) { workspaceContext =>
       assert {
-        runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
+        runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId, testData.methodConfig.namespace,
           testData.methodConfig.name).length.result) == 0
       }
     }

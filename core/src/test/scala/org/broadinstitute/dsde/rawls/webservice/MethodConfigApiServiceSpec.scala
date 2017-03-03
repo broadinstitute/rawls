@@ -453,7 +453,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
-    runAndWait(methodConfigurationQuery.save(SlickWorkspaceContext(testData.workspace), foo))
+    runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), foo))
 
     Get(s"${foo.path(testData.workspace)}/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>

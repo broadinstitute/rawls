@@ -24,7 +24,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       MethodRepoMethod("ns-config", "meth2", 2)
     )
 
-    runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfig2))
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfig2))
 
     assertResult(Option(methodConfig2)) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, methodConfig2.namespace, methodConfig2.name))
@@ -41,7 +41,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       methodRepoMethod = testData.methodConfig.methodRepoMethod.copy(methodVersion = 2)
     )
 
-    runAndWait(methodConfigurationQuery.save(workspaceContext, changed))
+    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.methodConfig.namespace, testData.methodConfig.name, changed))
 
     assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
@@ -78,11 +78,11 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       MethodRepoMethod("ns-config", "meth2", 2)
     )
 
-    runAndWait(methodConfigurationQuery.save(workspaceContext, methodConfigOldName ))
+    runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
 
     val changed = methodConfigOldName.copy(name = "newName")
 
-    runAndWait(methodConfigurationQuery.rename(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
+    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
 
     assertResult(Option(changed.copy(methodConfigVersion = 2))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
@@ -99,7 +99,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
     val workspaceContext = SlickWorkspaceContext(testData.workspace)
 
     //get the to-be-deleted method config record
-    val method = runAndWait(methodConfigurationQuery.findByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+    val method = runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceId,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
 
     //assert that the result is unique (only one method config was returned)
     assertResult(1) {

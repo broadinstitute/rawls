@@ -152,7 +152,7 @@ trait SubmissionComponent {
 
       uniqueResult[SubmissionRecord](findById(UUID.fromString(submission.submissionId))) flatMap {
         case None =>
-          val configIdAction = uniqueResult[Long](methodConfigurationQuery.findByName(
+          val configIdAction = uniqueResult[Long](methodConfigurationQuery.findActiveByName(
             workspaceContext.workspaceId, submission.methodConfigurationNamespace, submission.methodConfigurationName).map(_.id))
 
           loadSubmissionEntityId(workspaceContext.workspaceId, submission.submissionEntity) flatMap { entityId =>

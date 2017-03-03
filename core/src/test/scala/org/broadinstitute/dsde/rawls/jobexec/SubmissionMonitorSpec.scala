@@ -289,7 +289,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(methodConfigurationQuery.save(context, mcUpdateEntityLibraryOutputs))
+      runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryOutputs))
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryOutputs))
     }
 
@@ -312,7 +312,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(methodConfigurationQuery.save(context, mcUpdateEntityLibraryInputs))
+      runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryInputs))
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryInputs))
     }
 
