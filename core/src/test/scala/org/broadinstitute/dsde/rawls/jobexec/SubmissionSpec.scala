@@ -175,13 +175,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
 
+      val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
+
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
         directoryDAO,
         gpsDAO,
         "test-topic-name",
-        "test-notification-topic"
+        notificationDAO
       )_
 
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -193,8 +195,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
-        gpsDAO,
-        "test-notification-topic",
+        notificationDAO,
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor

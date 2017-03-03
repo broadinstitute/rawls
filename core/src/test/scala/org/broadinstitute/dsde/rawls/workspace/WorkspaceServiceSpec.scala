@@ -66,7 +66,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val gpsDAO = new MockGooglePubSubDAO
 
     val notificationTopic = "test-notification-topic"
-    gpsDAO.createTopic(notificationTopic)
+    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
 
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -83,7 +83,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       directoryDAO,
       gpsDAO,
       "test-topic-name",
-      notificationTopic
+      notificationDAO
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -95,8 +95,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
-      gpsDAO,
-      notificationTopic,
+      notificationDAO,
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor
