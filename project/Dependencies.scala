@@ -36,6 +36,7 @@ object Dependencies {
   )
 
   val modelDependencies = Seq(
+    // I am not certain why I need jackson-core here but IntelliJ is confused without it and tests don't run
     "com.fasterxml.jackson.core" % "jackson-core" % "2.4.3",
     "io.spray" %% "spray-json" % "1.3.2",
     "io.spray" %% "spray-http" % sprayV,
