@@ -631,7 +631,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"), MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"),
+      MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"))) {
       runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 
