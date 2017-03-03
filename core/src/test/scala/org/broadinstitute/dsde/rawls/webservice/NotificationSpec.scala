@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.dataaccess.{MockGooglePubSubDAO, MockGoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
