@@ -8,7 +8,7 @@
 
     <changeSet id="method_config_create_index" author="ansingh" logicalFilePath="dummy">
         <sql stripComments="true">
-            CREATE INDEX IDX_CONFIG ON METHOD_CONFIG (NAMESPACE, NAME, WORKSPACE_ID, METHOD_CONFIG_VERSION);
+            CREATE UNIQUE INDEX IDX_CONFIG ON METHOD_CONFIG (WORKSPACE_ID, NAMESPACE, NAME, METHOD_CONFIG_VERSION);
         </sql>
     </changeSet>
 
