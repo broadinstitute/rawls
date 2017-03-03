@@ -380,9 +380,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Owner.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
-
     val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
 
     assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
@@ -449,11 +446,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       testData.userReader.userEmail.value -> AccessEntry(WorkspaceAccessLevels.Read, false, false))), "Remove ACL should actually do so") {
       removedACLs
     }
-
-    // test notifications on remove
-    val aclRemove2 = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None))
-    Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclRemove2, false), Duration.Inf)
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
   }
 
   it should "patch realm ACLs when the owner is also a project owner" in withTestDataServices { services =>
@@ -538,8 +530,6 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     assert(vComplete.response._2.invitesSent.contains(WorkspaceACLUpdate("obama@whitehouse.gov", WorkspaceAccessLevels.Owner, None)))
-
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification("obama@whitehouse.gov", userInfo.userEmail)).compactPrint}"), 10 seconds)
 
     val vComplete3 = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
