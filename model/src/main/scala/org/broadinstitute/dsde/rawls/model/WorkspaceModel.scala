@@ -75,7 +75,8 @@ case class WorkspaceRequest (
                       attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
-  def briefName = toWorkspaceName.toString
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
 }
 
 case class Workspace(
@@ -93,7 +94,8 @@ case class Workspace(
                       isLocked: Boolean = false
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
-  def briefName = toWorkspaceName.toString
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -109,8 +111,10 @@ case class Entity(
                    entityType: String,
                    attributes: AttributeMap
                    ) extends Attributable {
-  def briefName = name
-  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
+  def briefName: String = name
+  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${entityType}/${name}"
+  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+  def path( workspaceRequest: WorkspaceRequest ): String = path(workspaceRequest.toWorkspaceName)
   def toReference = AttributeEntityReference(entityType, name)
 }
 
@@ -188,7 +192,8 @@ case class MethodConfiguration(
                    deleted: Boolean = false
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
-  def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
+  def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
+  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
 }
 
 case class MethodConfigurationShort(

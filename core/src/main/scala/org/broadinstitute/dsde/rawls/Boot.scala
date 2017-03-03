@@ -76,7 +76,7 @@ object Boot extends App with LazyLogging {
     )
 
     val pubSubDAO = new HttpGooglePubSubDAO(
-      clientSecrets,
+      clientSecrets.getDetails.get("client_email").toString,
       gcsConfig.getString("pathToPem"),
       gcsConfig.getString("appName"),
       gcsConfig.getString("serviceProject")

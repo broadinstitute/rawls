@@ -19,7 +19,7 @@ import scala.concurrent._
  * Created by mbemis on 5/6/16.
  */
 
-class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
+class HttpGooglePubSubDAO(clientEmail: String,
                           pemFile: String,
                           appName: String,
                           serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO {
@@ -28,8 +28,6 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
-
-  val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
 
   private val characterEncoding = "UTF-8"
 
@@ -113,7 +111,7 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(pubSubScopes) // grant pub sub powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
