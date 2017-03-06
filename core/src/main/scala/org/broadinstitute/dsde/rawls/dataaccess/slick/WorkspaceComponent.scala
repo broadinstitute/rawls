@@ -284,12 +284,12 @@ trait WorkspaceComponent {
 
     def deleteUserSharePermissions(workspaceId: UUID, userRefs: Seq[RawlsUserRef]) = {
       val usersToRemove = userRefs.map(_.userSubjectId.value)
-      (workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSet(usersToRemove))).delete
+      (workspaceUserShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId.inSetBind(usersToRemove))).delete
     }
 
     def deleteGroupSharePermissions(workspaceId: UUID, groupRefs: Seq[RawlsGroupRef]) = {
       val groupsToRemove = groupRefs.map(_.groupName.value)
-      (workspaceGroupShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSet(groupsToRemove))).delete
+      (workspaceGroupShareQuery.filter(rec => rec.workspaceId === workspaceId && rec.groupName.inSetBind(groupsToRemove))).delete
     }
 
     def deleteWorkspaceSharePermissions(workspaceId: UUID) = {
@@ -302,7 +302,7 @@ trait WorkspaceComponent {
         if(hasSharePermission) DBIO.successful(hasSharePermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
-          workspaceGroupShareQuery.filter(rec => ((rec.workspaceId === workspaceContext.workspaceId) && (rec.groupName).inSet(groupNames))).countDistinct.result.map(rows => rows > 0)
+          workspaceGroupShareQuery.filter(rec => ((rec.workspaceId === workspaceContext.workspaceId) && (rec.groupName).inSetBind(groupNames))).countDistinct.result.map(rows => rows > 0)
         }
       }
     }

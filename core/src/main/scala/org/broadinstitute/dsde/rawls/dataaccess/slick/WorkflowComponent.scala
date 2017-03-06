@@ -277,7 +277,7 @@ trait WorkflowComponent {
     }
 
     def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID, statuses: WorkflowStatuses.WorkflowStatus*): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsBySubmissionId(submissionId).filter(_.status inSet(statuses.map(_.toString))).result
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind(statuses.map(_.toString))).result
     }
 
     def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
