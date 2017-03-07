@@ -385,8 +385,8 @@ trait WorkspaceComponent {
           explicitly granted that ability, we want to be able to return all users and groups even if they don't have share permissions.
           After the join, a null column equates to false, and a non-null column equates to true. This conversion is done with permission.isDefined
        */
-      val userCatalogQuery = accessAndUserEmail.joinLeft(workspaceUserShareQuery.filter(_.workspaceId === workspaceContext.workspaceId)).on(_._3 === _.userSubjectId).map { case ((_, userEmail, _), catalogRecord) => (userEmail, catalogRecord.isDefined) }
-      val groupCatalogQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupShareQuery.filter(_.workspaceId === workspaceContext.workspaceId)).on(_._3 === _.groupName).map { case ((_, groupEmail, _), catalogRecord) => (groupEmail, catalogRecord.isDefined) }
+      val userCatalogQuery = accessAndUserEmail.joinLeft(workspaceUserCatalogQuery.filter(_.workspaceId === workspaceContext.workspaceId)).on(_._3 === _.userSubjectId).map { case ((_, userEmail, _), catalogRecord) => (userEmail, catalogRecord.isDefined) }
+      val groupCatalogQuery = accessAndSubGroupEmail.joinLeft(workspaceGroupCatalogQuery.filter(_.workspaceId === workspaceContext.workspaceId)).on(_._3 === _.groupName).map { case ((_, groupEmail, _), catalogRecord) => (groupEmail, catalogRecord.isDefined) }
 
       for {
         userResults <- userCatalogQuery.result

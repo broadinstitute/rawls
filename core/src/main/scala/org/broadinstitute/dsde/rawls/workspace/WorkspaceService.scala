@@ -641,30 +641,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   private def determineCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Seq[WorkspaceCatalog], Map[Either[RawlsUserRef,RawlsGroupRef], Boolean])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email))
-    // TODO the call below check the database to see if catalog is defined... but where do we actually check if the value is different
-    // from what is stored there?
       existingRefsAndCatalog <- dataAccess.workspaceQuery.findWorkspaceUsersAndCatalog(workspaceContext.workspaceId)
     } yield {
       val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogChange => refsToUpdateByEmail.keySet.contains(catalogChange.email))
-
-      val refsToUpdate = emailsFound.map { catalogUpdate => refsToUpdateByEmail.get(catalogUpdate.email) -> catalogUpdate.catalog }.collect {
+      val refsToUpdate = catalogUpdates.map { catalogUpdate => refsToUpdateByEmail.get(catalogUpdate.email) -> catalogUpdate.catalog }.collect {
         case (Some(ref), catalog) => (ref, catalog)
       }.toSet
 
-
-//      val refsToUpdateCatalogMap: Map[Either[RawlsUserRef,RawlsGroupRef], Boolean] = refsToUpdate.map { case (ref, catalog) => ref -> catalog }
-//      val existingRefCatalog = existingRefsAndCatalog.map { case (ref, catalog ) => (ref -> catalog }
-
-//
       // remove everything that is not changing
       val actualCatalogChangesToMake = refsToUpdate.diff(existingRefsAndCatalog)
-
-//      val membersWithCatalogPermission = actualCatalogChangesToMake.filter { case (_, canShare) => canShare.isDefined }
 
       (emailsNotFound, actualCatalogChangesToMake.toMap)
     }
   }
-
 
   /**
    * Determine what the access groups for a workspace should look like after the requested updates are applied
