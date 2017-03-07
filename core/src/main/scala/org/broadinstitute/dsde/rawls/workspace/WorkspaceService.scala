@@ -9,6 +9,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.expressions._
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.SubmissionStarted
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -36,6 +37,13 @@ import spray.json._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import spray.json._
+import Notifications._
+
+import scala.concurrent.Await
+import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor
 
 /**
  * Created by dvoet on 4/27/15.
@@ -107,11 +115,11 @@ object WorkspaceService {
     Props(workspaceServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
+  def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new WorkspaceService(userInfo, dataSource, methodRepoDAO, executionServiceCluster, execServiceBatchSize, gcsDAO, notificationDAO, submissionSupervisor, bucketDeletionMonitor, userServiceConstructor)
 }
 
-class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
+class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val methodRepoDAO: MethodRepoDAO, executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, submissionSupervisor: ActorRef, bucketDeletionMonitor: ActorRef, userServiceConstructor: UserInfo => UserService)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with MethodWiths with UserWiths with LazyLogging {
   import dataSource.dataAccess.driver.api._
 
   implicit val timeout = Timeout(5 minutes)
@@ -494,11 +502,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName): Future[Seq[WorkspaceACLUpdate]] = {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel, None)))
-          DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
+          DBIO.sequence(invites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
         }
       }
     }
@@ -538,13 +545,31 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       savedPermissions <- updateWorkspaceSharePermissions(actualShareChangesToMake)
       deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
-      savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else {
+      savedInvites <- if(inviteUsersNotFound) {
+        val invites = emailsNotFound diff deletedInvites
+
+        // only send invites for those that do not already exist
+        val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
+        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userEmail))
+        notificationDAO.fireAndForgetNotifications(inviteNotifications)
+
+        saveWorkspaceInvites(invites, workspaceName)
+      } else {
+        // save changes to only existing invites
         val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
-        saveWorkspaceInvites(invitesToUpdate, existingInvites, workspaceName)
+        saveWorkspaceInvites(invitesToUpdate, workspaceName)
       }
     } yield {
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
+          // fire and forget notifications
+          val notificationMessages = actualChangesToMake collect {
+            // note that we don't send messages to groups
+            case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
+            case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
+          }
+          notificationDAO.fireAndForgetNotifications(notificationMessages)
+
           RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
         case otherwise => otherwise
       }.reduce { (prior, next) =>
