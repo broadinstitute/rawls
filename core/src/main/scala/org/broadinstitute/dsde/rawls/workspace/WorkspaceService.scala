@@ -502,15 +502,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], existingInvites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName) = {
+    def saveWorkspaceInvites(invites: Seq[WorkspaceACLUpdate], workspaceName: WorkspaceName): Future[Seq[WorkspaceACLUpdate]] = {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          val dedupedInvites = invites.filterNot(update => existingInvites.contains(WorkspaceACLUpdate(update.email, update.accessLevel, None)))
-
-          val invitedNotifications = dedupedInvites.map(invite => Notifications.WorkspaceInvitedNotification(invite.email, userInfo.userEmail))
-          notificationDAO.fireAndForgetNotifications(invitedNotifications)
-
-          DBIO.sequence(dedupedInvites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
+          DBIO.sequence(invites.map(invite => dataAccess.workspaceQuery.saveInvite(workspaceContext.workspaceId, userInfo.userSubjectId, invite)))
         }
       }
     }
@@ -550,9 +545,19 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       existingInvites <- getExistingWorkspaceInvites(workspaceName)
       savedPermissions <- updateWorkspaceSharePermissions(actualShareChangesToMake)
       deletedInvites <- deleteWorkspaceInvites(emailsNotFound, existingInvites, workspaceName)
-      savedInvites <- if(inviteUsersNotFound) saveWorkspaceInvites((emailsNotFound diff deletedInvites), existingInvites, workspaceName) else {
+      savedInvites <- if(inviteUsersNotFound) {
+        val invites = emailsNotFound diff deletedInvites
+
+        // only send invites for those that do not already exist
+        val newInviteEmails = invites.map(_.email) diff existingInvites.map((_.email))
+        val inviteNotifications = newInviteEmails.map(Notifications.WorkspaceInvitedNotification(_, userInfo.userEmail))
+        notificationDAO.fireAndForgetNotifications(inviteNotifications)
+
+        saveWorkspaceInvites(invites, workspaceName)
+      } else {
+        // save changes to only existing invites
         val invitesToUpdate = emailsNotFound.filter(rec => existingInvites.map(_.email).contains(rec.email)) diff deletedInvites
-        saveWorkspaceInvites(invitesToUpdate, existingInvites, workspaceName)
+        saveWorkspaceInvites(invitesToUpdate, workspaceName)
       }
     } yield {
       overwriteGroupResults.map {
