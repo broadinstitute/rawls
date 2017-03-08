@@ -347,7 +347,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on create workspace with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+  it should "return 201 on create workspace with library-namespace attributes as non-curator" in withTestDataApiServices { services =>
     revokeCuratorRole(services)
 
     val newWorkspace = WorkspaceRequest(
@@ -360,12 +360,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.Created) {
           status
         }
-
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(AttributeName.libraryNamespace))
       }
   }
 
@@ -640,7 +637,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on update (add) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+  it should "return OK on update (add) with workspace library-namespace attributes as non-curator" in withTestDataApiServices { services =>
     revokeCuratorRole(services)
 
     val name = AttributeName(AttributeName.libraryNamespace, "whatever")
@@ -649,12 +646,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path, httpJson(Seq(AddUpdateAttribute(name, attr): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.OK) {
           status
         }
-
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(name.namespace))
       }
   }
 
@@ -682,12 +676,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Patch(testData.workspace.path, httpJson(Seq(RemoveAttribute(name): AttributeUpdateOperation))) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.OK) {
           status
         }
-
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(name.namespace))
       }
   }
 
@@ -816,7 +807,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 403 on clone workspace when adding library-namespace attributes as non-curator" in withTestDataApiServices { services =>
+  it should "return 201 on clone workspace when adding library-namespace attributes as non-curator" in withTestDataApiServices { services =>
     revokeCuratorRole(services)
 
     val workspaceCopy = WorkspaceRequest(
@@ -827,12 +818,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden) {
+        assertResult(StatusCodes.Created) {
           status
         }
-
-        val errorText = responseAs[ErrorReport].message
-        assert(errorText.contains(AttributeName.libraryNamespace))
       }
   }
 

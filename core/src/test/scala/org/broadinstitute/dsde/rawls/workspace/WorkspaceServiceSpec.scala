@@ -579,6 +579,117 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false))))
   }
 
+  it should "retrieve catalog permission" in withTestDataServices { services =>
+    //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
+    //ACLs into the workspace manually.
+//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+//    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+//
+//    runAndWait(rawlsUserQuery.save(user))
+//    runAndWait(rawlsGroupQuery.save(group))
+
+    val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
+
+//    val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
+//    val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
+//    val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
+//    runAndWait(rawlsGroupQuery.save(replacementOwnerGroup))
+//
+//    val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
+//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
+    val (vStatus, vData) = vComplete.response
+
+    assertResult(StatusCodes.OK) {
+      vStatus
+    }
+
+    val expectedResult = Vector(
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("project-owner-access",false),
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("reader-access",false),
+      WorkspaceCatalog("writer-access",false))
+
+    assertResult(expectedResult) {
+      vData
+    }
+  }
+
+  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsGroupQuery.save(group))
+
+    services.gcsDAO.createGoogleGroup(group)
+
+    //add ACL
+    // TODO why is this block needed?
+    val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
+    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
+    val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
+
+    assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
+      aclAddResponse.response
+    }
+
+    //add catalog perm
+    val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
+      WorkspaceCatalogResponse(user.userSubjectId.value, true),
+      WorkspaceCatalogResponse(group.groupName.value,true)),Seq.empty)
+
+    assertResult((StatusCodes.OK, expectedResponse)) {
+      catalogUpdateResponse.response
+    }
+
+    //check result
+    val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    assertResult(Vector(
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("obama@whitehouse.gov",true),
+      WorkspaceCatalog("project-owner-access",false),
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("reader-access",false),
+      WorkspaceCatalog("writer-access",false),
+      WorkspaceCatalog("group@whitehouse.gov",true))){
+      catalogUpdates
+    }
+
+
+//    //remove catalog perm
+//    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+//      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false))), Duration.Inf)
+//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+//    val expectedRemoveResponse = WorkspaceCatalogUpdateResponseList(Seq(
+//      WorkspaceCatalogResponse(user.userSubjectId.value, false),
+//      WorkspaceCatalogResponse(group.groupName.value,false)),Seq.empty)
+//
+//    assertResult((StatusCodes.OK, expectedRemoveResponse)) {
+//      catalogRemoveResponse.response
+//    }
+//
+//    //check result
+//    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+//      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+//
+//    val expectedCheckResponse = Vector(
+//      WorkspaceCatalog("owner-access",false),
+//      WorkspaceCatalog("project-owner-access",false),
+//      WorkspaceCatalog("owner-access",false),
+//      WorkspaceCatalog("reader-access",false),
+//      WorkspaceCatalog("writer-access",false))
+//    assertResult(expectedCheckResponse){
+//      catalogRemovals
+//    }
+  }
+
   it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
     //check workspace is not locked
     assert(!testData.workspaceTerminatedSubmissions.isLocked)

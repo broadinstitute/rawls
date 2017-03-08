@@ -44,8 +44,10 @@ trait DataAccess
       TableQuery[MethodConfigurationTable].delete andThen         // FK to workspace
       TableQuery[EntityTable].delete andThen                      // FK to workspace
       TableQuery[PendingWorkspaceAccessTable].delete andThen      // FK to workspace, user
-      TableQuery[WorkspaceUserShareTable].delete andThen          // FK to workspace, user
-      TableQuery[WorkspaceGroupShareTable].delete andThen         // FK to workspace, group
+      TableQuery[WorkspaceUserShareTable].delete andThen          // FK to workspace, user share
+      TableQuery[WorkspaceGroupShareTable].delete andThen         // FK to workspace, group share
+      TableQuery[WorkspaceUserCatalogTable].delete andThen        // FK to workspace, catalog perm
+      TableQuery[WorkspaceGroupCatalogTable].delete andThen       // FK to workspace, catalog perm
       TableQuery[WorkspaceTable].delete andThen                   // FK to realm
       TableQuery[RealmTable].delete andThen                       // FK to group
       TableQuery[RawlsBillingProjectTable].delete andThen
