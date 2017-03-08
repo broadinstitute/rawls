@@ -357,11 +357,11 @@ trait WorkspaceComponent {
     }
 
     def getUserCatalogPermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
-      workspaceUserCatalogQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0) flatMap { hasSharePermission =>
-        if(hasSharePermission) DBIO.successful(hasSharePermission)
+      workspaceUserCatalogQuery.filter(rec => (rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId)).countDistinct.result.map(rows => rows > 0) flatMap { hasCatalogPermission =>
+        if(hasCatalogPermission) DBIO.successful(hasCatalogPermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
-          workspaceGroupShareQuery.filter(rec => ((rec.workspaceId === workspaceContext.workspaceId) && (rec.groupName).inSet(groupNames))).countDistinct.result.map(rows => rows > 0)
+          workspaceGroupCatalogQuery.filter(rec => ((rec.workspaceId === workspaceContext.workspaceId) && (rec.groupName).inSet(groupNames))).countDistinct.result.map(rows => rows > 0)
         }
       }
     }

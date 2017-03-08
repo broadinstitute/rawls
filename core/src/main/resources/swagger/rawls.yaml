@@ -3125,10 +3125,6 @@ paths:
           items:
             schema:
               $ref: '#/definitions/WorkspaceCatalog'
-        '403':
-          description: Insufficient permissions to get workspace ACLs (must be owner or admin)
-          schema:
-            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace not found
           schema:
@@ -3165,14 +3161,6 @@ paths:
           description: Successful Request
           schema:
             $ref: '#/definitions/WorkspaceCatalogUpdateResponseList'
-        '400':
-          description: Attempting to change access controls you can't (your own, or public-access group)
-          schema:
-            $ref: '#/definitions/ErrorReport'
-        '403':
-          description: Insufficient permissions to edit workspace ACLs (must be owner)
-          schema:
-            $ref: '#/definitions/ErrorReport'
         '404':
           description: Workspace, user or group not found
           schema:
@@ -4585,10 +4573,23 @@ definitions:
         items:
           $ref: '#/definitions/WorkspaceACLUpdate'
 
-  WorkspaceCatalogUpdate:
+  WorkspaceCatalog:
     description: ''
     required:
       - email
+      - catalog
+    properties:
+      email:
+        type: string
+        description: email address of the user or group whose permissions will be changed
+      catalog:
+        type: boolean
+        description: Set to true if you want this user to be able to perform library related operations on the workspace
+
+  WorkspaceCatalogResponse:
+    description: ''
+    required:
+      - subjectId
       - catalog
     properties:
       email:
@@ -4613,7 +4614,7 @@ definitions:
         type: array
         description: the users or groups who were not found
         items:
-          $ref: '#/definitions/WorkspaceCatalogUpdate'
+          $ref: '#/definitions/WorkspaceCatalogResponse'
 
   WorkspaceAccessEntry:
     description: ''
@@ -4801,6 +4802,8 @@ definitions:
       accessLevel:
         $ref: '#/definitions/WorkspaceAccessLevel'
       canShare:
+        type: boolean
+      catalog:
         type: boolean
       workspace:
         $ref: '#/definitions/Workspace'
