@@ -560,16 +560,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         saveWorkspaceInvites(invitesToUpdate, workspaceName)
       }
     } yield {
+      // fire and forget notifications
+      val notificationMessages = actualChangesToMake collect {
+        // note that we don't send messages to groups
+        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
+        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
+      }
+      notificationDAO.fireAndForgetNotifications(notificationMessages)
+
       overwriteGroupResults.map {
         case RequestComplete(StatusCodes.NoContent) =>
-          // fire and forget notifications
-          val notificationMessages = actualChangesToMake collect {
-            // note that we don't send messages to groups
-            case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
-            case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
-          }
-          notificationDAO.fireAndForgetNotifications(notificationMessages)
-
           RequestComplete(StatusCodes.OK, getUsersUpdatedResponse(actualChangesToMake, (deletedInvites ++ savedInvites), (emailsNotFound diff savedInvites), existingInvites))
         case otherwise => otherwise
       }.reduce { (prior, next) =>
