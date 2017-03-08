@@ -35,7 +35,6 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, ExecutionServiceValidationFormat, SubmissionFormat, SubmissionListResponseFormat, SubmissionReportFormat, SubmissionStatusResponseFormat, SubmissionValidationReportFormat, WorkflowOutputsFormat, WorkflowQueueStatusResponseFormat}
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
