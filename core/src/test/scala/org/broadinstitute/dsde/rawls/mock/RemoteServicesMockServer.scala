@@ -571,5 +571,16 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
       .withStatusCode(StatusCodes.BadRequest.intValue)
   )
 
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/engine/v1/version")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.OK.intValue)
+      .withBody("""{"cromwell":"25"}""")
+  )
+
   def stopServer = mockServer.stop()
 }

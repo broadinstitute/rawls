@@ -44,4 +44,6 @@ class MockExecutionServiceDAO(timeout:Boolean = false, val identifier:String = "
   override def status(id: String, userInfo: UserInfo) = Future.successful(ExecutionServiceStatus(id, "Submitted"))
 
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+
+  override def version(userInfo: UserInfo) = Future.successful(ExecutionServiceVersion("25"))
 }

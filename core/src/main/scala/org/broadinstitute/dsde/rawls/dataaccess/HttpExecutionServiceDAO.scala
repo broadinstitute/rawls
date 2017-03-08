@@ -67,6 +67,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     retry(when500) { () => toFutureTry(pipeline(Post(url))) }
   }
 
+  override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
+    val url = executionServiceURL + s"/engine/v1/version"
+    import system.dispatcher
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceVersion]
+    retry(when500) { () => pipeline(Get(url)) }
+  }
+
   private def when500( throwable: Throwable ): Boolean = {
     throwable match {
       case ure: spray.client.UnsuccessfulResponseException => ure.responseStatus.intValue/100 == 5

@@ -36,6 +36,8 @@ case class ExecutionServiceStatus(
 
 case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray])
 
+case class ExecutionServiceVersion(cromwell: String)
+
 // Cromwell's response to workflow validation
 case class ExecutionServiceValidation(
   valid: Boolean,
@@ -259,6 +261,8 @@ class ExecutionJsonSupport extends JsonSupport {
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
 
   implicit val ExecutionServiceFailureFormat = jsonFormat3(ExecutionServiceFailure)
+
+  implicit val ExecutionServiceVersionFormat = jsonFormat1(ExecutionServiceVersion)
 
   implicit val ExecutionServiceValidationFormat = jsonFormat2(ExecutionServiceValidation)
 

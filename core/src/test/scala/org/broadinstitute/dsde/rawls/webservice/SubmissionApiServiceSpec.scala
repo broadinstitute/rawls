@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecord, WorkflowAuditStatusRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat, WorkflowOutputsFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{SubmissionReportFormat, SubmissionRequestFormat, SubmissionStatusResponseFormat, SubmissionListResponseFormat, WorkflowQueueStatusResponseFormat, WorkflowOutputsFormat, ExecutionServiceVersionFormat}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -352,6 +352,15 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
           JsArray(Vector(JsString("foo"), JsString("bar"))),
           JsArray(Vector(JsString("baz"), JsString("qux"))))))))))))
         assertResult(expectedOutputs) { responseAs[WorkflowOutputs] }
+      }
+  }
+
+  it should "return the cromwell version" in withTestDataApiServices { services =>
+    Get("/version/executionEngine") ~>
+      sealRoute(services.submissionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {status}
+        responseAs[ExecutionServiceVersion]
       }
   }
 }
