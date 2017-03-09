@@ -24,7 +24,7 @@ paths:
         - version
       summary: get version information of this application
       operationId: version
-  '/version/executionEngine':
+  '/api/version/executionEngine':
     get:
       responses:
         '200':
@@ -36,6 +36,11 @@ paths:
         - version
       summary: get version information of the execution engine
       operationId: execVersion
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/billing/list/{userEmail}':
     get:
       responses:
