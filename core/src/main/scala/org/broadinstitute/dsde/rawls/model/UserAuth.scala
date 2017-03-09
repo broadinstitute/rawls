@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.model.ManagedGroupRoles.ManagedGroupRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
@@ -29,6 +30,35 @@ object RawlsGroup {
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
+trait Managed {
+  val usersGroup: RawlsGroup
+  val ownersGroup: RawlsGroup
+}
+
+object ManagedRoles {
+  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
+  }
+
+  def withName(name: String): ManagedRole = name.toLowerCase match {
+    case "owner" => Owner
+    case "user" => User
+    case _ => throw new RawlsException(s"invalid role [${name}]")
+  }
+
+  case object Owner extends ManagedRole
+  case object User extends ManagedRole
+
+  val all: Set[ManagedRole] = Set(Owner, User)
+}
+
+
+case class ManagedGroup(usersGroup: RawlsGroupRef, ownersGroup: RawlsGroupRef)
+case class ManagedGroupFull(usersGroup: RawlsGroup, ownersGroup: RawlsGroup)
+case class ManagedGroupAccess(managedGroup: ManagedGroup, accessLevel: ManagedGroupRole)
+
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
 
@@ -51,6 +81,25 @@ object ProjectRoles {
   case object User extends ProjectRole
 
   val all: Set[ProjectRole] = Set(Owner, User)
+}
+
+object ManagedGroupRoles {
+  sealed trait ManagedGroupRole extends RawlsEnumeration[ManagedGroupRole] {
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+
+    override def withName(name: String): ManagedGroupRole = ManagedGroupRoles.withName(name)
+  }
+
+  def withName(name: String): ManagedGroupRole = name.toLowerCase match {
+    case "owner" => Owner
+    case "user" => User
+    case _ => throw new RawlsException(s"invalid ManagedGroupRole [${name}]")
+  }
+
+  case object Owner extends ManagedGroupRole
+  case object User extends ManagedGroupRole
+
+  val all: Set[ManagedGroupRole] = Set(Owner, User)
 }
 
 object CreationStatuses {
@@ -135,6 +184,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val ManagedGroupFormat = jsonFormat2(ManagedGroup)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

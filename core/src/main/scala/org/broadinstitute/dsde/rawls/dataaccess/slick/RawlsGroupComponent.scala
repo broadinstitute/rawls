@@ -8,9 +8,6 @@ import org.broadinstitute.dsde.rawls.model._
 case class RawlsGroupRecord(groupName: String, groupEmail: String, updatedDate: Option[Timestamp])
 case class GroupUsersRecord(userSubjectId: String, groupName: String)
 case class GroupSubgroupsRecord(parentGroupName: String, childGroupName: String)
-case class RealmRecord(groupName: String)
-//case class RoleGroupRecord(groupName: String)
-//case class RoleGroupRecord(mainGroupName: String, roleGroupName: String, role: String)
 
 trait RawlsGroupComponent {
   this: DriverComponent
@@ -51,17 +48,9 @@ trait RawlsGroupComponent {
     def pk = primaryKey("PK_GROUP_SUBGROUPS", (parentGroupName, childGroupName))
   }
 
-  class RealmTable(tag: Tag) extends Table[RealmRecord](tag, "REALM") {
-    def groupName = column[String]("GROUP_NAME", O.Length(254))
-
-    def * = (groupName) <> (RealmRecord.apply _, RealmRecord.unapply)
-
-    def group = foreignKey("FK_REALM_GROUP_NAME", groupName, rawlsGroupQuery)(_.groupName)
-  }
-
   protected val groupUsersQuery = TableQuery[GroupUsersTable]
   protected val groupSubgroupsQuery = TableQuery[GroupSubgroupsTable]
-  protected val realmQuery = TableQuery[RealmTable]
+
   type GroupQuery = Query[RawlsGroupTable, RawlsGroupRecord, Seq]
   private type GroupUsersQuery = Query[GroupUsersTable, GroupUsersRecord, Seq]
   private type GroupSubgroupsQuery = Query[GroupSubgroupsTable, GroupSubgroupsRecord, Seq]
@@ -177,10 +166,15 @@ trait RawlsGroupComponent {
     }
 
     def loadGroupIfMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadAction[Option[RawlsGroup]] = {
-      checkMembershipRecursively(userRef, Set.empty, Set(groupRef)).flatMap {
+      isGroupMember(groupRef, userRef).flatMap {
         case true => load(groupRef)
         case false => DBIO.successful(None)
       }
+    }
+
+
+    def isGroupMember(groupRef: RawlsGroupRef, userRef: RawlsUserRef): ReadAction[Boolean] = {
+      checkMembershipRecursively(userRef, Set.empty, Set(groupRef))
     }
 
     def loadGroupUserEmails(groupRef: RawlsGroupRef): ReadAction[Seq[RawlsUserEmail]] = {
@@ -200,14 +194,6 @@ trait RawlsGroupComponent {
       } yield group
       
       firstLevel.result.map(_.toSet).flatMap(groups => listParentGroupsRecursive(groups, groups).map(_.map(groupRec => RawlsGroupRef(RawlsGroupName(groupRec.groupName)))))
-    }
-
-    def listRealmsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsRealmRef]] = {
-      listAllManagedGroups().flatMap { allRealms =>
-        listGroupsForUser(userRef).map { allGroups =>
-          allRealms intersect allGroups.map(ref => RawlsRealmRef(ref.groupName))
-        }
-      }
     }
 
     def listParentGroupsRecursive(groups: Set[RawlsGroupRecord], cumulativeGroups: Set[RawlsGroupRecord]): ReadAction[Set[RawlsGroupRecord]] = {
@@ -301,22 +287,6 @@ trait RawlsGroupComponent {
       }
     }
 
-    def markGroupAsManaged(groupRef: RawlsGroupRef): ReadWriteAction[Int] = {
-      uniqueResult[RawlsGroupRecord](rawlsGroupQuery.filter(_.groupName === groupRef.groupName.value)).flatMap {
-        case None => DBIO.successful(0)
-        case Some(groupRec) =>
-          realmQuery += marshalRealm(groupRef)
-      }
-    }
-
-    def listAllManagedGroups(): ReadAction[Set[RawlsRealmRef]] = {
-      (realmQuery.result.map(recs => recs.map(unmarshalRealm).toSet))
-    }
-
-    def deleteRealmRecord(realmRef: RawlsGroupRef): ReadWriteAction[Int] = {
-      (realmQuery.filter(_.groupName === realmRef.groupName.value)).delete
-    }
-
     private def marshalRawlsGroup(group: RawlsGroup): RawlsGroupRecord = {
       RawlsGroupRecord(group.groupName.value, group.groupEmail.value, Option(nowTimestamp))
     }
@@ -333,14 +303,6 @@ trait RawlsGroupComponent {
       val userRefs = userRecords map { r => RawlsUserRef(RawlsUserSubjectId(r.userSubjectId)) }
       val subGroupRefs = subGroupRecords map { r => RawlsGroupRef(RawlsGroupName(r.childGroupName)) }
       RawlsGroup(RawlsGroupName(groupRecord.groupName), RawlsGroupEmail(groupRecord.groupEmail), userRefs.toSet, subGroupRefs.toSet)
-    }
-
-    private def marshalRealm(groupRef: RawlsGroupRef): RealmRecord = {
-      RealmRecord(groupRef.groupName.value)
-    }
-
-    private def unmarshalRealm(realmRecord: RealmRecord): RawlsRealmRef = {
-      RawlsRealmRef(RawlsGroupName(realmRecord.groupName))
     }
 
     def findGroupByName(name: String): GroupQuery = {

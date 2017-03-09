@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.joda.time.DateTime
 import spray.http.StatusCode
 import spray.json._
+import UserModelJsonSupport.ManagedGroupRefFormat
 
 object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
@@ -74,7 +75,7 @@ object AttributeName {
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsRealmRef],
+                      realm: Option[ManagedGroupRef],
                       attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
@@ -85,7 +86,7 @@ case class WorkspaceRequest (
 case class Workspace(
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsRealmRef],
+                      realm: Option[ManagedGroupRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
@@ -368,8 +369,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val EntityFormat = jsonFormat3(Entity)
 
   implicit val RawlsGroupRefFormat = UserModelJsonSupport.RawlsGroupRefFormat
-
-  implicit val RawlsRealmRefFormat = UserModelJsonSupport.RawlsRealmRefFormat
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 

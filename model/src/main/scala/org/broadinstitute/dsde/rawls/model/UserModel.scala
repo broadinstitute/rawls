@@ -6,8 +6,8 @@ sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
-case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef {
-  def toUserGroupRef: RawlsGroupRef = RawlsGroupRef(realmName)
+case class ManagedGroupRef(usersGroupName: RawlsGroupName) extends UserAuthRef {
+  def toUsersGroupRef: RawlsGroupRef = RawlsGroupRef(usersGroupName)
 }
 
 sealed trait UserAuthType { val value: String }
@@ -40,7 +40,7 @@ class UserModelJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
-  implicit val RawlsRealmRefFormat = jsonFormat1(RawlsRealmRef)
+  implicit val ManagedGroupRefFormat = jsonFormat1(ManagedGroupRef)
 }
 
 object UserModelJsonSupport extends UserModelJsonSupport
