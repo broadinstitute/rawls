@@ -4,6 +4,7 @@ import akka.actor.{Props, ActorContext, ActorRef, ActorSystem}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.{AgoraEntityType, MethodConfiguration, UserInfo, AgoraEntity}
 import org.broadinstitute.dsde.rawls.model.MethodRepoJsonSupport._
+import org.broadinstitute.dsde.rawls.util.Retry
 import scala.concurrent.{Future, Await}
 import scala.concurrent.duration.Duration
 import scala.util.{Success,Failure,Try}
@@ -12,6 +13,7 @@ import spray.client.pipelining._
 import spray.http.StatusCodes
 import spray.httpx.SprayJsonSupport._
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 /**

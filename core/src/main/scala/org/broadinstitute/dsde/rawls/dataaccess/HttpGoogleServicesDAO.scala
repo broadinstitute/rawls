@@ -23,23 +23,28 @@ import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.genomics.{Genomics, GenomicsScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
+import com.google.api.services.servicemanagement.{model, ServiceManagement}
+import com.google.api.services.servicemanagement.model.EnableServiceRequest
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
+import org.broadinstitute.dsde.rawls.google.{GoogleRpcErrorCodes, GoogleUtilities}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.BucketDeletionMonitor.{BucketDeleted, DeleteBucket}
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{Retry, FutureSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time
 import spray.client.pipelining._
 import spray.http.HttpHeaders.Authorization
 import spray.http.{HttpResponse, OAuth2BearerToken, StatusCode, StatusCodes}
 import spray.json._
+import spray.json.DefaultJsonProtocol._
 
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, _}
@@ -65,6 +70,8 @@ class HttpGoogleServicesDAO(
   bucketLogsMaxAge: Int)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends GoogleServicesDAO(groupsPrefix) with Retry with FutureSupport with LazyLogging with GoogleUtilities {
 
   val groupMemberRole = "MEMBER" // the Google Group role corresponding to a member (note that this is distinct from the GCS roles defined in WorkspaceAccessLevel)
+  val API_SERVICE_MANAGEMENT = "ServiceManagement"
+  val API_CLOUD_RESOURCE_MANAGER = "CloudResourceManager"
 
   // modify these if we need more granular access in the future
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE, PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
@@ -115,7 +122,7 @@ class HttpGoogleServicesDAO(
 
   private def getBucketName(workspaceId: String) = s"${groupsPrefix}-${workspaceId}"
 
-  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsGroupRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
+  override def setupWorkspace(userInfo: UserInfo, project: RawlsBillingProject, workspaceId: String, workspaceName: WorkspaceName, realm: Option[RawlsRealmRef], realmProjectOwnerIntersection: Option[Set[RawlsUserRef]]): Future[GoogleWorkspaceInfo] = {
 
     // we do not make a special access group for project owners because the only member would be a single group
     // we will just use that group directly and avoid potential google problems with a group being in too many groups
@@ -125,7 +132,7 @@ class HttpGoogleServicesDAO(
 
     val intersectionGroupRefsByLevel: Option[Map[WorkspaceAccessLevel, RawlsGroupRef]] = realm map { realmGroupRef =>
       groupAccessLevelsAscending.map { accessLevel =>
-        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef, accessLevel))))
+        (accessLevel, RawlsGroupRef(RawlsGroupName(intersectionGroupName(workspaceId, realmGroupRef.toUserGroupRef, accessLevel))))
       }.toMap
     }
 
@@ -733,7 +740,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[Unit] = {
+  override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
@@ -743,17 +750,58 @@ class HttpGoogleServicesDAO(
     }).recover {
       case t: HttpResponseException if StatusCode.int2StatusCode(t.getStatusCode) == StatusCodes.Conflict =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
-    } map ( _ => ())
+    } map ( googleOperation => {
+      if (toScalaBool(googleOperation.getDone) && Option(googleOperation.getError).exists(_.getCode == GoogleRpcErrorCodes.ALREADY_EXISTS)) {
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"A google project by the name $projectName already exists"))
+      }
+      RawlsBillingProjectOperationRecord(projectName.value, CREATE_PROJECT_OPERATION, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_CLOUD_RESOURCE_MANAGER)
+    })
+  }
+
+  override def pollOperation(rawlsBillingProjectOperation: RawlsBillingProjectOperationRecord): Future[RawlsBillingProjectOperationRecord] = {
+    val credential = getBillingServiceAccountCredential
+
+    // this code is a colossal DRY violation but because the operations collection is different
+    // for cloudResManager and servicesManager and they return different but identical Status objects
+    // there is not much else to be done... too bad scala does not have duck typing.
+    rawlsBillingProjectOperation.api match {
+      case API_CLOUD_RESOURCE_MANAGER =>
+        val cloudResManager = getCloudResourceManager(credential)
+
+        retryWhen500orGoogleError(() => {
+          executeGoogleRequest(cloudResManager.operations().get(rawlsBillingProjectOperation.operationId))
+        }).map { op =>
+          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+        }
+
+      case API_SERVICE_MANAGEMENT =>
+        val servicesManager = getServicesManager(credential)
+
+        retryWhen500orGoogleError(() => {
+          executeGoogleRequest(servicesManager.operations().get(rawlsBillingProjectOperation.operationId))
+        }).map { op =>
+          rawlsBillingProjectOperation.copy(done = toScalaBool(op.getDone), errorMessage = Option(op.getError).map(error => toErrorMessage(error.getMessage, error.getCode)))
+        }
+    }
 
   }
 
-  override def setupProject(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Unit]] = {
+  /**
+   * converts a possibly null java boolean to a scala boolean, null is treated as false
+   */
+  private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
+
+  private def toErrorMessage(message: String, code: Int): String = {
+    s"${Option(message).getOrElse("")} - code ${code}"
+  }
+
+  override def beginProjectSetup(project: RawlsBillingProject, projectTemplate: ProjectTemplate, groupEmailsByRef: Map[RawlsGroupRef, RawlsGroupEmail]): Future[Try[Seq[RawlsBillingProjectOperationRecord]]] = {
     val projectName = project.projectName
     val credential = getBillingServiceAccountCredential
 
     val cloudResManager = getCloudResourceManager(credential)
     val billingManager = getCloudBillingManager(credential)
-    val computeManager = getComputeManager(credential)
+    val serviceManager = getServicesManager(credential)
 
     val projectResourceName = s"projects/${projectName.value}"
 
@@ -793,10 +841,25 @@ class HttpGoogleServicesDAO(
       })
 
       // enable appropriate google apis
-      _ <- Future.sequence(projectTemplate.services.map { service => retryExponentially(when500orGoogleError)(() => {
-        enableServiceApi(projectName.value, service, credential)
-      })})
+      operations <- Future.sequence(projectTemplate.services.map { service => retryWhen500orGoogleError(() => {
+        executeGoogleRequest(serviceManager.services().enable(service, new EnableServiceRequest().setConsumerId(s"project:${projectName.value}")))
+      }) map { googleOperation =>
+        RawlsBillingProjectOperationRecord(projectName.value, service, googleOperation.getName, toScalaBool(googleOperation.getDone), Option(googleOperation.getError).map(error => toErrorMessage(error.getMessage, error.getCode)), API_SERVICE_MANAGEMENT)
+      }})
 
+    } yield {
+      operations
+    })
+  }
+
+  override def completeProjectSetup(project: RawlsBillingProject): Future[Try[Unit]] = {
+    val projectName = project.projectName
+    val credential = getBillingServiceAccountCredential
+
+    val computeManager = getComputeManager(credential)
+
+    // all of these things should be idempotent
+    toFutureTry(for {
       // create project usage export bucket
       exportBucket <- retryWithRecoverWhen500orGoogleError(() => {
         val bucket = new Bucket().setName(projectUsageExportBucketName(projectName))
@@ -809,10 +872,10 @@ class HttpGoogleServicesDAO(
 
       cromwellAuthBucket <- createCromwellAuthBucket(projectName)
 
-      _ <- Future { // don't retry this last step because it may take several minutes for this to happen and this whole process will retry
+      _ <- retryWhen500orGoogleError(() => {
         val usageLoc = new UsageExportLocation().setBucketName(projectUsageExportBucketName(projectName)).setReportNamePrefix("usage")
         executeGoogleRequest(computeManager.projects().setUsageExportBucket(projectName.value, usageLoc))
-      }
+      })
     } yield {
       // nothing
     })
@@ -834,7 +897,7 @@ class HttpGoogleServicesDAO(
       _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(billingManager.projects().updateBillingInfo(s"projects/${projectName.value}", new ProjectBillingInfo().setBillingEnabled(false)))
       })
-      - <- retryWhen500orGoogleError(() => {
+      _ <- retryWhen500orGoogleError(() => {
         executeGoogleRequest(resMgr.projects().delete(projectNameString))
       })
     } yield {
@@ -852,31 +915,12 @@ class HttpGoogleServicesDAO(
     new Cloudbilling.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
-  def getCloudResourceManager(credential: Credential): CloudResourceManager = {
-    new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
+  def getServicesManager(credential: Credential): ServiceManagement = {
+    new ServiceManagement.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
-  private def enableServiceApi(projectName: String, service: String, credential: Credential): Future[HttpResponse] = {
-    import spray.json._
-    import GoogleRequestJsonSupport._
-
-    // note that I could not find a google client library for this end point but I know how to http
-    val url = s"https://servicemanagement.googleapis.com/v1/services/$service:enable"
-    val pipeline = addHeader(Authorization(OAuth2BearerToken(credential.getAccessToken))) ~> sendReceive
-    val payload = s"""{"consumerId": "project:$projectName"}"""
-    val start = System.currentTimeMillis()
-    pipeline(Post(url, payload)).recover {
-      case t: Throwable =>
-        logger.debug(GoogleRequest("POST", url, Option(payload.parseJson), System.currentTimeMillis() - start, None, Option(ErrorReport(t))).toJson(GoogleRequestFormat).compactPrint)
-        throw t
-    } map { response =>
-      logger.debug(GoogleRequest("POST", url, Option(payload.parseJson), System.currentTimeMillis() - start, Option(response.status.intValue), None).toJson(GoogleRequestFormat).compactPrint)
-      if (response.status.isFailure) {
-        throw new GoogleServiceException(s"failure enabling service $service for project $projectName: status ${response.status}, response: ${response.entity.asString}")
-      } else {
-        response
-      }
-    }
+  def getCloudResourceManager(credential: Credential): CloudResourceManager = {
+    new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
   }
 
   private def updateBindings(bindings: Seq[Binding], template: ProjectTemplate) = {

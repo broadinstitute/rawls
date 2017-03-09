@@ -165,6 +165,7 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
     """.stripMargin
 
     val threeStepMethod = AgoraEntity(Some("dsde"),Some("three_step"),Some(1),None,None,None,None,Some(threeStepWDL),None,Some(AgoraEntityType.Workflow))
+
     mockServer.when(
       request()
         .withMethod("GET")
@@ -195,6 +196,22 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
         response()
           .withStatusCode(StatusCodes.NotFound.intValue)
       )
+
+    // Saving invalid WDL as a Method Repo Method is allowed
+
+    val badSyntaxWDL = threeStepWDL.replace("workflow", "not-a-workflow")
+    val badWDLMethod = AgoraEntity(Some("dsde"),Some("bad_wdl"),Some(1),None,None,None,None,Some(badSyntaxWDL),None,Some(AgoraEntityType.Workflow))
+
+    mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath(methodPath + "/dsde/bad_wdl/1")
+    ).respond(
+      response()
+        .withHeaders(jsonHeader)
+        .withBody(badWDLMethod.toJson.prettyPrint)
+        .withStatusCode(StatusCodes.OK.intValue)
+    )
 
     val noInputWdl =
       """
@@ -533,6 +550,37 @@ class RemoteServicesMockServer(port:Int) extends RawlsTestUtils {
           .withStatusCode(StatusCodes.Created.intValue)
       )
   }
+
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/outputs")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.BadRequest.intValue)
+  )
+
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/workflows/v1/29b2e816-ecaf-11e6-b006-92361f002671/metadata")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.BadRequest.intValue)
+  )
+
+  mockServer.when(
+    request()
+      .withMethod("GET")
+      .withPath("/engine/v1/version")
+  ).respond(
+    response()
+      .withHeaders(jsonHeader)
+      .withStatusCode(StatusCodes.OK.intValue)
+      .withBody("""{"cromwell":"25"}""")
+  )
 
   def stopServer = mockServer.stop()
 }

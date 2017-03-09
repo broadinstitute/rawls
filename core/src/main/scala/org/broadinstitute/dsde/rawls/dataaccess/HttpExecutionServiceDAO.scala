@@ -5,13 +5,14 @@ import akka.util.Timeout
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.util.FutureSupport
+import org.broadinstitute.dsde.rawls.util.{Retry, FutureSupport}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import spray.client.pipelining._
 import spray.http.{BodyPart, FormData, MultipartFormData}
 import spray.httpx.SprayJsonSupport._
+import spray.json.DefaultJsonProtocol._
 import spray.json.JsObject
 
 import scala.util.Try
@@ -64,6 +65,13 @@ class HttpExecutionServiceDAO( executionServiceURL: String, submissionTimeout: F
     import system.dispatcher
     val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceStatus]
     retry(when500) { () => toFutureTry(pipeline(Post(url))) }
+  }
+
+  override def version(userInfo: UserInfo): Future[ExecutionServiceVersion] = {
+    val url = executionServiceURL + s"/engine/v1/version"
+    import system.dispatcher
+    val pipeline = addAuthHeader(userInfo) ~> sendReceive ~> unmarshal[ExecutionServiceVersion]
+    retry(when500) { () => pipeline(Get(url)) }
   }
 
   private def when500( throwable: Throwable ): Boolean = {

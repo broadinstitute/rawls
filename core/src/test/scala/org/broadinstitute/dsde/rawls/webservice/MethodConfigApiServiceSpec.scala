@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import spray.http._
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -37,7 +39,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   "MethodConfigApi" should "return 201 on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -46,6 +48,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(newMethodConfig) {
           runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get
         }
+        // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
         assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newMethodConfig.path(testData.wsName)))))) {
           header("Location")
         }
@@ -55,21 +58,19 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   it should "update the workspace last modified date on create method configuration" in withTestDataApiServices { services =>
     val newMethodConfig = MethodConfiguration("dsde", "testConfigNew", "samples", Map("ready" -> AttributeString("true")), Map("param1" -> AttributeString("foo")), Map("out" -> AttributeString("bar")),
       MethodRepoMethod(testData.wsName.namespace, "method-a", 1))
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
       }
   }
-
-
 
   it should "validate attribute syntax in create method configuration" in withTestDataApiServices { services =>
     val inputs = Map("good_in" -> AttributeString("this.foo"), "bad_in" -> AttributeString("does.not.parse"))
@@ -82,7 +83,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -110,7 +111,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessInputs = Seq("lib_ent_in", "lib_ws_in")
     val expectedSuccessOutputs = Seq("lib_ent_out", "lib_ws_out")
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -140,7 +141,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     revokeCuratorRole(services)
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Created) {
@@ -167,7 +168,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     revokeCuratorRole(services)
 
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(newMethodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs", httpJson(newMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -189,7 +190,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     get(mc2)
 
     def create(mc: MethodConfiguration) = {
-      Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs", httpJson(mc)) ~>
+      Post(s"${testData.workspace.path}/methodconfigs", httpJson(mc)) ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.Created) {
@@ -202,7 +203,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     }
 
     def get(mc: MethodConfiguration) = {
-      Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${mc.namespace}/${mc.name}") ~>
+      Get(s"${testData.workspace.path}/methodconfigs/${mc.namespace}/${mc.name}") ~>
         sealRoute(services.methodConfigRoutes) ~>
         check {
           assertResult(StatusCodes.OK) {
@@ -213,7 +214,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 409 on method configuration rename when rename already exists" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Conflict) {
@@ -223,7 +224,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 on method configuration rename" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -239,14 +240,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on method configuration rename" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.methodConfig.path(testData.workspace)}/rename", httpJson(MethodConfigurationName("testConfig2_changed", testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -254,7 +255,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on method configuration rename, method configuration does not exist" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
+    Post(s"${testData.workspace.path}/methodconfigs/${testData.methodConfig.namespace}/foox/rename", httpJson(MethodConfigurationName(testData.methodConfig.name, testData.methodConfig.namespace, WorkspaceName(testData.workspace.namespace, testData.workspace.name)))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -273,7 +274,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
    * test disabled until we decide what to do with submissions that reference deleted configs
    */
   ignore should "*DISABLED* return 204 method configuration delete" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
+    Delete(testData.methodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -286,7 +287,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 method configuration delete" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig3.namespace}/${testData.methodConfig3.name}") ~>
+    Delete(testData.methodConfig3.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -299,14 +300,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the workspace last modified date on delete method configuration" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig3.namespace}/${testData.methodConfig3.name}") ~>
+    Delete(testData.methodConfig3.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -315,7 +316,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
 
   it should "return 404 method configuration delete, method configuration does not exist" in withTestDataApiServices { services =>
-    Delete(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}x") ~>
+    Delete(testData.methodConfig.copy(name = "DNE").path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -333,7 +334,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -350,14 +351,14 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
   it should "update the workspace last modified date on update method configuration" in withTestDataApiServices { services =>
     val modifiedMethodConfig = testData.methodConfig.copy(inputs = testData.methodConfig.inputs + ("param2" -> AttributeString("foo2")))
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -375,7 +376,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map("bad_out" -> "Failed at line 1, column 1: `workspace.' expected but `a' found")
 
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -404,7 +405,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
     val expectedSuccessOutputs = Seq("good_out")
     val expectedFailureOutputs = Map.empty[String, String]
 
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -430,7 +431,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     revokeCuratorRole(services)
 
-    Put(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}", httpJson(modifiedMethodConfig)) ~>
+    Put(testData.methodConfig.path(testData.workspace), httpJson(modifiedMethodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.Forbidden) {
@@ -452,9 +453,9 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
 
     val foo = testData.methodConfig.copy(name = "blah",inputs = theInputs, outputs = theOutputs)
 
-    runAndWait(methodConfigurationQuery.save(SlickWorkspaceContext(testData.workspace), foo))
+    runAndWait(methodConfigurationQuery.create(SlickWorkspaceContext(testData.workspace), foo))
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/blah/validate") ~>
+    Get(s"${foo.path(testData.workspace)}/validate") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {
@@ -467,7 +468,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 on update method configuration" in withTestDataApiServices { services =>
-    Post(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/update}", httpJson(testData.methodConfig)) ~>
+    Post(s"${testData.workspace.path}/methodconfigs/update}", httpJson(testData.methodConfig)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -497,7 +498,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -683,7 +684,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 when generating a method config template from a bogus method" in withTestDataApiServices { services =>
+  it should "return 404 when generating a method config template from a missing method" in withTestDataApiServices { services =>
     Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
@@ -691,16 +692,32 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 404 getting method inputs and outputs from a bogus method" in withTestDataApiServices { services =>
-    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
+  it should "return 404 getting method inputs and outputs from a missing method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","three_step",2))) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) { status }
+      }
+  }
+
+  it should "return 400 when generating a method config template from an invalid method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/template", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
+      }
+  }
+
+  it should "return 400 getting method inputs and outputs from an invalid method" in withTestDataApiServices { services =>
+    Post("/methodconfigs/inputsOutputs", httpJson(MethodRepoMethod("dsde","bad_wdl",1))) ~>
+      sealRoute(services.methodConfigRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) { status }
       }
   }
 
   it should "return 200 on get method configuration" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs/${testData.methodConfig.namespace}/${testData.methodConfig.name}") ~>
+    Get(testData.methodConfig.path(testData.workspace)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -710,7 +727,7 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "list method Configuration" in withTestDataApiServices { services =>
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/methodconfigs") ~>
+    Get(s"${testData.workspace.path}/methodconfigs") ~>
       sealRoute(services.methodConfigRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

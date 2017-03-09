@@ -2,4 +2,4 @@
 
 set -e
 
-sbt rawlsModel:publish -Dproject.isSnapshot=false
+sbt publish -Dproject.isSnapshot=false

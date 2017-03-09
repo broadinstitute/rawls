@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -105,14 +106,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   // Referential integrity constraint violation - if we change that behavior we need to fix this test
   ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
-    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.indiv1.entityType}/${testData.indiv1.name}") ~>
+    Delete(testData.indiv1.path(testData.wsName)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
       }
-    Delete(s"/workspaces/${testData.wsName.namespace}/${testData.wsName.name}/entities/${testData.sample2.entityType}/${testData.sample2.name}") ~>
+    Delete(testData.sample2.path(testData.wsName)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -421,6 +422,123 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 201 when creating a new realm" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+    import spray.json.DefaultJsonProtocol._
+
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain(group)
+      }
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    //check that the realm is actually there and categorized as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain(group)
+      }
+  }
+
+  it should "return 201 when deleting a realm" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+    import spray.json.DefaultJsonProtocol._
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    //check that the realm is actually there and categorized as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain(group)
+      }
+
+    Delete(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) { status }
+      }
+
+    //check that the realm is no longer there
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain(group)
+      }
+  }
+
+  it should "return 201 when listing all realms" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
+
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+      }
+  }
+
+  it should "not return regular groups in the list of all realms" in withTestDataApiServices { services =>
+    import spray.json.DefaultJsonProtocol._
+
+    val realmRefs: Seq[RawlsRealmRef] = Seq(testData.dbGapAuthorizedUsersGroup, testData.realm, testData.realm2).map(group => RawlsRealmRef(group.groupName))
+    val group = new RawlsGroupRef(RawlsGroupName("test_realm"))
+
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should contain theSameElementsAs(realmRefs)
+      }
+
+    Post(s"/admin/groups", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) { status }
+      }
+
+    //check that the regular group that was just created is not returned as a realm
+    Get(s"/admin/realms") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        responseAs[Seq[RawlsRealmRef]] should not contain group
+      }
+  }
+
+  it should "return 409 when trying to create a realm that already exists" in withTestDataApiServices { services =>
+    val group = new RawlsRealmRef(RawlsGroupName("test_realm"))
+
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) { status }
+      }
+    Post(s"/admin/realms", httpJson(group)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
+  it should "return 409 when trying to delete a realm that has workspaces in it" in withTestDataApiServices { services =>
+    val realm: RawlsRealmRef = RawlsRealmRef(testData.dbGapAuthorizedUsersGroup.groupName)
+
+    Delete(s"/admin/realms", httpJson(realm)) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) { status }
+      }
+  }
+
   it should "return 409 when trying to create a group that already exists" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
@@ -620,7 +738,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         runAndWait(rawlsGroupQuery.load(group))
       }
 
-      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready, None)
+      val project = RawlsBillingProject(RawlsBillingProjectName("project"), generateBillingGroups(RawlsBillingProjectName("project"), Map(ProjectRoles.Owner -> Set(testUser, user2)), Map.empty), "mock cromwell URL", CreationStatuses.Ready, None, None)
 
       project.groups.map { case (_,g) =>
         runAndWait(rawlsGroupQuery.save(g))
@@ -680,7 +798,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
       withWorkspaceContext(testWorkspace.workspace) { context =>
         // these are from DefaultTestData, but we're using EmptyWorkspace to init the DB, so save them now
-        runAndWait(methodConfigurationQuery.save(context, testData.methodConfig))
+        runAndWait(methodConfigurationQuery.create(context, testData.methodConfig))
         runAndWait(entityQuery.save(context, testData.sample2))
         runAndWait(entityQuery.save(context, testData.sset2))
         runAndWait(entityQuery.save(context, testData.indiv2))
@@ -694,8 +812,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
             status
           }
           assert {
-            import spray.http._
-            import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
             responseAs[ErrorReport].message.contains("Cannot delete a user with submissions")
           }
 
@@ -954,7 +1070,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     val group = runAndWait(rawlsGroupQuery.load(testData.workspace.accessLevels(WorkspaceAccessLevels.Read))).get
     assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 1))
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)
@@ -972,7 +1088,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
     assert(services.gpsDAO.receivedMessage(services.googleGroupSyncTopic, RawlsGroup.toRef(group).toJson.compactPrint, 2))
 
-    Get(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}") ~>
+    Get(testData.workspace.path) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertWorkspaceModifiedDate(status, responseAs[WorkspaceListResponse].workspace)

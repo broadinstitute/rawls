@@ -71,17 +71,18 @@ object AttributeName {
 case class WorkspaceRequest (
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsGroupRef],
+                      realm: Option[RawlsRealmRef],
                       attributes: AttributeMap
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
-  def briefName = toWorkspaceName.toString
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
 }
 
 case class Workspace(
                       namespace: String,
                       name: String,
-                      realm: Option[RawlsGroupRef],
+                      realm: Option[RawlsRealmRef],
                       workspaceId: String,
                       bucketName: String,
                       createdDate: DateTime,
@@ -93,7 +94,8 @@ case class Workspace(
                       isLocked: Boolean = false
                       ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace,name)
-  def briefName = toWorkspaceName.toString
+  def briefName: String = toWorkspaceName.toString
+  def path: String = toWorkspaceName.path
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
@@ -109,8 +111,10 @@ case class Entity(
                    entityType: String,
                    attributes: AttributeMap
                    ) extends Attributable {
-  def briefName = name
-  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${name}"
+  def briefName: String = name
+  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${entityType}/${name}"
+  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+  def path( workspaceRequest: WorkspaceRequest ): String = path(workspaceRequest.toWorkspaceName)
   def toReference = AttributeEntityReference(entityType, name)
 }
 
@@ -183,11 +187,13 @@ case class MethodConfiguration(
                    prerequisites: Map[String, AttributeString],
                    inputs: Map[String, AttributeString],
                    outputs: Map[String, AttributeString],
-                   methodRepoMethod:MethodRepoMethod,
+                   methodRepoMethod: MethodRepoMethod,
+                   methodConfigVersion: Int = 1,
                    deleted: Boolean = false
                    ) {
   def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
-  def path( workspaceName: WorkspaceName ) = workspaceName.path+s"/methodConfigs/${namespace}/${name}"
+  def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
+  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
 }
 
 case class MethodConfigurationShort(
@@ -241,44 +247,49 @@ case class WorkspaceResponse(accessLevel: WorkspaceAccessLevel,
 case class WorkspacePermissionsPair(workspaceId: String,
                                     accessLevel: WorkspaceAccessLevel)
 
-case class WorkspaceInvite(workspaceNamespace: String,
-                           workspaceName: String,
-                           userEmail: String,
-                           originSubjectId: String,
-                           accessLevel: WorkspaceAccessLevel)
-
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
 case class BucketUsageResponse(usageInBytes: BigInt)
 
 case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
 
-object ErrorReport extends ((String,String,Option[StatusCode],Seq[ErrorReport],Seq[StackTraceElement],Option[Class[_]]) => ErrorReport) {
-  val SOURCE = "rawls"
+case class ErrorReportSource(source: String)
 
-  def apply(statusCode: StatusCode, message: String): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),Seq.empty,Seq.empty, None)
+object ErrorReport {
+  def apply(message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq.empty,Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, cause: ErrorReport): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),Seq(cause),Seq.empty, None)
+  def apply(message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,Seq(cause),Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport]): ErrorReport =
-    new ErrorReport(SOURCE,message,Option(statusCode),causes,Seq.empty, None)
+  def apply(message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,None,causes,Seq.empty, None)
 
-  def apply(throwable: Throwable): ErrorReport =
-    new ErrorReport(SOURCE,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(statusCode: StatusCode, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
 
-  def apply(throwable: Throwable, statusCode: StatusCode): ErrorReport =
-    new ErrorReport(SOURCE,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+  def apply(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq.empty,Seq.empty, None)
 
-  def apply(message: String, cause: ErrorReport) =
-    new ErrorReport(SOURCE,message,None,Seq(cause),Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, Option(statusCode), causes(throwable), throwable.getStackTrace, None)
 
-  def apply(message: String, causes: Seq[ErrorReport]) =
-    new ErrorReport(SOURCE,message,None,causes,Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),Seq(cause),Seq.empty, None)
 
-  def message(throwable: Throwable) = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
-  def causes(throwable: Throwable): Array[ErrorReport] = causeThrowables(throwable).map(ErrorReport(_))
+  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message,Option(statusCode),causes,Seq.empty, None)
+
+  def apply(throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+
+  def apply(message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])(implicit source: ErrorReportSource): ErrorReport =
+    ErrorReport(source.source, message, statusCode, causes, stackTrace, exceptionClass)
+
+  def message(throwable: Throwable): String = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
+
+  def causes(throwable: Throwable)(implicit source: ErrorReportSource): Array[ErrorReport] = causeThrowables(throwable).map(apply)
+
   private def causeThrowables(throwable: Throwable) = {
     if (throwable.getSuppressed.nonEmpty || throwable.getCause == null) throwable.getSuppressed
     else Array(throwable.getCause)
@@ -315,12 +326,14 @@ object AttributeStringifier {
       case AttributeBoolean(value) => value.toString()
       case AttributeValueRawJson(value) => value.toString()
       case AttributeEntityReference(t, name) => name
-      case al: AttributeList[_] => al.list.map(apply).mkString(" ")
+      case al: AttributeList[_] =>
+        WDLJsonSupport.attributeFormat.write(al).toString()
     }
   }
 }
 
-object WorkspaceJsonSupport extends JsonSupport {
+class WorkspaceJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -345,6 +358,8 @@ object WorkspaceJsonSupport extends JsonSupport {
   implicit val EntityFormat = jsonFormat3(Entity)
 
   implicit val RawlsGroupRefFormat = UserModelJsonSupport.RawlsGroupRefFormat
+
+  implicit val RawlsRealmRefFormat = UserModelJsonSupport.RawlsRealmRefFormat
 
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
 
@@ -374,7 +389,7 @@ object WorkspaceJsonSupport extends JsonSupport {
 
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
-  implicit val MethodConfigurationFormat = jsonFormat8(MethodConfiguration)
+  implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
 
   implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
 
@@ -439,7 +454,9 @@ object WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport,"source","message","statusCode","causes","stackTrace","exceptionClass")))
+  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport.apply,"source","message","statusCode","causes","stackTrace","exceptionClass")))
 
   implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }
+
+object WorkspaceJsonSupport extends WorkspaceJsonSupport

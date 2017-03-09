@@ -5,6 +5,10 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.PoisonPill
 import akka.testkit.TestActorRef
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import akka.testkit.{TestKit, TestActorRef}
+import org.broadinstitute.dsde.rawls.model.Notifications.{WorkspaceRemovedNotification, WorkspaceInvitedNotification, WorkspaceAddedNotification, NotificationFormat}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor
@@ -60,6 +64,9 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
     val gpsDAO = new MockGooglePubSubDAO
 
+    val notificationTopic = "test-notification-topic"
+    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+
     val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, mockServer.defaultWorkflowSubmissionTimeout), slickDataSource)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
@@ -74,7 +81,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       gcsDAO,
       directoryDAO,
       gpsDAO,
-      "test-topic-name"
+      "test-topic-name",
+      notificationDAO
     )_
 
     val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -86,6 +94,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       executionServiceCluster,
       execServiceBatchSize,
       gcsDAO,
+      notificationDAO,
       submissionSupervisor,
       bucketDeletionMonitor,
       userServiceConstructor
@@ -628,7 +637,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"), MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
+    assertResult(Vector(MethodConfigurationShort("testConfig2","Sample",MethodRepoMethod("myNamespace","method-a",1),"dsde"),
+      MethodConfigurationShort("testConfig1","Sample",MethodRepoMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.list(SlickWorkspaceContext(testData.workspaceSuccessfulSubmission)))
     }
 

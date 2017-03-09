@@ -11,7 +11,7 @@ import scala.util.Try
   * Created by davidan on 6/14/16.
   */
 trait ExecutionServiceCluster extends ErrorReportable {
-  override val errorReportSource = "cromwell"
+  val errorReportSource = ErrorReportSource("cromwell")
 
   // ====================
   // facade methods
@@ -28,6 +28,8 @@ trait ExecutionServiceCluster extends ErrorReportable {
   def logs(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceLogs]
 
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
+
+  def version(userInfo: UserInfo): Future[ExecutionServiceVersion]
 
 }
 

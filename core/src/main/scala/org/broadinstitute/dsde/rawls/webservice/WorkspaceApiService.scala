@@ -2,11 +2,14 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import spray.routing.Directive.pimpApply
 import spray.routing._
+import spray.json.DefaultJsonProtocol._
+import spray.httpx.SprayJsonSupport._
 
 import scala.concurrent.ExecutionContext
 
@@ -16,9 +19,6 @@ import scala.concurrent.ExecutionContext
 
 trait WorkspaceApiService extends HttpService with PerRequestCreator with UserInfoDirectives {
   implicit val executionContext: ExecutionContext
-
-  import spray.httpx.SprayJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val workspaceRoutes = requireUserInfo() { userInfo =>

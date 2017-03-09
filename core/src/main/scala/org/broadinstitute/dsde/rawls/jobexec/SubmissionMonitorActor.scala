@@ -104,8 +104,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
    * @return
    */
   def queryExecutionServiceForStatus()(implicit executionContext: ExecutionContext): Future[ExecutionServiceStatusResponse] = {
-    val activeStatuses = Seq(WorkflowStatuses.Running, WorkflowStatuses.Submitted)
-
     val submissionFuture = datasource.inTransaction { dataAccess =>
       dataAccess.submissionQuery.loadSubmission(submissionId)
     }
@@ -116,7 +114,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
       }
     }
 
-    def abortActiveWorkflows(submissionId: UUID, workflows: Seq[Workflow]) = {
+    def abortActiveWorkflows(submissionId: UUID) = {
       datasource.inTransaction { dataAccess =>
         // look up abortable WorkflowRecs for this submission
         val wrquery = dataAccess.workflowQuery.findWorkflowsForAbort(submissionId)
@@ -145,7 +143,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging {
         if(submission.status == SubmissionStatuses.Aborting) {
           for {
             abortQueued <- abortQueuedWorkflows(submissionId)
-            abortActive <- abortActiveWorkflows(submissionId, submission.workflows.filter(wf => activeStatuses.contains(wf.status)))
+            abortActive <- abortActiveWorkflows(submissionId)
             getStatuses <- queryForWorkflowStatuses()
           } yield getStatuses
         }

@@ -7,6 +7,7 @@ import akka.pattern.AskTimeoutException
 import akka.testkit.{TestKit, TestActorRef}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.{GoogleGroupSyncMonitorSupervisor, BucketDeletionMonitor}
@@ -54,6 +55,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
   var subTerminalWorkflow = UUID.randomUUID().toString
   var subOneMissingWorkflow = UUID.randomUUID().toString
   var subTwoGoodWorkflows = UUID.randomUUID().toString
+  var subCromwellBadWorkflows = UUID.randomUUID().toString
 
   val subTestData = new SubmissionTestData()
 
@@ -73,6 +75,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     val existingWorkflowId = Option("69d1d92f-3895-4a7b-880a-82535e9a096e")
     val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
     val alreadyTerminatedWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c8778")
+    val badLogsAndMetadataWorkflowId = Option("29b2e816-ecaf-11e6-b006-92361f002671")
     
     
     
@@ -97,6 +100,10 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       Seq(
         Workflow(existingWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions),
         Workflow(alreadyTerminatedWorkflowId,WorkflowStatuses.Submitted,testDate,sample2.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
+
+    val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
+      Seq(
+        Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
@@ -133,13 +140,14 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
           DBIO.seq(
             entityQuery.save(context, sample1),
             entityQuery.save(context, sample2),
-            methodConfigurationQuery.save(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionTestAbortMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortMalformedWorkflow),
             submissionQuery.create(context, submissionTestAbortGoodWorkflow),
             submissionQuery.create(context, submissionTestAbortTerminalWorkflow),
             submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows),
+            submissionQuery.create(context, submissionTestCromwellBadWorkflows),
             // update exec key for all test data workflows that have been started.
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
@@ -167,12 +175,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
       gcsDAO.storeToken(userInfo, subTestData.refreshToken)
       val directoryDAO = new MockUserDirectoryDAO
 
+      val notificationDAO = new PubSubNotificationDAO(gpsDAO, "test-notification-topic")
+
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
         directoryDAO,
         gpsDAO,
-        "test-topic-name"
+        "test-topic-name",
+        notificationDAO
       )_
 
       val googleGroupSyncMonitorSupervisor = system.actorOf(GoogleGroupSyncMonitorSupervisor.props(500 milliseconds, 0 seconds, gpsDAO, "test-topic-name", "test-sub-name", 1, userServiceConstructor))
@@ -184,6 +195,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
         execServiceCluster,
         execServiceBatchSize,
         gcsDAO,
+        notificationDAO,
         submissionSupervisor,
         bucketDeletionMonitor,
         userServiceConstructor
@@ -524,6 +536,19 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     }
 
     assertResult(StatusCodes.NotFound) {errorReport.errorReport.statusCode.get}
+  }
+
+  it should "return 502 on getting a workflow if Cromwell barfs" in withSubmissionTestWorkspaceService { workspaceService =>
+    val rqComplete = workspaceService.workflowOutputs(
+      subTestData.wsName,
+      subTestData.submissionTestCromwellBadWorkflows.submissionId,
+      subTestData.badLogsAndMetadataWorkflowId.get)
+    val errorReport = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(rqComplete, Duration.Inf).asInstanceOf[RequestComplete[ErrorReport]].response
+    }
+
+    assertResult(StatusCodes.BadGateway) {errorReport.errorReport.statusCode.get}
+    assertResult("cromwell"){errorReport.errorReport.causes.head.source}
   }
 
   "Getting workflow metadata" should "return 200" in withSubmissionTestWorkspaceService { workspaceService =>

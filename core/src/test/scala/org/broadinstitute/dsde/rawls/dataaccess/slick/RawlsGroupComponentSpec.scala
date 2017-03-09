@@ -311,6 +311,36 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     }
   }
 
+  it should "save a new realm " in withEmptyTestDatabase {
+    val realm = makeRawlsGroup("A realm", Set.empty)
+
+    runAndWait(rawlsGroupQuery.save(realm))
+
+    runAndWait(rawlsGroupQuery.listAllRealms()) should not contain(RawlsRealmRef(realm.groupName))
+
+    runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
+
+    assertResult(Some(realm)) {
+      runAndWait(rawlsGroupQuery.load(realm))
+    }
+
+    runAndWait(rawlsGroupQuery.listAllRealms()) should contain(RawlsRealmRef(realm.groupName))
+  }
+
+  it should "not save a non-existent group as a realm" in withEmptyTestDatabase {
+    val realm = makeRawlsGroup("A realm", Set.empty)
+
+    assertResult(None) {
+      runAndWait(rawlsGroupQuery.load(realm))
+    }
+
+    assertResult(0) {
+      runAndWait(rawlsGroupQuery.setGroupAsRealm(RawlsRealmRef(realm.groupName)))
+    }
+
+    runAndWait(rawlsGroupQuery.listAllRealms()) should not contain(RawlsRealmRef(realm.groupName))
+  }
+
   it should "flatten group membership" in withEmptyTestDatabase {
     val testUser2 = testUser.copy(userSubjectId = RawlsUserSubjectId("dummy-ID2"), userEmail = RawlsUserEmail("dummy-email2@example.com"))
     val group1 = makeRawlsGroup("Group One", Set(testUser))

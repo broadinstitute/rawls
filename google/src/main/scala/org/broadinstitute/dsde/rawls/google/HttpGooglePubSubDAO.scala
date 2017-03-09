@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
@@ -8,8 +8,7 @@ import com.google.api.client.http.HttpResponseException
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO._
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 import spray.http.StatusCodes
 
@@ -20,7 +19,7 @@ import scala.concurrent._
  * Created by mbemis on 5/6/16.
  */
 
-class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
+class HttpGooglePubSubDAO(clientEmail: String,
                           pemFile: String,
                           appName: String,
                           serviceProject: String)( implicit val system: ActorSystem, implicit val executionContext: ExecutionContext ) extends FutureSupport with GoogleUtilities with GooglePubSubDAO {
@@ -29,8 +28,6 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
-
-  val serviceAccountClientId: String = clientSecrets.getDetails.get("client_email").toString
 
   private val characterEncoding = "UTF-8"
 
@@ -72,6 +69,7 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   override def publishMessages(topicName: String, messages: Seq[String]) = {
+    logger.debug(s"publishing to google pubsub topic $topicName, messages [${messages.mkString(", ")}]")
     Future.traverse(messages.grouped(1000)) { messageBatch =>
       retryWhen500orGoogleError(() => {
         val pubsubMessages = messageBatch.map(text => new PubsubMessage().encodeData(text.getBytes(characterEncoding)))
@@ -113,7 +111,7 @@ class HttpGooglePubSubDAO(val clientSecrets: GoogleClientSecrets,
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
       .setJsonFactory(jsonFactory)
-      .setServiceAccountId(serviceAccountClientId)
+      .setServiceAccountId(clientEmail)
       .setServiceAccountScopes(pubSubScopes) // grant pub sub powers
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()

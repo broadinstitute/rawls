@@ -1,17 +1,19 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
-import wdl4s.types.WdlArrayType
 import org.broadinstitute.dsde.rawls.{RawlsException, model}
 import org.broadinstitute.dsde.rawls.model._
 import spray.json._
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
+
+import wdl4s.{FullyQualifiedName, WdlNamespaceWithWorkflow, WorkflowInput}
+import wdl4s.types.WdlArrayType
+import wdl4s.parser.WdlParser.SyntaxError
 
 object MethodConfigResolver {
   val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"
@@ -40,16 +42,24 @@ object MethodConfigResolver {
     case _ => getSingleResult(wfInput.fqn, mcSequence, wfInput.optional)
   }
 
+  def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
+    val parsed = Try { WdlNamespaceWithWorkflow.load(wdl, Seq()) }.recoverWith { case t: SyntaxError =>
+      Failure(new RawlsException("Failed to parse Method WDL: this may be due to incompatibility with the current version of Cromwell."))
+    }
+
+    parsed map(_.workflow)
+  }
+
   case class MethodInput(workflowInput: WorkflowInput, expression: String)
 
-  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Seq[MethodInput] = {
-    val agoraInputs = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow.inputs
-    val missingInputs = agoraInputs.filter{ case (fqn,workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
-    val extraInputs = methodConfig.inputs.filter{ case (name,expression) => !agoraInputs.contains(name) }.keys
-    if ( missingInputs.size > 0 || extraInputs.size > 0 ) {
+  def gatherInputs(methodConfig: MethodConfiguration, wdl: String): Try[Seq[MethodInput]] = parseWDL(wdl) map { workflow =>
+    val agoraInputs = workflow.inputs
+    val missingInputs = agoraInputs.filter { case (fqn, workflowInput) => !methodConfig.inputs.contains(fqn) && !workflowInput.optional }.keys
+    val extraInputs = methodConfig.inputs.filter { case (name, expression) => !agoraInputs.contains(name) }.keys
+    if (missingInputs.nonEmpty || extraInputs.nonEmpty) {
       val message =
-        if ( missingInputs.size > 0 )
-          if ( extraInputs.size > 0 )
+        if (missingInputs.nonEmpty)
+          if (extraInputs.nonEmpty)
             "is missing definitions for these inputs: " + missingInputs.mkString(", ") + " and it has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
           else
             "is missing definitions for these inputs: " + missingInputs.mkString(", ")
@@ -57,7 +67,7 @@ object MethodConfigResolver {
           "has extraneous definitions for these inputs: " + extraInputs.mkString(", ")
       throw new RawlsException(s"MethodConfiguration ${methodConfig.namespace}/${methodConfig.name} ${message}")
     }
-    for ( (name,expression) <- methodConfig.inputs.toSeq ) yield MethodInput(agoraInputs.get(name).get,expression.value)
+    for ((name, expression) <- methodConfig.inputs.toSeq) yield MethodInput(agoraInputs(name), expression.value)
   }
 
   def resolveInputsForEntities(workspaceContext: SlickWorkspaceContext, inputs: Seq[MethodInput], entities: Seq[EntityRecord], dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
@@ -105,18 +115,16 @@ object MethodConfigResolver {
     }
   ) toString
 
-  def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod) = {
-    val workflow = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow
+  def toMethodConfiguration(wdl: String, methodRepoMethod: MethodRepoMethod): Try[MethodConfiguration] = parseWDL(wdl) map { workflow =>
     val nothing = AttributeString("")
-    val inputs = for ( (fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs ) yield fqn.toString -> nothing
+    val inputs = for ((fqn: FullyQualifiedName, wfInput: WorkflowInput) <- workflow.inputs) yield fqn.toString -> nothing
     val outputs = workflow.outputs map (o => o.locallyQualifiedName(workflow) -> nothing)
     MethodConfiguration("namespace", "name", "rootEntityType", Map(), inputs.toMap, outputs.toMap, methodRepoMethod)
   }
 
-  def getMethodInputsOutputs(wdl: String) = {
-    val workflow = WdlNamespaceWithWorkflow.load(wdl, Seq()).workflow
+  def getMethodInputsOutputs(wdl: String): Try[MethodInputsOutputs] = parseWDL(wdl) map { workflow =>
     MethodInputsOutputs(
-      (workflow.inputs map {case (fqn: FullyQualifiedName, wfInput:WorkflowInput) => model.MethodInput(fqn, wfInput.wdlType.toWdlString, wfInput.optional)}).toSeq,
+      (workflow.inputs map { case (fqn: FullyQualifiedName, wfInput: WorkflowInput) => model.MethodInput(fqn, wfInput.wdlType.toWdlString, wfInput.optional) }).toSeq,
       workflow.outputs.map(o => MethodOutput(o.locallyQualifiedName(workflow), o.wdlType.toWdlString)))
   }
 }

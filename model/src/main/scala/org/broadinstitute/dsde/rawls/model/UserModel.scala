@@ -6,6 +6,10 @@ sealed trait UserAuthRef
 case class RawlsUserRef(userSubjectId: RawlsUserSubjectId) extends UserAuthRef
 case class RawlsGroupRef(groupName: RawlsGroupName) extends UserAuthRef
 
+case class RawlsRealmRef(realmName: RawlsGroupName) extends UserAuthRef {
+  def toUserGroupRef: RawlsGroupRef = RawlsGroupRef(realmName)
+}
+
 sealed trait UserAuthType { val value: String }
 case class RawlsUserEmail(value: String) extends UserAuthType
 case class RawlsUserSubjectId(value: String) extends UserAuthType
@@ -14,7 +18,8 @@ case class RawlsGroupEmail(value: String) extends UserAuthType
 case class RawlsBillingAccountName(value: String) extends UserAuthType
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
-object UserModelJsonSupport extends JsonSupport {
+class UserModelJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
 
   case class UserModelJsonFormatter[T <: UserAuthType](create: String => T) extends RootJsonFormat[T] {
     def read(obj: JsValue): T = obj match {
@@ -35,4 +40,7 @@ object UserModelJsonSupport extends JsonSupport {
 
   implicit val RawlsUserRefFormat = jsonFormat1(RawlsUserRef)
   implicit val RawlsGroupRefFormat = jsonFormat1(RawlsGroupRef)
+  implicit val RawlsRealmRefFormat = jsonFormat1(RawlsRealmRef)
 }
+
+object UserModelJsonSupport extends UserModelJsonSupport

@@ -4,7 +4,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
-case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus)
+case class RawlsBillingProjectMembership(projectName: RawlsBillingProjectName, role: ProjectRoles.ProjectRole, creationStatus: CreationStatuses.CreationStatus, message: Option[String] = None)
 case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
 case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None, subGroupEmails: Option[Seq[String]] = None, userSubjectIds: Option[Seq[String]] = None, subGroupNames: Option[Seq[String]] = None)
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
@@ -13,7 +13,7 @@ case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
 case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail)
 
 object RawlsUser {
-  implicit def toRef(u: RawlsUser) = RawlsUserRef(u.userSubjectId)
+  implicit def toRef(u: RawlsUser): RawlsUserRef = RawlsUserRef(u.userSubjectId)
 
   def apply(userInfo: UserInfo): RawlsUser =
     RawlsUser(RawlsUserSubjectId(userInfo.userSubjectId), RawlsUserEmail(userInfo.userEmail))
@@ -24,13 +24,13 @@ case class RawlsGroup(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail, us
 }
 
 object RawlsGroup {
-  implicit def toRef(g: RawlsGroup) = RawlsGroupRef(g.groupName)
+  implicit def toRef(g: RawlsGroup): RawlsGroupRef = RawlsGroupRef(g.groupName)
 }
 
 case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName])
+case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
@@ -63,13 +63,16 @@ object CreationStatuses {
   def withName(name: String): CreationStatus = name.toLowerCase match {
     case "creating" => Creating
     case "ready" => Ready
+    case "error" => Error
     case _ => throw new RawlsException(s"invalid CreationStatus [${name}]")
   }
 
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
+  case object Error extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready)
+  val all: Set[CreationStatus] = Set(Creating, Ready, Error)
+  val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
 case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccountName)
@@ -79,7 +82,8 @@ case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 
 case class BillingAccountScopes(requiredScopes: Seq[String])
 
-object UserAuthJsonSupport extends JsonSupport {
+class UserAuthJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
   import UserModelJsonSupport._
 
   // need "apply" here so it doesn't choose the companion class
@@ -109,7 +113,7 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat5(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat6(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -126,9 +130,11 @@ object UserAuthJsonSupport extends JsonSupport {
 
   implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
 
-  implicit val RawlsBillingProjectMembershipFormat = jsonFormat3(RawlsBillingProjectMembership)
+  implicit val RawlsBillingProjectMembershipFormat = jsonFormat4(RawlsBillingProjectMembership)
 
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 }
+
+object UserAuthJsonSupport extends UserAuthJsonSupport

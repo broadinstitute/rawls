@@ -6,16 +6,17 @@ import akka.pattern._
 import com.google.api.client.http.HttpResponseException
 import com.google.api.client.auth.oauth2.TokenResponseException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, FutureSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.webservice.PerRequest.{PerRequestMessage, RequestComplete, RequestCompleteWithLocation}
 import spray.http.StatusCodes
 import spray.json._
 import spray.httpx.SprayJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -33,8 +34,8 @@ object UserService {
     Props(userServiceConstructor(userInfo))
   }
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, gpsDAO, gpsGroupSyncTopic)
+  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, userDirectoryDAO, gpsDAO, gpsGroupSyncTopic, notificationDAO)
 
   sealed trait UserServiceMessage
   case class SetRefreshToken(token: UserRefreshToken) extends UserServiceMessage
@@ -51,6 +52,7 @@ object UserService {
   case object AdminListUsers extends UserServiceMessage
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case object ListRealmsForUser extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
@@ -80,6 +82,9 @@ object UserService {
   case class RemoveGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList) extends UserServiceMessage
   case class AdminSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
   case class InternalSynchronizeGroupMembers(groupRef: RawlsGroupRef) extends UserServiceMessage
+  case class AdminCreateRealm(groupRef: RawlsRealmRef) extends UserServiceMessage
+  case class AdminDeleteRealm(groupRef: RawlsRealmRef) extends UserServiceMessage
+  case object AdminListAllRealms extends UserServiceMessage
 
   case class IsAdmin(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class IsLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
@@ -87,7 +92,7 @@ object UserService {
   case class AdminRemoveLibraryCurator(userEmail: RawlsUserEmail) extends UserServiceMessage
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
+class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, userDirectoryDAO: UserDirectoryDAO, gpsDAO: GooglePubSubDAO, gpsGroupSyncTopic: String, notificationDAO: NotificationDAO)(implicit protected val executionContext: ExecutionContext) extends Actor with RoleSupport with FutureSupport with UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
@@ -123,6 +128,11 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminListGroupMembers(groupRef) => asFCAdmin { listGroupMembers(groupRef) } pipeTo sender
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
+
+    case AdminCreateRealm(realmRef) => asFCAdmin { createRealm(realmRef) } pipeTo sender
+    case AdminDeleteRealm(realmRef) => asFCAdmin { deleteRealm(realmRef) } pipeTo sender
+    case AdminListAllRealms => asFCAdmin { listAllRealms } pipeTo sender
+    case ListRealmsForUser => listRealmsForUser pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -164,7 +174,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       case Some(date) => RequestComplete(UserRefreshTokenDate(date))
     }).recover {
       case t: TokenResponseException =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(t, t.getStatusCode))
+        throw new RawlsExceptionWithErrorReport(ErrorReport(t.getStatusCode, t))
     }
   }
 
@@ -184,8 +194,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         } yield ()),
         toFutureTry(userDirectoryDAO.createUser(user.userSubjectId) flatMap( _ => userDirectoryDAO.enableUser(user.userSubjectId)))
 
-      )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ =>
-      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}"), handleException("Errors creating user")
+      )).flatMap{ _ => Future.sequence(Seq(toFutureTry(turnInvitesIntoRealAccess(user))))})(_ => {
+      notificationDAO.fireAndForgetNotification(ActivationNotification(user.userSubjectId.value))
+      RequestCompleteWithLocation(StatusCodes.Created, s"/user/${user.userSubjectId.value}") }, handleException("Errors creating user")
     )
   }
 
@@ -364,7 +375,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def isAdmin(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(tryIsFCAdmin(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(b) => b match {
         case true => RequestComplete(StatusCodes.OK)
         case false => RequestComplete(StatusCodes.NotFound)
@@ -374,7 +385,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def isLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.isLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(b) => b match {
         case true => RequestComplete(StatusCodes.OK)
         case false => RequestComplete(StatusCodes.NotFound)
@@ -384,14 +395,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
   def addLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.addLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }
 
   def removeLibraryCurator(userEmail: RawlsUserEmail): Future[PerRequestMessage] = {
     toFutureTry(gcsDAO.removeLibraryCurator(userEmail.value)) map {
-      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(t, StatusCodes.InternalServerError))
+      case Failure(t) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, t))
       case Success(_) => RequestComplete(StatusCodes.OK)
     }
   }
@@ -426,7 +437,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way")
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) } flatMap {
       case Some(_) =>
@@ -439,7 +450,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  @deprecated
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   private def createBillingProjectGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): Future[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
     for {
       groups <- dataSource.inTransaction { dataAccess =>
@@ -453,13 +464,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     } yield groupMap
   }
 
-  @deprecated
+  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
   private def createBillingProjectInternal(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): Future[RawlsBillingProject] = {
     for {
       bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
       billingProject <- dataSource.inTransaction { dataAccess =>
         val bucketUrl = "gs://" + bucketName
-        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None)
+        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None, None)
         dataAccess.rawlsBillingProjectQuery.create(billingProject)
       }
     } yield billingProject
@@ -547,6 +558,50 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
         case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group ${groupRef.groupName} already exists")))
         case None =>
           createGroupInternal(groupRef, dataAccess) map { _ => RequestComplete(StatusCodes.Created) }
+      }
+    }
+  }
+
+  def createRealm(realmRef: RawlsRealmRef) = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.load(realmRef.toUserGroupRef) flatMap {
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Group [${realmRef.realmName.value}] already exists")))
+        case None =>
+          createGroupInternal(realmRef.toUserGroupRef, dataAccess) andThen dataAccess.rawlsGroupQuery.setGroupAsRealm(realmRef) map { _ => RequestComplete(StatusCodes.Created) }
+      }
+    }
+  }
+
+  def deleteRealm(realmRef: RawlsRealmRef) = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.listWorkspacesInRealm(realmRef) flatMap {
+        case Seq() =>
+          dataAccess.rawlsGroupQuery.deleteRealmRecord(realmRef) flatMap { _ =>
+            withGroup(realmRef.toUserGroupRef, dataAccess) { group =>
+              dataAccess.rawlsGroupQuery.delete(realmRef.toUserGroupRef) andThen
+                DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
+            }
+          }
+        case _ =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Unable to delete realm [${realmRef.realmName.value}] because there are workspaces in this realm")))
+      }
+    }
+  }
+
+  // Lists every realm in the system
+  def listAllRealms() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listAllRealms() map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
+      }
+    }
+  }
+
+  // Lists every realm that the user has access to
+  def listRealmsForUser() = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsGroupQuery.listRealmsForUser(RawlsUserRef(RawlsUserSubjectId(userInfo.userSubjectId))).map { realms =>
+        RequestComplete(StatusCodes.OK, realms)
       }
     }
   }
@@ -790,13 +845,14 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess =>
           for {
-            _ <- gcsDAO.createProject(projectName, billingAccount)
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount)
             result <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
                   for {
                     groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName)))
+                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
+                    _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
 
                   } yield {
                     RequestComplete(StatusCodes.Created)

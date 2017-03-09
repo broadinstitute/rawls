@@ -66,7 +66,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
-            methodConfigurationQuery.save(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", "Sample", Map.empty, Map.empty, Map.empty, MethodRepoMethod("std", "someMethod", 1))),
             submissionQuery.create(context, submissionWithExecutionKeys)
           )
         },
@@ -194,6 +194,13 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         val submittedRecords = Await.result(submittedRecordsQuery, Duration.Inf)
         assert(submittedRecords.forall(_.executionServiceKey == expectedInstanceId))
       }
+    }
+  }
+
+  it should "return execution service version" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
+    val version = Await.result(cluster.version(userInfo), Duration.Inf)
+    assertResult("25") {
+      version.cromwell
     }
   }
 

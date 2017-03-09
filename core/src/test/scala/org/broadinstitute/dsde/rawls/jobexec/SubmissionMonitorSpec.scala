@@ -282,14 +282,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   it should "handle inputs and outputs with library attributes" in withDefaultTestDatabase { dataSource: SlickDataSource =>
 
-    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig11", "Sample", Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
+    val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns", "testConfig12", "Sample", Map(), Map(), Map("o1_lib" -> AttributeString("this.library:foo")), MethodRepoMethod("ns-config", "meth1", 1))
 
     val subUpdateEntityLibraryOutputs = createTestSubmission(testData.workspace, mcUpdateEntityLibraryOutputs, testData.indiv1, testData.userOwner,
       Seq(testData.indiv1), Map(testData.indiv1 -> testData.inputResolutions),
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(methodConfigurationQuery.save(context, mcUpdateEntityLibraryOutputs))
+      runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryOutputs))
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryOutputs))
     }
 
@@ -312,7 +312,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       Seq(testData.indiv2), Map(testData.indiv2 -> testData.inputResolutions2))
 
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(methodConfigurationQuery.save(context, mcUpdateEntityLibraryInputs))
+      runAndWait(methodConfigurationQuery.create(context, mcUpdateEntityLibraryInputs))
       runAndWait(submissionQuery.create(context, subUpdateEntityLibraryInputs))
     }
 
@@ -461,6 +461,8 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
     Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
   }
   override def callLevelMetadata(id: String, userInfo: UserInfo) = Future.successful(null)
+
+  override def version(userInfo: UserInfo) = Future.successful(ExecutionServiceVersion("25"))
 }
 
 class TestSubmissionMonitor(val workspaceName: WorkspaceName,

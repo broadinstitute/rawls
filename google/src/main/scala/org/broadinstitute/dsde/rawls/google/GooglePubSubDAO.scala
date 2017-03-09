@@ -1,8 +1,8 @@
-package org.broadinstitute.dsde.rawls.dataaccess
+package org.broadinstitute.dsde.rawls.google
 
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.GooglePubSubDAO._
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 
 import scala.concurrent.{ExecutionContext, Future}
 

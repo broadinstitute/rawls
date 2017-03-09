@@ -4,8 +4,8 @@ import sbt._
 object Version {
   val baseModelVersion = "0.1"
 
-  def getVersionString(baseDir: File) = {
-    def getLastModelCommitFromGit = { s"""git log -n 1 --pretty=format:%h ${baseDir.getAbsolutePath}""" !! }
+  def getVersionString = {
+    def getLastModelCommitFromGit = { s"""git log -n 1 --pretty=format:%h""" !! }
 
     //jenkins builds will pass the last model commit in as an env variable because we currently build rawls
     //inside a docker container that doesn't know the code is a git repo.
@@ -20,7 +20,6 @@ object Version {
     if (isSnapshot) s"$version-SNAP" else version
   }
 
-  val modelVersionSettings: Seq[Setting[_]] =
-    Seq(version := getVersionString(baseDirectory.value))
-
+  val versionSettings: Seq[Setting[_]] =
+    Seq(version := getVersionString)
 }

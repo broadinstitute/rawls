@@ -2,17 +2,17 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import java.util
 import java.util.Collections
-import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.scalatest.{BeforeAndAfterAll, Matchers, FlatSpecLike}
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import spray.json._
 import UserModelJsonSupport._
@@ -40,7 +40,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val syncedGroups = Collections.synchronizedSet(new util.HashSet[RawlsGroupRef]()).asScala
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null) {
         override def receive = {
           case UserService.InternalSynchronizeGroupMembers(rawlsGroupRef) =>
             syncedGroups.add(rawlsGroupRef)
@@ -53,13 +53,15 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val workerCount = 10
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(10 milliseconds, 0 milliseconds, pubsubDao, topic, "subscription", workerCount, userServiceConstructor))
 
-    val testGroups = (for(i <- 0 until workerCount*4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
-    pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint))
+    // GoogleGroupSyncMonitorSupervisor creates the topic, need to wait for it to exist before publishing messages
+    awaitCond(pubsubDao.topics.contains(topic), 10 seconds)
+    val testGroups = (for (i <- 0 until workerCount * 4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
 
-    awaitCond(testGroups.toSet.equals(syncedGroups), 10 seconds)
-    assertResult(testGroups.size) {
-      pubsubDao.acks.size()
-    }
+    // wait for all the messages to be published and throw an error if one happens (i.e. use Await.result not Await.ready)
+    Await.result(pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint)), Duration.Inf)
+
+    awaitAssert(assertResult(testGroups.toSet) { syncedGroups }, 10 seconds)
+    awaitAssert(assertResult(testGroups.size) { pubsubDao.acks.size() }, 10 seconds)
   }
 
   it should "handle failures syncing google groups" in {
@@ -67,7 +69,7 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val topic = "topic"
 
     val userServiceConstructor = (userInfo: UserInfo) => {
-      new UserService(userInfo, null, null, null, null, null) {
+      new UserService(userInfo, null, null, null, null, null, null) {
         override def receive = {
           case _ => throw new RawlsException("I am a failure")
         }
@@ -77,10 +79,13 @@ class GoogleGroupSyncMonitorSpec(_system: ActorSystem) extends TestKit(_system) 
     val workerCount = 10
     system.actorOf(GoogleGroupSyncMonitorSupervisor.props(100 milliseconds, 0 milliseconds, pubsubDao, topic, "subscription", workerCount, userServiceConstructor))
 
-    val testGroups = (for(i <- 0 until workerCount*4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
-    pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint))
+    // GoogleGroupSyncMonitorSupervisor creates the topic, need to wait for it to exist before publishing messages
+    awaitCond(pubsubDao.topics.contains(topic), 10 seconds)
 
-    awaitCond(pubsubDao.subscriptionsByName("subscription").queue.isEmpty, 10 seconds)
+    val testGroups = (for(i <- 0 until workerCount*4) yield RawlsGroupRef(RawlsGroupName(s"testgroup_$i")))
+    Await.result(pubsubDao.publishMessages(topic, testGroups.map(_.toJson.compactPrint)), Duration.Inf)
+
+    awaitAssert(assert(pubsubDao.subscriptionsByName("subscription").queue.isEmpty), 10 seconds)
     assertResult(0) {
       pubsubDao.acks.size()
     }

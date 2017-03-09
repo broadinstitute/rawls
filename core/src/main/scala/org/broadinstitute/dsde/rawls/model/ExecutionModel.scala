@@ -35,6 +35,8 @@ case class ExecutionServiceStatus(
 
 case class ExecutionServiceFailure(status: String, message: String, errors: Option[JsArray])
 
+case class ExecutionServiceVersion(cromwell: String)
+
 // Cromwell's response to workflow validation
 case class ExecutionServiceValidation(
   valid: Boolean,
@@ -217,7 +219,9 @@ case class SubmissionWorkflowStatusResponse(
   workflowStatus: String,
   count: Int)
 
-object ExecutionJsonSupport extends JsonSupport {
+class ExecutionJsonSupport extends JsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
   type OutputType = Either[Attribute, UnsupportedOutputType]
   implicit override val attributeFormat = new AttributeFormat with PlainArrayAttributeListSerializer
 
@@ -259,6 +263,8 @@ object ExecutionJsonSupport extends JsonSupport {
   implicit val ExecutionServiceStatusFormat = jsonFormat2(ExecutionServiceStatus)
 
   implicit val ExecutionServiceFailureFormat = jsonFormat3(ExecutionServiceFailure)
+
+  implicit val ExecutionServiceVersionFormat = jsonFormat1(ExecutionServiceVersion)
 
   implicit val ExecutionServiceValidationFormat = jsonFormat2(ExecutionServiceValidation)
 
@@ -374,3 +380,5 @@ object SubmissionStatuses {
   case object Aborted extends SubmissionStatus
   case object Done extends SubmissionStatus
 }
+
+object ExecutionJsonSupport extends ExecutionJsonSupport

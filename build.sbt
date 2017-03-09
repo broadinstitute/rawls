@@ -2,17 +2,31 @@ import Settings._
 import Testing._
 
 
+lazy val workbenchUtil = project.in(file("util"))
+  .settings(utilSettings:_*)
+  .withTestSettings
+
 lazy val rawlsModel = project.in(file("model"))
   .settings(modelSettings:_*)
+  .withTestSettings
+
+lazy val workbenchGoogle = project.in(file("google"))
+  .settings(googleSettings:_*)
+  .dependsOn(rawlsModel)
+  .dependsOn(workbenchUtil)
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
   .settings(rawlsCoreSettings:_*)
   .dependsOn(rawlsModel)
+  .dependsOn(workbenchGoogle)
+  .dependsOn(workbenchUtil)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))
   .settings(rootSettings:_*)
+  .aggregate(workbenchUtil)
+  .aggregate(workbenchGoogle)
   .aggregate(rawlsModel)
   .aggregate(rawlsCore)
   .dependsOn(rawlsCore)
