@@ -191,10 +191,12 @@ trait MethodConfigurationComponent {
       }
     }
 
+    // includes "deleted" MCs
     def list(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
       findByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
     }
 
+    // standard listing: does not include "deleted" MCs
     def listActive(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[MethodConfigurationShort]] = {
       findActiveByWorkspace(workspaceContext.workspaceId).result.map(recs => recs.map(rec => unmarshalMethodConfigToShort(rec)))
     }
