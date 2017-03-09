@@ -7,7 +7,7 @@ import spray.json.JsObject
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.util.Try
+import scala.util.{Random, Try}
 
 
 class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,ExecutionServiceDAO], dataSource: SlickDataSource) extends ExecutionServiceCluster {
@@ -49,6 +49,9 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]] =
     getMember(workflowRec).abort(workflowRec.externalId.get, userInfo)
 
+  def version(userInfo: UserInfo): Future[ExecutionServiceVersion] =
+    getRandomMember.version(userInfo)
+
   // ====================
   // facade-to-cluster entry points
   // ====================
@@ -63,6 +66,10 @@ class ShardedHttpExecutionServiceCluster (members: Map[ExecutionServiceId,Execut
       }
       case _ => throw new RawlsException(s"can only process WorkflowRecord objects with an external id and an execution service key: ${workflowRec.toString}")
     }
+  }
+
+  private def getRandomMember: ExecutionServiceDAO = {
+    memberArray(Random.nextInt(memberArray.length)).dao
   }
 
   // for unsubmitted workflows, get the best instance to which we should submit

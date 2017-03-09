@@ -24,6 +24,23 @@ paths:
         - version
       summary: get version information of this application
       operationId: version
+  '/api/version/executionEngine':
+    get:
+      responses:
+        '200':
+          description: The currently running version of the execution engine
+          schema:
+            $ref: '#/definitions/ExecutionEngineVersion'
+      description: get version information of the execution engine
+      tags:
+        - version
+      summary: get version information of the execution engine
+      operationId: execVersion
+      security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/api/admin/billing/list/{userEmail}':
     get:
       responses:
@@ -4840,6 +4857,11 @@ definitions:
       buildNumber:
         type: string
       version:
+        type: string
+  ExecutionEngineVersion:
+    description: version of the execution engine
+    properties:
+      cromwell:
         type: string
   EntityQueryParameters:
     description: ''

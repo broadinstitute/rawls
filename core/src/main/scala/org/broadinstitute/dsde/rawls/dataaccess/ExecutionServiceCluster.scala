@@ -29,6 +29,8 @@ trait ExecutionServiceCluster extends ErrorReportable {
 
   def abort(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[Try[ExecutionServiceStatus]]
 
+  def version(userInfo: UserInfo): Future[ExecutionServiceVersion]
+
 }
 
 class ExecutionServiceId(val id: String) {
