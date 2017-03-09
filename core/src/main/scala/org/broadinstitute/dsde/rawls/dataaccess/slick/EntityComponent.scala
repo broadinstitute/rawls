@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import slick.driver.JdbcDriver
 import slick.jdbc.GetResult
-import slick.profile.SqlAction
 import spray.http.StatusCodes
 
 /**
@@ -109,10 +108,6 @@ trait EntityComponent {
 
       def actionForWorkspace(workspaceContext: SlickWorkspaceContext) = {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
-      }
-
-      def actionForId(id: Long) = {
-        sql"""#$baseEntityAndAttributeSql where e.id = ${id}""".as[EntityAndAttributesResult]
       }
 
       /**
@@ -508,15 +503,13 @@ trait EntityComponent {
      */
     def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[TraversableOnce[Entity]] = {
       val startingEntityIdsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames)).map(_.id)
-      val entitiesQuery = startingEntityIdsAction.result.flatMap { startingEntityIds =>
+
+      startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
-        DBIO.sequence(ids.map { id =>
-          unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForId(id))
-        }.toSeq)
+        unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
       }
-      entitiesQuery.map(_.flatten)
     }
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadWriteAction[TraversableOnce[Entity]] = {
