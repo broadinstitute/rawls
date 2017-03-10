@@ -134,6 +134,10 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
+    def getAllTags() = {
+      workspaceAttributeQuery.findByNameQuery(AttributeName("tag", "tags")).map(_.valueString.getOrElse(""))
+    }
+
     def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }

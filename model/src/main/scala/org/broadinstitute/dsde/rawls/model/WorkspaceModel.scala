@@ -46,13 +46,16 @@ case class AttributeName(
 object AttributeName {
   val defaultNamespace = "default"
   val libraryNamespace = "library"
-  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace)
+  val tagsNamespace = "tag"
+  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace, AttributeName.tagsNamespace)
 
   val delimiter = ':'
 
   def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
 
   def withLibraryNS(name: String) = AttributeName(libraryNamespace, name)
+
+  def withTagsNS(name: String) = AttributeName(tagsNamespace, name) // to be used for tests
 
   def toDelimitedName(aName: AttributeName): String = {
     if (aName.namespace == defaultNamespace) aName.name

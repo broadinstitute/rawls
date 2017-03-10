@@ -56,7 +56,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
-  case object ListWorkspaceIds extends WorkspaceServiceMessage
+  case object GetAllTags extends WorkspaceServiceMessage
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -132,7 +132,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
-    case ListWorkspaceIds => pipe(listWorkspaceIds()) to sender
+    case GetAllTags => pipe(getAllTags()) to sender
     case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
@@ -354,28 +354,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def listWorkspaceIds(): Future[PerRequestMessage] =
+  def getAllTags(): Future[PerRequestMessage] =
+    // need to make this only return DISTINCT ones (or could just filter out in the ui?)
     dataSource.inTransaction { dataAccess =>
-      val query = for {
-        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess)
-        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
-        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
-      } yield (permissionsPairs, realmsForUser, workspaces)
+      val tagQuery = for {
+        tags <- dataAccess.workspaceQuery.getAllTags().result // I think this is bad
+      } yield tags
 
-      val results = query.map { case (permissionsPairs, realmsForUser, workspaces) =>
-        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
-        permissionsPairs.filter((permissionsPair) =>
-          workspacesById.get(permissionsPair.workspaceId) match {
-            case Some(workspace) => workspace.realm match {
-              case None => true
-              case Some(realm) =>
-                if (realmsForUser.flatten.contains(realm)) true
-                else false
-            }
-            case _ => false
-          }).map(_.workspaceId)
-      }
-      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+      tagQuery.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }
 
 

@@ -3390,6 +3390,31 @@ paths:
               - email
               - profile
               - https://www.googleapis.com/auth/devstorage.full_control
+  '/api/workspaces/tags':
+      get:
+        responses:
+          '200':
+            description: Successful Request
+            schema:
+              type: array
+              description: list of all tags used in FireCloud
+              items:
+                type: string
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Get all tags used in FireCloud (for autocomplete)
+        tags:
+          - workspaces
+        summary: Get tags
+        operationId: getTags
+        security:
+        - authorization:
+          - openid
+          - email
+          - profile
+          - https://www.googleapis.com/auth/devstorage.full_control
   '/register/user':
      post:
        responses:
