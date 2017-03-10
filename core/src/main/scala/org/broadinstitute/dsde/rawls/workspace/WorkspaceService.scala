@@ -301,7 +301,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
-      
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceCatalogPermissions(workspaceContext.workspaceId)
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
