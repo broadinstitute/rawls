@@ -964,7 +964,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(Some(realmGroup)) {
+        assertResult(Some(ManagedGroup.toRef(realmGroup))) {
           responseAs[Workspace].realm
         }
       }
@@ -973,17 +973,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 403 when creating a workspace in a realm that you don't have access to" in withTestDataApiServices { services =>
     import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
-    val realmGroup = ManagedGroupRef(RawlsGroupName("realm-for-testing"))
-
-    services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
 
     val workspaceWithRealm = WorkspaceRequest(
       namespace = testData.wsName.namespace,

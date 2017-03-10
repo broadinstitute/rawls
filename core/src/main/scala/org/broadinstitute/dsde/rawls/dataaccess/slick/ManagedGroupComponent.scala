@@ -17,8 +17,8 @@ trait ManagedGroupComponent {
 
   import driver.api._
 
-  class ManagedGroupTable(tag: Tag) extends Table[ManagedGroupRecord](tag, "REALM") {
-    def usersGroupName = column[String]("USERS_GROUP_NAME", O.Length(254))
+  class ManagedGroupTable(tag: Tag) extends Table[ManagedGroupRecord](tag, "MANAGED_GROUP") {
+    def usersGroupName = column[String]("USERS_GROUP_NAME", O.Length(254), O.PrimaryKey)
     def ownersGroupName = column[String]("OWNERS_GROUP_NAME", O.Length(254))
 
     def * = (usersGroupName, ownersGroupName) <> (ManagedGroupRecord.tupled, ManagedGroupRecord.unapply)
