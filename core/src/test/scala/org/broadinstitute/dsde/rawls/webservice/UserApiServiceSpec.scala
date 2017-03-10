@@ -692,15 +692,15 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   it should "return OK with the list of a user's realms" in withTestDataApiServices { services =>
     import spray.json.DefaultJsonProtocol._
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFormat
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
     Get("/user/realms") ~>
       sealRoute(services.userRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
-        assertResult(Seq(RawlsRealmRef(RawlsGroupName("dbGapAuthorizedUsers")))) {
-          responseAs[Seq[RawlsRealmRef]]
+        assertResult(Seq(ManagedGroupRef(RawlsGroupName("dbGapAuthorizedUsers")))) {
+          responseAs[Seq[ManagedGroupRef]]
         }
       }
   }

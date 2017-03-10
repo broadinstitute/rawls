@@ -454,10 +454,10 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     Await.result(services.userService.addUserToBillingProject(RawlsBillingProjectName(testData.controlledWorkspace.namespace), ProjectAccessUpdate("owner-access", ProjectRoles.Owner)), Duration.Inf)
 
     //add dbGapAuthorizedUsers group to ACL
-    val aclAdd = Seq(WorkspaceACLUpdate(testData.dbGapAuthorizedUsersGroup.groupEmail.value, WorkspaceAccessLevels.Read, None))
+    val aclAdd = Seq(WorkspaceACLUpdate(testData.dbGapAuthorizedUsersGroup.usersGroup.groupEmail.value, WorkspaceAccessLevels.Read, None))
     val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.controlledWorkspace.toWorkspaceName, aclAdd, false), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = Seq(WorkspaceACLUpdateResponse(testData.dbGapAuthorizedUsersGroup.groupName.value, WorkspaceAccessLevels.Read))
+    val responseFromAdd = Seq(WorkspaceACLUpdateResponse(testData.dbGapAuthorizedUsersGroup.usersGroup.groupName.value, WorkspaceAccessLevels.Read))
 
     assertResult(responseFromAdd, "Add ACL shouldn't error") {
       aclAddResponse.response._2.usersUpdated
