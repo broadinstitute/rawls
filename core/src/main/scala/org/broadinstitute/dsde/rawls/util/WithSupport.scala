@@ -86,8 +86,8 @@ trait UserWiths {
     }
   }
 
-  def withManagedGroupOwnerAccess[T](managedGroupRef: ManagedGroupRef, userRef: RawlsUserRef, dataAccess: DataAccess)(op: ManagedGroupFull => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    dataAccess.managedGroupQuery.loadFull(managedGroupRef) flatMap {
+  def withManagedGroupOwnerAccess[T](managedGroupRef: ManagedGroupRef, userRef: RawlsUserRef, dataAccess: DataAccess)(op: ManagedGroup => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+    dataAccess.managedGroupQuery.load(managedGroupRef) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"group [${managedGroupRef.usersGroupName.value}] not found")))
       case Some(managedGroup) =>
         dataAccess.rawlsGroupQuery.isGroupMember(managedGroup.ownersGroup, userRef) flatMap {

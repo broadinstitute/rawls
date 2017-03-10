@@ -11,6 +11,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
+import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
+import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.user.UserService._
@@ -56,11 +58,13 @@ object UserService {
   case class ListGroupsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class GetUserGroup(groupRef: RawlsGroupRef) extends UserServiceMessage
 
-  case class CreateManagedGroup(name: String) extends UserServiceMessage
+  case class CreateManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
+  case class GetManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
   case object ListManagedGroupsForUser extends UserServiceMessage
-  case class UpdateManagedGroupMembers extends UserServiceMessage
-  case class OverwriteManagedGroupMembers extends UserServiceMessage
-  case class DeleteManagedGroup extends UserServiceMessage
+  case class AddManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
+  case class RemoveManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String) extends UserServiceMessage
+  case class OverwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList) extends UserServiceMessage
+  case class DeleteManagedGroup(groupRef: ManagedGroupRef) extends UserServiceMessage
 
   case class AdminDeleteRefreshToken(userRef: RawlsUserRef) extends UserServiceMessage
   case object AdminDeleteAllRefreshTokens extends UserServiceMessage
@@ -68,8 +72,6 @@ object UserService {
   case object ListBillingProjects extends UserServiceMessage
   case class AdminListBillingProjectsForUser(userEmail: RawlsUserEmail) extends UserServiceMessage
   case class AdminDeleteBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminRegisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
-  case class AdminUnregisterBillingProject(projectName: RawlsBillingProjectName) extends UserServiceMessage
   case class AdminAddUserToBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class AdminRemoveUserFromBillingProject(projectName: RawlsBillingProjectName, accessUpdate: ProjectAccessUpdate) extends UserServiceMessage
   case class AddUserToBillingProject(projectName: RawlsBillingProjectName, projectAccessUpdate: ProjectAccessUpdate) extends UserServiceMessage
@@ -120,8 +122,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case ListBillingProjects => listBillingProjects(RawlsUser(userInfo).userEmail) pipeTo sender
     case AdminListBillingProjectsForUser(userEmail) => asFCAdmin { listBillingProjects(userEmail) } pipeTo sender
     case AdminDeleteBillingProject(projectName) => asFCAdmin { deleteBillingProject(projectName) } pipeTo sender
-    case AdminRegisterBillingProject(projectName) => asFCAdmin { registerBillingProject(projectName) } pipeTo sender
-    case AdminUnregisterBillingProject(projectName) => asFCAdmin { unregisterBillingProject(projectName) } pipeTo sender
     case AdminAddUserToBillingProject(projectName, projectAccessUpdate) => asFCAdmin { addUserToBillingProject(projectName, projectAccessUpdate) } pipeTo sender
     case AdminRemoveUserFromBillingProject(projectName, projectAccessUpdate) => asFCAdmin { removeUserFromBillingProject(projectName, projectAccessUpdate) } pipeTo sender
 
@@ -134,7 +134,13 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     case AdminDeleteGroup(groupName) => asFCAdmin { deleteGroup(groupName) } pipeTo sender
     case AdminOverwriteGroupMembers(groupName, memberList) => asFCAdmin { overwriteGroupMembers(groupName, memberList) } to sender
 
+    case CreateManagedGroup(groupRef) => createManagedGroup(groupRef) pipeTo sender
+    case GetManagedGroup(groupRef) => getManagedGroup(groupRef) pipeTo sender
     case ListManagedGroupsForUser => listManagedGroupsForUser pipeTo sender
+    case AddManagedGroupMembers(groupRef, role, email) => addManagedGroupMembers(groupRef, role, email) pipeTo sender
+    case RemoveManagedGroupMembers(groupRef, role, email) => removeManagedGroupMembers(groupRef, role, email) pipeTo sender
+    case OverwriteManagedGroupMembers(groupRef, role, memberList) => overwriteManagedGroupMembers(groupRef, role, memberList) pipeTo sender
+    case DeleteManagedGroup(groupRef) => deleteManagedGroup(groupRef) pipeTo sender
 
     case CreateBillingProjectFull(projectName, billingAccount) => startBillingProjectCreation(projectName, billingAccount) pipeTo sender
     case GetBillingProjectMembers(projectName) => asProjectOwner(projectName) { getBillingProjectMembers(projectName) } pipeTo sender
@@ -439,45 +445,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
-  def registerBillingProject(projectName: RawlsBillingProjectName): Future[PerRequestMessage] = {
-    dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName) } flatMap {
-      case Some(_) =>
-        Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Cannot create billing project [${projectName.value}] in database because it already exists")))
-      case None =>
-        for {
-          groups <- createBillingProjectGroups(projectName)
-          project <- createBillingProjectInternal(projectName, CreationStatuses.Ready, groups)
-        } yield RequestComplete(StatusCodes.Created)
-    }
-  }
-
-  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
-  private def createBillingProjectGroups(projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef] = Set.empty): Future[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
-    for {
-      groups <- dataSource.inTransaction { dataAccess =>
-        DBIO.sequence(ProjectRoles.all.map { role =>
-          val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
-          createGroupInternal(RawlsGroupRef(name), dataAccess).map(g => role -> g)
-        }.toSeq)
-      }
-      groupMap = groups.toMap
-      _ <- updateGroupMembership(groupMap(ProjectRoles.Owner), addUsers = creators)
-    } yield groupMap
-  }
-
-  @deprecated(message = "this api is used in the old process of creating billing projects outside of firecloud, startBillingProjectCreation is the new way", since = "d9209db")
-  private def createBillingProjectInternal(projectName: RawlsBillingProjectName, status: CreationStatuses.CreationStatus, groups: Map[ProjectRoles.ProjectRole, RawlsGroup] = Map.empty): Future[RawlsBillingProject] = {
-    for {
-      bucketName <- gcsDAO.createCromwellAuthBucket(projectName)
-      billingProject <- dataSource.inTransaction { dataAccess =>
-        val bucketUrl = "gs://" + bucketName
-        val billingProject = RawlsBillingProject(projectName, groups, bucketUrl, status, None, None)
-        dataAccess.rawlsBillingProjectQuery.create(billingProject)
-      }
-    } yield billingProject
-  }
-
   private def createBillingProjectGroupsNoGoogle(dataAccess: DataAccess, projectName: RawlsBillingProjectName, creators: Set[RawlsUserRef]): ReadWriteAction[Map[ProjectRoles.ProjectRole, RawlsGroup]] = {
     val groupsByRole = ProjectRoles.all.map { role =>
       val name = RawlsGroupName(gcsDAO.toBillingProjectGroupName(projectName, role))
@@ -607,9 +574,9 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def createManagedGroup(name: String):  Future[PerRequestMessage] = {
-    val usersGroupRef = RawlsGroupRef(RawlsGroupName(name))
-    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(name + "-owners"))
+  def createManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
+    val usersGroupRef = groupRef.toUsersGroupRef
+    val ownersGroupRef = RawlsGroupRef(RawlsGroupName(groupRef.usersGroupName.value + "-owners"))
     for {
       managedGroup <- createManagedGroupInternal(usersGroupRef, ownersGroupRef)
       _ <- updateGroupMembership(managedGroup.ownersGroup, addUsers = Set(RawlsUser(userInfo)))
@@ -630,11 +597,23 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
       existingGroups.flatMap {
         case (None, None) =>
-          createGroupInternal(usersGroupRef, dataAccess) andThen
-            createGroupInternal(ownersGroupRef, dataAccess) andThen
-            dataAccess.managedGroupQuery.createManagedGroup(ManagedGroup(usersGroupRef, ownersGroupRef))
+          for {
+            usersGroup <- createGroupInternal(usersGroupRef, dataAccess)
+            ownersGroup <- createGroupInternal(ownersGroupRef, dataAccess)
+            managedGroup <- dataAccess.managedGroupQuery.createManagedGroup(ManagedGroup(usersGroup, ownersGroup))
+          } yield {
+            managedGroup
+          }
 
         case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "please choose a different name"))
+      }
+    }
+  }
+
+  def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
+        DBIO.successful(RequestComplete(managedGroup))
       }
     }
   }
@@ -645,38 +624,62 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  def updateManagedGroupMembers(groupRef: ManagedGroupRef, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
+  def addManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
+    loadRefList(email) flatMap { addMemberList => updateManagedGroupMembers(groupRef, role, addMemberList = addMemberList) }
+  }
+
+  def removeManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, email: String): Future[PerRequestMessage] = {
+    loadRefList(email) flatMap { removeMemberList => updateManagedGroupMembers(groupRef, role, removeMemberList = removeMemberList) }
+  }
+
+  def loadRefList(email: String): Future[RawlsGroupMemberList] = {
     dataSource.inTransaction { dataAccess =>
-      withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        DBIO.successful(managedGroup.usersGroup)
+      dataAccess.rawlsGroupQuery.loadRefsFromEmails(Seq(email)).map(_.values.headOption) map {
+        case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"User or group with email $email not found"))
+        case Some(Left(userRef)) => RawlsGroupMemberList(userSubjectIds = Option(Seq(userRef.userSubjectId.value)))
+        case Some(Right(groupRef)) => RawlsGroupMemberList(subGroupNames = Option(Seq(groupRef.groupName.value)))
       }
-    } flatMap { usersGroup =>
-      updateGroupMembers(usersGroup, addMemberList, removeMemberList)
     }
   }
 
-  def updateManagedGroupOwners(groupRef: ManagedGroupRef, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
-    if (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
-      removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
-    }
-
+  private def updateManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, addMemberList: RawlsGroupMemberList = RawlsGroupMemberList(), removeMemberList: RawlsGroupMemberList = RawlsGroupMemberList()): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        DBIO.successful(managedGroup.ownersGroup)
+        if (role == ManagedRoles.Owner &&
+          (removeMemberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) ||
+            removeMemberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId))) {
+
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
+        }
+
+        DBIO.successful(rawlsGroupForRole(role, managedGroup))
       }
-    } flatMap { ownersGroup =>
-      updateGroupMembers(ownersGroup, addMemberList, removeMemberList)
+    } flatMap { rawlsGroup =>
+      updateGroupMembers(rawlsGroup, addMemberList, removeMemberList)
     }
   }
 
-  def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
+  private def rawlsGroupForRole(role: ManagedRole, managedGroup: ManagedGroup): RawlsGroup = {
+    role match {
+      case ManagedRoles.Owner => managedGroup.ownersGroup
+      case ManagedRoles.User => managedGroup.usersGroup
+    }
+  }
+
+  def overwriteManagedGroupMembers(groupRef: ManagedGroupRef, role: ManagedRole, memberList: RawlsGroupMemberList): Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        DBIO.successful(managedGroup.usersGroup)
+        if (role == ManagedRoles.Owner &&
+          !memberList.userEmails.getOrElse(Seq.empty).contains(userInfo.userEmail) &&
+            !memberList.userSubjectIds.getOrElse(Seq.empty).contains(userInfo.userSubjectId)) {
+
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "You may not remove your own access."))
+        }
+
+        DBIO.successful(rawlsGroupForRole(role, managedGroup))
       }
-    } flatMap { usersGroup =>
-      overwriteGroupMembers(usersGroup, memberList)
+    } flatMap { rawlsGroup =>
+      overwriteGroupMembers(rawlsGroup, memberList)
     }
   }
 

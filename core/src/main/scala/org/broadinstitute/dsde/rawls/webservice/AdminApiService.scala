@@ -47,20 +47,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
           UserService.AdminDeleteBillingProject(RawlsBillingProjectName(projectId)))
       }
     } ~
-    path("admin" / "billing" / "register" / Segment) { (projectId) =>
-      put {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminRegisterBillingProject(RawlsBillingProjectName(projectId)))
-      }
-    } ~
-    path("admin" / "billing" / "unregister" / Segment) { (projectId) =>
-      delete {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminUnregisterBillingProject(RawlsBillingProjectName(projectId)))
-      }
-    } ~
     path("admin" / "billing" / Segment / Segment / Segment) { (projectId, role, userEmail) =>
       put {
         requestContext => perRequest(requestContext,
@@ -85,27 +71,6 @@ trait AdminApiService extends HttpService with PerRequestCreator with UserInfoDi
         requestContext => perRequest(requestContext,
           WorkspaceService.props(workspaceServiceConstructor, userInfo),
           WorkspaceService.AdminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId))
-      }
-    } ~
-    path("admin" / "realms") {
-      get { //list all realms
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.AdminListAllRealms)
-      } ~
-      post { //create a realm
-        entity(as[RawlsRealmRef]) { realmRef =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminCreateRealm(realmRef))
-        }
-      } ~
-      delete { //delete a realm
-        entity(as[RawlsRealmRef]) { realmRef =>
-          requestContext => perRequest(requestContext,
-            UserService.props(userServiceConstructor, userInfo),
-            UserService.AdminDeleteRealm(realmRef))
-        }
       }
     } ~
     path("admin" / "groups") { //create group

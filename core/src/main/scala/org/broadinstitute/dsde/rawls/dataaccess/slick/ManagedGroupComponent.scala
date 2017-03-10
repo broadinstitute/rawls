@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.ManagedGroupRoles.ManagedGroupRole
 import org.broadinstitute.dsde.rawls.model._
 
 /**
@@ -36,19 +35,15 @@ trait ManagedGroupComponent {
     }
 
     def load(managedGroupRef: ManagedGroupRef): ReadAction[Option[ManagedGroup]] = {
-      uniqueResult(findManagedGroup(managedGroupRef)).map { x: Option[ManagedGroupRecord] => x.map(unmarshalManagedGroup) }
-    }
-
-    def loadFull(managedGroupRef: ManagedGroupRef): ReadAction[Option[ManagedGroupFull]] = {
-      load(managedGroupRef).flatMap {
+      uniqueResult[ManagedGroupRecord](findManagedGroup(managedGroupRef)).flatMap {
         case Some(mg) =>
           for {
-            usersGroup <- rawlsGroupQuery.load(mg.usersGroup)
-            ownersGroup <- rawlsGroupQuery.load(mg.ownersGroup)
+            usersGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.usersGroupName)))
+            ownersGroup <- rawlsGroupQuery.load(RawlsGroupRef(RawlsGroupName(mg.ownersGroupName)))
           } yield {
-            Option(ManagedGroupFull(
-              usersGroup.getOrElse(throw new RawlsException(s"users group ${mg.usersGroup} does not exist")),
-              ownersGroup.getOrElse(throw new RawlsException(s"owners group ${mg.ownersGroup} does not exist"))
+            Option(ManagedGroup(
+              usersGroup.getOrElse(throw new RawlsException(s"users group ${mg.usersGroupName} does not exist")),
+              ownersGroup.getOrElse(throw new RawlsException(s"owners group ${mg.ownersGroupName} does not exist"))
             ))
           }
         case None => DBIO.successful(None)
@@ -57,35 +52,41 @@ trait ManagedGroupComponent {
 
     def listManagedGroupsForUser(userRef: RawlsUserRef): ReadAction[Set[ManagedGroupAccess]] = {
       for {
-        allManagedGroups <- listAllManagedGroups()
+        allManagedGroupRecs <- listAllManagedGroups()
         groupsForUser <- rawlsGroupQuery.listGroupsForUser(userRef)
       } yield {
-        allManagedGroups.collect {
-          case managedGroup if groupsForUser.contains(managedGroup.ownersGroup) => ManagedGroupAccess(managedGroup, ManagedGroupRoles.Owner)
-          case managedGroup if groupsForUser.contains(managedGroup.usersGroup) => ManagedGroupAccess(managedGroup, ManagedGroupRoles.User)
+        for {
+          managedGroupRecord <- allManagedGroupRecs
+          groupForUser <- groupsForUser if Seq(managedGroupRecord.usersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
+        } yield {
+          val role = groupForUser match {
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.ownersGroupName => ManagedRoles.Owner
+            case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.usersGroupName => ManagedRoles.User
+            case _ => throw new RawlsException("this should not have happened") // the guard in the for statement prevents this
+          }
+          ManagedGroupAccess(unmarshalManagedGroupRef(managedGroupRecord), role)
         }
       }
     }
 
-    def listAllManagedGroups(): ReadAction[Set[ManagedGroup]] = {
-      (managedGroupQuery.result.map(recs => recs.map(unmarshalManagedGroup).toSet))
+    private def listAllManagedGroups(): ReadAction[Set[ManagedGroupRecord]] = {
+      managedGroupQuery.result.map(_.toSet)
     }
 
     def deleteManagedGroup(managedGroupRef: ManagedGroupRef): ReadWriteAction[Int] = {
-      (findManagedGroup(managedGroupRef)).delete
+      findManagedGroup(managedGroupRef).delete
     }
 
     private def marshalManagedGroup(managedGroup: ManagedGroup): ManagedGroupRecord = {
       ManagedGroupRecord(managedGroup.usersGroup.groupName.value, managedGroup.ownersGroup.groupName.value)
     }
 
-    private def unmarshalManagedGroup(managedGroupRecord: ManagedGroupRecord): ManagedGroup = {
-      ManagedGroup(RawlsGroupRef(RawlsGroupName(managedGroupRecord.usersGroupName)), RawlsGroupRef(RawlsGroupName(managedGroupRecord.ownersGroupName)))
-    }
-
     private def findManagedGroup(managedGroupRef: ManagedGroupRef): ManagedGroupQuery = {
       managedGroupQuery.filter(_.usersGroupName === managedGroupRef.usersGroupName.value)
     }
-  }
 
+    private def unmarshalManagedGroupRef(managedGroup: ManagedGroupRecord): ManagedGroupRef = {
+      ManagedGroupRef(RawlsGroupName(managedGroup.usersGroupName))
+    }
+  }
 }

@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.ManagedGroupRoles.ManagedGroupRole
+import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import spray.json._
 
@@ -54,10 +54,12 @@ object ManagedRoles {
   val all: Set[ManagedRole] = Set(Owner, User)
 }
 
+object ManagedGroup {
+  implicit def toRef(mg: ManagedGroup): ManagedGroupRef = ManagedGroupRef(mg.usersGroup.groupName)
+}
 
-case class ManagedGroup(usersGroup: RawlsGroupRef, ownersGroup: RawlsGroupRef)
-case class ManagedGroupFull(usersGroup: RawlsGroup, ownersGroup: RawlsGroup)
-case class ManagedGroupAccess(managedGroup: ManagedGroup, accessLevel: ManagedGroupRole)
+case class ManagedGroup(usersGroup: RawlsGroup, ownersGroup: RawlsGroup) extends Managed
+case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevel: ManagedRole)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
@@ -81,25 +83,6 @@ object ProjectRoles {
   case object User extends ProjectRole
 
   val all: Set[ProjectRole] = Set(Owner, User)
-}
-
-object ManagedGroupRoles {
-  sealed trait ManagedGroupRole extends RawlsEnumeration[ManagedGroupRole] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
-
-    override def withName(name: String): ManagedGroupRole = ManagedGroupRoles.withName(name)
-  }
-
-  def withName(name: String): ManagedGroupRole = name.toLowerCase match {
-    case "owner" => Owner
-    case "user" => User
-    case _ => throw new RawlsException(s"invalid ManagedGroupRole [${name}]")
-  }
-
-  case object Owner extends ManagedGroupRole
-  case object User extends ManagedGroupRole
-
-  val all: Set[ManagedGroupRole] = Set(Owner, User)
 }
 
 object CreationStatuses {
@@ -156,6 +139,15 @@ class UserAuthJsonSupport extends JsonSupport {
     }
   }
 
+  implicit object ManagedRoleFormat extends RootJsonFormat[ManagedRole] {
+    override def write(obj: ManagedRole): JsValue = JsString(obj.toString)
+
+    override def read(json: JsValue): ManagedRole = json match {
+      case JsString(name) => ManagedRoles.withName(name)
+      case _ => throw new DeserializationException("could not deserialize managed role")
+    }
+  }
+
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
 
   implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
@@ -185,7 +177,9 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
 
-  implicit val ManagedGroupFormat = jsonFormat2(ManagedGroup)
+  implicit val ManagedGroupFormat = jsonFormat2(ManagedGroup.apply)
+
+  implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

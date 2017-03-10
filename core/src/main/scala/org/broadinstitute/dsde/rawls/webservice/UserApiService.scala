@@ -104,11 +104,47 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
-    path("user" / "realms") {
-      get {
-        requestContext => perRequest(requestContext,
-          UserService.props(userServiceConstructor, userInfo),
-          UserService.ListManagedGroupsForUser)
+    path("group") {
+      pathEnd {
+        get {
+          requestContext => perRequest(requestContext,
+            UserService.props(userServiceConstructor, userInfo),
+            UserService.ListManagedGroupsForUser)
+        }
+      } ~
+      path(Segment) { groupName =>
+        val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
+        pathEnd {
+          get {
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.GetManagedGroup(groupRef))
+          } ~
+          post {
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.CreateManagedGroup(groupRef))
+          } ~
+          delete {
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.DeleteManagedGroup(groupRef))
+          }
+        } ~
+        path(Segment / Segment) { (role, email) =>
+          put {
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.AddManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+
+          } ~
+          delete {
+            requestContext => perRequest(requestContext,
+              UserService.props(userServiceConstructor, userInfo),
+              UserService.RemoveManagedGroupMembers(groupRef, ManagedRoles.withName(role), email))
+
+          }
+        }
       }
     }
   }
