@@ -313,7 +313,7 @@ trait EntityComponent {
         attributeRec <- entityAttributeQuery.marshalAttribute(entityIdsByRef(entity.toReference), attributeName, attribute, entityIdsByRef)
       } yield attributeRec
 
-      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+      def insertScratchAttributes(attributeRecs: Seq[EntityAttributeRecord])(transactionId: String): WriteAction[Int] = {
         entityAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
@@ -461,7 +461,7 @@ trait EntityComponent {
       unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext))
     }
 
-    def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Unit] = {
+    def cloneAllEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext): ReadWriteAction[Int] = {
       val allEntitiesAction = listActiveEntitiesAllTypes(sourceWorkspaceContext)
 
       allEntitiesAction.flatMap(cloneEntities(destWorkspaceContext, _))
@@ -485,7 +485,7 @@ trait EntityComponent {
       }).map(_.flatten)
     }
 
-    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Unit] = {
+    def cloneEntities(destWorkspaceContext: SlickWorkspaceContext, entities: TraversableOnce[Entity]): ReadWriteAction[Int] = {
       batchInsertEntities(destWorkspaceContext, entities.toSeq.map(marshalNewEntity(_, destWorkspaceContext.workspaceId))) flatMap { ids =>
         val entityIdByEntity = ids.map(record => record.id -> entities.filter(p => p.entityType == record.entityType && p.name == record.name).toSeq.head)
         val entityIdsByRef = entityIdByEntity.map { case (entityId, entity) => entity.toReference -> entityId }.toMap

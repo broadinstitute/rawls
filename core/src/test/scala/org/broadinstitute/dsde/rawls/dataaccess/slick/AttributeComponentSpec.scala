@@ -385,7 +385,7 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   it should "upsert" in withEmptyTestDatabase {
     // copied from WorkspaceComponent
-    def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+    def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
       workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
     }
 

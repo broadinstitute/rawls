@@ -142,7 +142,7 @@ trait WorkflowComponent {
         }.toMap)
       }
 
-      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, String), SubmissionValidationRecord]): ReadWriteAction[Unit] = {
+      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(AttributeEntityReference, String), SubmissionValidationRecord]): WriteAction[Int] = {
         val attributes = for {
           workflow <- workflows
           inputResolution <- workflow.inputResolutions

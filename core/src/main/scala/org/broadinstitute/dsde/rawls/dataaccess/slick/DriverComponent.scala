@@ -55,8 +55,8 @@ trait DriverComponent {
     items.zipWithIndex.groupBy(_._2 % batchSize).values.map(_.map(_._1))
   }
 
-  def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Unit] = {
-    DBIO.seq(records.grouped(batchSize).map(tableQuery ++= _).toSeq:_*)
+  def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Int] = {
+    DBIO.sequence(records.grouped(batchSize).map(tableQuery ++= _)).map(_.flatten.sum)
   }
 
   def nowTimestamp: Timestamp = {

@@ -298,7 +298,7 @@ trait AttributeComponent {
     def toPrimaryKeyMap(recs: Traversable[RECORD]) =
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
-    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => ReadWriteAction[Unit]) = {
+    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
@@ -337,7 +337,7 @@ trait AttributeComponent {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
       }
 
-      def updateAction(insertIntoScratchFunction: String => ReadWriteAction[Unit]) = {
+      def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
         val transactionId = UUID.randomUUID().toString
         insertIntoScratchFunction(transactionId) andThen
           updateInMasterAction(transactionId) andThen
