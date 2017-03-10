@@ -25,6 +25,7 @@ trait DataAccess
 
   def truncateAll: WriteAction[Int] = {
     // important to keep the right order for referential integrity !
+    // if table X has a Foreign Key to table Y, delete table X first
 
     TableQuery[GroupSubgroupsTable].delete andThen                // FK to group
       TableQuery[GroupUsersTable].delete andThen                  // FK to group, users

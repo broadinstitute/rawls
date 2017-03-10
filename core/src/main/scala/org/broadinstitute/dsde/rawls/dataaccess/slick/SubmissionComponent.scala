@@ -428,10 +428,11 @@ trait SubmissionComponent {
       }
     }
 
-    object DeleteSubmissionQuery extends RawSqlQuery {
+    // performs actual deletion (not hiding) of everything that depends on a submission
+    object SubmissionDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcDriver = SubmissionComponent.this.driver
 
-      def deleteAction(workspaceId: UUID) = {
+      def deleteAction(workspaceId: UUID): WriteAction[Seq[Int]] = {
 
         def deleteSubmissionAttributes(workflowTable: String, columnId: String) = {
           sqlu""" delete t from SUBMISSION_ATTRIBUTE t
@@ -464,6 +465,12 @@ trait SubmissionComponent {
           })
         }
       }
+    }
+
+    // performs actual deletion (not hiding) of submission
+    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
+      SubmissionDependenciesDeletionQuery.deleteAction(workspaceId) andThen
+        submissionQuery.filter(_.workspaceId === workspaceId).delete
     }
 
     object SubmissionStatisticsQueries extends RawSqlQuery {

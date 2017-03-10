@@ -340,29 +340,8 @@ trait WorkspaceComponent {
       }
     }
 
-    def deleteWorkspaceAccessReferences(workspaceId: UUID) = {
+    def deleteWorkspaceAccessReferences(workspaceId: UUID): WriteAction[Int] = {
       workspaceAccessQuery.filter(_.workspaceId === workspaceId).delete
-    }
-
-    def deleteWorkspaceEntitiesAndAttributes(workspaceId: UUID) = {
-      entityQuery.DeleteEntityAttributesQuery.deleteAction(workspaceId) andThen {
-        entityQuery.filter(_.workspaceId === workspaceId).delete
-      } andThen
-        updateLastModified(workspaceId)
-    }
-
-    def deleteWorkspaceSubmissions(workspaceId: UUID) = {
-      submissionQuery.DeleteSubmissionQuery.deleteAction(workspaceId) andThen {
-        submissionQuery.filter(_.workspaceId === workspaceId).delete
-      } andThen
-        updateLastModified(workspaceId)
-    }
-
-    def deleteWorkspaceMethodConfigs(workspaceId: UUID) = {
-      methodConfigurationQuery.DeleteMethodConfigurationQuery.deleteAction(workspaceId) andThen {
-        methodConfigurationQuery.filter(_.workspaceId === workspaceId).delete
-      } andThen
-        updateLastModified(workspaceId)
     }
 
     def getAuthorizedRealms(workspaceIds: Seq[String], user: RawlsUserRef): ReadAction[Seq[Option[RawlsRealmRef]]] = {
