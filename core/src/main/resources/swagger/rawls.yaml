@@ -4594,7 +4594,7 @@ definitions:
     properties:
       email:
         type: string
-        description: email address of the user or group whose permissions will be changed
+        description: subject Id of the user or group whose permissions will be changed
       catalog:
         type: boolean
         description: Set to true if you want this user to be able to perform library related operations on the workspace
@@ -4612,9 +4612,9 @@ definitions:
           $ref: '#/definitions/WorkspaceCatalogResponse'
       usersNotFound:
         type: array
-        description: the users or groups who were not found
+        description: the emails of users or groups who were not found
         items:
-          $ref: '#/definitions/WorkspaceCatalog'
+          type: string
 
   WorkspaceAccessEntry:
     description: ''

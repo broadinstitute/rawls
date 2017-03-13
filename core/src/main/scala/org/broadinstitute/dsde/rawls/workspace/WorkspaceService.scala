@@ -194,7 +194,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, workspaceRequest) {
+    withAttributeNamespaceCheck(workspaceRequest) {
       dataSource.inTransaction { dataAccess =>
         withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
           DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
@@ -339,7 +339,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           val updateAction = Try {
@@ -409,7 +409,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, destWorkspaceRequest) {
+    withAttributeNamespaceCheck(destWorkspaceRequest) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
           withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
@@ -482,7 +482,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     val updatesFuture = dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        determineCatalogPermissions(input, dataAccess, workspaceContext)
+        determineNewCatalogPermissions(input, dataAccess, workspaceContext)
       }
     }
 
@@ -512,7 +512,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }.toSeq
 
       val emails = emailsNotFound map { wsCatalog => wsCatalog.email}
-      RequestComplete(StatusCodes.OK, new WorkspaceCatalogUpdateResponseList(usersUpdated, emails))
+      RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(usersUpdated, emails))
     }
   }
 
@@ -637,14 +637,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def determineCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Seq[WorkspaceCatalog], Map[Either[RawlsUserRef,RawlsGroupRef], Boolean])] = {
+  private def determineNewCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Seq[WorkspaceCatalog], Map[Either[RawlsUserRef,RawlsGroupRef], Boolean])] = {
     for {
       refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email))
       existingRefsAndCatalog <- dataAccess.workspaceQuery.findWorkspaceUsersAndCatalog(workspaceContext.workspaceId)
     } yield {
-      val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogChange => refsToUpdateByEmail.keySet.contains(catalogChange.email))
-      val refsToUpdate = catalogUpdates.map { catalogUpdate => refsToUpdateByEmail.get(catalogUpdate.email) -> catalogUpdate.catalog }.collect {
-        case (Some(ref), catalog) => (ref, catalog)
+      val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
+      val refsToUpdate = catalogUpdates.collect {
+        case x if refsToUpdateByEmail.contains(x.email) => refsToUpdateByEmail(x.email) -> x.catalog
       }.toSet
 
       // remove everything that is not changing
@@ -831,7 +831,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, entity) {
+    withAttributeNamespaceCheck(entity) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
@@ -848,7 +848,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       operation <- update.operations
     } yield operation.name
 
-    withAttributeNamespaceCheck(userInfo, namesToCheck) {
+    withAttributeNamespaceCheck(namesToCheck) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
@@ -932,7 +932,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
@@ -1158,7 +1158,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
-    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+    withAttributeNamespaceCheck(methodConfiguration) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
@@ -1196,7 +1196,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
-    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+    withAttributeNamespaceCheck(methodConfiguration) {
      // create transaction
       dataSource.inTransaction { dataAccess =>
        // check permissions
@@ -1239,7 +1239,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     transaction1Result flatMap { case (methodConfig, destContext) =>
-      withAttributeNamespaceCheck(userInfo, methodConfig) {
+      withAttributeNamespaceCheck(methodConfig) {
         dataSource.inTransaction { dataAccess =>
           saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
         }
@@ -1254,7 +1254,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val err = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named $name in the repository.")
         Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
       case Some(agoraEntity) => Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
-        withAttributeNamespaceCheck(userInfo, targetMethodConfig) {
+        withAttributeNamespaceCheck(targetMethodConfig) {
           dataSource.inTransaction { dataAccess =>
             withWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
               saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
@@ -1753,38 +1753,34 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   // helper methods
 
-  // note: success is indicated by a Future.successful(Map.empty)
-  private def attributeNamespaceCheck(userInfo: UserInfo, attributeNames: Iterable[AttributeName]): Map[String, String] = {
+  // note: success is indicated by  Map.empty
+  private def attributeNamespaceCheck(attributeNames: Iterable[AttributeName]): Map[String, String] = {
     val namespaces = attributeNames.map(_.namespace).toSet
 
-    // anyone can modify attributes in the default namespace
-    if (namespaces == Set(AttributeName.defaultNamespace)) Map.empty
+    // no one can modify attributes with invalid namespaces
+    val invalidNamespaces = namespaces -- AttributeName.validNamespaces
+    invalidNamespaces.map { ns => ns -> s"Invalid attribute namespace $ns" }.toMap
+  }
+
+  private def withAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    val errors = attributeNamespaceCheck(attributeNames)
+    if (errors.isEmpty) op
     else {
-      // no one can modify attributes with invalid namespaces
-      val invalidNamespaces = namespaces -- AttributeName.validNamespaces
-      invalidNamespaces.map { ns => ns -> s"Invalid attribute namespace $ns" }.toMap
+      val reasons = errors.values.mkString(", ")
+      val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
+      throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
 
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, attributeNames: Iterable[AttributeName])(op: => T): T = {
-  val errors = attributeNamespaceCheck(userInfo, attributeNames)
-  if (errors.isEmpty) op
-  else {
-    val reasons = errors.values.mkString(", ")
-    val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
-    throw new RawlsExceptionWithErrorReport(errorReport = err)
-  }
-}
+  private def withAttributeNamespaceCheck[T](hasAttributes: Attributable)(op: => Future[T]): Future[T] =
+    withAttributeNamespaceCheck(hasAttributes.attributes.keys)(op)
 
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, hasAttributes: Attributable)(op: => Future[T]): Future[T] =
-    withAttributeNamespaceCheck(userInfo, hasAttributes.attributes.keys)(op)
-
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, methodConfiguration: MethodConfiguration)(op: => Future[T]): Future[T] = {
+  private def withAttributeNamespaceCheck[T](methodConfiguration: MethodConfiguration)(op: => Future[T]): Future[T] = {
     // TODO: this duplicates expression parsing, the canonical way to do this.  Use that instead?
     // valid method configuration outputs are either in the format this.attrname or workspace.attrname
     // invalid (unparseable) will be caught by expression parsing instead
     val attrNames = methodConfiguration.outputs map { case (_, attr) => AttributeName.fromDelimitedName(attr.value.split('.').last) }
-    withAttributeNamespaceCheck(userInfo, attrNames)(op)
+    withAttributeNamespaceCheck(attrNames)(op)
   }
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)

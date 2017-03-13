@@ -580,39 +580,21 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   }
 
   it should "retrieve catalog permission" in withTestDataServices { services =>
-    //Really annoying setup. I'm trying to avoid using the patch function to test get, so I have to poke
-    //ACLs into the workspace manually.
-//    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
-//    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
-//
-//    runAndWait(rawlsUserQuery.save(user))
-//    runAndWait(rawlsGroupQuery.save(group))
-
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
-
-//    val ownerGroupRef = testData.workspace.accessLevels(WorkspaceAccessLevels.Owner)
-//    val theOwnerGroup = runAndWait(rawlsGroupQuery.load(ownerGroupRef)).get
-//    val replacementOwnerGroup = theOwnerGroup.copy(users = theOwnerGroup.users + user, subGroups = theOwnerGroup.subGroups + group)
-//    runAndWait(rawlsGroupQuery.save(replacementOwnerGroup))
-//
-//    val vComplete = Await.result(services.workspaceService.getACL(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACL)]]
     val (vStatus, vData) = vComplete.response
-
     assertResult(StatusCodes.OK) {
       vStatus
     }
 
     val expectedResult = Vector(
       WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("project-owner-access",false),
       WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("project-owner-access",false),
       WorkspaceCatalog("reader-access",false),
-      WorkspaceCatalog("writer-access",false))
-
+      WorkspaceCatalog("writer-access",false)).sortWith(_.email < _.email)
     assertResult(expectedResult) {
-      vData
+      vData.sortWith(_.email < _.email)
     }
   }
 
@@ -652,42 +634,41 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
 
     assertResult(Vector(
-      WorkspaceCatalog("owner-access",false),
       WorkspaceCatalog("obama@whitehouse.gov",true),
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("owner-access",false),
+      WorkspaceCatalog("project-owner-access",false),
+      WorkspaceCatalog("reader-access",false),
+      WorkspaceCatalog("writer-access",false),
+      WorkspaceCatalog("group@whitehouse.gov",true)).sortWith(_.email < _.email)){
+      catalogUpdates.sortWith(_.email < _.email)
+    }
+
+    //remove catalog perm
+    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+    val expectedRemoveResponse = WorkspaceCatalogUpdateResponseList(Seq(
+      WorkspaceCatalogResponse(user.userSubjectId.value, false),
+      WorkspaceCatalogResponse(group.groupName.value,false)),Seq.empty)
+
+    assertResult((StatusCodes.OK, expectedRemoveResponse)) {
+      catalogRemoveResponse.response
+    }
+
+    //check result
+    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    val expectedCheckResponse = Vector(
+      WorkspaceCatalog("owner-access",false),
       WorkspaceCatalog("project-owner-access",false),
       WorkspaceCatalog("owner-access",false),
       WorkspaceCatalog("reader-access",false),
-      WorkspaceCatalog("writer-access",false),
-      WorkspaceCatalog("group@whitehouse.gov",true))){
-      catalogUpdates
+      WorkspaceCatalog("writer-access",false)).sortWith(_.email < _.email)
+    assertResult(expectedCheckResponse){
+      catalogRemovals.sortWith(_.email < _.email)
     }
-
-
-//    //remove catalog perm
-//    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-//      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false))), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
-//    val expectedRemoveResponse = WorkspaceCatalogUpdateResponseList(Seq(
-//      WorkspaceCatalogResponse(user.userSubjectId.value, false),
-//      WorkspaceCatalogResponse(group.groupName.value,false)),Seq.empty)
-//
-//    assertResult((StatusCodes.OK, expectedRemoveResponse)) {
-//      catalogRemoveResponse.response
-//    }
-//
-//    //check result
-//    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
-//      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
-//
-//    val expectedCheckResponse = Vector(
-//      WorkspaceCatalog("owner-access",false),
-//      WorkspaceCatalog("project-owner-access",false),
-//      WorkspaceCatalog("owner-access",false),
-//      WorkspaceCatalog("reader-access",false),
-//      WorkspaceCatalog("writer-access",false))
-//    assertResult(expectedCheckResponse){
-//      catalogRemovals
-//    }
   }
 
   it should "lock a workspace with terminated submissions" in withTestDataServices { services =>

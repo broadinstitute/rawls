@@ -16,9 +16,11 @@ case class WorkspaceACLUpdateResponse(subjectId: String, accessLevel: WorkspaceA
 case class WorkspaceACLUpdateResponseList(usersUpdated: Seq[WorkspaceACLUpdateResponse], invitesSent: Seq[WorkspaceACLUpdate], invitesUpdated: Seq[WorkspaceACLUpdate], usersNotFound: Seq[WorkspaceACLUpdate])
 
 case class WorkspaceCatalog(email: String, catalog: Boolean)
+
 case class WorkspaceCatalogResponse(subjectId: String, catalog: Boolean)
 
-case class WorkspaceCatalogUpdateResponseList(usersUpdated: Seq[WorkspaceCatalogResponse], usersNotFound: Seq[String])
+case class WorkspaceCatalogUpdateResponseList(usersUpdated: Seq[WorkspaceCatalogResponse], emailsNotFound: Seq[String])
+
 
 object WorkspaceAccessLevels {
   sealed trait WorkspaceAccessLevel extends RawlsEnumeration[WorkspaceAccessLevel] with Ordered[WorkspaceAccessLevel] {
