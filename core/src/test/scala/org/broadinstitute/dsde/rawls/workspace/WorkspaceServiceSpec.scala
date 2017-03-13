@@ -583,18 +583,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
     val (vStatus, vData) = vComplete.response
-    assertResult(StatusCodes.OK) {
-      vStatus
-    }
-
-    val expectedResult = Vector(
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("project-owner-access",false),
-      WorkspaceCatalog("reader-access",false),
-      WorkspaceCatalog("writer-access",false)).sortWith(_.email < _.email)
-    assertResult(expectedResult) {
-      vData.sortWith(_.email < _.email)
+    assertResult((StatusCodes.OK, Vector.empty)) {
+      (vStatus, vData.filter(wc => wc.catalog))
     }
   }
 
@@ -606,24 +596,13 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     services.gcsDAO.createGoogleGroup(group)
 
-    //add ACL
-    // TODO why is this block needed?
-    val aclAdd = Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.Owner, None), WorkspaceACLUpdate(group.groupEmail.value, WorkspaceAccessLevels.Read, None))
-    val aclAddResponse = Await.result(services.workspaceService.updateACL(testData.workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceACLUpdateResponseList)]]
-    val responseFromAdd = WorkspaceACLUpdateResponseList(Seq(WorkspaceACLUpdateResponse(user.userSubjectId.value, WorkspaceAccessLevels.Owner), WorkspaceACLUpdateResponse(group.groupName.value, WorkspaceAccessLevels.Read)), Seq.empty, Seq.empty, Seq.empty)
-
-    assertResult((StatusCodes.OK, responseFromAdd), "Add ACL shouldn't error") {
-      aclAddResponse.response
-    }
-
     //add catalog perm
     val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true))), Duration.Inf)
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true),WorkspaceCatalog("none@nowhere.gov", true))), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
     val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
       WorkspaceCatalogResponse(user.userSubjectId.value, true),
-      WorkspaceCatalogResponse(group.groupName.value,true)),Seq.empty)
+      WorkspaceCatalogResponse(group.groupName.value,true)),Seq("none@nowhere.gov"))
 
     assertResult((StatusCodes.OK, expectedResponse)) {
       catalogUpdateResponse.response
@@ -635,39 +614,25 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     assertResult(Vector(
       WorkspaceCatalog("obama@whitehouse.gov",true),
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("project-owner-access",false),
-      WorkspaceCatalog("reader-access",false),
-      WorkspaceCatalog("writer-access",false),
       WorkspaceCatalog("group@whitehouse.gov",true)).sortWith(_.email < _.email)){
-      catalogUpdates.sortWith(_.email < _.email)
+      catalogUpdates.filter(wc => wc.catalog).sortWith(_.email < _.email)
     }
 
     //remove catalog perm
     val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
       Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false))), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
-    val expectedRemoveResponse = WorkspaceCatalogUpdateResponseList(Seq(
-      WorkspaceCatalogResponse(user.userSubjectId.value, false),
-      WorkspaceCatalogResponse(group.groupName.value,false)),Seq.empty)
 
-    assertResult((StatusCodes.OK, expectedRemoveResponse)) {
-      catalogRemoveResponse.response
+    assertResult((StatusCodes.OK, Seq.empty)) {
+      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.usersUpdated.filter(wc => wc.catalog))
     }
 
     //check result
     val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
 
-    val expectedCheckResponse = Vector(
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("project-owner-access",false),
-      WorkspaceCatalog("owner-access",false),
-      WorkspaceCatalog("reader-access",false),
-      WorkspaceCatalog("writer-access",false)).sortWith(_.email < _.email)
-    assertResult(expectedCheckResponse){
-      catalogRemovals.sortWith(_.email < _.email)
+    assertResult(Vector.empty){
+      catalogRemovals.filter(wc => wc.catalog)
     }
   }
 
