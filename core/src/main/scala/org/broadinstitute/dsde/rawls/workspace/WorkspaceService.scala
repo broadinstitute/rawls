@@ -355,13 +355,12 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def getAllTags(): Future[PerRequestMessage] =
-    // need to make this only return DISTINCT ones (or could just filter out in the ui?)
     dataSource.inTransaction { dataAccess =>
       val tagQuery = for {
-        tags <- dataAccess.workspaceQuery.getAllTags().result // I think this is bad
+        tags <- dataAccess.workspaceQuery.getAllTags().result
       } yield tags
 
-      tagQuery.map { responses => RequestComplete(StatusCodes.OK, responses) }
+      tagQuery.map { responses => RequestComplete(StatusCodes.OK, responses.toSet) } // making it a set so there's no duplicates
     }
 
 
