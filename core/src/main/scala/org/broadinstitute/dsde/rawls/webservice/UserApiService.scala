@@ -104,7 +104,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
-    path("group") {
+    path("groups") {
       pathEnd {
         get {
           requestContext => perRequest(requestContext,

@@ -195,106 +195,29 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 201 when registering a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    assert {
-      getBillingProject(services.dataSource, project).isEmpty
-    }
-
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-
-        assert {
-          getBillingProject(services.dataSource, project).nonEmpty
-        }
-      }
-  }
-
-  it should "return 409 when attempting to re-register an existing billing project" in withTestDataApiServices { services =>
-    Put(s"/admin/billing/register/duplicated_project") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        Put(s"/admin/billing/register/duplicated_project") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.Conflict) {
-              status
-            }
-          }
-      }
-  }
-
-  it should "return 200 when unregistering a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assert {
-          getBillingProject(services.dataSource, project).nonEmpty
-        }
-
-        Delete(s"/admin/billing/unregister/${project.projectName.value}") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            assert {
-              getBillingProject(services.dataSource, project).isEmpty
-            }
-          }
-      }
-  }
-
-  it should "return 404 when unregistering a nonexistent billing project" in withTestDataApiServices { services =>
-    Delete(s"/admin/billing/unregister/missing_project") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.NotFound) {
-          status
-        }
-      }
-  }
-
   it should "return 200 when adding a user to a billing project" in withTestDataApiServices { services =>
-    val project = billingProjectFromName("new_project")
-
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
+    Put(s"/admin/billing/${testData.billingProject.projectName.value}/user/${testData.userWriter.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assert {
-          ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
+        assertResult(StatusCodes.OK) {
+          status
         }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(testData.billingProject.projectName)).get
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
+      }
 
-        Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            assert {
-              val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && !loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
-            }
-          }
-
-        Put(s"/admin/billing/${project.projectName.value}/owner/${testData.userOwner.userEmail.value}") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assertResult(StatusCodes.OK) {
-              status
-            }
-            assert {
-              val loadedProject = runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get
-              loadedProject.groups(ProjectRoles.User).users.contains(testData.userOwner) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userOwner)
-            }
-          }
+    Put(s"/admin/billing/${testData.billingProject.projectName.value}/owner/${testData.userWriter.userEmail.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assert {
+          val loadedProject = runAndWait(rawlsBillingProjectQuery.load(testData.billingProject.projectName)).get
+          loadedProject.groups(ProjectRoles.User).users.contains(testData.userWriter) && loadedProject.groups(ProjectRoles.Owner).users.contains(testData.userWriter)
+        }
       }
   }
 
@@ -326,28 +249,24 @@ class AdminApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 when removing a user from a billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("new_project")
-
-    Put(s"/admin/billing/register/${project.projectName.value}") ~>
+    createBillingProject(project)
+    Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        Put(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
-          sealRoute(services.adminRoutes) ~>
-          check {
-            assert {
-              runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
-            }
+        assert {
+          runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
+        }
+      }
 
-            Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
-              sealRoute(services.adminRoutes) ~>
-              check {
-                assertResult(StatusCodes.OK) {
-                  status
-                }
-                assert {
-                  ! runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
-                }
-              }
-          }
+    Delete(s"/admin/billing/${project.projectName.value}/user/${testData.userOwner.userEmail.value}") ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assert {
+          !runAndWait(rawlsBillingProjectQuery.load(project.projectName)).get.groups(ProjectRoles.User).users.contains(testData.userOwner)
+        }
       }
   }
 
@@ -394,13 +313,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Put(s"/admin/billing/register/${project1.projectName.value}") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
+    createBillingProject(project1)
+
     Put(s"/admin/billing/${project1.projectName.value}/user/${testUser.userEmail.value}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
@@ -421,6 +335,14 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  def createBillingProject(project: RawlsBillingProject): Unit = {
+    import driver.api._
+    runAndWait(DBIO.seq(
+      DBIO.sequence(project.groups.values.map(rawlsGroupQuery.save).toSeq),
+      rawlsBillingProjectQuery.create(project)
+    ))
+  }
+
   it should "return 201 when creating a new group" in withTestDataApiServices { services =>
     val group = new RawlsGroupRef(RawlsGroupName("test_group"))
 
@@ -428,61 +350,6 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created, response.entity.asString) { status }
-      }
-  }
-
-  it should "return 201 when creating a new realm" in withTestDataApiServices { services =>
-    val group = new ManagedGroupRef(RawlsGroupName("test_realm"))
-    import spray.json.DefaultJsonProtocol._
-
-    Get(s"/admin/realms") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        responseAs[Seq[ManagedGroupRef]] should not contain(group)
-      }
-
-    Post(s"/admin/realms", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) { status }
-      }
-
-    //check that the realm is actually there and categorized as a realm
-    Get(s"/admin/realms") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        responseAs[Seq[ManagedGroupRef]] should contain(group)
-      }
-  }
-
-  it should "return 201 when deleting a realm" in withTestDataApiServices { services =>
-    val group = new ManagedGroupRef(RawlsGroupName("test_realm"))
-    import spray.json.DefaultJsonProtocol._
-
-    Post(s"/admin/realms", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) { status }
-      }
-
-    //check that the realm is actually there and categorized as a realm
-    Get(s"/admin/realms") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        responseAs[Seq[ManagedGroupRef]] should contain(group)
-      }
-
-    Delete(s"/admin/realms", httpJson(group)) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK, response.entity.asString) { status }
-      }
-
-    //check that the realm is no longer there
-    Get(s"/admin/realms") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        responseAs[Seq[ManagedGroupRef]] should not contain(group)
       }
   }
 

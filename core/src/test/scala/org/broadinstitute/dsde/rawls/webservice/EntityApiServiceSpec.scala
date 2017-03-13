@@ -1649,7 +1649,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.Created, response.entity.asString) {
           status
         }
-        assertResult(Some(newRealm)) {
+        assertResult(Some(ManagedGroup.toRef(newRealm))) {
           responseAs[Workspace].realm
         }
       }

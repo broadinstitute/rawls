@@ -971,8 +971,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 403 when creating a workspace in a realm that you don't have access to" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
-
     val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
 
     val workspaceWithRealm = WorkspaceRequest(
@@ -1031,18 +1029,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "update the intersection groups for related workspaces when group membership changes" in withTestDataApiServices { services =>
-    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
-    val realmGroup = ManagedGroupRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, response.entity.asString) {
-          status
-        }
-      }
 
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
     Post(s"/admin/groups/${realmGroup.usersGroupName.value}/members", httpJson(ownerAdd)) ~>
@@ -1123,20 +1112,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "update the intersection groups for related workspaces when updating subgroup membership" in withTestDataApiServices { services =>
     import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 
-    val realmGroup = ManagedGroupRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupA = RawlsGroup(RawlsGroupName("GroupA"), RawlsGroupEmail("groupA@firecloud.org"), Set.empty, Set.empty)
     val groupB = RawlsGroup(RawlsGroupName("GroupB"), RawlsGroupEmail("groupB@firecloud.org"), Set.empty, Set(groupA))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    //create the realm group
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
@@ -1249,20 +1229,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "update the intersection groups for related workspaces when updating realm subgroup membership" in withTestDataApiServices { services =>
     import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 
-    val realmGroup = ManagedGroupRef(RawlsGroupName("realm-for-testing"))
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty)
     val groupC = RawlsGroup(RawlsGroupName("GroupC"), RawlsGroupEmail("groupC@firecloud.org"), Set.empty, Set.empty)
     val groupD = RawlsGroup(RawlsGroupName("GroupD"), RawlsGroupEmail("groupD@firecloud.org"), Set.empty, Set(groupC))
 
     services.gcsDAO.adminList += testData.userOwner.userEmail.value
-
-    //create the realm group
-    Post(s"/admin/realms", realmGroup) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created) {
-          status
-        }
-      }
 
     //add the owner to the realm
     val ownerAdd = RawlsGroupMemberList(None, None, Some(Seq(testData.userOwner.userSubjectId.value)), None)
@@ -2109,12 +2080,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     import WorkspaceACLJsonSupport._
 
     val realmName = "testRealm"
-    val realm = createAndSaveManagedGroup(realmName, Set(testData.userOwner))
 
     val request = WorkspaceRequest(
       namespace = testData.wsName.namespace,
       name = "newWorkspace",
-      Option(realm),
+      Option(ManagedGroupRef(RawlsGroupName(realmName))),
       Map.empty
     )
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
@@ -2146,6 +2116,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource) { services =>
+        createAndSaveManagedGroup(realmName, Set(testData.userOwner))
+
         Post(s"/workspaces", httpJson(request)) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
