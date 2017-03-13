@@ -3390,7 +3390,7 @@ paths:
               - email
               - profile
               - https://www.googleapis.com/auth/devstorage.full_control
-  '/api/workspaces/tags':
+  '/api/workspaces/tags/autocomplete/{query}':
       get:
         responses:
           '200':
@@ -3409,6 +3409,12 @@ paths:
           - workspaces
         summary: Get tags
         operationId: getTags
+        parameters:
+          - in: path
+            description: Query
+            name: query
+            required: true
+            type: string
         security:
         - authorization:
           - openid

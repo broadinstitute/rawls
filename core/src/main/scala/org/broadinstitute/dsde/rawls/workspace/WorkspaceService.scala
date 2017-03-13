@@ -56,7 +56,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
-  case object GetAllTags extends WorkspaceServiceMessage
+  case class GetTags(query: String) extends WorkspaceServiceMessage
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -132,7 +132,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
-    case GetAllTags => pipe(getAllTags()) to sender
+    case GetTags(query) => pipe(getTags(query)) to sender
     case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
@@ -354,13 +354,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getAllTags(): Future[PerRequestMessage] =
+  def getTags(query: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      val tagQuery = for {
-        tags <- dataAccess.workspaceQuery.getAllTags().result
-      } yield tags
+      dataAccess.workspaceQuery.getAllTags().map { recs =>
+        val tagValues: Seq[String] = (recs collect {
 
-      tagQuery.map { responses => RequestComplete(StatusCodes.OK, responses.toSet) } // making it a set so there's no duplicates
+          case record: WorkspaceAttributeRecord => record.valueString collect {
+            case string: String if string.toLowerCase.contains(query.toLowerCase) => string
+          }
+
+          // fruitless type test: a value of type org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceAttributeRecord cannot also be a org.broadinstitute.dsde.rawls.model.AttributeValueList
+//          case ss: AttributeValueList => ss.list collect {
+//            case s: AttributeString => s.value // if (s.value.contains(query)) => s.value
+        }).flatten
+        RequestComplete(StatusCodes.OK, tagValues.toSet) // making it a set so there's no duplicates
+      }
     }
 
 

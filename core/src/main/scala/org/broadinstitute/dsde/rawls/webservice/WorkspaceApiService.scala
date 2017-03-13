@@ -108,9 +108,10 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
           WorkspaceService.GetBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
-    path("workspaces" / "tags" ) {
+      // can I make this so that query can be none?
+    path("workspaces" / "tags" / "autocomplete" / Segment ) { (query) =>
       get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetAllTags)
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetTags(query))
       }
     }
   }
