@@ -43,11 +43,11 @@ object MethodConfigResolver {
   }
 
   def parseWDL(wdl: String): Try[wdl4s.Workflow] = {
-    val parsed = Try { WdlNamespaceWithWorkflow.load(wdl, Seq()) }.recoverWith { case t: SyntaxError =>
+    val parsed: Try[WdlNamespaceWithWorkflow] = WdlNamespaceWithWorkflow.load(wdl, Seq()).recoverWith { case t: SyntaxError =>
       Failure(new RawlsException("Failed to parse Method WDL: this may be due to incompatibility with the current version of Cromwell."))
     }
 
-    parsed map(_.workflow)
+    parsed map( _.workflow )
   }
 
   case class MethodInput(workflowInput: WorkflowInput, expression: String)

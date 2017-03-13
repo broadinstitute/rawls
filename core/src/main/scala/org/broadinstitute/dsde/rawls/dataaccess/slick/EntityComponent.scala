@@ -110,10 +110,6 @@ trait EntityComponent {
         sql"""#$baseEntityAndAttributeSql where e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
       }
 
-      def actionForId(id: Long) = {
-        sql"""#$baseEntityAndAttributeSql where e.id = ${id}""".as[EntityAndAttributesResult]
-      }
-
       /**
        * Generates a sub query that can be filtered, sorted, sliced
        * @param workspaceId
@@ -354,10 +350,11 @@ trait EntityComponent {
         }
     }
 
-    object DeleteEntityAttributesQuery extends RawSqlQuery {
+    // performs actual deletion (not hiding) of everything that depends on an entity
+    object EntityDependenciesDeletionQuery extends RawSqlQuery {
       val driver: JdbcDriver = EntityComponent.this.driver
 
-      def deleteAction(workspaceId: UUID) =
+      def deleteAction(workspaceId: UUID): WriteAction[Int] =
         sqlu"""delete ea from ENTITY_ATTRIBUTE ea
                inner join ENTITY e
                on ea.owner_id = e.id
@@ -365,6 +362,12 @@ trait EntityComponent {
           """
     }
 
+    // performs actual deletion (not hiding) of an entity
+    def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
+      EntityDependenciesDeletionQuery.deleteAction(workspaceId) andThen {
+        filter(_.workspaceId === workspaceId).delete
+      }
+    }
 
     /** list all entities of the given type in the workspace */
     def list(workspaceContext: SlickWorkspaceContext, entityType: String): ReadAction[TraversableOnce[Entity]] = {
@@ -500,15 +503,13 @@ trait EntityComponent {
      */
     def getEntitySubtrees(workspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadAction[TraversableOnce[Entity]] = {
       val startingEntityIdsAction = filter(rec => rec.workspaceId === workspaceContext.workspaceId && rec.entityType === entityType && rec.name.inSetBind(entityNames)).map(_.id)
-      val entitiesQuery = startingEntityIdsAction.result.flatMap { startingEntityIds =>
+
+      startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
         recursiveGetEntityReferenceIds(idSet, idSet)
       } flatMap { ids =>
-        DBIO.sequence(ids.map { id =>
-          unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForId(id))
-        }.toSeq)
+        unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
       }
-      entitiesQuery.map(_.flatten)
     }
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String]): ReadWriteAction[TraversableOnce[Entity]] = {
