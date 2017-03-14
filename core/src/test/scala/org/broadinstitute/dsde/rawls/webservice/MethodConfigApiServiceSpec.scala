@@ -180,12 +180,13 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
         assertResult(ValidatedMethodConfiguration(newMethodConfig, expectedSuccessInputs, Map(), expectedSuccessOutputs, Map())) {
           responseAs[ValidatedMethodConfiguration]
         }
+        val methodConfigs = runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name))
         // all inputs and outputs are saved, regardless of parsing errors
         for ((key, value) <- inputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.inputs.get(key)
+          methodConfigs.get.inputs.get(key)
         }
         for ((key, value) <- outputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), newMethodConfig.namespace, newMethodConfig.name)).get.outputs.get(key)
+          methodConfigs.get.outputs.get(key)
         }
       }
   }
@@ -457,11 +458,12 @@ class MethodConfigApiServiceSpec extends ApiServiceSpec {
           responseAs[ValidatedMethodConfiguration]
         }
         // all inputs and outputs are saved, regardless of parsing errors
+        val methodConfigs = runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name))
         for ((key, value) <- newInputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.inputs.get(key)
+          methodConfigs.get.inputs.get(key)
         }
         for ((key, value) <- newOutputs) assertResult(Option(value)) {
-          runAndWait(methodConfigurationQuery.get(SlickWorkspaceContext(testData.workspace), testData.methodConfig.namespace, testData.methodConfig.name)).get.outputs.get(key)
+          methodConfigs.get.outputs.get(key)
         }
       }
   }

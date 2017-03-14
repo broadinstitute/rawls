@@ -3121,9 +3121,9 @@ paths:
       responses:
         '200':
           description: Successful Request
-          type: array
-          items:
-            schema:
+          schema:
+            type: array
+            items:
               $ref: '#/definitions/WorkspaceCatalog'
         '404':
           description: Workspace not found
@@ -4556,7 +4556,7 @@ definitions:
         type: array
         description: the users or groups who were updated
         items:
-          $ref: '#/definitions/WorkspaceACLUpdateResponse'
+          $ref: '#/definitions/WorkspaceACLUpdate'
       invitesSent:
         type: array
         description: the list of invites that were sent
@@ -4581,7 +4581,7 @@ definitions:
     properties:
       email:
         type: string
-        description: subject Id of the user or group whose permissions will be changed
+        description: email of the user or group whose permissions will be changed
       catalog:
         type: boolean
         description: Set to true if you want this user to be able to perform library related operations on the workspace
@@ -4592,7 +4592,7 @@ definitions:
       - subjectId
       - catalog
     properties:
-      email:
+      subjectId:
         type: string
         description: subject Id of the user or group whose permissions will be changed
       catalog:

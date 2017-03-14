@@ -140,7 +140,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates, inviteUsersNotFound) => pipe(updateACL(workspaceName, aclUpdates, inviteUsersNotFound)) to sender
     case GetCatalog(workspaceName) => pipe(getCatalog(workspaceName)) to sender
-    case UpdateCatalog(workspaceName, catalogUpdates) => pipe(updateCatalog(workspaceName, catalogUpdates.toSeq)) to sender
+    case UpdateCatalog(workspaceName, catalogUpdates) => pipe(updateCatalog(workspaceName, catalogUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
     case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
     case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
@@ -643,9 +643,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       existingRefsAndCatalog <- dataAccess.workspaceQuery.findWorkspaceUsersAndCatalog(workspaceContext.workspaceId)
     } yield {
       val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
-      val refsToUpdate = catalogUpdates.collect {
-        case x if refsToUpdateByEmail.contains(x.email) => refsToUpdateByEmail(x.email) -> x.catalog
-      }.toSet
+      val refsToUpdate = emailsFound.map { cat =>  refsToUpdateByEmail(cat.email) -> cat.catalog }.toSet
 
       // remove everything that is not changing
       val actualCatalogChangesToMake = refsToUpdate.diff(existingRefsAndCatalog)

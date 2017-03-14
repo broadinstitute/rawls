@@ -32,21 +32,10 @@ case class WorkspaceAccessRecord(workspaceId: UUID, groupName: String, accessLev
 /** result class for workspaceQuery.findAssociatedGroupsToIntersect, target = group1 intersect group2 */
 case class GroupsToIntersect(target: RawlsGroupRef, group1: RawlsGroupRef, group2: RawlsGroupRef)
 
-case class WorkspaceUserRecord(workspaceId: UUID, subjectId: String)
-case class WorkspaceGroupRecord(workspaceId: UUID, groupName: String)
-
-case class WorkspaceUserShareRecord(workspaceId: UUID, subjectId: String)// {
-//  def apply(workspaceId: UUID, subjectId: String) = WorkspaceUserRecord(workspaceId, subjectId)
-//}
-case class WorkspaceGroupShareRecord(workspaceId: UUID, groupName: String)// {
-//  def apply(workspaceId: UUID, groupName: String) = WorkspaceGroupRecord(workspaceId, groupName)
-//}
-case class WorkspaceUserCatalogRecord(workspaceId: UUID, subjectId: String)// {
-//  def apply(workspaceId: UUID, subjectId: String) = WorkspaceUserRecord(workspaceId, subjectId)
-//}
-case class WorkspaceGroupCatalogRecord(workspaceId: UUID, groupName: String)// {
-//  def apply(workspaceId: UUID, groupName: String) = WorkspaceGroupRecord(workspaceId, groupName)
-//}
+case class WorkspaceUserShareRecord(workspaceId: UUID, subjectId: String)
+case class WorkspaceGroupShareRecord(workspaceId: UUID, groupName: String)
+case class WorkspaceUserCatalogRecord(workspaceId: UUID, subjectId: String)
+case class WorkspaceGroupCatalogRecord(workspaceId: UUID, groupName: String)
 
 case class PendingWorkspaceAccessRecord(
   workspaceId: UUID,
