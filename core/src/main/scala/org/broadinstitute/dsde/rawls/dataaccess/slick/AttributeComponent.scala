@@ -274,7 +274,7 @@ trait AttributeComponent {
         rec.namespace === attrName.namespace &&
         rec.name === attrName.name &&
         rec.valueString.isDefined
-      ).distinctOn(_.valueString.get)
+      ).map(_.valueString).distinct
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
