@@ -356,9 +356,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getTags(query: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getAllTags().map { tags =>
-        val filteredTags = tags.filter(_.toLowerCase.contains(query.toLowerCase))
-        RequestComplete(StatusCodes.OK, filteredTags.toSet)
+      dataAccess.workspaceQuery.getTags(query).map { result =>
+        RequestComplete(StatusCodes.OK, result.toSet)
       }
     }
 

@@ -269,11 +269,12 @@ trait AttributeComponent {
       }
     }
 
-    def findUniqueStringsByNameQuery(attrName: AttributeName) = {
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: String) = {
       filter(rec =>
         rec.namespace === attrName.namespace &&
         rec.name === attrName.name &&
-        rec.valueString.isDefined
+        rec.valueString.isDefined &&
+        rec.valueString.like('%' + queryString + '%')
       ).map(_.valueString).distinct
     }
 

@@ -699,6 +699,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+
+
+  // TODO: test tags
+
+  it should "return empty list (set?) when getting tags for a workspace that doesn't have any" in withTestDataApiServices { services =>
+    Get(s"${testData.workspace.path}/acl") ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        // assert result is empty
+//        response.entity
+      }
+    }
+
+
+
   it should "return 400 on update with workspace attributes that specify list as value" in withTestDataApiServices { services =>
     // we can't make this non-sensical json from our object hierarchy; we have to craft it by hand
     val testPayload =
