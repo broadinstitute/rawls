@@ -5,6 +5,7 @@ import java.util.UUID
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, RawlsBillingProjectOperationRecord}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
 import org.broadinstitute.dsde.rawls.model.Notifications.{ActivationNotification, NotificationFormat}
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -777,54 +778,135 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "200 list groups for user - some user, some owner, some both" in {
+  it should "200 list groups for user - some user, some owner, some both" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
     val ownerOnlyGroupName = "owner-only"
     val userOnlyGroupName = "user-only"
     val bothGroupName = "both"
 
-    withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
+    withApiServices(dataSource, usersTestData.userOwner) { services =>
+      createManagedGroup(services, ownerOnlyGroupName)
+      val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)))).get
+      // owners automatically added as users - undo that for this test
+      removeUser(services, ownerOnlyGroupName, ManagedRoles.User, managedGroup.ownersGroup.groupEmail.value)
+      addUser(services, ownerOnlyGroupName, ManagedRoles.Owner, usersTestData.userUser.userEmail.value)
+
+      createManagedGroup(services, userOnlyGroupName)
+      addUser(services, userOnlyGroupName, ManagedRoles.User, usersTestData.userUser.userEmail.value)
+
+      createManagedGroup(services, bothGroupName)
+      addUser(services, bothGroupName, ManagedRoles.Owner, usersTestData.userUser.userEmail.value)
+    }
+
+    withApiServices(dataSource, usersTestData.userUser) { services =>
+      import UserAuthJsonSupport.ManagedGroupAccessFormat
+      Get("/groups") ~>
+        sealRoute(services.userRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          responseAs[Seq[ManagedGroupAccess]] should contain theSameElementsAs Seq(
+            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)), ManagedRoles.Owner),
+            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(userOnlyGroupName)), ManagedRoles.User),
+            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), ManagedRoles.Owner),
+            ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), ManagedRoles.User)
+          )
+        }
+    }
+  }
+
+  Seq((Option(ManagedRoles.User), StatusCodes.Forbidden), (Option(ManagedRoles.Owner), StatusCodes.OK), (None, StatusCodes.NotFound)).foreach { case (roleOption, expectedStatus) =>
+    it should s"${expectedStatus.toString} get a group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
+      import UserAuthJsonSupport.ManagedGroupFormat
+
+      val testGroupName = "testGroup"
+
       withApiServices(dataSource, usersTestData.userOwner) { services =>
-        createManagedGroup(services, ownerOnlyGroupName)
-        val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)))).get
-        // owners automatically added as users - undo that for this test
-        removeUser(services, ownerOnlyGroupName, ManagedRoles.User, managedGroup.ownersGroup.groupEmail.value)
-        addUser(services, ownerOnlyGroupName, ManagedRoles.Owner, usersTestData.userUser.userEmail.value)
-
-        createManagedGroup(services, userOnlyGroupName)
-        addUser(services, userOnlyGroupName, ManagedRoles.User, usersTestData.userUser.userEmail.value)
-
-        createManagedGroup(services, bothGroupName)
-        addUser(services, bothGroupName, ManagedRoles.Owner, usersTestData.userUser.userEmail.value)
+        createManagedGroup(services, testGroupName)
+        roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
       }
-
       withApiServices(dataSource, usersTestData.userUser) { services =>
-        import UserAuthJsonSupport.ManagedGroupAccessFormat
-        Get("/groups") ~>
+        Get(s"/groups/$testGroupName") ~>
           sealRoute(services.userRoutes) ~>
           check {
-            assertResult(StatusCodes.OK) {
+            assertResult(expectedStatus) {
               status
             }
-            responseAs[Seq[ManagedGroupAccess]] should contain theSameElementsAs Seq(
-              ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(ownerOnlyGroupName)), ManagedRoles.Owner),
-              ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(userOnlyGroupName)), ManagedRoles.User),
-              ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), ManagedRoles.Owner),
-              ManagedGroupAccess(ManagedGroupRef(RawlsGroupName(bothGroupName)), ManagedRoles.User)
-            )
+            if (status.isSuccess) {
+              assertResult(runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get) {
+                responseAs[ManagedGroup]
+              }
+            }
           }
       }
     }
+
+    ManagedRoles.all.foreach { roleToAddRemove =>
+      it should s"${expectedStatus.toString} add ${roleToAddRemove} to group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
+        val testGroupName = "testGroup"
+
+        withApiServices(dataSource, usersTestData.userOwner) { services =>
+          createManagedGroup(services, testGroupName)
+          roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
+        }
+        withApiServices(dataSource, usersTestData.userUser) { services =>
+          addUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value, expectedStatus)
+          val resultGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
+          assertResult(expectedStatus.isSuccess) {
+            val group = roleToAddRemove match {
+              case ManagedRoles.Owner => resultGroup.ownersGroup
+              case ManagedRoles.User => resultGroup.usersGroup
+            }
+            group.users.contains(RawlsUser.toRef(usersTestData.userNoAccess))
+          }
+        }
+      }
+
+      it should s"${expectedStatus.toString} remove ${roleToAddRemove} from group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
+        val testGroupName = "testGroup"
+
+        withApiServices(dataSource, usersTestData.userOwner) { services =>
+          createManagedGroup(services, testGroupName)
+          addUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value)
+          roleOption.foreach(role => addUser(services, testGroupName, role, usersTestData.userUser.userEmail.value))
+        }
+        withApiServices(dataSource, usersTestData.userUser) { services =>
+          removeUser(services, testGroupName, roleToAddRemove, usersTestData.userNoAccess.userEmail.value, expectedStatus)
+          val resultGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
+          assertResult(expectedStatus.isSuccess) {
+            val group = roleToAddRemove match {
+              case ManagedRoles.Owner => resultGroup.ownersGroup
+              case ManagedRoles.User => resultGroup.usersGroup
+            }
+            !group.users.contains(RawlsUser.toRef(usersTestData.userNoAccess))
+          }
+        }
+      }
+    }
   }
-  // 403 get a group as user
-  // 404 get a group as nobody
-  // 200 get a group as owner
-  // 403 add user to group as user
-  // 404 add user to group nobody
-  // 200 add user to group as owner
-  // 403 remove user from group as user
-  // 404 remove user from group nobody
-  // 200 remove user from group as owner
-  // 400 remove self from owner
+
+  it should "200 adding a user that already exists" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "testGroup"
+
+    createManagedGroup(services, testGroupName)
+    addUser(services, testGroupName, ManagedRoles.User, usersTestData.userUser.userEmail.value)
+    addUser(services, testGroupName, ManagedRoles.User, usersTestData.userUser.userEmail.value)
+  }
+
+  it should "200 removing a user that does not exists" in withUsersTestDataApiServices() { services =>
+    val testGroupName = "testGroup"
+
+    createManagedGroup(services, testGroupName)
+    removeUser(services, testGroupName, ManagedRoles.User, usersTestData.userNoAccess.userEmail.value)
+
+  }
+
+  it should "400 remove self from owner" in withUsersTestDataApiServices(usersTestData.userOwner) { services =>
+    val testGroupName = "testGroup"
+
+    createManagedGroup(services, testGroupName)
+    removeUser(services, testGroupName, ManagedRoles.Owner, usersTestData.userOwner.userEmail.value, StatusCodes.BadRequest)
+  }
 
   def createManagedGroup(services: TestApiService, testGroupName: String, expectedStatusCode: StatusCode = StatusCodes.Created): Unit = {
     Post(s"/groups/$testGroupName") ~>
