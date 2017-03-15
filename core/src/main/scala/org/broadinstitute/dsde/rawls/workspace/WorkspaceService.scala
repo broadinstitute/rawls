@@ -56,6 +56,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
+  case class AccessCheck(workspaceIds: Seq[String]) extends WorkspaceServiceMessage
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -131,6 +132,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case UpdateWorkspace(workspaceName, operations) => pipe(updateWorkspace(workspaceName, operations)) to sender
     case ListWorkspaces => pipe(listWorkspaces()) to sender
     case ListAllWorkspaces => pipe(listAllWorkspaces()) to sender
+    case AccessCheck(workspaceIds) => pipe(accessCheck(workspaceIds)) to sender
     case AdminListWorkspacesWithAttribute(attributeName, attributeValue) => asFCAdmin { listWorkspacesWithAttribute(attributeName, attributeValue) } pipeTo sender
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
@@ -352,6 +354,35 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
+  def accessCheck(workspaceIds: Seq[String]): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+
+      val query = for {
+        permissionsPairs <- listWorkspaces(RawlsUser(userInfo), dataAccess, Some(workspaceIds))
+        realmsForUser <- dataAccess.workspaceQuery.getAuthorizedRealms(permissionsPairs.map(_.workspaceId), RawlsUser(userInfo))
+        workspaces <- dataAccess.workspaceQuery.listByIds(permissionsPairs.map(p => UUID.fromString(p.workspaceId)))
+      } yield (permissionsPairs, realmsForUser, workspaces)
+
+      val results = query.map { case (permissionsPairs, realmsForUser, workspaces) =>
+        val workspacesById = workspaces.groupBy(_.workspaceId).mapValues(_.head)
+        permissionsPairs.map { permissionsPair =>
+          workspacesById.get(permissionsPair.workspaceId).map { workspace =>
+            def trueAccessLevel = workspace.realm match {
+              case None => permissionsPair.accessLevel
+              case Some(realm) =>
+                if (realmsForUser.flatten.contains(realm)) permissionsPair.accessLevel
+                else WorkspaceAccessLevels.NoAccess
+            }
+            val wsId = UUID.fromString(workspace.workspaceId)
+            WorkspacePermissionsPair(workspace.workspaceId, trueAccessLevel)
+          }
+        }
+      }
+
+      results.map { responses => RequestComplete(StatusCodes.OK, responses) }
+    }
+  }
+
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
 
@@ -382,10 +413,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       results.map { responses => RequestComplete(StatusCodes.OK, responses) }
     }
 
-  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess): ReadAction[Seq[WorkspacePermissionsPair]] = {
+  def listWorkspaces(user: RawlsUser, dataAccess: DataAccess, workspaceIds: Option[Seq[String]] = None): ReadAction[Seq[WorkspacePermissionsPair]] = {
     val rawPairs = for {
       groups <- dataAccess.rawlsGroupQuery.listGroupsForUser(user)
-      pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups)
+      pairs <- dataAccess.workspaceQuery.listPermissionPairsForGroups(groups, workspaceIds)
     } yield pairs
 
     rawPairs.map { pairs =>

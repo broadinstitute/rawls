@@ -483,11 +483,19 @@ trait WorkspaceComponent {
       filter(_.realmGroupName === realmRef.realmName.value)
     }
 
-    def listPermissionPairsForGroups(groups: Set[RawlsGroupRef]): ReadAction[Seq[WorkspacePermissionsPair]] = {
-      val query = for {
-        accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
-        workspace <- workspaceQuery if (workspace.id === accessLevel.workspaceId)
-      } yield (workspace, accessLevel)
+    def listPermissionPairsForGroups(groups: Set[RawlsGroupRef], workspaceIds: Option[Seq[String]] = None): ReadAction[Seq[WorkspacePermissionsPair]] = {
+      val query = workspaceIds match {
+        case Some(ids) =>
+          for {
+            accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
+            workspace <- workspaceQuery if (workspace.id.inSetBind(ids.map(UUID.fromString(_))) && workspace.id === accessLevel.workspaceId)
+          } yield (workspace, accessLevel)
+        case None =>
+          for {
+            accessLevel <- workspaceAccessQuery if (accessLevel.groupName.inSetBind(groups.map(_.groupName.value)) && accessLevel.isRealmAcl === false)
+            workspace <- workspaceQuery if (workspace.id === accessLevel.workspaceId)
+          } yield (workspace, accessLevel)
+      }
       query.result.map(_.map { case (workspace, accessLevel) => WorkspacePermissionsPair(workspace.id.toString(), WorkspaceAccessLevels.withName(accessLevel.accessLevel)) })
     }
 

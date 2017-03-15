@@ -10,6 +10,7 @@ import spray.routing.Directive.pimpApply
 import spray.routing._
 import spray.json.DefaultJsonProtocol._
 import spray.httpx.SprayJsonSupport._
+import spray.json.{JsArray, JsString}
 
 import scala.concurrent.ExecutionContext
 
@@ -31,6 +32,15 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
         }
       }
     } ~
+      path("workspaces" / "access") {
+        post {
+          entity(as[Seq[String]]) { workspaceIds =>
+            requestContext => perRequest(requestContext,
+              WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.AccessCheck(workspaceIds))
+          }
+        }
+      } ~
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
       patch {
         entity(as[Array[AttributeUpdateOperation]]) { operations =>

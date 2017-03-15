@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsRealmRefFor
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{WorkspacePermissionsPair, _}
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.vault.common.util.ImplicitMagnet
@@ -2278,6 +2278,80 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             responseAs[BucketUsageResponse]
           }
         }
+    }
+  }
+
+  {
+
+    val expected: Map[String,Set[WorkspacePermissionsPair]] = Map(
+      "project-owner-access" -> Set(
+        WorkspacePermissionsPair(testWorkspaces.workspace1Id, WorkspaceAccessLevels.ProjectOwner),
+        WorkspacePermissionsPair(testWorkspaces.workspace2Id, WorkspaceAccessLevels.ProjectOwner),
+        WorkspacePermissionsPair(testWorkspaces.workspace3Id, WorkspaceAccessLevels.NoAccess)), // workspace 3 is in a realm
+      "owner-access" -> Set(
+        WorkspacePermissionsPair(testWorkspaces.workspace1Id, WorkspaceAccessLevels.Owner),
+        WorkspacePermissionsPair(testWorkspaces.workspace2Id, WorkspaceAccessLevels.Write),
+        WorkspacePermissionsPair(testWorkspaces.workspace3Id, WorkspaceAccessLevels.NoAccess)), // workspace 3 is in a realm
+      "writer-access" -> Set(
+        WorkspacePermissionsPair(testWorkspaces.workspace1Id, WorkspaceAccessLevels.Write)),
+      "reader-access" -> Set(
+        WorkspacePermissionsPair(testWorkspaces.workspace1Id, WorkspaceAccessLevels.Read)),
+      "unknown-user" -> Set.empty[WorkspacePermissionsPair]
+    )
+
+    for (access <- Seq("project-owner-access", "owner-access", "writer-access", "reader-access", "unknown-user")) {
+      it should s"return access check correctly for $access requests" in withTestWorkspacesApiServicesAndUser(access) { services =>
+        val criteria = Seq(testWorkspaces.workspace1Id, testWorkspaces.workspace2Id, testWorkspaces.workspace3Id)
+        Post(s"/workspaces/access", httpJson(criteria)) ~> sealRoute(services.workspaceRoutes) ~> check {
+          val permissionPairs = responseAs[Seq[WorkspacePermissionsPair]].toSet
+          assertResult(expected(access)) {
+            permissionPairs
+          }
+        }
+      }
+    }
+  }
+
+  it should s"return access check without error in the presence of unknown ids" in withTestWorkspacesApiServicesAndUser("project-owner-access") { services =>
+    val criteria = Seq(UUID.randomUUID().toString, testWorkspaces.workspace2Id, testWorkspaces.workspace3Id, UUID.randomUUID().toString)
+    Post(s"/workspaces/access", httpJson(criteria)) ~> sealRoute(services.workspaceRoutes) ~> check {
+      val permissionPairs = responseAs[Seq[WorkspacePermissionsPair]].toSet
+      val expected = Set(
+        WorkspacePermissionsPair(testWorkspaces.workspace2Id, WorkspaceAccessLevels.ProjectOwner),
+        WorkspacePermissionsPair(testWorkspaces.workspace3Id, WorkspaceAccessLevels.NoAccess))
+
+      assertResult(expected) {
+        permissionPairs
+      }
+    }
+  }
+
+  it should s"return empty access check when only unknown ids" in withTestWorkspacesApiServicesAndUser("project-owner-access") { services =>
+    val criteria = Seq(UUID.randomUUID().toString, UUID.randomUUID().toString, UUID.randomUUID().toString)
+    Post(s"/workspaces/access", httpJson(criteria)) ~> sealRoute(services.workspaceRoutes) ~> check {
+      val permissionPairs = responseAs[Seq[WorkspacePermissionsPair]].toSet
+      assert(permissionPairs.isEmpty)
+    }
+  }
+
+  it should s"return empty access check when no ids specified" in withTestWorkspacesApiServicesAndUser("project-owner-access") { services =>
+    val criteria = Seq.empty[String]
+    Post(s"/workspaces/access", httpJson(criteria)) ~> sealRoute(services.workspaceRoutes) ~> check {
+      val permissionPairs = responseAs[Seq[WorkspacePermissionsPair]].toSet
+      assert(permissionPairs.isEmpty)
+    }
+  }
+
+  it should s"return error access check when not given uuids" in withTestWorkspacesApiServicesAndUser("project-owner-access") { services =>
+    val criteria = Seq(UUID.randomUUID().toString,"hello","world",UUID.randomUUID().toString)
+    Post(s"/workspaces/access", httpJson(criteria)) ~> sealRoute(services.workspaceRoutes) ~> check {
+      assertResult(StatusCodes.InternalServerError) {status}
+    }
+  }
+
+  it should s"return error access check when not given valid json" in withTestWorkspacesApiServicesAndUser("project-owner-access") { services =>
+    Post(s"/workspaces/access", "no.") ~> sealRoute(services.workspaceRoutes) ~> check {
+      assertResult(StatusCodes.UnsupportedMediaType) {status}
     }
   }
 }
