@@ -226,16 +226,16 @@ trait AttributeComponent {
       insertInBatches(this, attributes)
     }
 
-    def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
+    private def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, None, None, Option(0), false)
     }
 
-    def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
+    private def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
       val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, Option(entityId), listIndex, listLength, false)
     }
 
-    def marshalAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
+    private def marshalAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
       val valueBoolean = value match {
         case AttributeBoolean(b) => Option(b)
         case _ => None
