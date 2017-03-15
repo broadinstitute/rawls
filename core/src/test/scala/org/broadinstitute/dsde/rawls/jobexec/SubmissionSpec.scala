@@ -103,7 +103,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
 
     val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, testData.userOwner, "std","someMethod",sample1.toReference,
       Seq(
-        Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted)
+        Workflow(badLogsAndMetadataWorkflowId,WorkflowStatuses.Submitted,testDate,sample1.toReference, testData.inputResolutions)), SubmissionStatuses.Submitted, false)
 
     val extantWorkflowOutputs = WorkflowOutputs( existingWorkflowId.get,
       Map(
