@@ -356,18 +356,9 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def getTags(query: String): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getAllTags().map { recs =>
-        val tagValues: Seq[String] = (recs collect {
-
-          case record: WorkspaceAttributeRecord => record.valueString collect {
-            case string: String if string.toLowerCase.contains(query.toLowerCase) => string
-          }
-
-          // fruitless type test: a value of type org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceAttributeRecord cannot also be a org.broadinstitute.dsde.rawls.model.AttributeValueList
-//          case ss: AttributeValueList => ss.list collect {
-//            case s: AttributeString => s.value // if (s.value.contains(query)) => s.value
-        }).flatten
-        RequestComplete(StatusCodes.OK, tagValues.toSet) // making it a set so there's no duplicates
+      dataAccess.workspaceQuery.getAllTags().map { tags =>
+        val filteredTags = tags.filter(_.toLowerCase.contains(query.toLowerCase))
+        RequestComplete(StatusCodes.OK, filteredTags.toSet)
       }
     }
 

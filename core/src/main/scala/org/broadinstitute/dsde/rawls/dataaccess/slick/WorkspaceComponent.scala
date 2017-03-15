@@ -134,8 +134,10 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
-    def getAllTags() = { //: ReadAction[Seq[Attribute]] = {
-      workspaceAttributeQuery.findByNameQuery(AttributeName("tag", "tags")).result
+    def getAllTags(): ReadAction[Seq[String]] = {
+      workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName("tag", "tags")).result map {recs =>
+        recs map (_.get)
+      }
     }
 
     def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] = {

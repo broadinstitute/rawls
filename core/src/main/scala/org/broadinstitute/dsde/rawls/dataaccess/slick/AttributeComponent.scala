@@ -269,6 +269,14 @@ trait AttributeComponent {
       }
     }
 
+    def findUniqueStringsByNameQuery(attrName: AttributeName) = {
+      filter(rec =>
+        rec.namespace === attrName.namespace &&
+        rec.name === attrName.name &&
+        rec.valueString.isDefined
+      ).map(_.valueString).distinct
+    }
+
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
