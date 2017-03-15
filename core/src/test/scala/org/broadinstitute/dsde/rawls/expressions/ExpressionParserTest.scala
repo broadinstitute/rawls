@@ -412,7 +412,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       }
 
       assertResult(Map("sample1" -> TrySuccess(Seq(testData.sample1.attributes.get(AttributeName.withDefaultNS("type")).get)))) {
-        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref.type"))
@@ -444,7 +444,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
       //      }
 
       intercept[RawlsException] {
-        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "workspace.sample1ref."))
@@ -509,7 +509,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(Set("sample2")) {
         val ent = runAndWait(entityQuery.get(workspaceContext, "Pair", "pair1")).get
-        val libraryAttribute = AttributeName("library", "lib_case") -> AttributeEntityReference("Sample", "sample2")
+        val libraryAttribute = AttributeName("library", "lib_case") -> testData.sample2.toReference
         runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = ent.attributes + libraryAttribute)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "this.library:lib_case")).map(_.name).toSet
@@ -517,7 +517,7 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
 
       assertResult(Set("sample1", "sample2", "sample3")) {
         val ent = runAndWait(entityQuery.get(workspaceContext, "Individual", "indiv1")).get
-        val libraryAttribute = AttributeName("library", "lib_set") -> AttributeEntityReference("SampleSet", "sset1")
+        val libraryAttribute = AttributeName("library", "lib_set") -> testData.sset1.toReference
         runAndWait(entityQuery.save(workspaceContext, ent.copy(attributes = ent.attributes + libraryAttribute)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Individual", "indiv1", "this.library:lib_set.samples")).map(_.name).toSet
@@ -529,14 +529,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
     withTestWorkspace { workspaceContext =>
 
       assertResult(Set("sample1")) {
-        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("sample1ref") -> testData.sample1.toReference)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.sample1ref")).map(_.name).toSet
       }
 
       assertResult(Set("sample2")) {
-        val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
+        val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName.withDefaultNS("samplerefs") -> reflist)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
@@ -549,14 +549,14 @@ class ExpressionParserTest extends FunSuite with TestDriverComponent {
     withTestWorkspace { workspaceContext =>
 
       assertResult(Set("sample1")) {
-        val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "s1ref") -> AttributeEntityReference("Sample", "sample1"))
+        val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "s1ref") -> testData.sample1.toReference)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 
         runAndWait(evalFinalEntity(workspaceContext, "Pair", "pair1", "workspace.library:s1ref")).map(_.name).toSet
       }
 
       assertResult(Set("sample2")) {
-        val reflist = AttributeEntityReferenceList(Seq(AttributeEntityReference("Sample", "sample2")))
+        val reflist = AttributeEntityReferenceList(Seq(testData.sample2.toReference))
         val attributesPlusReference = testData.workspace.attributes + (AttributeName("library", "srefs") -> reflist)
         runAndWait(workspaceQuery.save(testData.workspace.copy(attributes = attributesPlusReference)))
 

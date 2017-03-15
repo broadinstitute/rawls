@@ -29,8 +29,8 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
   def insertWorkspaceAttributeRecords(workspaceId: UUID, attributeName: AttributeName, attribute: Attribute): ReadWriteAction[Option[Int]] = {
     entityQuery.findEntityByWorkspace(workspaceId).result flatMap { entityRecords =>
-      val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
-      workspaceAttributeQuery ++= workspaceAttributeQuery.marshalAttribute(workspaceId, attributeName, attribute, entityIdsByRef)
+      val entityRecordsMap = entityRecords.map(e => e.toReference -> e.id).toMap
+      workspaceAttributeQuery ++= workspaceAttributeQuery.marshalAttribute(workspaceId, attributeName, attribute, entityRecordsMap)
     }
   }
 

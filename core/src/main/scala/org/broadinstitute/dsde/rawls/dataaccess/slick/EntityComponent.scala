@@ -286,8 +286,7 @@ trait EntityComponent {
         preExistingEntityRecs <- lookupEntitiesByNames(workspaceContext.workspaceId, entities.map(_.toReference)).map(populateAllAttributeValues(_, entities))
         savingEntityRecs <- insertNewEntities(workspaceContext, entities, preExistingEntityRecs).map(_ ++ preExistingEntityRecs)
         referencedAndSavingEntityRecs <- lookupNotYetLoadedReferences(workspaceContext, entities, savingEntityRecs).map(_ ++ savingEntityRecs)
-        entityIdsByRef = referencedAndSavingEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name) -> r.id).toMap
-        _ <- upsertAttributes(entities, savingEntityRecs.map(_.id), entityIdsByRef)
+        _ <- upsertAttributes(entities, savingEntityRecs.map(_.id), referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap)
         _ <- DBIO.seq(preExistingEntityRecs map optimisticLockUpdate: _ *)
       } yield entities
     }
@@ -295,7 +294,7 @@ trait EntityComponent {
     def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord], entitiesToSave: Traversable[Entity]): Seq[EntityRecord] = {
       val entitiesByRef = entitiesToSave.map(e => e.toReference -> e).toMap
       entityRecsFromDb.map { rec =>
-        rec.copy(allAttributeValues = createAllAttributesString(entitiesByRef(AttributeEntityReference(rec.entityType, rec.name))))
+        rec.copy(allAttributeValues = createAllAttributesString(entitiesByRef(rec.toReference)))
       }
     }
 
@@ -331,11 +330,11 @@ trait EntityComponent {
           case r: AttributeEntityReference => Seq(r)
           case _ => Seq.empty
         }
-      } yield ref).toSet -- alreadyLoadedEntityRecs.map(r => AttributeEntityReference(r.entityType, r.name))
+      } yield ref).toSet -- alreadyLoadedEntityRecs.map(_.toReference)
 
       lookupEntitiesByNames(workspaceContext.workspaceId, notYetLoadedEntityRecs) map { foundEntities =>
         if (foundEntities.size != notYetLoadedEntityRecs.size) {
-          val notFoundRefs = notYetLoadedEntityRecs -- foundEntities.map(r => AttributeEntityReference(r.entityType, r.name))
+          val notFoundRefs = notYetLoadedEntityRecs -- foundEntities.map(_.toReference)
           throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Could not resolve some entity references", notFoundRefs.map { missingRef =>
             ErrorReport(s"${missingRef.entityType} ${missingRef.entityName} not found", Seq.empty)
           }.toSeq))
@@ -481,7 +480,7 @@ trait EntityComponent {
       val entitiesGrouped = entities.grouped(batchSize).toSeq
 
       DBIO.sequence(entitiesGrouped map { batch =>
-        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map(r => AttributeEntityReference(r.entityType, r.name)))
+        EntityRecordRawSqlQuery.action(workspaceContext.workspaceId, batch.map(_.toReference))
       }).map(_.flatten)
     }
 

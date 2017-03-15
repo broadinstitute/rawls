@@ -419,8 +419,6 @@ trait AttributeComponent {
       }
     }
 
-    private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = {
-      AttributeEntityReference(entityType = referredEntity.entityType, entityName = referredEntity.name)
-    }
+    private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
   }
 }

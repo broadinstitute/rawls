@@ -106,7 +106,7 @@ trait WorkflowComponent {
 
     def createWorkflows(workspaceContext: SlickWorkspaceContext, submissionId: UUID, workflows: Seq[Workflow]): ReadWriteAction[Seq[Workflow]] = {
       def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], entityRecs: Seq[EntityRecord]): ReadWriteAction[Map[AttributeEntityReference, WorkflowRecord]] = {
-        val entityRecsMap = entityRecs.map(e => AttributeEntityReference(e.entityType, e.name) -> e.id).toMap
+        val entityRecsMap = entityRecs.map(e => e.toReference -> e.id).toMap
         val recsToInsert = workflows.map(workflow => marshalNewWorkflow(submissionId, workflow, entityRecsMap(workflow.workflowEntity)))
 
         val insertedRecQuery = for {
@@ -116,7 +116,7 @@ trait WorkflowComponent {
 
         insertInBatches(workflowQuery, recsToInsert) andThen
         insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
-          AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name) -> workflowRec
+          workflowEntityRec.toReference -> workflowRec
         }.toMap)
       }
 
@@ -136,7 +136,7 @@ trait WorkflowComponent {
 
         insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
         insertedRecQuery.result.map(_.map { case (workflowEntityRec, insertedInputResolutionRec) =>
-          val ref = AttributeEntityReference(workflowEntityRec.entityType, workflowEntityRec.name)
+          val ref = workflowEntityRec.toReference
           val name = insertedInputResolutionRec.inputName
           (ref, name) -> insertedInputResolutionRec
         }.toMap)
@@ -501,9 +501,7 @@ trait WorkflowComponent {
       workflowMsgRecs.map(rec => AttributeString(rec.message))
     }
 
-    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = {
-      AttributeEntityReference(entityRec.entityType, entityRec.name)
-    }
+    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = entityRec.toReference
 
     private def deleteMessagesAndInputs(id: Long): DBIOAction[Int, NoStream, Write with Write] = {
         findWorkflowMessagesById(id).delete andThen

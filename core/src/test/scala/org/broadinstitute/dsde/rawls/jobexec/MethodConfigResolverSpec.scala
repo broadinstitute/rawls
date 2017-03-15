@@ -57,23 +57,23 @@ class MethodConfigResolverSpec extends WordSpecLike with Matchers with TestDrive
   val intOptName = "w1.t1.int_opt"
   val intArrayName = "w1.int_array"
 
-  val workspace = new Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
+  val workspace = Workspace("workspaces", "test_workspace", None, UUID.randomUUID().toString(), "aBucket", currentTime(), currentTime(), "testUser", Map.empty, Map.empty, Map.empty)
 
-  val sampleGood = new Entity("sampleGood", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(1)))
-  val sampleGood2 = new Entity("sampleGood2", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(2)))
-  val sampleMissingValue = new Entity("sampleMissingValue", "Sample", Map.empty)
+  val sampleGood = Entity("sampleGood", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(1)))
+  val sampleGood2 = Entity("sampleGood2", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(2)))
+  val sampleMissingValue = Entity("sampleMissingValue", "Sample", Map.empty)
 
-  val sampleSet = new Entity("daSampleSet", "SampleSet",
+  val sampleSet = Entity("daSampleSet", "SampleSet",
     Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
-      AttributeEntityReference("Sample", "sampleGood"),
-      AttributeEntityReference("Sample", "sampleMissingValue")
-    )))
+      sampleGood.toReference,
+      sampleMissingValue.toReference)
+    ))
   )
 
-  val sampleSet2 = new Entity("daSampleSet2", "SampleSet",
+  val sampleSet2 = Entity("daSampleSet2", "SampleSet",
     Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(
-      AttributeEntityReference("Sample", "sampleGood"),
-      AttributeEntityReference("Sample", "sampleGood2")
+      sampleGood.toReference,
+      sampleGood2.toReference
     )))
   )
 
