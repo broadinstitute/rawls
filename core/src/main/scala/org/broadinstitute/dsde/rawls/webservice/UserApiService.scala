@@ -104,7 +104,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
           UserService.GetUserGroup(RawlsGroupRef(RawlsGroupName(groupName))))
       }
     } ~
-    path("groups") {
+    pathPrefix("groups") {
       pathEnd {
         get {
           requestContext => perRequest(requestContext,
@@ -112,7 +112,7 @@ trait UserApiService extends HttpService with PerRequestCreator with UserInfoDir
             UserService.ListManagedGroupsForUser)
         }
       } ~
-      path(Segment) { groupName =>
+        pathPrefix(Segment) { groupName =>
         val groupRef = ManagedGroupRef(RawlsGroupName(groupName))
         pathEnd {
           get {

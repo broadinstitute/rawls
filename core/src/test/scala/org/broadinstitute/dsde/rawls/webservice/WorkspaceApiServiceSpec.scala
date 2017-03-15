@@ -294,6 +294,27 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 403 creating a workspace with a Realm for owner and not user" in withTestDataApiServices { services =>
+    val realmGroup = createAndSaveManagedGroup("realm-for-testing", Set.empty, Set(testData.userOwner))
+    val workspaceWithRealm = WorkspaceRequest(
+      namespace = testData.wsName.namespace,
+      name = "newWorkspace",
+      realm = Option(realmGroup),
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(workspaceWithRealm)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Forbidden, response.entity.asString) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(workspaceWithRealm.toWorkspaceName))
+        }
+      }
+  }
+
   it should "return 403 on create workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
     val invalidAttrNamespace = "invalid"
 
@@ -901,8 +922,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef]): ManagedGroup = {
-    val realmGroup = makeManagedGroup(name, users)
+  def createAndSaveManagedGroup(name: String, users: Set[RawlsUserRef], owners: Set[RawlsUserRef] = Set.empty): ManagedGroup = {
+    val realmGroup = makeManagedGroup(name, users, owners = owners)
     runAndWait(rawlsGroupQuery.save(realmGroup.usersGroup) andThen rawlsGroupQuery.save(realmGroup.ownersGroup) andThen managedGroupQuery.createManagedGroup(realmGroup))
   }
 

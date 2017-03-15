@@ -57,7 +57,7 @@ trait ManagedGroupComponent {
       } yield {
         for {
           managedGroupRecord <- allManagedGroupRecs
-          groupForUser <- groupsForUser if Seq(managedGroupRecord.usersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
+          groupForUser <- groupsForUser if Seq(managedGroupRecord.ownersGroupName, managedGroupRecord.usersGroupName).contains(groupForUser.groupName.value)
         } yield {
           val role = groupForUser match {
             case RawlsGroupRef(RawlsGroupName(name)) if name == managedGroupRecord.ownersGroupName => ManagedRoles.Owner

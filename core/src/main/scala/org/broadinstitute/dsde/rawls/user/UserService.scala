@@ -538,11 +538,15 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteGroup(groupRef: RawlsGroupRef) = {
-    dataSource.inTransaction { dataAccess =>
-      withGroup(groupRef, dataAccess) { group =>
-        dataAccess.rawlsGroupQuery.delete(groupRef) andThen
-          DBIO.from(gcsDAO.deleteGoogleGroup(group)) map { _ => RequestComplete(StatusCodes.OK) }
+    for {
+      group <- dataSource.inTransaction { dataAccess =>
+        withGroup(groupRef, dataAccess) { group =>
+          dataAccess.rawlsGroupQuery.delete(groupRef) map { _ => group }
+        }
       }
+      _ <- gcsDAO.deleteGoogleGroup(group)
+    } yield {
+      RequestComplete(StatusCodes.OK)
     }
   }
 
@@ -684,14 +688,22 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   }
 
   def deleteManagedGroup(groupRef: ManagedGroupRef) = {
+    // note that this function does not call deleteGroup (in this class) which does the desired work of deleting
+    // a rawls group and associated google group because we need to catch any FK constraint violations caused by
+    // deleting the rawls groups and if there are any rollback the db delete and not remove google groups
     for {
       groupEmailsToDelete <- dataSource.inTransaction { dataAccess =>
         withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-          dataAccess.managedGroupQuery.deleteManagedGroup(groupRef).map(_ => Seq(managedGroup.usersGroup, managedGroup.ownersGroup))
+          DBIO.seq(
+            dataAccess.managedGroupQuery.deleteManagedGroup(groupRef),
+            dataAccess.rawlsGroupQuery.delete(managedGroup.usersGroup),
+            dataAccess.rawlsGroupQuery.delete(managedGroup.ownersGroup)
+          ).map(_ => Seq(managedGroup.usersGroup, managedGroup.ownersGroup))
         }
       }.recover {
-        // assume any sql exception is a FK violation
-        case sqle: SQLException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Cannot delete group because it is in use", sqle))
+        // assume any sql exception is a FK violation, to be more specific catch MySQLIntegrityConstraintViolationException
+        // but it is good to keep the code free of mysql specific code
+        case sqle: SQLException => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Cannot delete group because it is in use", sqle))
       }
 
       _ <- Future.traverse(groupEmailsToDelete) { group =>
