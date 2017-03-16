@@ -361,7 +361,6 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-
   def listWorkspaces(): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
 

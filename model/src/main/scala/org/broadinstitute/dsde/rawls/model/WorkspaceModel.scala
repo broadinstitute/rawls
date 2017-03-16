@@ -55,7 +55,7 @@ object AttributeName {
 
   def withLibraryNS(name: String) = AttributeName(libraryNamespace, name)
 
-  def withTagsNS(name: String) = AttributeName(tagsNamespace, name) // to be used for tests
+  def withTagsNS(name: String) = AttributeName(tagsNamespace, name)
 
   def toDelimitedName(aName: AttributeName): String = {
     if (aName.namespace == defaultNamespace) aName.name
