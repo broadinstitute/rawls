@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
@@ -14,15 +15,15 @@ import spray.http.StatusCodes
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Future, Await, ExecutionContext}
 
 class BillingApiServiceSpec extends ApiServiceSpec {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
-    val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+  def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
+    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try {
       testCode(apiService)
     } finally {
@@ -220,6 +221,25 @@ class BillingApiServiceSpec extends ApiServiceSpec {
             }
         }
       }
+  }
+
+  it should "rollback billing project inserts when there is a google error" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    withApiServices(dataSource, new MockGoogleServicesDAO("test") {
+      override def createProject(projectName: RawlsBillingProjectName, billingAccount: RawlsBillingAccount): Future[RawlsBillingProjectOperationRecord] = {
+        Future.failed(new Exception("test exception"))
+      }
+    }) { services =>
+      val projectName = RawlsBillingProjectName("test_good2")
+
+      Post("/billing", CreateRawlsBillingProjectFullRequest(projectName, services.gcsDAO.accessibleBillingAccountName)) ~>
+        sealRoute(services.billingRoutes) ~>
+        check {
+          assertResult(StatusCodes.InternalServerError) {
+            status
+          }
+          runAndWait(rawlsBillingProjectQuery.load(projectName)) map { p => fail("did not rollback project inserts: " + p) }
+        }
+    }
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withTestDataApiServices { services =>
