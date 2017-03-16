@@ -274,7 +274,7 @@ trait AttributeComponent {
         rec.namespace === attrName.namespace &&
         rec.name === attrName.name &&
         rec.valueString.isDefined &&
-        rec.valueString.like('%' + queryString + '%')
+        rec.valueString.like(s"%$queryString%")
       ).map(_.valueString).distinct
     }
 

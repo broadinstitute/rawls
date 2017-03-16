@@ -853,4 +853,44 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
   }
+
+  it should "return the correct tags from autocomplete" in withTestDataServices { services =>
+
+    // when no tags, return empty set
+    val res1 = Await.result(services.workspaceService.getTags("notag"), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set()) {
+      res1.response._2
+    }
+
+    // add a tag
+    Await.result(services.workspaceService.updateWorkspace(testData.workspace.toWorkspaceName, Seq(AddUpdateAttribute(AttributeName.withTagsNS("tags"), AttributeString("cancer")))), Duration.Inf)
+
+    // searching for tag that doesn't exist should return empty set
+    val res2 = Await.result(services.workspaceService.getTags("notag"), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set()) {
+      res2.response._2
+    }
+
+    // searching for tag that does exist should return the tag (query string case doesn't matter)
+    val res3 = Await.result(services.workspaceService.getTags("aNc"), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set("cancer")) {
+      res3.response._2
+    }
+
+    // remove tags
+    Await.result(services.workspaceService.updateWorkspace(testData.workspace.toWorkspaceName, Seq(RemoveAttribute(AttributeName.withTagsNS("tags")))), Duration.Inf)
+
+    // make sure that tags no longer exists
+    val res4 = Await.result(services.workspaceService.getTags("aNc"), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set()) {
+      res4.response._2
+    }
+
+  }
+
+
 }
