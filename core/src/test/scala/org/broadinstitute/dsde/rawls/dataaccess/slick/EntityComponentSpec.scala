@@ -452,6 +452,20 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     Map.empty
   )
 
+  val workspace3 = Workspace(
+    namespace = testData.wsName.namespace + "3",
+    name = testData.wsName.name + "3",
+    None,
+    workspaceId = UUID.randomUUID.toString,
+    bucketName = "aBucket",
+    createdDate = currentTime(),
+    lastModified = currentTime(),
+    createdBy = "Joe Biden",
+    Map.empty,
+    Map.empty,
+    Map.empty
+  )
+
   it should "copy entities without a conflict" in withDefaultTestDatabase {
     runAndWait(workspaceQuery.save(workspace2))
     withWorkspaceContext(testData.workspace) { context1 =>
@@ -530,7 +544,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context, Seq(testData.sample1))).toSet
         }
 
-        assertResult(Set(testData.sample1, testData.aliquot1)) {
+        assertResult(Set(testData.sample1)) {
           runAndWait(entityQuery.copyEntities(context, context, "Sample", Seq("sample1"))).toSet
         }
 
@@ -538,6 +552,41 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         assert(runAndWait(entityQuery.list(context, "Sample")).toList.filter(entity => entity == testData.sample1).size == 1)
       }
 
+  }
+
+  it should "copy entities with a conflict in the entity subtrees and properly link already existing entities" in withDefaultTestDatabase {
+
+    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(workspaceQuery.save(workspace3))
+    withWorkspaceContext(workspace2) { context1 =>
+      withWorkspaceContext(workspace3) { context2 =>
+        val participant1 = Entity("participant1", "participant", Map.empty)
+        val sample1 = Entity("sample1", "sample", Map(AttributeName.withDefaultNS("participant") -> AttributeEntityReference("participant", "participant1")))
+
+        runAndWait(entityQuery.save(context1, participant1))
+        runAndWait(entityQuery.save(context2, participant1))
+        runAndWait(entityQuery.save(context2, sample1))
+
+        assertResult(List()){
+          runAndWait(entityQuery.list(context1, "sample")).toList
+        }
+
+        assertResult(List(participant1)){
+          runAndWait(entityQuery.list(context1, "participant")).toList
+        }
+
+        runAndWait(entityQuery.copyEntities(context2, context1, "sample", Seq("sample1")))
+
+        assertResult(List(sample1)){
+          runAndWait(entityQuery.list(context1, "sample")).toList
+        }
+
+        assertResult(List(participant1)){
+          runAndWait(entityQuery.list(context1, "participant")).toList
+        }
+
+      }
+    }
   }
 
   it should "fail when putting dots in user-specified strings" in withDefaultTestDatabase { 
