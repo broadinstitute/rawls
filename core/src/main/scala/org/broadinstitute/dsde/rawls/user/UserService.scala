@@ -845,24 +845,28 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       billingAccountNames.find(_.accountName == billingAccountName) match {
         case Some(billingAccount) if billingAccount.firecloudHasAccess =>
           for {
-            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount)
-            result <- dataSource.inTransaction { dataAccess =>
+            _ <- dataSource.inTransaction { dataAccess =>
               dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
                 case None =>
-                  for {
-                    groups <- createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo)))
-                    _ <- dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
-                    _ <- dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
-
-                  } yield {
-                    RequestComplete(StatusCodes.Created)
+                  createBillingProjectGroupsNoGoogle(dataAccess, projectName, Set(RawlsUser(userInfo))) flatMap { groups =>
+                    dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(projectName, groups, "gs://" + gcsDAO.getCromwellAuthBucketName(projectName), CreationStatuses.Creating, Option(billingAccountName), None))
                   }
 
-                case Some(_) => DBIO.successful(RequestComplete(StatusCodes.Conflict))
+                case Some(_) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists"))
               }
             }
+
+            createProjectOperation <- gcsDAO.createProject(projectName, billingAccount).recoverWith {
+              case t: Throwable =>
+                // failed to create project in google land, rollback inserts above
+                dataSource.inTransaction { dataAccess => dataAccess.rawlsBillingProjectQuery.delete(projectName) } map(_ => throw t)
+            }
+
+            _ <- dataSource.inTransaction { dataAccess =>
+              dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
+            }
           } yield {
-            result
+            RequestComplete(StatusCodes.Created)
           }
         case None => Future.successful(RequestComplete(ErrorReport(StatusCodes.Forbidden, s"You must be a billing administrator of ${billingAccountName.value} to create a project with it.")))
         case Some(billingAccount) if !billingAccount.firecloudHasAccess => Future.successful(RequestComplete(ErrorReport(StatusCodes.BadRequest, s"${gcsDAO.billingEmail} must be a billing administrator of ${billingAccountName.value} to create a project with it.")))

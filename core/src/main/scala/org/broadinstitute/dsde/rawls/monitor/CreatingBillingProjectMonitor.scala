@@ -90,8 +90,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
         // see GoogleServicesDAO.createProject for more details
         val nextStepFuture = operationsByProject(project.projectName) match {
           case Seq() =>
-            // for some reason there are no operations, mark it as an error
-            Future.successful(project.copy(status = CreationStatuses.Error, message = Option("Internal error: no operations created")))
+            // there are no operations, there is a small window when this can happen but it should resolve itself so let it pass
+            Future.successful(project)
 
           case Seq(RawlsBillingProjectOperationRecord(_, gcsDAO.CREATE_PROJECT_OPERATION, _, true, None, _)) =>
             // create project operation finished successfully
