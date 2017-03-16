@@ -177,14 +177,11 @@ trait RawlsGroupComponent {
       checkMembershipRecursively(userRef, Set.empty, Set(groupRef))
     }
 
-    def loadGroupUserEmails(groupRef: RawlsGroupRef): ReadAction[Seq[RawlsUserEmail]] = {
-      (findUsersByGroupName(groupRef.groupName.value) join
-        rawlsUserQuery on (_.userSubjectId === _.userSubjectId) map (_._2.userEmail)).result.map(_.map(RawlsUserEmail))
-    }
+    def loadMemberEmails(groupRef: RawlsGroupRef): ReadAction[Seq[String]] = {
+      val userEmailQuery = (findUsersByGroupName(groupRef.groupName.value) join rawlsUserQuery on (_.userSubjectId === _.userSubjectId) map (_._2.userEmail))
+      val subGroupEmailQuery = (findSubgroupsByGroupName(groupRef.groupName.value) join rawlsGroupQuery on (_.childGroupName === _.groupName) map (_._2.groupEmail))
 
-    def loadGroupSubGroupEmails(groupRef: RawlsGroupRef): ReadAction[Seq[RawlsGroupEmail]] = {
-      (findSubgroupsByGroupName(groupRef.groupName.value) join
-        rawlsGroupQuery on (_.childGroupName === _.groupName) map (_._2.groupEmail)).result.map(_.map(RawlsGroupEmail))
+      (userEmailQuery unionAll subGroupEmailQuery).result
     }
     
     def listGroupsForUser(userRef: RawlsUserRef): ReadAction[Set[RawlsGroupRef]] = {

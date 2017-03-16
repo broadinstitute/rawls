@@ -28,30 +28,9 @@ object RawlsGroup {
   implicit def toRef(g: RawlsGroup): RawlsGroupRef = RawlsGroupRef(g.groupName)
 }
 
-case class RawlsGroupShort(groupName: RawlsGroupName, groupEmail: RawlsGroupEmail)
-
 trait Managed {
   val usersGroup: RawlsGroup
   val ownersGroup: RawlsGroup
-}
-
-object ManagedRoles {
-  sealed trait ManagedRole extends RawlsEnumeration[ManagedRole] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
-
-    override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
-  }
-
-  def withName(name: String): ManagedRole = name.toLowerCase match {
-    case "owner" => Owner
-    case "user" => User
-    case _ => throw new RawlsException(s"invalid role [${name}]")
-  }
-
-  case object Owner extends ManagedRole
-  case object User extends ManagedRole
-
-  val all: Set[ManagedRole] = Set(Owner, User)
 }
 
 object ManagedGroup {
@@ -59,7 +38,6 @@ object ManagedGroup {
 }
 
 case class ManagedGroup(usersGroup: RawlsGroup, ownersGroup: RawlsGroup) extends Managed
-case class ManagedGroupAccess(managedGroupRef: ManagedGroupRef, accessLevel: ManagedRole)
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
 case class RawlsBillingProject(projectName: RawlsBillingProjectName, groups: Map[ProjectRoles.ProjectRole, RawlsGroup], cromwellAuthBucketUrl: String, status: CreationStatuses.CreationStatus, billingAccount: Option[RawlsBillingAccountName], message: Option[String])
@@ -139,18 +117,7 @@ class UserAuthJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object ManagedRoleFormat extends RootJsonFormat[ManagedRole] {
-    override def write(obj: ManagedRole): JsValue = JsString(obj.toString)
-
-    override def read(json: JsValue): ManagedRole = json match {
-      case JsString(name) => ManagedRoles.withName(name)
-      case _ => throw new DeserializationException("could not deserialize managed role")
-    }
-  }
-
   implicit val RawlsGroupFormat = jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
-
-  implicit val RawlsGroupShortFormat = jsonFormat2(RawlsGroupShort)
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
@@ -176,10 +143,6 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
 
   implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
-
-  implicit val ManagedGroupFormat = jsonFormat2(ManagedGroup.apply)
-
-  implicit val ManagedGroupAccessFormat = jsonFormat2(ManagedGroupAccess)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

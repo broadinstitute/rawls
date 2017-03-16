@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Notifications._
 import org.broadinstitute.dsde.rawls.model.ManagedRoles.ManagedRole
-import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.user.UserService._
@@ -25,6 +24,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -513,10 +513,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       dataAccess.rawlsGroupQuery.load(groupRef) flatMap {
         case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Group ${groupRef.groupName.value} does not exist")))
         case Some(group) =>
-          for {
-            memberUsers <- dataAccess.rawlsGroupQuery.loadGroupUserEmails(group)
-            memberGroups <- dataAccess.rawlsGroupQuery.loadGroupSubGroupEmails(group)
-          } yield RequestComplete(StatusCodes.OK, UserList(memberUsers.map(_.value) ++ memberGroups.map(_.value)))
+          dataAccess.rawlsGroupQuery.loadMemberEmails(group).map(memberEmails => RequestComplete(StatusCodes.OK, UserList(memberEmails)))
       }
     }
   }
@@ -617,7 +614,12 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   def getManagedGroup(groupRef: ManagedGroupRef):  Future[PerRequestMessage] = {
     dataSource.inTransaction { dataAccess =>
       withManagedGroupOwnerAccess(groupRef, RawlsUser(userInfo), dataAccess) { managedGroup =>
-        DBIO.successful(RequestComplete(managedGroup))
+        for {
+          usersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.usersGroup)
+          ownersEmails <- dataAccess.rawlsGroupQuery.loadMemberEmails(managedGroup.ownersGroup)
+        } yield {
+          RequestComplete(ManagedGroupWithMembers(managedGroup.usersGroup.toRawlsGroupShort, managedGroup.ownersGroup.toRawlsGroupShort, usersEmails, ownersEmails))
+        }
       }
     }
   }

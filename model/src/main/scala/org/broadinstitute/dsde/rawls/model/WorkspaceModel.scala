@@ -345,6 +345,8 @@ case class WorkspaceTag(tag: String, count: Int)
 
 class WorkspaceJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
+  import UserModelJsonSupport.RawlsGroupRefFormat
+  import WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
   implicit object SortDirectionFormat extends JsonFormat[SortDirection] {
     override def write(dir: SortDirection): JsValue = JsString(SortDirections.toString(dir))
@@ -368,11 +370,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityFormat = jsonFormat3(Entity)
 
-  implicit val RawlsGroupRefFormat = UserModelJsonSupport.RawlsGroupRefFormat
-
   implicit val WorkspaceRequestFormat = jsonFormat4(WorkspaceRequest)
-
-  implicit val WorkspaceAccessLevelFormat = WorkspaceACLJsonSupport.WorkspaceAccessLevelFormat
 
   implicit val WorkspaceFormat = jsonFormat12(Workspace)
 

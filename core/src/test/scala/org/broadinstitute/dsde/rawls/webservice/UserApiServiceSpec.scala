@@ -570,7 +570,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group1))
 
-    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
     Get(s"/user/group/${group3.groupName.value}") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -600,7 +600,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group1))
 
-    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
     Get(s"/user/group/${group3.groupName.value}") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -628,7 +628,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     runAndWait(rawlsGroupQuery.save(group2))
     runAndWait(rawlsGroupQuery.save(group1))
 
-    import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport._
     Get("/user/groups") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -765,7 +765,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "200 list groups for user - no groups" in withUsersTestDataApiServices(usersTestData.userNoAccess) { services =>
-    import UserAuthJsonSupport.ManagedGroupAccessFormat
+    import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessFormat
     Get("/groups") ~>
       sealRoute(services.userRoutes) ~>
       check {
@@ -798,7 +798,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
     }
 
     withApiServices(dataSource, usersTestData.userUser) { services =>
-      import UserAuthJsonSupport.ManagedGroupAccessFormat
+      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupAccessFormat
       Get("/groups") ~>
         sealRoute(services.userRoutes) ~>
         check {
@@ -817,7 +817,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   Seq((Option(ManagedRoles.User), StatusCodes.Forbidden), (Option(ManagedRoles.Owner), StatusCodes.OK), (None, StatusCodes.NotFound)).foreach { case (roleOption, expectedStatus) =>
     it should s"${expectedStatus.toString} get a group as ${roleOption.map(_.toString).getOrElse("nobody")}" in withCustomTestDatabase(usersTestData) { dataSource: SlickDataSource =>
-      import UserAuthJsonSupport.ManagedGroupFormat
+      import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupWithMembersFormat
 
       val testGroupName = "testGroup"
 
@@ -833,8 +833,14 @@ class UserApiServiceSpec extends ApiServiceSpec {
               status
             }
             if (status.isSuccess) {
-              assertResult(runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get) {
-                responseAs[ManagedGroup]
+              val managedGroup = runAndWait(managedGroupQuery.load(ManagedGroupRef(RawlsGroupName(testGroupName)))).get
+
+              assertResult(ManagedGroupWithMembers(managedGroup.usersGroup.toRawlsGroupShort,
+                managedGroup.ownersGroup.toRawlsGroupShort,
+                Seq(managedGroup.ownersGroup.groupEmail.value),
+                Seq(usersTestData.userOwner.userEmail.value, usersTestData.userUser.userEmail.value))) {
+
+                responseAs[ManagedGroupWithMembers]
               }
             }
           }
