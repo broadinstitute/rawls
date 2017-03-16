@@ -42,7 +42,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
   }
 
   "SubmissionApi" should "return 404 Not Found when creating a submission using a MethodConfiguration that doesn't exist in the workspace" in withTestDataApiServices { services =>
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest("dsde","not there","Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -53,7 +53,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.wsName.path}/methodconfigs", httpJson(methodConf)) ~>
       sealRoute(services.methodConfigRoutes) ~>
       check { assertResult(StatusCodes.Created) {status} }
-    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None))) ~>
+    Post(s"${testData.wsName.path}/submissions", httpJson(SubmissionRequest(mcName.namespace, mcName.name,"Pattern","pattern1", None, false))) ~>
       sealRoute(services.submissionRoutes) ~>
       check { assertResult(StatusCodes.NotFound) {status} }
   }
@@ -69,7 +69,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression)
+    val submissionRq = SubmissionRequest(methodConf.namespace, methodConf.name, submissionEntity.entityType, submissionEntity.name, submissionExpression, false)
     Post(s"${wsName.path}/submissions", httpJson(submissionRq)) ~>
       sealRoute(services.submissionRoutes) ~>
       check {
@@ -339,7 +339,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec {
       Workflow(Option(workflowId), WorkflowStatuses.Succeeded, testDate, testData.indiv1.toReference, Seq.empty)
     )
 
-    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done)
+    val testSubmission = Submission(UUID.randomUUID.toString, testDate, testData.userOwner, testData.methodConfig.namespace, testData.methodConfig.name, testData.indiv1.toReference, workflows, SubmissionStatuses.Done, false)
 
     runAndWait(submissionQuery.create(SlickWorkspaceContext(testData.workspace), testSubmission))
     runAndWait(workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowId, UUID.fromString(testSubmission.submissionId)).map(_.executionServiceKey).update(Option("unittestdefault")))

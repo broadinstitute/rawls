@@ -3903,6 +3903,9 @@ definitions:
       expression:
         type: string
         description: Expression that resolves to one or more entities matching the entity type in the method configuration.
+      useCallCache:
+        type: boolean
+        description: Whether or not to read from cache for this submission
 
   SubmissionValidationInput:
     description: 'method configuration input parameter, it''s name and the associated expression from the method config'

@@ -2,15 +2,13 @@ package org.broadinstitute.dsde.rawls.model
 
 import java.util.UUID
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.OutputType
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.RawlsUserRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
-import UserModelJsonSupport.RawlsUserRefFormat
-
-import spray.json._
 import org.joda.time.DateTime
-import org.broadinstitute.dsde.rawls.RawlsException
+import spray.json._
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,7 +23,8 @@ case class SubmissionRequest(
   methodConfigurationName: String,
   entityType: String,
   entityName: String,
-  expression: Option[String]
+  expression: Option[String],
+  useCallCache: Boolean
 )
 
 // Cromwell's response to workflow submission
@@ -70,7 +69,8 @@ case class ExecutionServiceWorkflowOptions(
   refresh_token: String,
   auth_bucket: String,
   final_workflow_log_dir: String,
-  default_runtime_attributes: Option[JsValue]
+  default_runtime_attributes: Option[JsValue],
+  read_from_cache: Boolean
 )
 
 // Status of a successfully started workflow
@@ -102,7 +102,8 @@ case class Submission(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   workflows: Seq[Workflow],
-  status: SubmissionStatus
+  status: SubmissionStatus,
+  useCallCache: Boolean
 )
 
 case class SubmissionStatusResponse(
@@ -126,9 +127,10 @@ case class SubmissionListResponse(
   methodConfigurationName: String,
   submissionEntity: AttributeEntityReference,
   status: SubmissionStatus,
-  workflowStatuses: Map[String, Int]
+  workflowStatuses: Map[String, Int],
+  useCallCache: Boolean
 ) {
-  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses)
+  def this(submission: Submission, rawlsUser: RawlsUser, workflowStatuses: Map[String, Int]) = this(submission.submissionId, submission.submissionDate, rawlsUser.userEmail.value, submission.methodConfigurationNamespace, submission.methodConfigurationName, submission.submissionEntity, submission.status, workflowStatuses, submission.useCallCache)
 }
 
 // method configuration input parameter, it's name and the associated expression from the method config
@@ -254,7 +256,7 @@ class ExecutionJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val SubmissionRequestFormat = jsonFormat5(SubmissionRequest)
+  implicit val SubmissionRequestFormat = jsonFormat6(SubmissionRequest)
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
@@ -272,7 +274,7 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat7(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat8(ExecutionServiceWorkflowOptions)
 
   implicit val TaskOutputFormat = jsonFormat2(TaskOutput)
 
@@ -290,13 +292,13 @@ class ExecutionJsonSupport extends JsonSupport {
 
   implicit val WorkflowFormat = jsonFormat6(Workflow)
 
-  implicit val SubmissionFormat = jsonFormat8(Submission)
+  implicit val SubmissionFormat = jsonFormat9(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
   implicit val SubmissionStatusResponseFormat = jsonFormat8(SubmissionStatusResponse)
 
-  implicit val SubmissionListResponseFormat = jsonFormat8(SubmissionListResponse)
+  implicit val SubmissionListResponseFormat = jsonFormat9(SubmissionListResponse)
 
   implicit val CallMetadataFormat = jsonFormat14(CallMetadata)
 

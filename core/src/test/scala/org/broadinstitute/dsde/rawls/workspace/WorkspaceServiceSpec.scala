@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import java.util.concurrent.TimeUnit
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -234,7 +233,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull entity records for a single entity given no expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "Sample", "sample1", None)
+      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "Sample", "sample1", None, false)
 
       //Lookup succeeds
       runAndWait(
@@ -274,7 +273,7 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
   it should "pull multiple entity records given an entity expression" in withTestDataServices { services =>
     withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "SampleSet", "sset1", Some("this.samples"))
+      val subRq = SubmissionRequest(testData.methodConfig.namespace, testData.methodConfig.name, "SampleSet", "sset1", Some("this.samples"), false)
 
       //Lookup succeeds
       runAndWait(
