@@ -3133,10 +3133,10 @@ paths:
           description: Rawls Internal Error
           schema:
             $ref: '#/definitions/ErrorReport'
-      description: Get catalog permissions for a workspace
+      description: Returns workspace catalog permissions for users and groups with the permission for the workspace
       tags:
         - workspaces
-      summary: Get workspace catalog permission
+      summary: Returns workspace catalog permissions for users and groups with the permission for the workspace
       operationId: getCatalog
       parameters:
         - in: path
@@ -4603,14 +4603,14 @@ definitions:
     description: ''
     required:
       - usersUpdated
-      - usersNotFound
+      - emailsNotFound
     properties:
       usersUpdated:
         type: array
         description: the users or groups who were updated
         items:
           $ref: '#/definitions/WorkspaceCatalogResponse'
-      usersNotFound:
+      emailsNotFound:
         type: array
         description: the emails of users or groups who were not found
         items:

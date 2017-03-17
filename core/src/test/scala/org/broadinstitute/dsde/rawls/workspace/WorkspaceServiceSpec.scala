@@ -612,27 +612,24 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
 
-    assertResult(Vector(
-      WorkspaceCatalog("obama@whitehouse.gov",true),
-      WorkspaceCatalog("group@whitehouse.gov",true)).sortWith(_.email < _.email)){
-      catalogUpdates.filter(wc => wc.catalog).sortWith(_.email < _.email)
-    }
+    assertSameElements(Vector(WorkspaceCatalog("obama@whitehouse.gov",true),WorkspaceCatalog("group@whitehouse.gov",true)), catalogUpdates)
 
     //remove catalog perm
     val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
-      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false))), Duration.Inf)
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false),WorkspaceCatalog("none@nowhere.gov", false))), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
 
-    assertResult((StatusCodes.OK, Seq.empty)) {
-      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.usersUpdated.filter(wc => wc.catalog))
+    assertResult((StatusCodes.OK, Seq("none@nowhere.gov"))) {
+      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.emailsNotFound)
     }
+    assertSameElements(Seq(WorkspaceCatalogResponse("obamaiscool", false),WorkspaceCatalogResponse("test", false)), catalogRemoveResponse.response._2.usersUpdated)
 
     //check result
     val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
 
     assertResult(Vector.empty){
-      catalogRemovals.filter(wc => wc.catalog)
+      catalogRemovals
     }
   }
 

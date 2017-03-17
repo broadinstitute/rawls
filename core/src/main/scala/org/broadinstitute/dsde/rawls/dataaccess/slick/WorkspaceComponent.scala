@@ -357,7 +357,8 @@ trait WorkspaceComponent {
     }
 
     def getUserCatalogPermissions(subjectId: RawlsUserSubjectId, workspaceContext: SlickWorkspaceContext): ReadAction[Boolean] = {
-      workspaceUserCatalogQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(rows => rows > 0) flatMap { hasCatalogPermission =>
+      workspaceUserCatalogQuery.filter(rec => rec.userSubjectId === subjectId.value && rec.workspaceId === workspaceContext.workspaceId).countDistinct.result.map(
+        rows => rows > 0) flatMap { hasCatalogPermission =>
         if(hasCatalogPermission) DBIO.successful(hasCatalogPermission)
         else rawlsGroupQuery.listGroupsForUser(RawlsUserRef(subjectId)).flatMap { userGroups =>
           val groupNames = userGroups.map(_.groupName.value)
@@ -384,7 +385,7 @@ trait WorkspaceComponent {
       } yield (access, subGroup)).map { case (access, subGroup) => (access.accessLevel, subGroup.groupEmail, subGroup.groupName) }
     }
 
-    def listEmailsAndCatalog(workspaceContext: SlickWorkspaceContext)  = {
+    def listEmailsWithCatalogAccess(workspaceContext: SlickWorkspaceContext)  = {
       val catalogUserQuery = workspaceUserCatalogQuery.filter(rec => rec.workspaceId === workspaceContext.workspaceId)
       val catalogGroupQuery = workspaceGroupCatalogQuery.filter(rec => rec.workspaceId === workspaceContext.workspaceId)
 
@@ -399,11 +400,8 @@ trait WorkspaceComponent {
       for {
         usersWithCatalog <- userEmailsWithCatalog.result
         groupsWithCatalog <- groupEmailsWithCatalog.result
-        allWSUserEmail <- getAccessAndUserEmail(workspaceContext).result.map(_.map { case(access, email, id) => email})
-        allWSGroupEmail <- getAccessAndGroupEmail(workspaceContext).result.map(_.map { case(access, email, id) => email})
       } yield {
-        val noCatalog = ((allWSUserEmail.toSet - usersWithCatalog) ++ (allWSGroupEmail.toSet - groupsWithCatalog)).map { case (email:String) => WorkspaceCatalog(email,false)}
-        (usersWithCatalog ++ groupsWithCatalog).map { case (email:String) => WorkspaceCatalog(email,true)} ++ noCatalog
+        (usersWithCatalog ++ groupsWithCatalog).map { case (email:String) => WorkspaceCatalog(email,true)}
       }
     }
 
@@ -673,21 +671,17 @@ trait WorkspaceComponent {
       }
     }
 
-    def findWorkspaceUsersAndCatalog(workspaceId: UUID): ReadAction[Set[(Either[RawlsUserRef, RawlsGroupRef], Boolean)]] = {
-      val (userQuery, subGroupQuery) = findWorkspaceUsers(workspaceId)
+    def findWorkspaceUsersAndGroupsWithCatalog(workspaceId: UUID): ReadAction[(Set[RawlsUserRef], Set[RawlsGroupRef])] = {
 
-      val usersWithCatalogPermission = userQuery.joinLeft(workspaceUserCatalogQuery).on((accessQuery, catalogQuery) => accessQuery._2 === catalogQuery.userSubjectId && accessQuery._1 === catalogQuery.workspaceId).map { case ((_, subjectId, _), hasCatalogPermission) =>
-        (subjectId, hasCatalogPermission.isDefined)
-      }
-      val groupsWithCatalogPermission = subGroupQuery.joinLeft(workspaceGroupCatalogQuery).on((accessQuery, catalogQuery) => accessQuery._2 === catalogQuery.groupName && accessQuery._1 === catalogQuery.workspaceId).map { case ((_, groupName, _), hasCatalogPermission) =>
-        (groupName, hasCatalogPermission.isDefined)
-      }
+      val usersWithCatalogPermission = workspaceUserCatalogQuery.filter(rec => rec.workspaceId === workspaceId)
+      val groupsWithCatalogPermission = workspaceGroupCatalogQuery.filter(rec => rec.workspaceId === workspaceId)
+
       for {
-        users <- usersWithCatalogPermission.result.map { _.map { case (id, hasField) => (Left(RawlsUserRef(RawlsUserSubjectId(id))), hasField) } }
-        subGroups <- groupsWithCatalogPermission.result.map { _.map { case (id, hasField) => (Right(RawlsGroupRef(RawlsGroupName(id))),hasField) }}
+        users <- usersWithCatalogPermission.result.map(_.map { rec =>RawlsUserRef(RawlsUserSubjectId(rec.subjectId)) } )
+        groups <- groupsWithCatalogPermission.result.map(_.map { rec => RawlsGroupRef(RawlsGroupName(rec.groupName)) } )
       } yield {
-        users ++ subGroups
-      }.toSet
+        (users.toSet, groups.toSet)
+      }
     }
 
     private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {

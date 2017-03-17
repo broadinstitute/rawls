@@ -472,7 +472,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        dataAccess.workspaceQuery.listEmailsAndCatalog(workspaceContext).map { accessResults =>
+        dataAccess.workspaceQuery.listEmailsWithCatalogAccess(workspaceContext).map { accessResults =>
           RequestComplete(StatusCodes.OK, accessResults)
         }
       }
@@ -480,39 +480,14 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
 
-    val updatesFuture = dataSource.inTransaction { dataAccess =>
+    dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        determineNewCatalogPermissions(input, dataAccess, workspaceContext)
-      }
-    }
-
-    def updateWorkspaceCatalogPermissions(actualChangesToMake: Map[Either[RawlsUserRef, RawlsGroupRef], Boolean]) = {
-      val (usersToAdd, usersToRemove) = actualChangesToMake.collect { case (Left(userRef), catalog) => userRef -> catalog }.toSeq
-        .partition { case (_, catalog) => catalog }
-      val (groupsToAdd, groupsToRemove) = actualChangesToMake.collect { case (Right(groupRef), catalog) => groupRef -> catalog }.toSeq
-        .partition { case (_, catalog) => catalog }
-
-      dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-          dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
-            dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
-            dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
-            dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef })
+        updateCatalogPermissions(input, dataAccess, workspaceContext) flatMap {
+          _.map { resp =>
+            RequestComplete(StatusCodes.OK, resp)
+          }
         }
       }
-    }
-
-    for {
-      (emailsNotFound, actualChangesToMake) <- updatesFuture
-      savedPermissions <- updateWorkspaceCatalogPermissions(actualChangesToMake)
-    } yield {
-      val usersUpdated = actualChangesToMake.map {
-        case (Left(userRef), catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog)
-        case (Right(groupRef), catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog)
-      }.toSeq
-
-      val emails = emailsNotFound map { wsCatalog => wsCatalog.email}
-      RequestComplete(StatusCodes.OK, WorkspaceCatalogUpdateResponseList(usersUpdated, emails))
     }
   }
 
@@ -637,18 +612,42 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def determineNewCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[(Seq[WorkspaceCatalog], Map[Either[RawlsUserRef,RawlsGroupRef], Boolean])] = {
+  private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext)= {
     for {
-      refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email))
-      existingRefsAndCatalog <- dataAccess.workspaceQuery.findWorkspaceUsersAndCatalog(workspaceContext.workspaceId)
+      refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email))  // map from email to ref
+      (usersWithCatalog, groupsWithCatalog) <- dataAccess.workspaceQuery.findWorkspaceUsersAndGroupsWithCatalog(workspaceContext.workspaceId)  // refs with catalog
     } yield {
       val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
-      val refsToUpdate = emailsFound.map { cat =>  refsToUpdateByEmail(cat.email) -> cat.catalog }.toSet
 
-      // remove everything that is not changing
-      val actualCatalogChangesToMake = refsToUpdate.diff(existingRefsAndCatalog)
+      val (emailsToAddCatalog, emailsToRemoveCatalog) = emailsFound.partition(updates => updates.catalog)
 
-      (emailsNotFound, actualCatalogChangesToMake.toMap)
+      val usersToAdd = emailsToAddCatalog.collect {
+        case cat if refsToUpdateByEmail(cat.email).isLeft && !usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
+          (refsToUpdateByEmail(cat.email).left.get, true)
+      }
+      val usersToRemove = emailsToRemoveCatalog.collect {
+        case cat if refsToUpdateByEmail(cat.email).isLeft && usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
+          (refsToUpdateByEmail(cat.email).left.get, false)
+      }
+      val groupsToAdd = emailsToAddCatalog.collect {
+        case cat if refsToUpdateByEmail(cat.email).isRight && !groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
+          (refsToUpdateByEmail(cat.email).right.get, true)
+      }
+      val groupsToRemove = emailsToRemoveCatalog.collect {
+        case cat if refsToUpdateByEmail(cat.email).isRight && groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
+          (refsToUpdateByEmail(cat.email).right.get, false)
+      }
+
+      val users = (usersToAdd ++ usersToRemove).map { case (userRef, catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog) }
+      val groups = (groupsToAdd ++ groupsToRemove).map { case (groupRef, catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog) }
+      val emails = emailsNotFound.map { wsCatalog => wsCatalog.email }
+
+      dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
+        dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
+        dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
+        dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef }) map { _ =>
+        WorkspaceCatalogUpdateResponseList(users ++ groups, emails)
+      }
     }
   }
 

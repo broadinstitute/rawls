@@ -649,6 +649,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
+        assertResult(Option(attr)) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
       }
   }
 
@@ -679,6 +682,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) {
           status
         }
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(testData.wsName)).get.attributes.get(name)
+        }
+
       }
   }
 
