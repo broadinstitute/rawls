@@ -64,7 +64,7 @@ trait DriverComponent {
   }
 
   def renameForHiding(name: String): String = {
-    name + "_" + DateTime.now().toString("yyyy-MM-dd_HH.mm.ss")
+    name + "_" + DateTime.now().toString("yyyy-MM-dd_HH.mm.ss.SSS")
   }
 }
 
