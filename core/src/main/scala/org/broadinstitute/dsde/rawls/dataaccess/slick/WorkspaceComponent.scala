@@ -368,21 +368,20 @@ trait WorkspaceComponent {
     }
 
     def getAccessAndUserEmail(workspaceContext: SlickWorkspaceContext) = {
-      (for {
+      for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceContext.workspaceId && access.isRealmAcl === false
         group <- rawlsGroupQuery if access.groupName === group.groupName
         userGroup <- groupUsersQuery if group.groupName === userGroup.groupName
         user <- rawlsUserQuery if user.userSubjectId === userGroup.userSubjectId
-      } yield (access, user)).map { case (access, user) => (access.accessLevel, user.userEmail, user.userSubjectId) }
-    }
+      } yield (access.accessLevel, user.userEmail, user.userSubjectId)    }
 
     def getAccessAndGroupEmail(workspaceContext: SlickWorkspaceContext) = {
-      (for {
+      for {
         access <- workspaceAccessQuery if access.workspaceId === workspaceContext.workspaceId && access.isRealmAcl === false
         group <- rawlsGroupQuery if access.groupName === group.groupName
         subGroupGroup <- groupSubgroupsQuery if group.groupName === subGroupGroup.parentGroupName
         subGroup <- rawlsGroupQuery if subGroup.groupName === subGroupGroup.childGroupName
-      } yield (access, subGroup)).map { case (access, subGroup) => (access.accessLevel, subGroup.groupEmail, subGroup.groupName) }
+      } yield (access.accessLevel, subGroup.groupEmail, subGroup.groupName)
     }
 
     def listEmailsWithCatalogAccess(workspaceContext: SlickWorkspaceContext)  = {
