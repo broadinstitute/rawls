@@ -373,7 +373,8 @@ trait WorkspaceComponent {
         group <- rawlsGroupQuery if access.groupName === group.groupName
         userGroup <- groupUsersQuery if group.groupName === userGroup.groupName
         user <- rawlsUserQuery if user.userSubjectId === userGroup.userSubjectId
-      } yield (access.accessLevel, user.userEmail, user.userSubjectId)    }
+      } yield (access.accessLevel, user.userEmail, user.userSubjectId)
+    }
 
     def getAccessAndGroupEmail(workspaceContext: SlickWorkspaceContext) = {
       for {
