@@ -482,10 +482,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        updateCatalogPermissions(input, dataAccess, workspaceContext) flatMap {
-          _.map { resp =>
-            RequestComplete(StatusCodes.OK, resp)
-          }
+        updateCatalogPermissions(input, dataAccess, workspaceContext) map { resp =>
+          RequestComplete(StatusCodes.OK, resp)
         }
       }
     }
@@ -612,41 +610,43 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadAction[WriteAction[WorkspaceCatalogUpdateResponseList]] = {
-    for {
-      refsToUpdateByEmail <- dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email))  // map from email to ref
-      (usersWithCatalog, groupsWithCatalog) <- dataAccess.workspaceQuery.findWorkspaceUsersAndGroupsWithCatalog(workspaceContext.workspaceId)  // refs with catalog
-    } yield {
+  private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[WorkspaceCatalogUpdateResponseList] = {
+
+    // map from email to ref
+    dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email)) flatMap { refsToUpdateByEmail =>
       val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
 
       val (emailsToAddCatalog, emailsToRemoveCatalog) = emailsFound.partition(updates => updates.catalog)
-
-      val usersToAdd = emailsToAddCatalog.collect {
-        case cat if refsToUpdateByEmail(cat.email).isLeft && !usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
-          (refsToUpdateByEmail(cat.email).left.get, true)
-      }
-      val usersToRemove = emailsToRemoveCatalog.collect {
-        case cat if refsToUpdateByEmail(cat.email).isLeft && usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
-          (refsToUpdateByEmail(cat.email).left.get, false)
-      }
-      val groupsToAdd = emailsToAddCatalog.collect {
-        case cat if refsToUpdateByEmail(cat.email).isRight && !groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
-          (refsToUpdateByEmail(cat.email).right.get, true)
-      }
-      val groupsToRemove = emailsToRemoveCatalog.collect {
-        case cat if refsToUpdateByEmail(cat.email).isRight && groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
-          (refsToUpdateByEmail(cat.email).right.get, false)
-      }
-
-      val users = (usersToAdd ++ usersToRemove).map { case (userRef, catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog) }
-      val groups = (groupsToAdd ++ groupsToRemove).map { case (groupRef, catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog) }
       val emails = emailsNotFound.map { wsCatalog => wsCatalog.email }
 
-      dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
-        dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
-        dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
-        dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef }) map { _ =>
-        WorkspaceCatalogUpdateResponseList(users ++ groups, emails)
+      // refs with catalog
+      dataAccess.workspaceQuery.findWorkspaceUsersAndGroupsWithCatalog(workspaceContext.workspaceId) flatMap { case ((usersWithCatalog, groupsWithCatalog)) =>
+        val usersToAdd = emailsToAddCatalog.collect {
+          case cat if refsToUpdateByEmail(cat.email).isLeft && !usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
+            (refsToUpdateByEmail(cat.email).left.get, true)
+        }
+        val usersToRemove = emailsToRemoveCatalog.collect {
+          case cat if refsToUpdateByEmail(cat.email).isLeft && usersWithCatalog.contains(refsToUpdateByEmail(cat.email).left.get) =>
+            (refsToUpdateByEmail(cat.email).left.get, false)
+        }
+        val groupsToAdd = emailsToAddCatalog.collect {
+          case cat if refsToUpdateByEmail(cat.email).isRight && !groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
+            (refsToUpdateByEmail(cat.email).right.get, true)
+        }
+        val groupsToRemove = emailsToRemoveCatalog.collect {
+          case cat if refsToUpdateByEmail(cat.email).isRight && groupsWithCatalog.contains(refsToUpdateByEmail(cat.email).right.get) =>
+            (refsToUpdateByEmail(cat.email).right.get, false)
+        }
+
+        val users = (usersToAdd ++ usersToRemove).map { case (userRef, catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog) }
+        val groups = (groupsToAdd ++ groupsToRemove).map { case (groupRef, catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog) }
+
+        dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
+          dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
+          dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
+          dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef }) map { _ =>
+          WorkspaceCatalogUpdateResponseList(users ++ groups, emails)
+        }
       }
     }
   }
