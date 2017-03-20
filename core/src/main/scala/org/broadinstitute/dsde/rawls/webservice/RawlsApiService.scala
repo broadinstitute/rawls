@@ -26,10 +26,10 @@ object RawlsApiServiceActor {
 
 class RawlsApiServiceActor(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statisticsServiceConstructor: UserInfo => StatisticsService, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor
   with RootRawlsApiService with WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
-  with AdminApiService with UserApiService with StandardUserInfoDirectives with BillingApiService {
+  with AdminApiService with UserApiService with StandardUserInfoDirectives with BillingApiService with NotificationsApiService {
 
   def actorRefFactory = context
-  def apiRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes
+  def apiRoutes = options{ complete(OK) } ~ baseRoute ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutes ~ notificationsRoutes
   def registerRoutes = options{ complete(OK) } ~ createUserRoute ~ getUserStatusRoute
 
   def receive = runRoute(

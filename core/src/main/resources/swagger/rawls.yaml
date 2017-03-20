@@ -3799,7 +3799,53 @@ paths:
             - openid
             - email
             - profile
-
+  '/api/notifications/workspace/{workspaceNamespace}/{workspaceName}':
+    get:
+      responses:
+        200:
+          description: Success
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/NotificationType'
+      parameters:
+        - in: path
+          description: workspace namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: workspace name
+          name: workspaceName
+          required: true
+          type: string
+      tags:
+        - notifications
+      summary: Gets the notifications available for a workspace
+      operationId: workspaceNotifications
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+  '/api/notifications/general':
+    get:
+      responses:
+        200:
+          description: Success
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/NotificationType'
+      tags:
+        - notifications
+      summary: Gets the general notifications available
+      operationId: generalNotifications
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
 tags:
   - name: admin
     description: Administrative API
@@ -3817,6 +3863,8 @@ tags:
     description: Billing Project API
   - name: groups
     description: Group manipulation API
+  - name: notifications
+    description: Notifications API
 
 securityDefinitions:
   authorization:
@@ -5179,3 +5227,13 @@ definitions:
         type: array
         items:
           type: string
+  NotificationType:
+    description: key and description of a notification
+    required:
+      - notificationKey
+      - description
+    properties:
+      notificationKey:
+        type: string
+      description:
+        type: string

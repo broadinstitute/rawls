@@ -60,7 +60,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Write.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId.value, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.userEmail)).compactPrint}"), 10 seconds)
 
     //remove ACL
     Patch(s"/workspaces/${testData.workspace.namespace}/${testData.workspace.name}/acl", httpJson(Seq(WorkspaceACLUpdate(user.userEmail.value, WorkspaceAccessLevels.NoAccess, None)))) ~>
@@ -69,7 +69,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, response.entity.asString) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.namespace, testData.workspace.name, userInfo.userEmail)).compactPrint}"), 10 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId.value, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.userEmail)).compactPrint}"), 10 seconds)
   }
 
   it should "be sent for activation" in withEmptyTestDatabase { dataSource: SlickDataSource => withApiServices(dataSource) { services =>

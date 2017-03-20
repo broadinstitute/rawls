@@ -2,44 +2,108 @@ package org.broadinstitute.dsde.rawls.model
 
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import scala.reflect.runtime.universe._
+import WorkspaceJsonSupport.WorkspaceNameFormat
 
+/**
+ * All notifications emitted by rawls are described here. To add a new notification type:
+ * - create a new case class with appropriate fields
+ *   - extend WorkspaceNotification if it is a notification specific to a workspace
+ *   - otherwise extend UserNotification if a user id is available
+ * - create a val extending NotificationType being sure to call register
+ */
 object Notifications {
+  private def baseKey[T <: Notification : TypeTag](n: T) = s"notifications/${typeOf[T].typeSymbol.asClass.name}"
+  private def baseKey[T <: Notification : TypeTag] = s"notifications/${typeOf[T].typeSymbol.asClass.name}"
+  private def workspaceNotification[T <: Notification : TypeTag] = typeOf[T] <:< typeOf[WorkspaceNotification]
 
-  sealed trait Notification
+  def workspaceKey[T <: WorkspaceNotification : TypeTag](nt: NotificationType[T], workspaceName: WorkspaceName): String = workspaceKey(baseKey[T], workspaceName)
+  private def workspaceKey(baseKey: String, workspaceName: WorkspaceName) = s"$baseKey/${workspaceName.namespace}/${workspaceName.name}"
 
-  case class ActivationNotification(recipientUserId: String) extends Notification
-  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceNamespace: String, workspaceName: String, workspaceOwnerEmail: String) extends Notification
-  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceNamespace: String, workspaceName: String, workspaceOwnerEmail: String) extends Notification
+  sealed abstract class NotificationType[T <: Notification: TypeTag] {
+    def baseKey = Notifications.baseKey[T]
+    def workspaceNotification = Notifications.workspaceNotification[T]
+    val format: RootJsonFormat[T]
+    val notificationType = typeOf[T].typeSymbol.asClass.name.toString
+    val description: String
+  }
+
+  sealed trait Notification {
+    def key = Notifications.baseKey(this)
+  }
+
+  sealed trait UserNotification extends Notification {
+    val recipientUserId: String
+  }
+  object UserNotification {
+    def unapply(userNotification: UserNotification) = Option(userNotification.recipientUserId)
+  }
+
+  sealed trait WorkspaceNotification extends UserNotification {
+    override def key = workspaceKey(Notifications.baseKey(this), workspaceName)
+    val workspaceName: WorkspaceName
+  }
+  object WorkspaceNotification {
+    def unapply(workspaceNotification: WorkspaceNotification) = Option((workspaceNotification.workspaceName, workspaceNotification.recipientUserId))
+  }
+
+  private val allNotificationTypesBuilder = Map.newBuilder[String, NotificationType[_ <: Notification]]
+
+  /**
+   * called internally to register a notification type so it will appear in the allNotificationTypes map
+   * @param notificationType
+   * @tparam T
+   * @return notificationType
+   */
+  private def register[T <: Notification](notificationType: NotificationType[T]): NotificationType[T] = {
+    require(allNotificationTypes == null, "all calls to register must come before definition of allNotificationTypes in the file")
+    allNotificationTypesBuilder += notificationType.notificationType -> notificationType
+    notificationType
+  }
+
+  case class ActivationNotification(recipientUserId: String) extends UserNotification
+  val ActivationNotificationType = register(new NotificationType[ActivationNotification] {
+    override val format = jsonFormat1(ActivationNotification.apply)
+    override val description = "Account Activation"
+  })
+
+  case class WorkspaceAddedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
+  val WorkspaceAddedNotificationType = register(new NotificationType[WorkspaceAddedNotification] {
+    override val format = jsonFormat4(WorkspaceAddedNotification.apply)
+    override val description = "Workspace Access Added or Changed"
+  })
+
+  case class WorkspaceRemovedNotification(recipientUserId: String, accessLevel: String, workspaceName: WorkspaceName, workspaceOwnerEmail: String) extends WorkspaceNotification
+  val WorkspaceRemovedNotificationType = register(new NotificationType[WorkspaceRemovedNotification] {
+    override val format = jsonFormat4(WorkspaceRemovedNotification.apply)
+    override val description = "Workspace Access Removed"
+  })
+
   case class WorkspaceInvitedNotification(recipientUserEmail: String, originEmail: String) extends Notification
+  val WorkspaceInvitedNotificationType = register(new NotificationType[WorkspaceInvitedNotification] {
+    override val format = jsonFormat2(WorkspaceInvitedNotification.apply)
+    override val description = "Invitation"
+  })
 
-  private val ActivationNotificationFormat = jsonFormat1(ActivationNotification)
-  private val WorkspaceAddedNotificationFormat = jsonFormat5(WorkspaceAddedNotification)
-  private val WorkspaceRemovedNotificationFormat = jsonFormat5(WorkspaceRemovedNotification)
-  private val WorkspaceInvitedNotificationFormat = jsonFormat2(WorkspaceInvitedNotification)
+  // IMPORTANT that this comes after all the calls to register
+  val allNotificationTypes: Map[String, NotificationType[_ <: Notification]] = allNotificationTypesBuilder.result()
 
   implicit object NotificationFormat extends RootJsonFormat[Notification] {
 
     private val notificationTypeAttribute = "notificationType"
 
     override def write(obj: Notification): JsValue = {
-      val json = obj match {
-        case x: ActivationNotification => ActivationNotificationFormat.write(x)
-        case x: WorkspaceAddedNotification => WorkspaceAddedNotificationFormat.write(x)
-        case x: WorkspaceRemovedNotification => WorkspaceRemovedNotificationFormat.write(x)
-        case x: WorkspaceInvitedNotification => WorkspaceInvitedNotificationFormat.write(x)
-      }
+      val notificationType = obj.getClass.getSimpleName
+      val json = obj.toJson(allNotificationTypes.getOrElse(notificationType, throw new SerializationException(s"format missing for $obj")).format.asInstanceOf[RootJsonWriter[Notification]])
 
-      JsObject(json.asJsObject.fields + (notificationTypeAttribute -> JsString(obj.getClass.getSimpleName)))
+      JsObject(json.asJsObject.fields + (notificationTypeAttribute -> JsString(notificationType)))
     }
 
     override def read(json: JsValue) : Notification = json match {
       case JsObject(fields) =>
         val notificationType = fields.getOrElse(notificationTypeAttribute, throw new DeserializationException(s"missing $notificationTypeAttribute property"))
         notificationType match {
-          case JsString("ActivationNotification") => ActivationNotificationFormat.read(json)
-          case JsString("WorkspaceAddedNotification") => WorkspaceAddedNotificationFormat.read(json)
-          case JsString("WorkspaceRemovedNotification") => WorkspaceRemovedNotificationFormat.read(json)
-          case JsString("WorkspaceInvitedNotification") => WorkspaceInvitedNotificationFormat.read(json)
+          case JsString(tpe) => allNotificationTypes.getOrElse(tpe, throw new DeserializationException(s"unrecognized notification type: $tpe")).format.read(json)
           case x => throw new DeserializationException(s"unrecognized $notificationTypeAttribute: $x")
         }
 

@@ -592,8 +592,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       // fire and forget notifications
       val notificationMessages = actualChangesToMake collect {
         // note that we don't send messages to groups
-        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
-        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName.namespace, workspaceName.name, userInfo.userEmail)
+        case (Left(userRef), NoAccess) => Notifications.WorkspaceRemovedNotification(userRef.userSubjectId.value, NoAccess.toString, workspaceName, userInfo.userEmail)
+        case (Left(userRef), access) => Notifications.WorkspaceAddedNotification(userRef.userSubjectId.value, access.toString, workspaceName, userInfo.userEmail)
       }
       notificationDAO.fireAndForgetNotifications(notificationMessages)
 
