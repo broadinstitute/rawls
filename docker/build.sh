@@ -4,7 +4,7 @@
 # @ Jackie Roberti
 #
 # Provide command line options to do one or several things:
-#   make : build rawls jar
+#   jar : build rawls jar
 #   publish : run rawls/core/src/bin/publishSnapshot.sh to publish to Artifactory
 #   -d | --docker : provide arg either "build" or "push", to build and push docker image
 # Jenkins build job should run with all options, for example,
@@ -49,9 +49,10 @@ function docker_cmd()
 
 # parse command line options
 DOCKER_CMD=
+GIT_BRANCH=${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
 while [ "$1" != "" ]; do
     case $1 in
-        make) make_jar ;;
+        jar) make_jar ;;
         publish) artifactory_push ;;
         -d | --docker) shift
                        echo $1
