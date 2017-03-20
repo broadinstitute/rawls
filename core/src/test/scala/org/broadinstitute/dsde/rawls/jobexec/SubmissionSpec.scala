@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, PoisonPill, ActorSystem}
 import akka.pattern.AskTimeoutException
 import akka.testkit.{TestKit, TestActorRef}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
@@ -276,6 +276,34 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system) with FlatSpe
     assert(newSubmissionReport.workflows.size == 1)
 
     checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+  }
+
+  it should "continue to monitor a Submission on a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), useCallCache = false)
+    val rqComplete = Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf).asInstanceOf[RequestComplete[(StatusCode, SubmissionReport)]]
+    val (status, newSubmissionReport) = rqComplete.response
+    assertResult(StatusCodes.Created) {
+      status
+    }
+
+    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+
+    val monitorActor = waitForSubmissionActor(newSubmissionReport.submissionId)
+    assert(monitorActor != None) //not really necessary, failing to find the actor above will throw an exception and thus fail this test
+
+    assert(newSubmissionReport.workflows.size == 1)
+
+    checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
+  }
+
+  it should "fail to submit when given an entity expression that evaluates to a deleted entity" in withWorkspaceServiceMockExecution { mockExecSvc => workspaceService =>
+
+    runAndWait(entityQuery.hide(SlickWorkspaceContext(testData.workspace), Seq(testData.pair1.toReference)))
+
+    val submissionRq = SubmissionRequest("dsde", "GoodMethodConfig", "Pair", "pair1", Some("this.case"), useCallCache = false)
+    intercept[RawlsException] {
+      Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
+    }
   }
 
   it should "return a successful Submission when given an entity expression that evaluates to a set of entities" in withWorkspaceService { workspaceService =>

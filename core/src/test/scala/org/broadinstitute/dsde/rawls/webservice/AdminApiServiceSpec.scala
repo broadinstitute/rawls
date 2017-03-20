@@ -101,17 +101,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // NOTE: we no longer support deleting entities that are tied to an existing submission - this will cause a
-  // Referential integrity constraint violation - if we change that behavior we need to fix this test
-  ignore should "*DISABLED* return 200 when listing active submissions and some entities are missing" in withTestDataApiServices { services =>
-    Delete(testData.indiv1.path(testData.wsName)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
-    Delete(testData.sample2.path(testData.wsName)) ~>
+  it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
+    Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
@@ -122,11 +113,32 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/submissions") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
-        val expected = Array(ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission1),
-          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submission2),
-          ActiveSubmission(testData.wsName.namespace,testData.wsName.name,testData.submissionTerminateTest))
-        assertSameElements(expected, responseAs[Array[ActiveSubmission]])
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val resp = responseAs[Array[ActiveSubmission]]
+
+        // entity name will be modified a la DriverComponent.renameForHiding
+
+        val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.entityName).toSet
+        assertResult(1)(responseEntityNames.size)
+        assert(responseEntityNames.head.contains(constantData.indiv1.name + "_"))
+
+        // check that the response contains the same submissions, with only entity names changed
+
+        val expected = Seq(
+          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submissionNoWorkflows),
+          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
+          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
+
+        def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] = {
+          in.map { as =>
+            as.copy(submission = as.submission.copy(submissionEntity = as.submission.submissionEntity.copy(entityName = "newName")))
+          }
+        }
+
+        assertSameElements(withNewEntityNames(expected), withNewEntityNames(resp))
       }
   }
 

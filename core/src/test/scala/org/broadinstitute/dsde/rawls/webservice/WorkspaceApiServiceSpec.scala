@@ -569,14 +569,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           status
         }
       }
-    //this endpoint is only temporarily returning MethodNotAllowed. When GAWB-422 is complete, it should return NotFound
-    Delete(testData.sample2.path(cloneDest)) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.MethodNotAllowed) {
-          status
-        }
-      }
   }
 
   it should "return 200 on update workspace attributes" in withTestDataApiServices { services =>
@@ -751,8 +743,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
@@ -808,8 +800,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet
@@ -869,8 +861,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
           withWorkspaceContext(copiedWorkspace) { copiedWorkspaceContext =>
             //Name, namespace, creation date, and owner might change, so this is all that remains.
-            assertResult(runAndWait(entityQuery.listEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
-              runAndWait(entityQuery.listEntitiesAllTypes(copiedWorkspaceContext)).toSet
+            assertResult(runAndWait(entityQuery.listActiveEntitiesAllTypes(sourceWorkspaceContext)).toSet) {
+              runAndWait(entityQuery.listActiveEntitiesAllTypes(copiedWorkspaceContext)).toSet
             }
             assertResult(runAndWait(methodConfigurationQuery.list(sourceWorkspaceContext)).toSet) {
               runAndWait(methodConfigurationQuery.list(copiedWorkspaceContext)).toSet

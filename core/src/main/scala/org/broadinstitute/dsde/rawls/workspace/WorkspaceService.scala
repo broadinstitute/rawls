@@ -69,7 +69,7 @@ object WorkspaceService {
   case class CreateEntity(workspaceName: WorkspaceName, entity: Entity) extends WorkspaceServiceMessage
   case class GetEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
   case class UpdateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
-  case class DeleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String) extends WorkspaceServiceMessage
+  case class DeleteEntities(workspaceName: WorkspaceName, entities: Seq[AttributeEntityReference]) extends WorkspaceServiceMessage
   case class RenameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String) extends WorkspaceServiceMessage
   case class EvaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String) extends WorkspaceServiceMessage
   case class GetEntityTypeMetadata(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -144,7 +144,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case CreateEntity(workspaceName, entity) => pipe(createEntity(workspaceName, entity)) to sender
     case GetEntity(workspaceName, entityType, entityName) => pipe(getEntity(workspaceName, entityType, entityName)) to sender
     case UpdateEntity(workspaceName, entityType, entityName, operations) => pipe(updateEntity(workspaceName, entityType, entityName, operations)) to sender
-    case DeleteEntity(workspaceName, entityType, entityName) => pipe(deleteEntity(workspaceName, entityType, entityName)) to sender
+    case DeleteEntities(workspaceName, entities) => pipe(deleteEntities(workspaceName, entities)) to sender
     case RenameEntity(workspaceName, entityType, entityName, newName) => pipe(renameEntity(workspaceName, entityType, entityName, newName)) to sender
     case EvaluateExpression(workspaceName, entityType, entityName, expression) => pipe(evaluateExpression(workspaceName, entityType, entityName, expression)) to sender
     case GetEntityTypeMetadata(workspaceName) => pipe(entityTypeMetadata(workspaceName)) to sender
@@ -881,11 +881,17 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def deleteEntity(workspaceName: WorkspaceName, entityType: String, entityName: String): Future[PerRequestMessage] =
+  def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference]): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-        withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
-          dataAccess.entityQuery.delete(workspaceContext, entity.entityType, entity.name).map(_ => RequestComplete(StatusCodes.NoContent))
+        withAllEntities(workspaceContext, dataAccess, entRefs) { entities =>
+          dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
+            if (referringEntities != entRefs.toSet)
+              DBIO.successful(RequestComplete(StatusCodes.Conflict, referringEntities))
+            else {
+              dataAccess.entityQuery.hide(workspaceContext, entRefs).map(_ => RequestComplete(StatusCodes.NoContent))
+            }
+          }
         }
       }
     }
@@ -1859,10 +1865,28 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
   }
 
-  private def withEntity(workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[PerRequestMessage]): ReadWriteAction[PerRequestMessage] = {
+  private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {
     dataAccess.entityQuery.get(workspaceContext, entityType, entityName) flatMap {
       case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${entityType} ${entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}")))
       case Some(entity) => op(entity)
+    }
+  }
+
+  private def withAllEntities[T](workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess, entities: Seq[AttributeEntityReference])(op: (Seq[Entity]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    val entityActions: Seq[ReadAction[Try[Entity]]] = entities map { e =>
+      dataAccess.entityQuery.get(workspaceContext, e.entityType, e.entityName) map {
+        case None => Failure(new RawlsException(s"${e.entityType} ${e.entityName} does not exist in ${workspaceContext.workspace.toWorkspaceName}"))
+        case Some(entity) => Success(entity)
+      }
+    }
+
+    DBIO.sequence(entityActions) flatMap { entityTries =>
+      val failures = entityTries.collect { case Failure(y) => y.getMessage }
+      if (failures.isEmpty) op(entityTries collect { case Success(e) => e })
+      else {
+        val err = ErrorReport(statusCode = StatusCodes.BadRequest, message = (Seq("Entities were not found:") ++ failures) mkString System.lineSeparator())
+        DBIO.failed(new RawlsExceptionWithErrorReport(err))
+      }
     }
   }
 

@@ -4,7 +4,6 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 
 case class MethodConfigurationRecord(id: Long,
@@ -173,7 +172,7 @@ trait MethodConfigurationComponent {
 
     def hideMethodConfigurationAction(id: Long, methodConfigName: String): ReadWriteAction[Int] = {
       findById(id).map(rec => (rec.deleted, rec.name))
-        .update(true, methodConfigName + "_" + DateTime.now().toString("yyyy-MM-dd_HH:mm:ss"))
+        .update(true, renameForHiding(methodConfigName))
     }
 
     // performs actual deletion (not hiding) of everything that depends on a method configuration

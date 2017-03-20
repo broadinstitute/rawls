@@ -14,6 +14,18 @@ import org.broadinstitute.dsde.rawls.model._
 class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
 
+  // entity and attribute counts, regardless of deleted status
+  def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
+    val ents = runAndWait(entityQuery.listEntitiesAllTypes(SlickWorkspaceContext(workspace)))
+    (ents.size, ents.map(_.attributes.size).sum)
+  }
+
+  // entity and attribute counts, non-deleted only
+  def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
+    val ents = runAndWait(entityQuery.listActiveEntitiesAllTypes(SlickWorkspaceContext(workspace)))
+    (ents.size, ents.map(_.attributes.size).sum)
+  }
+
   "EntityComponent" should "crud entities" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
     val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, None, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
@@ -70,35 +82,77 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     runAndWait(entityQuery.save(workspaceContext, emptyRefListEntity))
     assertResult(Some(emptyRefListAttributeEntity.copy(name="emptyRefList"))) { runAndWait(entityQuery.get(workspaceContext, "type", "emptyRefList")) }
 
-    assertResult(true) { runAndWait(entityQuery.delete(workspaceContext, "type", "name")) }
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(workspace)
+
+    // "hide" deletion
+
+    assertResult(1) { runAndWait(entityQuery.hide(workspaceContext, Seq(entity.toReference))) }
     assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
-    assertResult(false) { runAndWait(entityQuery.delete(workspaceContext, "type", "name")) }
-  }
+    assertResult(0) { runAndWait(entityQuery.hide(workspaceContext, Seq(entity.toReference))) }
 
-  it should "get entity types" in withDefaultTestDatabase {
-    
-      withWorkspaceContext(testData.workspace) { context =>
-        assertResult(Set("PairSet", "Individual", "Sample", "Aliquot", "SampleSet", "Pair")) {
-          runAndWait(entityQuery.getEntityTypes(context)).toSet
-        }
-      }
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(workspace)
 
+    assertResult(entityCount1)(entityCount2)
+    assertResult(attributeCount1)(attributeCount2)
+    assertResult(activeEntityCount1 - 1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+
+    // actual deletion
+
+    val entityForDeletion = Entity("delete-me", "type", Map.empty)
+
+    assertResult(entityForDeletion) { runAndWait(entityQuery.save(workspaceContext, entityForDeletion)) }
+    assertResult(Some(entityForDeletion)) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
+
+    val (entityCount3, attributeCount3) = countEntitiesAttrs(workspace)
+    val (activeEntityCount3, activeAttributeCount3) = countActiveEntitiesAttrs(workspace)
+
+    assertResult(entityCount2 + 1)(entityCount3)
+    assertResult(attributeCount2)(attributeCount3)
+    assertResult(activeEntityCount2 + 1)(activeEntityCount3)
+    assertResult(activeAttributeCount2)(activeAttributeCount3)
+
+    assertResult(entityCount3) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceId)) }
+    assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "delete-me")) }
+    assertResult(0) { runAndWait(entityQuery.deleteFromDb(workspaceContext.workspaceId)) }
+
+    val (entityCount4, attributeCount4) = countEntitiesAttrs(workspace)
+    val (activeEntityCount4, activeAttributeCount4) = countActiveEntitiesAttrs(workspace)
+
+    assertResult(0)(entityCount4)
+    assertResult(0)(attributeCount4)
+    assertResult(0)(activeEntityCount4)
+    assertResult(0)(activeAttributeCount4)
   }
 
   it should "list all entities of all entity types" in withConstantTestDatabase {
     withWorkspaceContext(constantData.workspace) { context =>
-      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listEntitiesAllTypes(context)))
+      assertSameElements(constantData.allEntities, runAndWait(entityQuery.listActiveEntitiesAllTypes(context)))
     }
   }
 
   it should "list all entity types with their counts" in withDefaultTestDatabase {
-
     withWorkspaceContext(testData.workspace) { context =>
       assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
         runAndWait(entityQuery.getEntityTypesWithCounts(context))
       }
     }
+  }
 
+  it should "skip deleted entities when listing all entity types with their counts" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val deleteSamples = entityQuery.findEntityByType(context.workspaceId, "Sample").result flatMap { entityRecs =>
+        val deleteActions = entityRecs map { rec => entityQuery.hide(context, Seq(rec.toReference)) }
+        DBIO.seq(deleteActions:_*)
+      }
+      runAndWait(deleteSamples)
+
+      assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
+        runAndWait(entityQuery.getEntityTypesWithCounts(context))
+      }
+    }
   }
 
   it should "list all entity types with their attribute names" in withDefaultTestDatabase {
@@ -162,9 +216,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       val id2 = 2   // arbitrary
 
       // count distinct misses rows with null columns, like this one
-      runAndWait(entityQuery += EntityRecord(id1, "test1", "null_attrs_type", context.workspaceId, 0, None))
+      runAndWait(entityQuery += EntityRecord(id1, "test1", "null_attrs_type", context.workspaceId, 0, None, deleted = false))
 
-      runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some("")))
+      runAndWait(entityQuery += EntityRecord(id2, "test2", "blank_attrs_type", context.workspaceId, 0, Some(""), deleted = false))
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
         "null_attrs_type" -> EntityTypeMetadata(1, "null_attrs_type_id", Seq()),
@@ -335,10 +389,10 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
           val expectedEntities = Set(c1, c2, c3_updated)
           assertResult(expectedEntities) {
-            runAndWait(entityQuery.listEntitiesAllTypes(originalContext)).toSet
+            runAndWait(entityQuery.listActiveEntitiesAllTypes(originalContext)).toSet
           }
           assertResult(expectedEntities) {
-            runAndWait(entityQuery.listEntitiesAllTypes(cloneContext)).toSet
+            runAndWait(entityQuery.listActiveEntitiesAllTypes(cloneContext)).toSet
           }
         }
       }
@@ -425,14 +479,38 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   /* Test case tests for cycles, cycles contained within cycles, cycles existing below other cycles, invalid
    * entity names being supplied, and multiple disjoint subtrees
    */
-  it should "get entity subtrees from a list of entities" in withDefaultTestDatabase { 
-    
-      withWorkspaceContext(testData.workspace) { context =>
-        assertResult(Set(testData.sset3, testData.sample1, testData.sset2, testData.aliquot1, testData.sample6, testData.sset1, testData.sample2, testData.sample3, testData.sample5)) {
-          runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))).toSet
-        }
-      }
+  it should "get entity subtrees from a list of entities" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val expected = Set(testData.sset1, testData.sset2, testData.sset3, testData.sample1, testData.aliquot1, testData.sample6, testData.sample2, testData.sample3, testData.sample5)
+      assertSameElements(expected, runAndWait(entityQuery.getEntitySubtrees(context, "SampleSet", List("sset1", "sset2", "sset3", "sampleSetDOESNTEXIST"))))
 
+      val expected2 = Set(testData.indiv2, testData.sset2, testData.sample2)
+      assertSameElements(expected2, runAndWait(entityQuery.getEntitySubtrees(context, "Individual", List("indiv2"))))
+    }
+  }
+
+  // the opposite of the above traversal: get all reference to these entities, traversing upward
+
+  it should "get the full set of entity references from a list of entities" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sset1, testData.ps1, testData.indiv1).map(_.toReference)
+      assertSameElements(expected, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference))))
+
+      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.pair2, testData.sset1, testData.ps1, testData.indiv1).map(_.toReference)
+      assertSameElements(expected2, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.aliquot1.toReference, testData.aliquot2.toReference))))
+    }
+  }
+
+  it should "not include deleted entities when getting the full set of entity references from a list of entities" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      runAndWait(entityQuery.hide(context, Seq(testData.indiv1.toReference, testData.pair2.toReference)))
+
+      val expected = Set(testData.sample1, testData.sample3, testData.pair1, testData.sset1, testData.ps1).map(_.toReference)
+      assertSameElements(expected, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.sample1.toReference))))
+
+      val expected2 = Set(testData.aliquot1, testData.aliquot2, testData.sample1, testData.sample3, testData.pair1, testData.sset1, testData.ps1).map(_.toReference)
+      assertSameElements(expected2, runAndWait(entityQuery.getAllReferringEntities(context, Set(testData.aliquot1.toReference, testData.aliquot2.toReference))))
+    }
   }
 
   val x1 = Entity("x1", "SampleSet", Map(AttributeName.withDefaultNS("child") -> AttributeEntityReference("SampleSet", "x2")))
@@ -578,4 +656,122 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       }
     }
   }
- }
+
+  it should "save a new entity with the same name as a deleted entity" in withDefaultTestDatabase {
+    val workspaceId: UUID = UUID.randomUUID()
+    val workspace: Workspace = Workspace("test_namespace", workspaceId.toString, None, workspaceId.toString, "bucketname", currentTime(), currentTime(), "me", Map.empty, Map.empty, Map.empty, false)
+    runAndWait(workspaceQuery.save(workspace))
+    val workspaceContext = SlickWorkspaceContext(workspace)
+
+    assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
+
+    val entity = Entity("name", "type", Map.empty)
+
+    assertResult(entity) { runAndWait(entityQuery.save(workspaceContext, entity)) }
+    assertResult(Some(entity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
+
+    val oldId = runAndWait(entityQuery.findEntityByName(workspaceId, "type", "name").result).head.id
+
+    assertResult(1) { runAndWait(entityQuery.hide(workspaceContext, Seq(entity.toReference))) }
+    assertResult(None) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
+
+    assertResult(entity) { runAndWait(entityQuery.save(workspaceContext, entity)) }
+    assertResult(Some(entity)) { runAndWait(entityQuery.get(workspaceContext, "type", "name")) }
+
+    val newId = runAndWait(entityQuery.findEntityByName(workspaceId, "type", "name").result).head.id
+
+    assert(oldId != newId)
+  }
+
+  it should "delete a set without affecting its component entities" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      assertResult(Some(testData.sset1)) {
+        runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
+      }
+      assertResult(Some(testData.sample1)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample1"))
+      }
+      assertResult(Some(testData.sample2)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample2"))
+      }
+      assertResult(Some(testData.sample3)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample3"))
+      }
+
+      assertResult(1) {
+        runAndWait(entityQuery.hide(context, Seq(testData.sset1.toReference)))
+      }
+
+      assertResult(None) {
+        runAndWait(entityQuery.get(context, "SampleSet", "sset1"))
+      }
+      assertResult(Some(testData.sample1)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample1"))
+      }
+      assertResult(Some(testData.sample2)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample2"))
+      }
+      assertResult(Some(testData.sample3)) {
+        runAndWait(entityQuery.get(context, "Sample", "sample3"))
+      }
+    }
+  }
+
+  it should "delete a sample without affecting its individual or any other entities" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+
+      val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+      val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+      val bob = Entity("Bob", "Individual", Map(AttributeName.withDefaultNS("alive") -> AttributeBoolean(false), AttributeName.withDefaultNS("sampleSite") -> AttributeString("head")))
+      val blood = Entity("Bob-Blood", "Sample", Map(AttributeName.withDefaultNS("indiv") -> bob.toReference, AttributeName.withDefaultNS("color") -> AttributeString("red")))
+      val bone = Entity("Bob-Bone", "Sample", Map(AttributeName.withDefaultNS("indiv") -> bob.toReference, AttributeName.withDefaultNS("color") -> AttributeString("white")))
+
+      runAndWait(entityQuery.save(context, bob))
+      runAndWait(entityQuery.save(context, blood))
+      runAndWait(entityQuery.save(context, bone))
+
+      assertResult(Some(bob)) {
+        runAndWait(entityQuery.get(context, "Individual", "Bob"))
+      }
+      assertResult(Some(blood)) {
+        runAndWait(entityQuery.get(context, "Sample", blood.name))
+      }
+      assertResult(Some(bone)) {
+        runAndWait(entityQuery.get(context, "Sample", bone.name))
+      }
+
+      val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+      val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+      assertResult(entityCount1 + 3)(entityCount2)
+      assertResult(attributeCount1 + 6)(attributeCount2)
+      assertResult(activeEntityCount1 + 3)(activeEntityCount2)
+      assertResult(activeAttributeCount1 + 6)(activeAttributeCount2)
+
+      assertResult(1) {
+        runAndWait(entityQuery.hide(context, Seq(bone.toReference)))
+      }
+
+      assertResult(Some(bob)) {
+        runAndWait(entityQuery.get(context, "Individual", "Bob"))
+      }
+      assertResult(Some(blood)) {
+        runAndWait(entityQuery.get(context, "Sample", blood.name))
+      }
+      assertResult(None) {
+        runAndWait(entityQuery.get(context, "Sample", bone.name))
+      }
+
+      val (entityCount3, attributeCount3) = countEntitiesAttrs(testData.workspace)
+      val (activeEntityCount3, activeAttributeCount3) = countActiveEntitiesAttrs(testData.workspace)
+
+      assertResult(entityCount2)(entityCount3)
+      assertResult(attributeCount2)(attributeCount3)
+      assertResult(activeEntityCount2 - 1)(activeEntityCount3)
+      assertResult(activeAttributeCount2 - 2)(activeAttributeCount3)
+
+    }
+  }
+
+}

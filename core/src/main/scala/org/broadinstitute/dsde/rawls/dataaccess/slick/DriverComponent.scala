@@ -5,6 +5,7 @@ import java.util.UUID
 
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.joda.time.DateTime
 import slick.driver.JdbcDriver
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.http.StatusCodes
@@ -60,6 +61,10 @@ trait DriverComponent {
 
   def nowTimestamp: Timestamp = {
     new Timestamp(System.currentTimeMillis())
+  }
+
+  def renameForHiding(name: String): String = {
+    name + "_" + DateTime.now().toString("yyyy-MM-dd_HH.mm.ss.SSS")
   }
 }
 

@@ -39,6 +39,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T = {
+    withConstantTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource)(testCode)
+    }
+  }
+
+  def dbId(ent: Entity): Long = runAndWait(entityQuery.lookupEntitiesByNames(SlickWorkspaceContext(testData.workspace).workspaceId, Seq(ent.toReference))).head.id
+  def dbName(id: Long): String = runAndWait(entityQuery.listByIds(Seq(id))).head._2.name
+
   "EntityApi" should "return 404 on Entity CRUD when workspace does not exist" in withTestDataApiServices { services =>
     Post(s"${testData.workspace.copy(name = "DNE").path}/entities", httpJson(testData.sample2)) ~>
       sealRoute(services.entityRoutes) ~>
@@ -174,7 +183,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 on create entity" in withTestDataApiServices { services =>
-    val wsName = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
     val newSample = Entity("sampleNew", "sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor")))
 
     Post(s"${testData.workspace.path}/entities", httpJson(newSample)) ~>
@@ -192,7 +200,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
 
         // TODO: does not test that the path we return is correct.  Update this test in the future if we care about that
-        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(wsName)))))) {
+        assertResult(Some(HttpHeaders.Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newSample.path(testData.workspace)))))) {
           header("Location")
         }
       }
@@ -269,6 +277,425 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // entity and attribute counts, regardless of deleted status
+  def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
+    val ents = runAndWait(entityQuery.listEntitiesAllTypes(SlickWorkspaceContext(testData.workspace)))
+    (ents.size, ents.map(_.attributes.size).sum)
+  }
+
+  // entity and attribute counts, non-deleted only
+  def countActiveEntitiesAttrs(workspace: Workspace): (Int, Int) = {
+    val ents = runAndWait(entityQuery.listActiveEntitiesAllTypes(SlickWorkspaceContext(testData.workspace)))
+    (ents.size, ents.map(_.attributes.size).sum)
+  }
+
+  it should "return 204 on unreferenced entity delete" in withTestDataApiServices { services =>
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1)(entityCount2)
+    assertResult(attributeCount1)(attributeCount2)
+    assertResult(activeEntityCount1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
+  it should "return 204 on entity delete covering all references" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val e1 = Entity("e1", "Generic", Map.empty)
+    val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1, e2))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1 + 2)(entityCount2)
+    assertResult(attributeCount1 + 1)(attributeCount2)
+    assertResult(activeEntityCount1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
+
+  it should "return 204 on entity delete covering all references including cycles" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val e1 = Entity("e1", "Generic", Map.empty)
+    val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
+    val e3 = Entity("e3", "Generic", Map(AttributeName.withDefaultNS("link") -> e2.toReference))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e3)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val update = EntityUpdateDefinition(e1.name, e1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("link"), e3.toReference)))
+    val new_e1 = e1.copy(attributes = Map(AttributeName.withDefaultNS("link") -> e3.toReference))
+
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(new_e1)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1, e2, e3))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e3.entityType, e3.name))
+        }
+      }
+
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1 + 3)(entityCount2)
+    assertResult(attributeCount1 + 3)(attributeCount2)
+    assertResult(activeEntityCount1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
+  it should "return 409 with the set of references on referenced entity delete" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val e1 = Entity("e1", "Generic", Map.empty)
+    val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
+          status
+        }
+
+        val expected = Seq(e1, e2) map  { _.toReference }
+        assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
+        assertResult(Some(e1)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+        assertResult(Some(e2)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1 + 2)(entityCount2)
+    assertResult(attributeCount1 + 1)(attributeCount2)
+    assertResult(activeEntityCount1 + 2)(activeEntityCount2)
+    assertResult(activeAttributeCount1 + 1)(activeAttributeCount2)
+  }
+
+  it should "return 409 with the set of references on referenced entity delete with a cycle" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val e1 = Entity("e1", "Generic", Map.empty)
+    val e2 = Entity("e2", "Generic", Map(AttributeName.withDefaultNS("link") -> e1.toReference))
+    val e3 = Entity("e3", "Generic", Map(AttributeName.withDefaultNS("link") -> e2.toReference))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e3)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val update = EntityUpdateDefinition(e1.name, e1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("link"), e3.toReference)))
+    val new_e1 = e1.copy(attributes = Map(AttributeName.withDefaultNS("link") -> e3.toReference))
+
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(new_e1)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e1))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Conflict) {
+          status
+        }
+        val expected = Seq(e1, e2, e3) map { _.toReference }
+        assertSameElements(expected, responseAs[Seq[AttributeEntityReference]])
+        assertResult(Some(new_e1)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e1.entityType, e1.name))
+        }
+        assertResult(Some(e2)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e2.entityType, e2.name))
+        }
+        assertResult(Some(e3)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e3.entityType, e3.name))
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1 + 3)(entityCount2)
+    assertResult(attributeCount1 + 3)(attributeCount2)
+    assertResult(activeEntityCount1 + 3)(activeEntityCount2)
+    assertResult(activeAttributeCount1 + 3)(activeAttributeCount2)
+  }
+
+  it should "return 400 on entity delete where not all entities exist" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val request = EntityDeleteRequest(testData.sample2.copy(name = "DNE1"), testData.sample2.copy(name = "DNE2"))
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1)(entityCount2)
+    assertResult(attributeCount1)(attributeCount2)
+    assertResult(activeEntityCount1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
+  it should "return 400 on entity delete where some entities do not exist" in withTestDataApiServices { services =>
+    val (entityCount1, attributeCount1) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount1, activeAttributeCount1) = countActiveEntitiesAttrs(testData.workspace)
+
+    val request = EntityDeleteRequest(testData.sample2, testData.sample2.copy(name = "DNE"))
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(request)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+      }
+
+    val (entityCount2, attributeCount2) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCount2, activeAttributeCount2) = countActiveEntitiesAttrs(testData.workspace)
+
+    assertResult(entityCount1)(entityCount2)
+    assertResult(attributeCount1)(attributeCount2)
+    assertResult(activeEntityCount1)(activeEntityCount2)
+    assertResult(activeAttributeCount1)(activeAttributeCount2)
+  }
+
+  it should "return 201 on create entity for a previously deleted entity" in withTestDataApiServices { services =>
+    val attrs1 = Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"), AttributeName.withDefaultNS("alive") -> AttributeBoolean(false))
+    val attrs2 = Map(AttributeName.withDefaultNS("type") -> AttributeString("normal"), AttributeName.withDefaultNS("answer") -> AttributeNumber(42))
+    val attrs3 = Map(AttributeName.withDefaultNS("cout") -> AttributeString("wackwack"))
+
+    val sample = Entity("ABCD", "Sample", attrs1)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(sample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assertResult(sample) {
+          responseAs[Entity]
+        }
+        assertResult(sample) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+        }
+      }
+
+    val oldId = dbId(sample)
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(sample))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    val sampleNewAttrs = sample.copy(attributes = attrs2)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(sampleNewAttrs)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assertResult(sampleNewAttrs) {
+          responseAs[Entity]
+        }
+        assertResult(sampleNewAttrs) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+        }
+      }
+
+    val newId = dbId(sampleNewAttrs)
+    assert(oldId != newId)
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(sampleNewAttrs))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    val sampleAttrs3 = sample.copy(attributes = attrs3)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(sampleAttrs3)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+
+        assertResult(sampleAttrs3) {
+          responseAs[Entity]
+        }
+        assertResult(sampleAttrs3) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), sample.entityType, sample.name)).get
+        }
+      }
+
+    val id3 = dbId(sampleAttrs3)
+
+    assert(oldId != id3)
+    assert(newId != id3)
+  }
+
   it should "return 400 when batch upserting an entity with invalid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(RemoveListMember(AttributeName.withDefaultNS("bingo"), AttributeString("a"))))
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1))) ~>
@@ -295,6 +722,49 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), "Sample", "newSample"))
         }
       }
+  }
+
+  it should "return 204 when batch upserting an entity that was previously deleted" in withTestDataApiServices { services =>
+
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    val oldId = dbId(e)
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    val update = EntityUpdateDefinition(e.name, e.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz"))))
+    val updatedEntity = e.copy(attributes = Map(AttributeName.withDefaultNS("newAttribute") -> AttributeString("baz")))
+    Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(Some(updatedEntity)) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    val newId = dbId(e)
+
+    assert { oldId != newId }
   }
 
   it should "return 204 when batch upserting an entity with valid update operations" in withTestDataApiServices { services =>
@@ -425,6 +895,41 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 400 when batch updating an entity that was deleted" in withTestDataApiServices { services =>
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    val update1 = EntityUpdateDefinition(e.name, e.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("baz"))))
+    Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.BadRequest) {
+          status
+        }
+        assertResult(1) {
+          responseAs[ErrorReport].causes.length
+        }
+      }
+  }
+
   it should "return 204 when batch updating an entity with valid update operations" in withTestDataApiServices { services =>
     val update1 = EntityUpdateDefinition(testData.sample1.name, testData.sample1.entityType, Seq(AddUpdateAttribute(AttributeName.withDefaultNS("newAttribute"), AttributeString("bar"))))
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1))) ~>
@@ -502,41 +1007,224 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 on list entity types" in withTestDataApiServices { services =>
-    Get(s"${testData.workspace.path}/entities") ~>
+  // metadata attribute name sequences have undefined ordering, so can't compare directly
+  def assertMetadataMapsEqual(a: Map[String, EntityTypeMetadata], b: Map[String, EntityTypeMetadata]): Unit = {
+    assert(a.size == b.size, "Maps are not equal: sizes differ")
+    assertSameElements(a.keySet, b.keySet)
+    a.keysIterator.foreach { key =>
+      val aMeta = a(key)
+      val bMeta = b(key)
+      assert(aMeta.count == bMeta.count, s"Map counts differ for Entity Type $key")
+      assert(aMeta.idName == bMeta.idName, s"ID names counts differ for Entity Type $key")
+      assertSameElements(aMeta.attributeNames, bMeta.attributeNames)
+    }
+  }
+
+  val expectedMetadataMap: Map[String, EntityTypeMetadata] = Map(
+    "Sample" -> EntityTypeMetadata(8, "Sample_id", Seq("quot", "somefoo", "thingies", "type", "whatsit", "confused", "tumortype", "cycle")),
+    "Aliquot" -> EntityTypeMetadata(2, "Aliquot_id", Seq()),
+    "Pair" -> EntityTypeMetadata(2, "Pair_id", Seq("case", "control", "whatsit")),
+    "SampleSet" -> EntityTypeMetadata(5, "SampleSet_id", Seq("samples", "hasSamples")),
+    "PairSet" -> EntityTypeMetadata(1, "PairSet_id", Seq("pairs")),
+    "Individual" -> EntityTypeMetadata(2, "Individual_id", Seq("sset"))
+  )
+  it should "return 200 on list entity types" in withConstantTestDataApiServices { services =>
+    Get(s"${constantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
 
-        val entityTypes = runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(testData.workspace)))
-        assertResult(entityTypes) {
-          responseAs[Map[String, EntityTypeMetadata]]
-        }
+        assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
+        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(constantData.workspace))))
       }
   }
 
-  it should "return 200 on list all samples" in withTestDataApiServices { services =>
-    Get(s"${testData.workspace.path}/entities/${testData.sample2.entityType}") ~>
+  it should "not include deleted entities in EntityTypeMetadata" in withConstantTestDataApiServices { services =>
+    val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
+
+    Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(newSample))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    Get(s"${constantData.workspace.path}/entities") ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
           status
         }
 
-        val samples = runAndWait(entityQuery.list(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType))
-        assertSameElements(responseAs[Array[Entity]], samples)
+        assertMetadataMapsEqual(expectedMetadataMap, responseAs[Map[String, EntityTypeMetadata]])
+        assertMetadataMapsEqual(expectedMetadataMap, runAndWait(entityQuery.getEntityTypeMetadata(SlickWorkspaceContext(constantData.workspace))))
       }
   }
 
-  it should "return 404 on non-existing entity" in withTestDataApiServices { services =>
+  it should "return 200 on list all samples" in withConstantTestDataApiServices { services =>
+    val expected = Seq(constantData.sample1,
+      constantData.sample2,
+      constantData.sample3,
+      constantData.sample4,
+      constantData.sample5,
+      constantData.sample6,
+      constantData.sample7,
+      constantData.sample8)
+
+    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        assertSameElements(responseAs[Array[Entity]], expected)
+        assertSameElements(dbSamples, expected)
+      }
+  }
+
+  it should "not list deleted samples" in withConstantTestDataApiServices { services =>
+    val expected = Seq(constantData.sample1,
+      constantData.sample2,
+      constantData.sample3,
+      constantData.sample4,
+      constantData.sample5,
+      constantData.sample6,
+      constantData.sample7,
+      constantData.sample8)
+
+    val newSample = Entity("foo", "Sample", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
+
+    Post(s"${constantData.workspace.path}/entities", httpJson(newSample)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
+        assertSameElements(dbSamples, expected :+ newSample)
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(newSample))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    Get(s"${constantData.workspace.path}/entities/Sample") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val dbSamples = runAndWait(entityQuery.list(SlickWorkspaceContext(constantData.workspace), "Sample"))
+        assertSameElements(responseAs[Array[Entity]], expected)
+        assertSameElements(dbSamples, expected)
+      }
+  }
+
+  it should "return 404 on get non-existing entity" in withTestDataApiServices { services =>
     Get(testData.sample2.copy(name = "DNE").path(testData.workspace)) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
         }
+      }
+  }
+
+  it should "return 200 on get deleted entity accessed by its hidden name" in withTestDataApiServices { services =>
+    val e = Entity("foo", "bar", Map(AttributeName.withDefaultNS("blah") -> AttributeNumber(123)))
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Get(e.path(testData.workspace)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(e) {
+          responseAs[Entity]
+        }
+      }
+
+    val id = dbId(e)
+    val oldName = dbName(id)
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+      }
+
+    val newName = dbName(id)
+    assert(oldName != newName)
+
+    Get(e.path(testData.workspace)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+
+    val newEnt = e.copy(name = newName)
+
+    Get(newEnt.path(testData.workspace)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+
+        val respEnt = responseAs[Entity]
+        assertResult(e.entityType) { respEnt.entityType }
+        assert(e.name != respEnt.name)
+        assertResult(newEnt.name) { respEnt.name }
+
+        assertResult(1) { respEnt.attributes.size }
+
+        // same attribute namespace and value but the attribute name has been hidden/renamed on deletion
+        val respAttr = respEnt.attributes.head
+        val eAttr = e.attributes.head
+
+        assertResult(eAttr._1.namespace) { respAttr._1.namespace }
+        assert(respAttr._1.name.contains(eAttr._1.name + "_"))
+        assertResult(eAttr._2) { respAttr._2 }
       }
   }
 
@@ -568,6 +1256,37 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 404 on update to non-existing entity" in withTestDataApiServices { services =>
     Patch(testData.sample2.copy(name = "DNE").path(testData.workspace), httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("boo"), AttributeString("bang")): AttributeUpdateOperation))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  it should "return 404 on update to a deleted entity" in withTestDataApiServices { services =>
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    Patch(e.path(testData.workspace), httpJson(Seq(AddUpdateAttribute(AttributeName.withDefaultNS("baz"), AttributeString("bang")): AttributeUpdateOperation))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -723,23 +1442,29 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  /*
-    following 2 tests disabled until entity deletion is re-implemented (see GAWB-422)
-   */
-  ignore should "*DISABLED* return 204 on entity delete" in withTestDataApiServices { services =>
-    Delete(testData.sample2.path(testData.workspace)) ~>
+  it should "return 404 on entity rename, entity was deleted" in withTestDataApiServices { services =>
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent) {
           status
         }
         assertResult(None) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
         }
       }
-  }
-  ignore should "*DISABLED* return 404 entity delete, entity does not exist" in withTestDataApiServices { services =>
-    Delete(testData.sample2.copy(name = "s2_changed").path(testData.workspace)) ~>
+
+    Post(s"${e.path(testData.workspace)}/rename", httpJson(EntityName("baz"))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
@@ -1116,6 +1841,47 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 200 OK on entity query when there are no entities of given type" in withPaginationTestDataApiServices { services =>
     Get(s"${paginationTestData.workspace.path}/entityQuery/blarf") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK, response.entity.asString) {
+          status
+        }
+        assertResult(EntityQueryResponse(
+          defaultQuery,
+          EntityQueryResultMetadata(0, 0, 0),
+          Seq.empty)) {
+
+          responseAs[EntityQueryResponse]
+        }
+      }
+  }
+
+  it should "not return deleted entities on entity query" in withPaginationTestDataApiServices { services =>
+    val e = Entity("foo", "bar", Map.empty)
+
+    Post(s"${testData.workspace.path}/entities", httpJson(e)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created) {
+          status
+        }
+        assertResult(e) {
+          responseAs[Entity]
+        }
+      }
+
+    Post(s"${testData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(e))) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.NoContent) {
+          status
+        }
+        assertResult(None) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), e.entityType, e.name))
+        }
+      }
+
+    Get(s"${paginationTestData.workspace.path}/entityQuery/bar") ~>
       sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.OK, response.entity.asString) {
