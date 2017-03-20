@@ -26,8 +26,7 @@ function make_jar()
 
 function artifactory_push()
 {
-    # publish snapshot to artifactory
-    echo "Pushing to artifactory..."
+    echo "Publishing to artifactory..."
     docker run --rm -v $PWD:/$PROJECT -v jar-cache:/root/.ivy -v jar-cache:/root/.ivy2 -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD broadinstitute/scala-baseimage:scala-2.11.8 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
