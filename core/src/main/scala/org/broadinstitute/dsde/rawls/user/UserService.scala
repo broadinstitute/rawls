@@ -889,7 +889,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     errorReports match {
       case Seq() => None
       case Seq(single) => Option(single)
-      case many => Option(ErrorReport("multiple errors", errorReports.toSeq))
+      case many => Option(ErrorReport("multiple errors", errorReports))
     }
   }
 
