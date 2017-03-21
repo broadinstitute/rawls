@@ -2258,6 +2258,12 @@ paths:
           description: Destination workspace must match source's realm, if the source has a realm
           schema:
             $ref: '#/definitions/ErrorReport'
+        '449':
+          description: An entity that you are copying has a dependency on an entity that already exists in your workspace. Retry with the paramter linkExistingEntities=true to link them.
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Entity'
         '500':
           description: Rawls Internal Error
           schema:
@@ -2268,6 +2274,12 @@ paths:
       summary: copy entities from one workspace into another workspace
       operationId: copy_entities
       parameters:
+        - in: query
+          description: true to link new entities to existing entities, false to fail instead of link
+          name: linkExistingEntities
+          required: false
+          default: false
+          type: boolean
         - in: body
           description: Source and destination for entities
           name: entityCopyDefinition

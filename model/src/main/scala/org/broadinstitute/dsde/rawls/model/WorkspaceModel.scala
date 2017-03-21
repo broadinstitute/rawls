@@ -174,6 +174,8 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
+case class EntityCopyResponse(entitiesCopied: Seq[Entity], conflicts: Seq[Entity], subtreeConflicts: Seq[Entity])
+
 case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,

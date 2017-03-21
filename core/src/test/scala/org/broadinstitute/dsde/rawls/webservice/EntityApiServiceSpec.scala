@@ -1604,6 +1604,45 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 449 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices { services =>
+    val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
+    val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample2.entityType, Seq(testData.sample2.name))
+    val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.newSampleWithRef.entityType, Seq(testData.newSampleWithRef.name))
+
+    Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+
+    //test the default case of no parameter set
+    Post("/workspaces/entities/copy", httpJson(entityCopyDefinition2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.RetryWith, response.entity.asString) {
+          status
+        }
+      }
+
+    Post("/workspaces/entities/copy?linkExistingEntities=false", httpJson(entityCopyDefinition2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.RetryWith, response.entity.asString) {
+          status
+        }
+      }
+
+    Post("/workspaces/entities/copy?linkExistingEntities=true", httpJson(entityCopyDefinition2)) ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, response.entity.asString) {
+          status
+        }
+      }
+  }
+
   it should "return 422 when copying entities from a Realm-protected workspace into one not in that Realm" in withTestDataApiServices { services =>
     val srcWorkspace = testData.workspaceWithRealm
     val srcWorkspaceName = srcWorkspace.toWorkspaceName
