@@ -411,4 +411,30 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertExpectedRecords(toSave:_*)
   }
 
+  it should "findUniqueStringsByNameQuery shouldn't return any duplicates, limit results by namespace" in withEmptyTestDatabase{
+
+    runAndWait(workspaceQuery.save(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("testString"), AttributeString("cant")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cancer")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cantaloupe")))
+
+
+    val workspace2ID = UUID.randomUUID()
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", None, workspace2ID.toString, "fake-bucket", DateTime.now, DateTime.now, "testuser", Map.empty, Map.empty, Map.empty, false)
+    runAndWait(workspaceQuery.save(workspace2))
+    runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
+    runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))
+
+    assertResult(Vector(Some("cancer"), Some("cantaloupe"))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, Some("can")).result)
+    }
+
+    assertResult(Vector(Some("cancer"), Some("cantaloupe"), Some("buffalo"))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, None).result)
+    }
+    assertResult(Vector(Some("cant"))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withDefaultNS("testString"), Some("can")).result)
+    }
+  }
+
 }

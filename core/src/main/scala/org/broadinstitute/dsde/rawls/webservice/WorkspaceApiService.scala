@@ -108,9 +108,11 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
           WorkspaceService.GetBucketUsage(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
-    path("workspaces" / "tags" / "autocomplete" / Segment ) { (query) =>
-      get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetTags(query))
+    path("workspaces" / "tags") {
+      parameter('q.?) { queryString =>
+        get {
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetTags(queryString))
+        }
       }
     }
   }

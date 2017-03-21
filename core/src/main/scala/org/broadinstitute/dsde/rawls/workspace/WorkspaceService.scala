@@ -56,7 +56,7 @@ object WorkspaceService {
   case class UpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
   case object ListWorkspaces extends WorkspaceServiceMessage
   case object ListAllWorkspaces extends WorkspaceServiceMessage
-  case class GetTags(query: String) extends WorkspaceServiceMessage
+  case class GetTags(query: Option[String]) extends WorkspaceServiceMessage
   case class AdminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue) extends WorkspaceServiceMessage
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -354,7 +354,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def getTags(query: String): Future[PerRequestMessage] =
+  def getTags(query: Option[String]): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.getTags(query).map { result =>
         RequestComplete(StatusCodes.OK, result.toSet)

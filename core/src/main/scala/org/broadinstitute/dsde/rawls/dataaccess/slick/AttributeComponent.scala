@@ -269,13 +269,17 @@ trait AttributeComponent {
       }
     }
 
-    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: String) = {
-      filter(rec =>
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String]) = {
+      // ToDo: figure out what the generated query is
+      val basicFilter = filter(rec =>
         rec.namespace === attrName.namespace &&
-        rec.name === attrName.name &&
-        rec.valueString.isDefined &&
-        rec.valueString.like(s"%$queryString%")
-      ).map(_.valueString).distinct
+          rec.name === attrName.name &&
+          rec.valueString.isDefined)
+
+      (queryString match {
+        case Some(query) => basicFilter.filter(_.valueString.like(s"%${query}%"))
+        case None => basicFilter
+      }).map(_.valueString).distinct
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {

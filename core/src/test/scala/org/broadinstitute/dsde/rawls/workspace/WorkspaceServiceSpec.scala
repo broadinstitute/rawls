@@ -857,37 +857,66 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
 
     // when no tags, return empty set
-    val res1 = Await.result(services.workspaceService.getTags("notag"), Duration.Inf)
+    val res1 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set()) {
+    assertResult(Set.empty[String]) {
       res1.response._2
     }
 
-    // add a tag
-    Await.result(services.workspaceService.updateWorkspace(testData.workspace.toWorkspaceName, Seq(AddUpdateAttribute(AttributeName.withTagsNS("tags"), AttributeString("cancer")))), Duration.Inf)
+    // add some tags
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName,
+      Seq(AddListMember(AttributeName.withTagsNS, AttributeString("cancer")),
+        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")))), Duration.Inf)
+
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName7,
+      Seq(
+        AddListMember(AttributeName.withTagsNS, AttributeString("cantaloupe")),
+        AddListMember(AttributeName.withTagsNS, AttributeString("buffalo")))), Duration.Inf)
 
     // searching for tag that doesn't exist should return empty set
-    val res2 = Await.result(services.workspaceService.getTags("notag"), Duration.Inf)
+    val res2 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set()) {
+    assertResult(Set.empty[String]) {
       res2.response._2
     }
 
     // searching for tag that does exist should return the tag (query string case doesn't matter)
-    val res3 = Await.result(services.workspaceService.getTags("aNc"), Duration.Inf)
+    val res3 = Await.result(services.workspaceService.getTags(Some("bUf")), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set("cancer")) {
+    assertResult(Set("buffalo")) {
       res3.response._2
     }
 
+    val res4 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set("cancer")) {
+      res4.response._2
+    }
+
+    // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
+    val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set("cancer", "cantaloupe")) {
+      res5.response._2
+    }
+
+    // searching for with no query should return all tags
+    val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
+    assertResult(Set("cancer", "cantaloupe", "buffalo")) {
+      res6.response._2
+    }
+
     // remove tags
-    Await.result(services.workspaceService.updateWorkspace(testData.workspace.toWorkspaceName, Seq(RemoveAttribute(AttributeName.withTagsNS("tags")))), Duration.Inf)
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
+    Await.result(services.workspaceService.updateWorkspace(testData.wsName7, Seq(RemoveAttribute(AttributeName.withTagsNS))), Duration.Inf)
+
 
     // make sure that tags no longer exists
-    val res4 = Await.result(services.workspaceService.getTags("aNc"), Duration.Inf)
+    val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set()) {
-      res4.response._2
+    assertResult(Set.empty[String]) {
+      res7.response._2
     }
 
   }
