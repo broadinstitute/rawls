@@ -837,14 +837,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
           status
-        }
-        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute1") -> AttributeString("wang"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
-        }
-        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute2") -> AttributeString("chung"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
         }
       }
   }
@@ -875,7 +869,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpsert", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.NoContent, response.entity.asString) {
           status
         }
       }
@@ -966,14 +960,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent, response.entity.asString) {
+        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
           status
-        }
-        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute1") -> AttributeString("wang"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
-        }
-        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute2") -> AttributeString("chung"))))) {
-          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
         }
       }
   }
@@ -1004,8 +992,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     Post(s"${testData.workspace.path}/entities/batchUpdate", httpJson(Seq(update1, update2))) ~>
       sealRoute(services.entityRoutes) ~>
       check {
-        assertResult(StatusCodes.Forbidden, responseAs[ErrorReport]) {
+        assertResult(StatusCodes.NoContent, response.entity.asString) {
           status
+        }
+        assertResult(Some(Entity(testData.sample1.name, testData.sample1.entityType, testData.sample1.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute1") -> AttributeString("wang"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample1.entityType, testData.sample1.name))
+        }
+        assertResult(Some(Entity(testData.sample2.name, testData.sample2.entityType, testData.sample2.attributes + (AttributeName(AttributeName.libraryNamespace, "newAttribute2") -> AttributeString("chung"))))) {
+          runAndWait(entityQuery.get(SlickWorkspaceContext(testData.workspace), testData.sample2.entityType, testData.sample2.name))
         }
       }
   }
