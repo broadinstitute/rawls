@@ -1606,8 +1606,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   it should "return 449 for copying entities into a workspace with subtree conflicts, but successfully copy when asked to" in withTestDataApiServices { services =>
     val sourceWorkspace = WorkspaceName(testData.workspace.namespace, testData.workspace.name)
-    val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample2.entityType, Seq(testData.sample2.name))
-    val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.newSampleWithRef.entityType, Seq(testData.newSampleWithRef.name))
+    val entityCopyDefinition1 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample1.entityType, Seq(testData.sample1.name))
+    val entityCopyDefinition2 = EntityCopyDefinition(sourceWorkspace, testData.controlledWorkspace.toWorkspaceName, testData.sample3.entityType, Seq(testData.sample3.name))
 
     Post("/workspaces/entities/copy", httpJson(entityCopyDefinition1)) ~>
       sealRoute(services.entityRoutes) ~>

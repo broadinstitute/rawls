@@ -135,7 +135,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "list all entity types with their counts" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 8, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
+      assertResult(Map("PairSet" -> 1, "Individual" -> 2, "Sample" -> 9, "Aliquot" -> 2, "SampleSet" -> 5, "Pair" -> 2)) {
         runAndWait(entityQuery.getEntityTypesWithCounts(context))
       }
     }
@@ -184,7 +184,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     withWorkspaceContext(testData.workspace) { context =>
 
       val desiredTypeMetadata = Map[String, EntityTypeMetadata](
-        "Sample" -> EntityTypeMetadata(8, "sample_id", Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
+        "Sample" -> EntityTypeMetadata(9, "sample_id", Seq("type", "whatsit", "thingies", "quot", "somefoo", "tumortype", "confused", "cycle", "foo_id")),
         "Aliquot" -> EntityTypeMetadata(2, "aliquot_id", Seq()),
         "Pair" -> EntityTypeMetadata(2, "pair_id", Seq("case", "control", "whatsit")),
         "SampleSet" -> EntityTypeMetadata(5, "sampleset_id", Seq("samples", "hasSamples")),

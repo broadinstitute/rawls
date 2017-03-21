@@ -309,7 +309,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
     val sample7 = Entity("sample7", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"), AttributeName.withDefaultNS("cycle") -> AttributeEntityReference("Sample", "sample6")))
     val sample8 = Entity("sample8", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("tumor"), AttributeName.withDefaultNS("foo_id") -> AttributeString("1029384756")))
     val extraSample = Entity("extraSample", "Sample", Map.empty)
-    val newSampleWithRef = Entity("extraSample", "Sample", Map(AttributeName.withDefaultNS("case") -> AttributeEntityReference("Sample", "sample2")))
 
     val aliquot1 = Entity("aliquot1", "Aliquot", Map.empty)
     val aliquot2 = Entity("aliquot2", "Aliquot", Map.empty)
@@ -548,7 +547,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess {
         workspaceQuery.insertGroupSharePermissions(workspaceToTestGrantId, Seq(RawlsGroupRef(dbGapAuthorizedUsersGroup.groupName))),
         withWorkspaceContext(workspace)({ context =>
           DBIO.seq(
-                entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2, newSampleWithRef)),
+                entityQuery.save(context, Seq(aliquot1, aliquot2, sample1, sample2, sample3, sample4, sample5, sample6, sample7, sample8, pair1, pair2, ps1, sset1, sset2, sset3, sset4, sset_empty, indiv1, indiv2)),
 
                 methodConfigurationQuery.create(context, methodConfig),
                 methodConfigurationQuery.create(context, methodConfig2),
