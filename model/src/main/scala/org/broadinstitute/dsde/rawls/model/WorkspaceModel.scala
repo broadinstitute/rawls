@@ -411,6 +411,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceResponseFormat = jsonFormat5(WorkspaceResponse)
 
+  implicit val WorkspacePermissionsPairFormat = jsonFormat2(WorkspacePermissionsPair)
+
   implicit val ValidatedMethodConfigurationFormat = jsonFormat5(ValidatedMethodConfiguration)
 
   implicit val MethodInputFormat = jsonFormat3(MethodInput)

@@ -3181,6 +3181,38 @@ paths:
             - openid
             - email
             - profile
+  '/api/workspaces/access':
+    post:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/WorkspacePermissionsPair'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Check access for specific workspaces
+      tags:
+        - workspaces
+      summary: Check access for specific workspaces
+      operationId: workspacesAccessCheck
+      consumes:
+        - application/json
+      parameters:
+        - in: body
+          description: json array of workspace ids to check
+          name: workspaceIds
+          required: true
+          type: string
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+            - https://www.googleapis.com/auth/devstorage.full_control
   '/api/workspaces/{workspaceNamespace}/{workspaceName}':
     patch:
       responses:
@@ -4473,7 +4505,7 @@ definitions:
         type: array
         description: the users or groups who were updated
         items:
-          $ref: '#/definitions/WorkspaceACLUpdateResponse'
+          $ref: '#/definitions/WorkspaceACLUpdate'
       invitesSent:
         type: array
         description: the list of invites that were sent
@@ -4506,6 +4538,19 @@ definitions:
       canShare:
         type: boolean
         description: True if the user can share the workspace with others, false otherwise
+
+  WorkspacePermissionsPair:
+    description: ''
+    required:
+      - workspaceId
+      - accessLevel
+    properties:
+      workspaceId:
+        type: string
+        description: A UUID associated with the workspace
+      accessLevel:
+        type: string
+        description: Current user's access level
 
   Workspace:
     description: ''
