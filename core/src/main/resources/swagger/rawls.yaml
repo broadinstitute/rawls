@@ -3136,7 +3136,7 @@ paths:
       description: Returns workspace catalog permissions for users and groups with the permission for the workspace
       tags:
         - workspaces
-      summary: Returns workspace catalog permissions for users and groups with the permission for the workspace
+      summary: Get catalog permissions
       operationId: getCatalog
       parameters:
         - in: path
