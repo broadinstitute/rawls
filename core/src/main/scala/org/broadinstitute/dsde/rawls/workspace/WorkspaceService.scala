@@ -482,9 +482,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
-        updateCatalogPermissions(input, dataAccess, workspaceContext) map { resp =>
-          RequestComplete(StatusCodes.OK, resp)
-        }
+        updateCatalogPermissions(input, dataAccess, workspaceContext).map {RequestComplete(StatusCodes.OK, _)}
       }
     }
   }
