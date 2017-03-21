@@ -438,7 +438,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
 
   private def ignoreStatusLastChangedDate(response: ExecutionServiceStatusResponse): ExecutionServiceStatusResponse = {
     ExecutionServiceStatusResponse(response.statusResponse.map {
-      case scala.util.Success(Some((workflowRec, outputs))) => scala.util.Success(Some(workflowRec.copy(statusLastChangedDate = null), outputs))
+      case scala.util.Success(Some((workflowRec, execOutputs))) => scala.util.Success(Some(workflowRec.copy(statusLastChangedDate = null), execOutputs))
       case otherwise => otherwise
     })
   }

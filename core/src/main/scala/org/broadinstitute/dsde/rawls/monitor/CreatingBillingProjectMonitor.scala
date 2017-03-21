@@ -99,8 +99,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging {
               case util.Failure(t) =>
                 logger.info(s"Failure creating project $project", t)
                 Future.successful(project.copy(status = CreationStatuses.Error, message = Option(t.getMessage)))
-              case Success(operations) => datasource.inTransaction { dataAccess =>
-                dataAccess.rawlsBillingProjectQuery.insertOperations(operations).map(_ => project)
+              case Success(operationRecords) => datasource.inTransaction { dataAccess =>
+                dataAccess.rawlsBillingProjectQuery.insertOperations(operationRecords).map(_ => project)
               }
             }
 

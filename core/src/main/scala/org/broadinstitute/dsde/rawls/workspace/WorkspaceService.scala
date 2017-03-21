@@ -392,8 +392,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     } yield pairs
 
     rawPairs.map { pairs =>
-      pairs.groupBy(_.workspaceId).map { case (workspaceId, pairs) =>
-        pairs.reduce((a, b) => WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(a.accessLevel, b.accessLevel)))
+      pairs.groupBy(_.workspaceId).map { case (workspaceId, pairsInWorkspace) =>
+        pairsInWorkspace.reduce((a, b) => WorkspacePermissionsPair(workspaceId, WorkspaceAccessLevels.max(a.accessLevel, b.accessLevel)))
       }.toSeq
     }
   }

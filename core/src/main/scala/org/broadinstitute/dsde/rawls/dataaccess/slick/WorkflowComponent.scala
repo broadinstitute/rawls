@@ -172,8 +172,8 @@ trait WorkflowComponent {
         insertInBatches(workflowMessageQuery, messageRecs)
       }
 
-      val entitiesWithMultipleWorkflows = workflows.groupBy(_.workflowEntity).filter { case (entityRef, workflows) => workflows.size > 1 }.keys
-      if (!entitiesWithMultipleWorkflows.isEmpty) {
+      val entitiesWithMultipleWorkflows = workflows.groupBy(_.workflowEntity).filter { case (entityRef, workflowsForEntity) => workflowsForEntity.size > 1 }.keys
+      if (entitiesWithMultipleWorkflows.nonEmpty) {
         throw new RawlsException(s"Each workflow in a submission must have a unique entity. Entities [${entitiesWithMultipleWorkflows.mkString(", ")}] have multiple workflows")
       }
 

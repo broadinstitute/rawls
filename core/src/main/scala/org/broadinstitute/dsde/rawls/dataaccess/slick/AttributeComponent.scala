@@ -347,7 +347,7 @@ trait AttributeComponent {
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
-        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
+        id -> workspaceAttributeRecsWithRef.groupBy { case ((_, attrRec), _) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
           val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listLength.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
