@@ -393,6 +393,8 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
 
+  implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
+
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 
   implicit val MethodConfigurationFormat = jsonFormat9(MethodConfiguration)
