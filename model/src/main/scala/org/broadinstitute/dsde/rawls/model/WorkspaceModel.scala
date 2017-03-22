@@ -335,6 +335,8 @@ object AttributeStringifier {
   }
 }
 
+case class WorkspaceTag(tag: String, count: Int)
+
 class WorkspaceJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -417,6 +419,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodOutputFormat = jsonFormat2(MethodOutput)
 
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
+
+  implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

@@ -858,8 +858,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     // when no tags, return empty set
     val res1 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set.empty[String]) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector.empty[WorkspaceTag]) {
       res1.response._2
     }
 
@@ -875,35 +875,35 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     // searching for tag that doesn't exist should return empty set
     val res2 = Await.result(services.workspaceService.getTags(Some("notag")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set.empty[String]) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[String])]]
+    assertResult(Vector.empty[String]) {
       res2.response._2
     }
 
     // searching for tag that does exist should return the tag (query string case doesn't matter)
     val res3 = Await.result(services.workspaceService.getTags(Some("bUf")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set("buffalo")) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("buffalo", 1))) {
       res3.response._2
     }
 
     val res4 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set("cancer")) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("cancer", 1))) {
       res4.response._2
     }
 
     // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
     val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set("cancer", "cantaloupe")) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("cancer", 1), WorkspaceTag("cantaloupe", 2))) {
       res5.response._2
     }
 
     // searching for with no query should return all tags
     val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set("cancer", "cantaloupe", "buffalo")) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector(WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1), WorkspaceTag("cantaloupe", 2))) {
       res6.response._2
     }
 
@@ -914,8 +914,8 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
 
     // make sure that tags no longer exists
     val res7 = Await.result(services.workspaceService.getTags(Some("aNc")), Duration.Inf)
-      .asInstanceOf[RequestComplete[(StatusCode, Set[String])]]
-    assertResult(Set.empty[String]) {
+      .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
+    assertResult(Vector.empty[WorkspaceTag]) {
       res7.response._2
     }
 
