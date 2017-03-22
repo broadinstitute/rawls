@@ -30,12 +30,7 @@ Spin up mysql locally and validate that it is working:
 ```
 Run tests.
 ```
-sbt clean compile test -Dmysql.host=localhost
-```
-Optionally include a custom mysql port. 
-The default is 3306 but can be changed by setting the system property:
-```
-sbt clean compile test -Dmysql.host=localhost -Dmysql.port=3306
+sbt clean compile test -Dmysql.host=localhost -Dmysql.port=3310
 ```
 And when you're done, spin down mysql:
 ```
