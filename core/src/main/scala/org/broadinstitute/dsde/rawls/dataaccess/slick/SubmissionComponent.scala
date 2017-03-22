@@ -123,11 +123,9 @@ trait SubmissionComponent {
           case (submissionRec, userRec, methodConfigRec, entityRec) =>
             val user = rawlsUserQuery.unmarshalRawlsUser(userRec)
             val config = methodConfigurationQuery.unmarshalMethodConfig(methodConfigRec, Map.empty, Map.empty, Map.empty)
-            val entity = AttributeEntityReference(entityRec.entityType, entityRec.name)
-
             val subStatuses = states.getOrElse(submissionRec.id, Seq.empty).map(x => x.workflowStatus -> x.count).toMap
 
-            new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entity, Seq.empty), user, subStatuses)
+            new SubmissionListResponse(unmarshalSubmission(submissionRec, config, entityRec.toReference, Seq.empty), user, subStatuses)
         }
         }
       }
@@ -296,7 +294,7 @@ trait SubmissionComponent {
             (wr.id, Workflow(wr.externalId,
               WorkflowStatuses.withName(wr.status),
               new DateTime(wr.statusLastChangedDate.getTime),
-              AttributeEntityReference(er.entityType, er.name),
+              er.toReference,
               workflowResolutions.sortBy(_.inputName), //enforce consistent sorting
               messages
             ))
@@ -376,9 +374,7 @@ trait SubmissionComponent {
       )
     }
 
-    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = {
-      AttributeEntityReference(entityRec.entityType, entityRec.name)
-    }
+    private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = entityRec.toReference
 
     private object WorkflowAndMessagesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcDriver = SubmissionComponent.this.driver

@@ -219,7 +219,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
         groups.update(group, members + member)
         googleGroups(group.groupEmail.value) += (member match {
           case Left(user) => toProxyFromUser(user.userSubjectId)
-          case Right(group) => toGoogleGroupName(group.groupName)
+          case Right(groupMember) => toGoogleGroupName(groupMember.groupName)
         })
       case None => throw new RuntimeException(s"group $group does not exist")
     }
@@ -236,7 +236,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
         groups.update(group, members - member)
         googleGroups(group.groupEmail.value) -= (member match {
           case Left(user) => toProxyFromUser(user.userSubjectId)
-          case Right(group) => toGoogleGroupName(group.groupName)
+          case Right(groupMember) => toGoogleGroupName(groupMember.groupName)
         })
       case None => throw new RuntimeException(s"group $group does not exist")
     }
@@ -245,7 +245,7 @@ class MockGoogleServicesDAO(groupsPrefix: String) extends GoogleServicesDAO(grou
   override def listGroupMembers(group: RawlsGroup): Future[Option[Map[String, Option[Either[RawlsUserRef, RawlsGroupRef]]]]] = Future {
     groups.get(group) map ( _.map {
       case Left(user) => user.userEmail.value -> Option(Left(RawlsUser.toRef(user)))
-      case Right(group) => group.groupEmail.value -> Option(Right(RawlsGroup.toRef(group)))
+      case Right(groupMember) => groupMember.groupEmail.value -> Option(Right(RawlsGroup.toRef(groupMember)))
     } toMap)
   }
 

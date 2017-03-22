@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model._
 import org.joda.time.DateTime
-import slick.dbio.Effect.Read
 import org.broadinstitute.dsde.rawls.dataaccess.SlickWorkspaceContext
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 
@@ -184,11 +183,11 @@ trait WorkspaceComponent {
       } map { _ => workspace }
     }
 
-    private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Unit] = {
+    private def insertOrUpdateAccessRecords(workspace: Workspace): WriteAction[Int] = {
       val id = UUID.fromString(workspace.workspaceId)
       val accessRecords = workspace.accessLevels.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, false) }
       val realmAclRecords = workspace.realmACLs.map { case (accessLevel, group) => WorkspaceAccessRecord(id, group.groupName.value, accessLevel.toString, true) }
-      DBIO.seq((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }.toSeq: _*)
+      DBIO.sequence((accessRecords ++ realmAclRecords).map { workspaceAccessQuery insertOrUpdate }).map(_.sum)
     }
 
     private def upsertAttributes(workspace: Workspace) = {
@@ -198,12 +197,12 @@ trait WorkspaceComponent {
       val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list}.flatten
       val entitiesToLookup = entityRefs ++ entityRefListMembers
 
-      def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): ReadWriteAction[Unit] = {
+      def insertScratchAttributes(attributeRecs: Seq[WorkspaceAttributeRecord])(transactionId: String): WriteAction[Int] = {
         workspaceAttributeScratchQuery.batchInsertAttributes(attributeRecs, transactionId)
       }
 
       entityQuery.lookupEntitiesByNames(workspaceId, entitiesToLookup) flatMap { entityRecords =>
-        val entityIdsByRef = entityRecords.map(rec => AttributeEntityReference(rec.entityType, rec.name) -> rec.id).toMap
+        val entityIdsByRef = entityRecords.map(e => e.toReference -> e.id).toMap
         val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
 
         workspaceAttributeQuery.findByOwnerQuery(Seq(workspaceId)).result flatMap { existingAttributes =>
@@ -235,10 +234,10 @@ trait WorkspaceComponent {
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
         case None => DBIO.successful(false)
         case Some(workspaceRecord) =>
-          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))) flatMap { _ =>
+          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))) andThen {
             //should we be deleting ALL workspace-related things inside of this method?
             workspaceAccessQuery.filter(_.workspaceId === workspaceRecord.id).delete
-          } flatMap { _ =>
+          } andThen {
             findByIdQuery(workspaceRecord.id).delete
           } map { count =>
             count > 0
@@ -684,11 +683,11 @@ trait WorkspaceComponent {
       }
     }
 
-    private def loadWorkspace(lookup: WorkspaceQueryType): DBIOAction[Option[Workspace], NoStream, Read] = {
+    private def loadWorkspace(lookup: WorkspaceQueryType): ReadAction[Option[Workspace]] = {
       uniqueResult(loadWorkspaces(lookup))
     }
 
-    private def loadWorkspaces(lookup: WorkspaceQueryType): DBIOAction[Seq[Workspace], NoStream, Read] = {
+    private def loadWorkspaces(lookup: WorkspaceQueryType): ReadAction[Seq[Workspace]] = {
       for {
         workspaceRecs <- lookup.result
         workspaceAttributeRecs <- workspaceAttributesWithReferences(lookup).result

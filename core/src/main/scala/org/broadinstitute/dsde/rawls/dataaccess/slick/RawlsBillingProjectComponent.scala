@@ -153,7 +153,7 @@ trait RawlsBillingProjectComponent {
       usersAndProjects.result.map { results =>
         results.groupBy { case (userRec, optProjectRec) => userRec } map {
           case (userRec, userAndProjectOps) =>
-            val projects = userAndProjectOps.collect { case (userRec, Some(projectRec)) => RawlsBillingProjectName(projectRec.projectName) }
+            val projects = userAndProjectOps.collect { case (_, Some(projectRec)) => RawlsBillingProjectName(projectRec.projectName) }
             rawlsUserQuery.unmarshalRawlsUser(userRec) -> projects
         }
       }

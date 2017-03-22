@@ -248,10 +248,10 @@ trait RawlsGroupComponent {
       load(groupRef) flatMap {
         case None => throw new RawlsException(s"Unable to load group ${groupRef}")
         case Some(group) =>
-          listDescendantGroupsRecursive(Set(marshalRawlsGroup(group)), Set(marshalRawlsGroup(group))) flatMap { groups =>
-            DBIO.sequence(groups.toSeq.map { group =>
-              listGroupUsers(group)
-            }).map(_.reduce(_ ++ _))
+          val rawlsGroupRec = Set(marshalRawlsGroup(group))
+          listDescendantGroupsRecursive(rawlsGroupRec, rawlsGroupRec) flatMap { groupRecs =>
+            val userRefs = groupRecs map listGroupUsers
+            DBIO.sequence(userRefs.toSeq).map(_.toSet.flatten)
           }
       }
     }

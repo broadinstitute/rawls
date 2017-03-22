@@ -46,9 +46,9 @@ trait RawlsTestUtils extends Suite with TestDriverComponent with Matchers {
   // Seq flavor of above
   def assertWorkspaceResult(expected: Seq[Workspace])(actual: Seq[Workspace]) = {
     expected zip actual foreach {
-      case (e, a) =>
-        assertResult(e) {
-          a.copy(lastModified = e.lastModified)
+      case (exp, act) =>
+        assertResult(exp) {
+          act.copy(lastModified = exp.lastModified)
         }
       case _ => throw new TestFailedException(Some("Unable to parse expected value: " + expected.toString), None, 4)
     }

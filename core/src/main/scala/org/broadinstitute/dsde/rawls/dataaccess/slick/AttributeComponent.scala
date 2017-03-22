@@ -226,16 +226,16 @@ trait AttributeComponent {
       insertInBatches(this, attributes)
     }
 
-    def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
+    private def marshalAttributeEmptyEntityReferenceList(ownerId: OWNER_ID, attributeName: AttributeName): RECORD = {
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, None, None, Option(0), false)
     }
 
-    def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
+    private def marshalAttributeEntityReference(ownerId: OWNER_ID, attributeName: AttributeName, listIndex: Option[Int], ref: AttributeEntityReference, entityIdsByRef: Map[AttributeEntityReference, Long], listLength: Option[Int]): RECORD = {
       val entityId = entityIdsByRef.getOrElse(ref, throw new RawlsException(s"$ref not found"))
       createRecord(0, ownerId, attributeName.namespace, attributeName.name, None, None, None, None, Option(entityId), listIndex, listLength, false)
     }
 
-    def marshalAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
+    private def marshalAttributeValue(ownerId: OWNER_ID, attributeName: AttributeName, value: AttributeValue, listIndex: Option[Int], listLength: Option[Int]): RECORD = {
       val valueBoolean = value match {
         case AttributeBoolean(b) => Option(b)
         case _ => None
@@ -298,7 +298,7 @@ trait AttributeComponent {
     def toPrimaryKeyMap(recs: Traversable[RECORD]) =
       recs.map { rec => (AttributeRecordPrimaryKey(rec.ownerId, rec.namespace, rec.name, rec.listIndex), rec) }.toMap
 
-    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => ReadWriteAction[Unit]) = {
+    def upsertAction(attributesToSave: Traversable[RECORD], existingAttributes: Traversable[RECORD], insertFunction: Seq[RECORD] => String => WriteAction[Int]) = {
       val toSaveAttrMap = toPrimaryKeyMap(attributesToSave)
       val existingAttrMap = toPrimaryKeyMap(existingAttributes)
 
@@ -337,7 +337,7 @@ trait AttributeComponent {
         sqlu"""delete from #${baseTableRow.tableName}_SCRATCH where transaction_id = $transactionId"""
       }
 
-      def updateAction(insertIntoScratchFunction: String => ReadWriteAction[Unit]) = {
+      def updateAction(insertIntoScratchFunction: String => WriteAction[Int]) = {
         val transactionId = UUID.randomUUID().toString
         insertIntoScratchFunction(transactionId) andThen
           updateInMasterAction(transactionId) andThen
@@ -347,7 +347,7 @@ trait AttributeComponent {
 
     def unmarshalAttributes[ID](allAttributeRecsWithRef: Seq[((ID, RECORD), Option[EntityRecord])]): Map[ID, AttributeMap] = {
       allAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => id }.map { case (id, workspaceAttributeRecsWithRef) =>
-        id -> workspaceAttributeRecsWithRef.groupBy { case ((id, attrRec), entOp) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
+        id -> workspaceAttributeRecsWithRef.groupBy { case ((_, attrRec), _) => AttributeName(attrRec.namespace, attrRec.name) }.map { case (attrName, attributeRecsWithRefForNameWithDupes) =>
           val attributeRecsWithRefForName = attributeRecsWithRefForNameWithDupes.map { case ((wsId, attributeRec), entityRec) => (attributeRec, entityRec) }.toSet
           val unmarshalled = if (attributeRecsWithRefForName.forall(_._1.listLength.isDefined)) {
             unmarshalList(attributeRecsWithRefForName)
@@ -419,8 +419,6 @@ trait AttributeComponent {
       }
     }
 
-    private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = {
-      AttributeEntityReference(entityType = referredEntity.entityType, entityName = referredEntity.name)
-    }
+    private def unmarshalReference(referredEntity: EntityRecord): AttributeEntityReference = referredEntity.toReference
   }
 }
