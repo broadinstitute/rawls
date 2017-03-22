@@ -894,16 +894,17 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     }
 
     // searching for multiple tag that does exist should return the tags (query string case doesn't matter)
+    // should be sorted by counts of tags
     val res5 = Await.result(services.workspaceService.getTags(Some("cAn")), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-    assertResult(Vector(WorkspaceTag("cancer", 1), WorkspaceTag("cantaloupe", 2))) {
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("cancer", 1))) {
       res5.response._2
     }
 
     // searching for with no query should return all tags
     val res6 = Await.result(services.workspaceService.getTags(None), Duration.Inf)
       .asInstanceOf[RequestComplete[(StatusCode, Vector[WorkspaceTag])]]
-    assertResult(Vector(WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1), WorkspaceTag("cantaloupe", 2))) {
+    assertResult(Vector(WorkspaceTag("cantaloupe", 2), WorkspaceTag("buffalo", 1), WorkspaceTag("cancer", 1))) {
       res6.response._2
     }
 

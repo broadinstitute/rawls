@@ -281,7 +281,7 @@ trait AttributeComponent {
         case Some(query) => basicFilter.filter(_.valueString.like(s"%${query}%"))
         case None => basicFilter
       }).groupBy(_.valueString).map(queryThing =>
-        (queryThing._1.get, queryThing._2.length)) // not sure if we should be concerned about the .get erroring out?
+        (queryThing._1.get, queryThing._2.length))
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {

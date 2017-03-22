@@ -357,7 +357,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getTags(query: Option[String]): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.getTags(query).map { result =>
-        RequestComplete(StatusCodes.OK, result)
+        RequestComplete(StatusCodes.OK, result.sortWith(_.count > _.count))
       }
     }
 
