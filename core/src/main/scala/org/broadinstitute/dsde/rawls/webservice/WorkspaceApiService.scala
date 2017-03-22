@@ -29,6 +29,9 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
             WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.CreateWorkspace(workspace))
         }
+      } ~
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaces)
       }
     } ~
     path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
@@ -37,21 +40,12 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
           requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
             WorkspaceService.UpdateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations))
         }
-      }
-    } ~
-    path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
+      } ~
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.GetWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
-      }
-    } ~
-      path("workspaces" / Segment / Segment) { (workspaceNamespace, workspaceName) =>
-        delete {
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.DeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
-        }
       } ~
-    path("workspaces") {
-      get {
-        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.ListWorkspaces)
+      delete {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo), WorkspaceService.DeleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "clone" ) { (sourceNamespace, sourceWorkspace) =>
@@ -66,17 +60,25 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
       get {
         requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
                                 WorkspaceService.GetACL(WorkspaceName(workspaceNamespace, workspaceName)))
-      }
-    } ~
-    path("workspaces" / Segment / Segment / "acl" ) { (workspaceNamespace, workspaceName) =>
+      } ~
       patch {
         parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
-          requireUserInfo() { userInfo =>
-            entity(as[Array[WorkspaceACLUpdate]]) { aclUpdate =>
-              requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-                WorkspaceService.UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean))
-            }
+          entity(as[Array[WorkspaceACLUpdate]]) { aclUpdate =>
+            requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+              WorkspaceService.UpdateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean))
           }
+        }
+      }
+    } ~
+    path("workspaces" / Segment / Segment / "catalog" ) { (workspaceNamespace, workspaceName) =>
+      get {
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.GetCatalog(WorkspaceName(workspaceNamespace, workspaceName)))
+      } ~
+      patch {
+        entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
+          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+            WorkspaceService.UpdateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate))
         }
       }
     } ~
@@ -88,18 +90,14 @@ trait WorkspaceApiService extends HttpService with PerRequestCreator with UserIn
     } ~
     path("workspaces" / Segment / Segment / "lock" ) { (workspaceNamespace, workspaceName) =>
       put {
-        requireUserInfo() { userInfo =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.LockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
-        }
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.LockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "unlock" ) { (workspaceNamespace, workspaceName) =>
       put {
-        requireUserInfo() { userInfo =>
-          requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
-            WorkspaceService.UnlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
-        }
+        requestContext => perRequest(requestContext, WorkspaceService.props(workspaceServiceConstructor, userInfo),
+          WorkspaceService.UnlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)))
       }
     } ~
     path("workspaces" / Segment / Segment / "bucketUsage" ) { (workspaceNamespace, workspaceName) =>

@@ -579,6 +579,60 @@ class WorkspaceServiceSpec extends FlatSpec with ScalatestRouteTest with Matcher
     assert(!vComplete4.response._2.acl.toSeq.contains(("obama@whitehouse.gov", AccessEntry(WorkspaceAccessLevels.Owner, true, false))))
   }
 
+  it should "retrieve catalog permission" in withTestDataServices { services =>
+    val vComplete = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]]
+    val (vStatus, vData) = vComplete.response
+    assertResult((StatusCodes.OK, Vector.empty)) {
+      (vStatus, vData.filter(wc => wc.catalog))
+    }
+  }
+
+  it should "patch Catalog and return updated permissions" in withTestDataServices { services =>
+    val user = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
+    val group = RawlsGroup(RawlsGroupName("test"), RawlsGroupEmail("group@whitehouse.gov"), Set.empty[RawlsUserRef], Set.empty[RawlsGroupRef])
+    runAndWait(rawlsUserQuery.save(user))
+    runAndWait(rawlsGroupQuery.save(group))
+
+    services.gcsDAO.createGoogleGroup(group)
+
+    //add catalog perm
+    val catalogUpdateResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", true),WorkspaceCatalog("group@whitehouse.gov", true),WorkspaceCatalog("none@nowhere.gov", true))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+    val expectedResponse = WorkspaceCatalogUpdateResponseList(Seq(
+      WorkspaceCatalogResponse(user.userSubjectId.value, true),
+      WorkspaceCatalogResponse(group.groupName.value,true)),Seq("none@nowhere.gov"))
+
+    assertResult((StatusCodes.OK, expectedResponse)) {
+      catalogUpdateResponse.response
+    }
+
+    //check result
+    val (_, catalogUpdates) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    assertSameElements(Vector(WorkspaceCatalog("obama@whitehouse.gov",true),WorkspaceCatalog("group@whitehouse.gov",true)), catalogUpdates)
+
+    //remove catalog perm
+    val catalogRemoveResponse = Await.result(services.workspaceService.updateCatalog(testData.workspace.toWorkspaceName,
+      Seq(WorkspaceCatalog("obama@whitehouse.gov", false),WorkspaceCatalog("group@whitehouse.gov", false),WorkspaceCatalog("none@nowhere.gov", false))), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, WorkspaceCatalogUpdateResponseList)]]
+
+    assertResult((StatusCodes.OK, Seq("none@nowhere.gov"))) {
+      (catalogRemoveResponse.response._1, catalogRemoveResponse.response._2.emailsNotFound)
+    }
+    assertSameElements(Seq(WorkspaceCatalogResponse("obamaiscool", false),WorkspaceCatalogResponse("test", false)), catalogRemoveResponse.response._2.usersUpdated)
+
+    //check result
+    val (_, catalogRemovals) = Await.result(services.workspaceService.getCatalog(testData.workspace.toWorkspaceName), Duration.Inf)
+      .asInstanceOf[RequestComplete[(StatusCode, Seq[WorkspaceCatalog])]].response
+
+    assertResult(Vector.empty){
+      catalogRemovals
+    }
+  }
+
   it should "lock a workspace with terminated submissions" in withTestDataServices { services =>
     //check workspace is not locked
     assert(!testData.workspaceTerminatedSubmissions.isLocked)

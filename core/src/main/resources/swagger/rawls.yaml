@@ -3116,6 +3116,89 @@ paths:
             - email
             - profile
 
+  '/api/workspaces/{workspaceNamespace}/{workspaceName}/catalog':
+    get:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/WorkspaceCatalog'
+        '404':
+          description: Workspace not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Returns workspace catalog permissions for users and groups with the permission for the workspace
+      tags:
+        - workspaces
+      summary: Get catalog permissions
+      operationId: getCatalog
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+    patch:
+      responses:
+        '200':
+          description: Successful Request
+          schema:
+            $ref: '#/definitions/WorkspaceCatalogUpdateResponseList'
+        '404':
+          description: Workspace, user or group not found
+          schema:
+            $ref: '#/definitions/ErrorReport'
+        '500':
+          description: Rawls Internal Error
+          schema:
+            $ref: '#/definitions/ErrorReport'
+      description: Edit catalog permissions for a workspace
+      tags:
+        - workspaces
+      summary: Update catalog permission
+      operationId: updateCatalog
+      parameters:
+        - in: path
+          description: Workspace Namespace
+          name: workspaceNamespace
+          required: true
+          type: string
+        - in: path
+          description: Workspace Name
+          name: workspaceName
+          required: true
+          type: string
+        - in: body
+          description: Series of Catalog updates for workspace
+          name: catalogUpdates
+          required: true
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/WorkspaceCatalog'
+      security:
+        - authorization:
+            - openid
+            - email
+            - profile
+
   '/api/workspaces':
     post:
       responses:
@@ -4473,7 +4556,7 @@ definitions:
         type: array
         description: the users or groups who were updated
         items:
-          $ref: '#/definitions/WorkspaceACLUpdateResponse'
+          $ref: '#/definitions/WorkspaceACLUpdate'
       invitesSent:
         type: array
         description: the list of invites that were sent
@@ -4489,6 +4572,49 @@ definitions:
         description: the users or groups who were not found
         items:
           $ref: '#/definitions/WorkspaceACLUpdate'
+
+  WorkspaceCatalog:
+    description: ''
+    required:
+      - email
+      - catalog
+    properties:
+      email:
+        type: string
+        description: email of the user or group whose permissions will be changed
+      catalog:
+        type: boolean
+        description: Set to true if you want this user to be able to perform library related operations on the workspace
+
+  WorkspaceCatalogResponse:
+    description: ''
+    required:
+      - subjectId
+      - catalog
+    properties:
+      subjectId:
+        type: string
+        description: subject Id of the user or group whose permissions will be changed
+      catalog:
+        type: boolean
+        description: Set to true if you want this user to be able to perform library related operations on the workspace
+
+  WorkspaceCatalogUpdateResponseList:
+    description: ''
+    required:
+      - usersUpdated
+      - emailsNotFound
+    properties:
+      usersUpdated:
+        type: array
+        description: the users or groups who were updated
+        items:
+          $ref: '#/definitions/WorkspaceCatalogResponse'
+      emailsNotFound:
+        type: array
+        description: the emails of users or groups who were not found
+        items:
+          type: string
 
   WorkspaceAccessEntry:
     description: ''
@@ -4676,6 +4802,8 @@ definitions:
       accessLevel:
         $ref: '#/definitions/WorkspaceAccessLevel'
       canShare:
+        type: boolean
+      catalog:
         type: boolean
       workspace:
         $ref: '#/definitions/Workspace'

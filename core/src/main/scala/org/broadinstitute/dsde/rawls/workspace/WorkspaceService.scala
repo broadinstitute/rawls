@@ -33,6 +33,8 @@ import spray.http.{StatusCodes, Uri}
 import spray.httpx.SprayJsonSupport._
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport.{WorkspaceACLFormat, WorkspaceCatalogFormat, WorkspaceCatalogUpdateResponseListFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -60,6 +62,8 @@ object WorkspaceService {
   case class CloneWorkspace(sourceWorkspace: WorkspaceName, destWorkspace: WorkspaceRequest) extends WorkspaceServiceMessage
   case class GetACL(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UpdateACL(workspaceName: WorkspaceName, aclUpdates: Seq[WorkspaceACLUpdate], inviteUsersNotFound: Boolean) extends WorkspaceServiceMessage
+  case class GetCatalog(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class UpdateCatalog(workspaceName: WorkspaceName, catalogUpdates: Seq[WorkspaceCatalog]) extends WorkspaceServiceMessage
   case class LockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class UnlockWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class CheckBucketReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -135,6 +139,8 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case CloneWorkspace(sourceWorkspace, destWorkspaceRequest) => pipe(cloneWorkspace(sourceWorkspace, destWorkspaceRequest)) to sender
     case GetACL(workspaceName) => pipe(getACL(workspaceName)) to sender
     case UpdateACL(workspaceName, aclUpdates, inviteUsersNotFound) => pipe(updateACL(workspaceName, aclUpdates, inviteUsersNotFound)) to sender
+    case GetCatalog(workspaceName) => pipe(getCatalog(workspaceName)) to sender
+    case UpdateCatalog(workspaceName, catalogUpdates) => pipe(updateCatalog(workspaceName, catalogUpdates)) to sender
     case LockWorkspace(workspaceName: WorkspaceName) => pipe(lockWorkspace(workspaceName)) to sender
     case UnlockWorkspace(workspaceName: WorkspaceName) => pipe(unlockWorkspace(workspaceName)) to sender
     case CheckBucketReadAccess(workspaceName: WorkspaceName) => pipe(checkBucketReadAccess(workspaceName)) to sender
@@ -188,7 +194,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createWorkspace(workspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, workspaceRequest) {
+    withAttributeNamespaceCheck(workspaceRequest) {
       dataSource.inTransaction { dataAccess =>
         withNewWorkspaceContext(workspaceRequest, dataAccess) { workspaceContext =>
           DBIO.successful(RequestCompleteWithLocation((StatusCodes.Created, workspaceContext.workspace), workspaceRequest.toWorkspaceName.path))
@@ -200,16 +206,16 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
         getMaximumAccessLevel(RawlsUser(userInfo), workspaceContext, dataAccess) flatMap { accessLevel =>
-          getUserSharePermissions(workspaceContext, accessLevel, dataAccess) flatMap { canShare =>
-            if (accessLevel < WorkspaceAccessLevels.Read)
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
-            else {
-              for {
-                stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
-                owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
-              } yield {
-                RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, workspaceContext.workspace, stats, owners))
-              }
+          if (accessLevel < WorkspaceAccessLevels.Read)
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+          else {
+            for {
+              catalog <- getUserCatalogPermissions(workspaceContext, dataAccess)
+              canShare <- getUserSharePermissions(workspaceContext, accessLevel, dataAccess)
+              stats <- getWorkspaceSubmissionStats(workspaceContext, dataAccess)
+              owners <- getWorkspaceOwners(workspaceContext.workspace, dataAccess)
+            } yield {
+              RequestComplete(StatusCodes.OK, WorkspaceResponse(accessLevel, canShare, catalog, workspaceContext.workspace, stats, owners))
             }
           }
         }
@@ -295,7 +301,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         _ <- dataAccess.workspaceQuery.deleteWorkspaceAccessReferences(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceInvites(workspaceContext.workspaceId)
         _ <- dataAccess.workspaceQuery.deleteWorkspaceSharePermissions(workspaceContext.workspaceId)
-      
+        _ <- dataAccess.workspaceQuery.deleteWorkspaceCatalogPermissions(workspaceContext.workspaceId)
         _ <- dataAccess.submissionQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.methodConfigurationQuery.deleteFromDb(workspaceContext.workspaceId)
         _ <- dataAccess.entityQuery.deleteFromDb(workspaceContext.workspaceId)
@@ -333,7 +339,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           val updateAction = Try {
@@ -403,7 +409,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, destWorkspaceRequest) {
+    withAttributeNamespaceCheck(destWorkspaceRequest) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(sourceWorkspaceName, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
           withClonedRealm(sourceWorkspaceContext, destWorkspaceRequest) { newRealm =>
@@ -462,6 +468,21 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         }
       }
     }
+
+  def getCatalog(workspaceName: WorkspaceName): Future[PerRequestMessage] =
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        dataAccess.workspaceQuery.listEmailsWithCatalogAccess(workspaceContext).map {RequestComplete(StatusCodes.OK, _)}
+      }
+    }
+
+  def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[PerRequestMessage] = {
+    dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+        updateCatalogPermissions(input, dataAccess, workspaceContext).map {RequestComplete(StatusCodes.OK, _)}
+      }
+    }
+  }
 
   /**
    * updates acls for a workspace
@@ -579,6 +600,44 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         prior match {
           case RequestComplete(StatusCodes.NoContent) => next
           case otherwise => prior
+        }
+      }
+    }
+  }
+
+  private def updateCatalogPermissions(catalogUpdates: Seq[WorkspaceCatalog], dataAccess: DataAccess, workspaceContext: SlickWorkspaceContext): ReadWriteAction[WorkspaceCatalogUpdateResponseList] = {
+
+    // map from email to ref
+    dataAccess.rawlsGroupQuery.loadRefsFromEmails(catalogUpdates.map(_.email)) flatMap { refsToUpdateByEmail =>
+      val (emailsFound, emailsNotFound) = catalogUpdates.partition(catalogUpdate => refsToUpdateByEmail.keySet.contains(catalogUpdate.email))
+      val emailsFoundWithRefs:Seq[(WorkspaceCatalog,Either[RawlsUserRef, RawlsGroupRef])] = emailsFound map {wc =>
+        (wc, refsToUpdateByEmail(wc.email))
+      }
+      val (emailsToAddCatalog, emailsToRemoveCatalog) = emailsFoundWithRefs.partition(update => update._1.catalog)
+
+      dataAccess.workspaceQuery.findWorkspaceUsersAndGroupsWithCatalog(workspaceContext.workspaceId) flatMap { case ((usersWithCatalog, groupsWithCatalog)) =>
+        val usersToAdd = emailsToAddCatalog.collect {
+          case (cat, Left(userref)) if !usersWithCatalog.contains(userref) => (userref, true)
+        }
+        val usersToRemove = emailsToRemoveCatalog.collect {
+          case (cat, Left(userref)) if usersWithCatalog.contains(userref) => (userref, false)
+        }
+        val groupsToAdd = emailsToAddCatalog.collect {
+          case (cat, Right(groupref)) if !groupsWithCatalog.contains(groupref) => (groupref, true)
+        }
+        val groupsToRemove = emailsToRemoveCatalog.collect {
+          case (cat, Right(groupref)) if groupsWithCatalog.contains(groupref) => (groupref, false)
+        }
+
+        val emails = emailsNotFound.map { wsCatalog => wsCatalog.email }
+        val users = (usersToAdd ++ usersToRemove).map { case (userRef, catalog) => WorkspaceCatalogResponse(userRef.userSubjectId.value, catalog) }
+        val groups = (groupsToAdd ++ groupsToRemove).map { case (groupRef, catalog) => WorkspaceCatalogResponse(groupRef.groupName.value, catalog) }
+
+        dataAccess.workspaceQuery.insertUserCatalogPermissions(workspaceContext.workspaceId, usersToAdd.map { case (userRef, _) => userRef }) andThen
+          dataAccess.workspaceQuery.deleteUserCatalogPermissions(workspaceContext.workspaceId, usersToRemove.map { case (userRef, _) => userRef }) andThen
+          dataAccess.workspaceQuery.insertGroupCatalogPermissions(workspaceContext.workspaceId, groupsToAdd.map { case (groupRef, _) => groupRef }) andThen
+          dataAccess.workspaceQuery.deleteGroupCatalogPermissions(workspaceContext.workspaceId, groupsToRemove.map { case (groupRef, _) => groupRef }) map { _ =>
+          WorkspaceCatalogUpdateResponseList(users ++ groups, emails)
         }
       }
     }
@@ -761,7 +820,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, entity) {
+    withAttributeNamespaceCheck(entity) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
@@ -778,7 +837,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       operation <- update.operations
     } yield operation.name
 
-    withAttributeNamespaceCheck(userInfo, namesToCheck) {
+    withAttributeNamespaceCheck(namesToCheck) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           val updateTrialsAction = dataAccess.entityQuery.list(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name))) map { entities =>
@@ -862,7 +921,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
-    withAttributeNamespaceCheck(userInfo, operations.map(_.name)) {
+    withAttributeNamespaceCheck(operations.map(_.name)) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
@@ -1088,7 +1147,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   }
 
   def createMethodConfiguration(workspaceName: WorkspaceName, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
-    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+    withAttributeNamespaceCheck(methodConfiguration) {
       dataSource.inTransaction { dataAccess =>
         withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
           dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfiguration.namespace, methodConfiguration.name) flatMap {
@@ -1126,7 +1185,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[PerRequestMessage] = {
-    withAttributeNamespaceCheck(userInfo, methodConfiguration) {
+    withAttributeNamespaceCheck(methodConfiguration) {
      // create transaction
       dataSource.inTransaction { dataAccess =>
        // check permissions
@@ -1169,7 +1228,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
 
     transaction1Result flatMap { case (methodConfig, destContext) =>
-      withAttributeNamespaceCheck(userInfo, methodConfig) {
+      withAttributeNamespaceCheck(methodConfig) {
         dataSource.inTransaction { dataAccess =>
           saveCopiedMethodConfiguration(methodConfig, mcnp.destination, destContext, dataAccess)
         }
@@ -1184,7 +1243,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
         val err = ErrorReport(StatusCodes.NotFound, s"There is no method configuration named $name in the repository.")
         Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
       case Some(agoraEntity) => Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
-        withAttributeNamespaceCheck(userInfo, targetMethodConfig) {
+        withAttributeNamespaceCheck(targetMethodConfig) {
           dataSource.inTransaction { dataAccess =>
             withWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName, WorkspaceAccessLevels.Write, dataAccess) { destContext =>
               saveCopiedMethodConfiguration(targetMethodConfig, methodRepoQuery.destination, destContext, dataAccess)
@@ -1683,50 +1742,34 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
 
   // helper methods
 
-  // note: success is indicated by a Future.successful(Map.empty)
-  private def attributeNamespaceCheck(userInfo: UserInfo, attributeNames: Iterable[AttributeName]): Future[Map[String, String]] = {
+  // note: success is indicated by  Map.empty
+  private def attributeNamespaceCheck(attributeNames: Iterable[AttributeName]): Map[String, String] = {
     val namespaces = attributeNames.map(_.namespace).toSet
 
-    // anyone can modify attributes in the default namespace
-    if (namespaces == Set(AttributeName.defaultNamespace)) Future.successful(Map.empty)
+    // no one can modify attributes with invalid namespaces
+    val invalidNamespaces = namespaces -- AttributeName.validNamespaces
+    invalidNamespaces.map { ns => ns -> s"Invalid attribute namespace $ns" }.toMap
+  }
+
+  private def withAttributeNamespaceCheck[T](attributeNames: Iterable[AttributeName])(op: => T): T = {
+    val errors = attributeNamespaceCheck(attributeNames)
+    if (errors.isEmpty) op
     else {
-      // only curators can modify attributes in the library namespace
-      val libraryErrors = if (namespaces.contains(AttributeName.libraryNamespace)) {
-        tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
-          if (isCurator) Future.successful(Map.empty)
-          else Future.successful(Map(AttributeName.libraryNamespace -> "Must be library curator"))
-        }
-      }
-      else Future.successful(Map.empty)
-
-      // no one can modify attributes with invalid namespaces
-      val invalidNamespaces = namespaces -- AttributeName.validNamespaces
-      val invalidErrors = invalidNamespaces.map { ns => ns -> s"Invalid attribute namespace $ns" }.toMap
-
-      // add the invalid errors to the Future
-      libraryErrors map { _ ++ invalidErrors }
+      val reasons = errors.values.mkString(", ")
+      val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
+      throw new RawlsExceptionWithErrorReport(errorReport = err)
     }
   }
 
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, attributeNames: Iterable[AttributeName])(op: => Future[T]): Future[T] =
-    attributeNamespaceCheck(userInfo, attributeNames) flatMap { errors =>
-      if (errors.isEmpty) op
-      else {
-        val reasons = errors.values.mkString(", ")
-        val err = ErrorReport(statusCode = StatusCodes.Forbidden, message = s"Attribute namespace validation failed: [$reasons]")
-        Future.failed(new RawlsExceptionWithErrorReport(errorReport = err))
-      }
-    }
+  private def withAttributeNamespaceCheck[T](hasAttributes: Attributable)(op: => Future[T]): Future[T] =
+    withAttributeNamespaceCheck(hasAttributes.attributes.keys)(op)
 
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, hasAttributes: Attributable)(op: => Future[T]): Future[T] =
-    withAttributeNamespaceCheck(userInfo, hasAttributes.attributes.keys)(op)
-
-  private def withAttributeNamespaceCheck[T](userInfo: UserInfo, methodConfiguration: MethodConfiguration)(op: => Future[T]): Future[T] = {
+  private def withAttributeNamespaceCheck[T](methodConfiguration: MethodConfiguration)(op: => Future[T]): Future[T] = {
     // TODO: this duplicates expression parsing, the canonical way to do this.  Use that instead?
     // valid method configuration outputs are either in the format this.attrname or workspace.attrname
     // invalid (unparseable) will be caught by expression parsing instead
     val attrNames = methodConfiguration.outputs map { case (_, attr) => AttributeName.fromDelimitedName(attr.value.split('.').last) }
-    withAttributeNamespaceCheck(userInfo, attrNames)(op)
+    withAttributeNamespaceCheck(attrNames)(op)
   }
 
   private def withNewWorkspaceContext(workspaceRequest: WorkspaceRequest, dataAccess: DataAccess)
@@ -1863,6 +1906,10 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
   def getUserSharePermissions(workspaceContext: SlickWorkspaceContext, userAccessLevel: WorkspaceAccessLevel, dataAccess: DataAccess): ReadAction[Boolean] = {
     if (userAccessLevel >= WorkspaceAccessLevels.Owner) DBIO.successful(true)
     else dataAccess.workspaceQuery.getUserSharePermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
+  }
+
+  def getUserCatalogPermissions(workspaceContext: SlickWorkspaceContext, dataAccess: DataAccess): ReadAction[Boolean] = {
+    dataAccess.workspaceQuery.getUserCatalogPermissions(RawlsUserSubjectId(userInfo.userSubjectId), workspaceContext)
   }
 
   private def withEntity[T](workspaceContext: SlickWorkspaceContext, entityType: String, entityName: String, dataAccess: DataAccess)(op: (Entity) => ReadWriteAction[T]): ReadWriteAction[T] = {

@@ -43,4 +43,5 @@
     <include file="changesets/20170302_add_method_config_version_to_unique_index.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170320_entity_deleted_column.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20170320_attribute_deleted_columns.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20170321_catalog_permissions.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
