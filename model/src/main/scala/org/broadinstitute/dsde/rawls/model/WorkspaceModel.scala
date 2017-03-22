@@ -174,6 +174,8 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
+case class EntityCopyResponse(entitiesCopied: Seq[Entity], conflicts: Seq[Entity], subtreeConflicts: Seq[Entity])
+
 case class MethodRepoMethod(
                    methodNamespace: String,
                    methodName: String,
@@ -391,6 +393,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodConfigurationNamePairFormat = jsonFormat2(MethodConfigurationNamePair)
 
   implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
+
+  implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
 
   implicit val MethodStoreMethodFormat = jsonFormat3(MethodRepoMethod)
 

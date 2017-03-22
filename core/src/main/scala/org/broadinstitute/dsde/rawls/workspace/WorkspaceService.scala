@@ -79,7 +79,7 @@ object WorkspaceService {
   case class GetEntityTypeMetadata(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class QueryEntities(workspaceName: WorkspaceName, entityType: String, query: EntityQuery) extends WorkspaceServiceMessage
   case class ListEntities(workspaceName: WorkspaceName, entityType: String) extends WorkspaceServiceMessage
-  case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri) extends WorkspaceServiceMessage
+  case class CopyEntities(entityCopyDefinition: EntityCopyDefinition, uri:Uri, linkExistingEntities: Boolean) extends WorkspaceServiceMessage
   case class BatchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
   case class BatchUpdateEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition]) extends WorkspaceServiceMessage
 
@@ -156,7 +156,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case GetEntityTypeMetadata(workspaceName) => pipe(entityTypeMetadata(workspaceName)) to sender
     case ListEntities(workspaceName, entityType) => pipe(listEntities(workspaceName, entityType)) to sender
     case QueryEntities(workspaceName, entityType, query) => pipe(queryEntities(workspaceName, entityType, query)) to sender
-    case CopyEntities(entityCopyDefinition, uri: Uri) => pipe(copyEntities(entityCopyDefinition, uri)) to sender
+    case CopyEntities(entityCopyDefinition, uri: Uri, linkExistingEntities: Boolean) => pipe(copyEntities(entityCopyDefinition, uri, linkExistingEntities)) to sender
     case BatchUpsertEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, true)) to sender
     case BatchUpdateEntities(workspaceName, entityUpdates) => pipe(batchUpdateEntities(workspaceName, entityUpdates, false)) to sender
 
@@ -778,26 +778,29 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
       }
     }
 
-  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri): Future[PerRequestMessage] =
+  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[PerRequestMessage] =
     dataSource.inTransaction { dataAccess =>
       withWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, WorkspaceAccessLevels.Write, dataAccess) { destWorkspaceContext =>
         withWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace, WorkspaceAccessLevels.Read, dataAccess) { sourceWorkspaceContext =>
           realmCheck(sourceWorkspaceContext, destWorkspaceContext) flatMap { _ =>
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
-            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames)
-            copyResults.flatMap(conflicts => conflicts.size match {
-              case 0 => {
+            val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
+            copyResults.flatMap(results => (results.conflicts.size, results.subtreeConflicts.size) match {
+              case (0, 0) => {
                 // get the entities that were copied into the destination workspace
                 dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
-                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toList
-                  RequestComplete(StatusCodes.Created, entityCopies)
+                  val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toSeq
+                  RequestComplete(StatusCodes.Created, results.copy(entitiesCopied = entityCopies))
                 }
               }
-              case _ => {
+              case (0, _) => {
+                DBIO.successful(RequestComplete(StatusCodes.OK, results))
+              }
+              case (_, _) => {
                 val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-                val conflictingUris = conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris.toSeq)))
+                val conflictingUris = results.conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
+                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris)))
               }
             })
           }
