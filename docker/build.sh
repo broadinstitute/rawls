@@ -33,13 +33,13 @@ function artifactory_push()
 
 function docker_cmd()
 {
-    if [ $DOCKER_CMD="build" ] || [ $DOCKER_CMD="push" ]; then
+    if [ $DOCKER_CMD = "build" ] || [ $DOCKER_CMD = "push" ]; then
         echo "building docker image..."
         GIT_SHA=$(git rev-parse ${GIT_BRANCH})
         echo GIT_SHA=$GIT_SHA > env.properties  # for jenkins jobs
         docker build -t $REPO:${GIT_SHA:0:12} .
 
-        if [ $DOCKER_CMD="push" ]; then
+        if [ $DOCKER_CMD = "push" ]; then
             echo "pushing docker image..."
             docker push $REPO:${GIT_SHA:0:12}
         fi
