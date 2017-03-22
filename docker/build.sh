@@ -11,6 +11,7 @@
 #   ./docker/build.sh jar publish -d push
 
 set -ex
+PROJECT=rawls
 
 function make_jar()
 {
@@ -50,7 +51,7 @@ function docker_cmd()
 # parse command line options
 DOCKER_CMD=
 GIT_BRANCH=${GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
-REPO=${REPO:-broadinstitute/rawls}  # default to rawls docker repo
+REPO=${REPO:-broadinstitute/$PROJECT}  # default to rawls docker repo
 while [ "$1" != "" ]; do
     case $1 in
         jar) make_jar ;;
