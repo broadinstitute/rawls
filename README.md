@@ -24,18 +24,13 @@ See the wiki for detailed documentation.
 
 ## Unit Testing with MySQL in Docker 
 Ensure that docker is up to date and initialized.
-Spin up mysql locally:
+Spin up mysql locally and validate that it is working:
 ```
-docker run -p 3306:3306 --name mysql -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d mysql/mysql-server:5.7
+./docker/run-mysql.sh
 ```
-Run tests. Replace the `default` value with your docker machine name:
+Run tests.
 ```
-sbt clean compile test -Dmysql.host=`docker-machine ip default`
-```
-Optionally include a custom mysql port. 
-The default is 3306 but can be changed by setting the system property:
-```
-sbt clean compile test -Dmysql.host=<mysql hostname> -Dmysql.port=<mysql port>
+sbt clean compile test -Dmysql.host=localhost -Dmysql.port=3310
 ```
 And when you're done, spin down mysql:
 ```
@@ -54,13 +49,16 @@ sudo ln -s <path_to_rawls_src>/config/billing-account.pem
 ```
 Run tests using mysql similarly to unit tests.
 ```
-sbt clean compile it:test -Dmysql.host=<mysql hostname>
+sbt clean compile it:test -Dmysql.host=localhost -Dmysql.port=3310
 ```
 
 ## Build Rawls docker image
+Build Rawls jar
 ```
-# make jar 
-./docker/build.sh
-# build image
-docker build -t broadinstitute/rawls:$tag .
+./docker/build.sh jar
+```
+
+Build Rawls jar and docker image 
+```
+./docker/build.sh jar -d build 
 ```
