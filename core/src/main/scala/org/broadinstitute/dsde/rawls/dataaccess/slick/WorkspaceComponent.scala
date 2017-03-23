@@ -135,11 +135,10 @@ trait WorkspaceComponent {
     }
 
     def getTags(queryString: Option[String]): ReadAction[Seq[WorkspaceTag]] = {
-      // order by count ?
       val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString).result
       tags map { recs =>
-        recs map { tagThing =>
-          WorkspaceTag(tagThing._1, tagThing._2)
+        recs collect { case(Some(tag), count) =>
+          WorkspaceTag(tag, count)
         }
       }
     }
