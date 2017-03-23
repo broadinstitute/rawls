@@ -112,6 +112,7 @@ object WorkspaceService {
   case object AdminListAllActiveSubmissions extends WorkspaceServiceMessage
   case class AdminAbortSubmission(workspaceName: WorkspaceName, submissionId: String) extends WorkspaceServiceMessage
   case class AdminDeleteWorkspace(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
+  case class AdminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]) extends WorkspaceServiceMessage
 
   case class HasAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
   case class GrantAllUserReadAccess(workspaceName: WorkspaceName) extends WorkspaceServiceMessage
@@ -190,6 +191,7 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     case AdminListAllActiveSubmissions => asFCAdmin { listAllActiveSubmissions() } pipeTo sender
     case AdminAbortSubmission(workspaceName,submissionId) => pipe(adminAbortSubmission(workspaceName,submissionId)) to sender
     case AdminDeleteWorkspace(workspaceName) => pipe(adminDeleteWorkspace(workspaceName)) to sender
+    case AdminUpdateWorkspace(workspaceName, operations) => asFCAdmin { adminUpdateWorkspace(workspaceName, operations) } pipeTo sender
 
     case HasAllUserReadAccess(workspaceName) => pipe(hasAllUserReadAccess(workspaceName)) to sender
     case GrantAllUserReadAccess(workspaceName) => pipe(grantAllUserReadAccess(workspaceName)) to sender
@@ -338,22 +340,32 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
     }
   }
 
-  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =
+  def adminUpdateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] = asFCAdmin {
+    getWorkspaceContext(workspaceName) flatMap { ctx =>
+      updateWorkspace(workspaceName, operations, ctx)
+    }
+  }
+
+  def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[PerRequestMessage] =  {
+    getWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write) flatMap { ctx =>
+      updateWorkspace(workspaceName, operations, ctx)
+    }
+  }
+
+  private def updateWorkspace(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation], workspaceContext: SlickWorkspaceContext): Future[PerRequestMessage] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       dataSource.inTransaction { dataAccess =>
-        withWorkspaceContextAndPermissions(workspaceName, WorkspaceAccessLevels.Write, dataAccess) { workspaceContext =>
-          val updateAction = Try {
-            val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
-            dataAccess.workspaceQuery.save(updatedWorkspace)
-          } match {
-            case Success(result) => result
-            case Failure(e: AttributeUpdateOperationException) =>
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
-            case Failure(regrets) => DBIO.failed(regrets)
-          }
-          updateAction.map { savedWorkspace =>
-            RequestComplete(StatusCodes.OK, savedWorkspace)
-          }
+        val updateAction = Try {
+          val updatedWorkspace = applyOperationsToWorkspace(workspaceContext.workspace, operations)
+          dataAccess.workspaceQuery.save(updatedWorkspace)
+        } match {
+          case Success(result) => result
+          case Failure(e: AttributeUpdateOperationException) =>
+            DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Unable to update ${workspaceName}", ErrorReport(e))))
+          case Failure(regrets) => DBIO.failed(regrets)
+        }
+        updateAction.map { savedWorkspace =>
+          RequestComplete(StatusCodes.OK, savedWorkspace)
         }
       }
     }
