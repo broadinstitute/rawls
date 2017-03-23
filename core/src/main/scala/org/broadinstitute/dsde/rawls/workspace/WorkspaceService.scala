@@ -727,21 +727,18 @@ class WorkspaceService(protected val userInfo: UserInfo, val dataSource: SlickDa
             val entityNames = entityCopyDef.entityNames
             val entityType = entityCopyDef.entityType
             val copyResults = dataAccess.entityQuery.copyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities)
-            copyResults.flatMap(results => (results.conflicts.size, results.subtreeConflicts.size) match {
-              case (0, 0) => {
+            copyResults.flatMap(results => (results.hardConflicts.size, results.softConflicts.size) match {
+              case (1, 1) => {
                 // get the entities that were copied into the destination workspace
                 dataAccess.entityQuery.list(destWorkspaceContext, entityType).map { allEntities =>
                   val entityCopies = allEntities.filter((e: Entity) => entityNames.contains(e.name)).toSeq
                   RequestComplete(StatusCodes.Created, results.copy(entitiesCopied = entityCopies))
                 }
               }
-              case (0, _) => {
-                DBIO.successful(RequestComplete(StatusCodes.OK, results))
-              }
               case (_, _) => {
-                val basePath = s"/${destWorkspaceContext.workspace.namespace}/${destWorkspaceContext.workspace.name}/entities/"
-                val conflictingUris = results.conflicts.map(conflict => ErrorReport(uri.copy(path = Uri.Path(basePath + s"${conflict.entityType}/${conflict.name}")).toString(), Seq.empty))
-                DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, "Unable to copy entities. Some entities already exist.", conflictingUris)))
+                println("foo")
+                println(results)
+                DBIO.successful(RequestComplete(StatusCodes.Conflict, results))
               }
             })
           }

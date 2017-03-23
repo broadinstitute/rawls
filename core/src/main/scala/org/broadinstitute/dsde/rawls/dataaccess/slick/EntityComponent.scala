@@ -521,6 +521,7 @@ trait EntityComponent {
      *                       that if there is a cycle some of entityIds may be in the result anyway
      * @return the ids of all the entities referred to by entityIds
      */
+    //private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIdsWithParentId: Map[Long, Set[Long]]): ReadAction[Set[Long]] = {
     private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIds: Set[Long]): ReadAction[Set[Long]] = {
       def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[Long]] = {
         val query = filter(_.id inSetBind idBatch) join
@@ -567,22 +568,46 @@ trait EntityComponent {
     }
 
     def copyEntities(sourceWorkspaceContext: SlickWorkspaceContext, destWorkspaceContext: SlickWorkspaceContext, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean): ReadWriteAction[EntityCopyResponse] = {
-      getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames).flatMap { entities =>
-        getCopyConflicts(destWorkspaceContext, entities).flatMap { allConflicts =>
-          // trueConflicts are the entities that conflict based on user-specified input. These are fatal.
-          // subtreeConflicts are the entities that conflict after we look up the subtrees. These are non-fatal, because we can simply link them up with the user-specified entities.
-          val trueConflicts = allConflicts.filter(e => (e.entityType.equalsIgnoreCase(entityType) && entityNames.contains(e.name))).toSeq
-          val subtreeConflicts = allConflicts.toSeq diff trueConflicts
 
-          (trueConflicts.isEmpty, subtreeConflicts.isEmpty) match {
-            case (true, subtreeConflictsIsEmpty) => {
-              if(linkExistingEntities || subtreeConflictsIsEmpty) {
-                cloneEntities(destWorkspaceContext, (entities.toSeq diff subtreeConflicts), subtreeConflicts).map(_ => Seq.empty[Entity]) map { clonedEntities =>
-                  EntityCopyResponse(clonedEntities, Seq.empty, Seq.empty)
-                }
-              } else DBIO.successful(EntityCopyResponse(Seq.empty, trueConflicts, subtreeConflicts))
+
+      def getStuff(): ReadAction[Seq[(EntityConflict, EntityConflict)]] = {
+        DBIO.sequence(entityNames.map { entityName =>
+          getEntitySubtrees(sourceWorkspaceContext, entityType, Seq(entityName)) flatMap { entities =>
+            getCopyConflicts(destWorkspaceContext, entities).map { allConflictsViaEntity =>
+              val hardConflicts = (allConflictsViaEntity.toSeq.filter(e => e.entityType.equalsIgnoreCase(entityType))).toSeq
+              val softConflicts = (allConflictsViaEntity.toSeq diff hardConflicts).toSeq
+
+              val hardConflictReports = EntityConflict(entityType, entityName, hardConflicts.map(x => EntityConflict(x.entityType, x.name, Seq.empty)))
+              val softConflictReports = EntityConflict(entityType, entityName, softConflicts.map(x => EntityConflict(x.entityType, x.name, Seq.empty)))
+
+              (hardConflictReports, softConflictReports)
             }
-            case (_, _) => DBIO.successful(EntityCopyResponse(Seq.empty, trueConflicts, subtreeConflicts))
+          }
+        })
+      }
+
+
+      getStuff().flatMap { shit =>
+        getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames).flatMap { entities =>
+          getCopyConflicts(destWorkspaceContext, entities).flatMap { allConflicts =>
+            // hardConflicts are the entities that conflict based on user-specified input. These are fatal.
+            // softConflicts are the entities that conflict after we look up the subtrees. These are non-fatal, because we can simply link them up with the user-specified entities.
+            val hardConflicts = allConflicts.filter(e => (e.entityType.equalsIgnoreCase(entityType) && entityNames.contains(e.name))).toSeq
+            val softConflicts = allConflicts.toSeq diff hardConflicts
+
+            val hardConflictReports = shit.map(_._1).filterNot(_.isEmpty)
+            val softConflictReports = shit.map(_._2).filterNot(_.isEmpty)
+
+            (hardConflicts.isEmpty, softConflicts.isEmpty) match {
+              case (true, subtreeConflictsIsEmpty) => {
+                if (linkExistingEntities || subtreeConflictsIsEmpty) {
+                  cloneEntities(destWorkspaceContext, (entities.toSeq diff softConflicts), softConflicts).map(_ => Seq.empty[Entity]) map { clonedEntities =>
+                    EntityCopyResponse(clonedEntities, Seq.empty, Seq.empty)
+                  }
+                } else DBIO.successful(EntityCopyResponse(Seq.empty, hardConflictReports, softConflictReports))
+              }
+              case (_, _) => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflictReports, softConflictReports))
+            }
           }
         }
       }
