@@ -49,7 +49,7 @@ sudo ln -s <path_to_rawls_src>/config/billing-account.pem
 ```
 Run tests using mysql similarly to unit tests.
 ```
-sbt clean compile it:test -Dmysql.host=localhost
+sbt clean compile it:test -Dmysql.host=localhost -Dmysql.port=3310
 ```
 
 ## Build Rawls docker image
