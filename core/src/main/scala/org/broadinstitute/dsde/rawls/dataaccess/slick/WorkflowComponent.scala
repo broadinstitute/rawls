@@ -393,7 +393,7 @@ trait WorkflowComponent {
           submission <- submissionQuery if workflows.submissionId === submission.id && (!submission.submitterId.inSetBind(excludedSubmitters))
         } yield workflows
       }
-      query.sortBy(_.statusLastChangedDate)
+      query.sortBy(_.id)
     }
 
     def findWorkflowsQueuedBefore(lastChangedDate: Timestamp): WorkflowQueryType = {
