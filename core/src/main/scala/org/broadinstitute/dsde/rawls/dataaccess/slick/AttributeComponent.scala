@@ -282,7 +282,7 @@ trait AttributeComponent {
       }).groupBy(_.valueString).map(queryThing =>
         (queryThing._1, queryThing._2.length))
 
-      res.sortBy(r => (r._2.desc, r._1))
+      res.sortBy(r => (r._2.desc, r._1)).map(x => (x._1.get, x._2))
     }
 
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
