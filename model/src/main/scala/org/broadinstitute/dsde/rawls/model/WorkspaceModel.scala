@@ -174,7 +174,7 @@ case class EntityCopyDefinition(
                    entityNames: Seq[String]
                    )
 
-case class EntityConflict(entityType: String, entityName: String, conflicts: Seq[EntityConflict]) {
+case class EntityConflict(entityType: String, name: String, conflicts: Seq[EntityConflict]) {
   def isEmpty: Boolean = conflicts.isEmpty
 }
 
