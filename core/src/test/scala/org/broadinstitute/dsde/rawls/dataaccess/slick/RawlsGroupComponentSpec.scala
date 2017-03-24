@@ -247,6 +247,10 @@ class RawlsGroupComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
         runAndWait(rawlsGroupQuery.loadGroupIfMember(group, user1))
       }
 
+      assertResult(Set(group1, group2, group3).map(RawlsGroup.toRef)) {
+        runAndWait(rawlsGroupQuery.listGroupsForUser(user1))
+      }
+
       assertResult(None) {
         runAndWait(rawlsGroupQuery.loadGroupIfMember(group, user2))
       }
