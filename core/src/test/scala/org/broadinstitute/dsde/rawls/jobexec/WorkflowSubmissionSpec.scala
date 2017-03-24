@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkflowRecord}
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{LookForWorkflows, ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ScheduleNextWorkflowQuery, SubmitWorkflowBatch}
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model._
 import org.mockserver.model.{HttpRequest, StringBody}
@@ -169,7 +169,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
 
       val workflowIds = runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submission1.submissionId))).map(_.id)
 
-      assertResult(LookForWorkflows) {
+      assertResult(ScheduleNextWorkflowQuery) {
         Await.result(workflowSubmission.submitWorkflowBatch(workflowIds), Duration.Inf)
       }
 
