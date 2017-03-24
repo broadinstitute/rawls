@@ -15,11 +15,11 @@ import scala.concurrent.{Await, ExecutionContext}
 import spray.http._
 import spray.json._
 import spray.json.DefaultJsonProtocol._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, RawlsGroupRefFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{WorkspaceFormat, WorkspaceStatusFormat, ErrorReportFormat, WorkspaceListResponseFormat, AttributeReferenceFormat}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ActiveSubmissionFormat
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport.{UserStatusFormat, UserListFormat}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.{CreateRawlsBillingProjectFullRequestFormat, SyncReportFormat, RawlsBillingProjectMembershipFormat, RawlsGroupMemberListFormat, RawlsUserInfoListFormat}
-import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsRealmRefFormat}
+import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.{RawlsBillingProjectNameFormat, RawlsGroupRefFormat}
 
 /**
  * Created by tsharpe on 9/28/15.
