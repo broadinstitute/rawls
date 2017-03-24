@@ -46,13 +46,16 @@ case class AttributeName(
 object AttributeName {
   val defaultNamespace = "default"
   val libraryNamespace = "library"
-  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace)
+  val tagsNamespace = "tag"
+  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.libraryNamespace, AttributeName.tagsNamespace)
 
   val delimiter = ':'
 
   def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
 
   def withLibraryNS(name: String) = AttributeName(libraryNamespace, name)
+
+  def withTagsNS() = AttributeName(tagsNamespace, "tags")
 
   def toDelimitedName(aName: AttributeName): String = {
     if (aName.namespace == defaultNamespace) aName.name
@@ -337,6 +340,8 @@ object AttributeStringifier {
   }
 }
 
+case class WorkspaceTag(tag: String, count: Int)
+
 class WorkspaceJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -419,6 +424,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodOutputFormat = jsonFormat2(MethodOutput)
 
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
+
+  implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
 
   implicit object StatusCodeFormat extends JsonFormat[StatusCode] {
     override def write(code: StatusCode): JsValue = JsNumber(code.intValue)

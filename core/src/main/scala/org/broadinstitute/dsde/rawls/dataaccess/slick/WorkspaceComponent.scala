@@ -157,6 +157,13 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaceQuery)
     }
 
+    def getTags(queryString: Option[String]): ReadAction[Seq[WorkspaceTag]] = {
+      val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString).result
+      tags map(_.map { rec =>
+          WorkspaceTag(rec._1, rec._2)
+        })
+    }
+
     def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] = {
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
     }

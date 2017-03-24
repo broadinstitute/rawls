@@ -3477,6 +3477,36 @@ paths:
               - email
               - profile
               - https://www.googleapis.com/auth/devstorage.full_control
+  '/api/workspaces/tags':
+      get:
+        responses:
+          '200':
+            description: Successful Request
+            schema:
+              type: array
+              description: list of all tags used in FireCloud and their associated frequencies
+              items:
+                $ref: '#/definitions/WorkspaceTag'
+          '500':
+            description: Rawls Internal Error
+            schema:
+              $ref: '#/definitions/ErrorReport'
+        description: Get all tags used in FireCloud (for autocomplete)
+        tags:
+          - workspaces
+        summary: Get tags
+        operationId: getTags
+        parameters:
+          - in: query
+            description: Query string
+            name: q
+            required: false
+            type: string
+        security:
+        - authorization:
+          - openid
+          - email
+          - profile
   '/register/user':
      post:
        responses:
@@ -5094,3 +5124,15 @@ definitions:
       role:
         type: string
         description: the role of the user in the project
+  WorkspaceTag:
+    description: tag with count
+    required:
+      - tag
+      - count
+    properties:
+      tag:
+        type: string
+        description: tag string
+      count:
+        type: number
+        description: number of usages of the tag across FireCloud

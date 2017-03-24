@@ -276,6 +276,22 @@ trait AttributeComponent {
       }
     }
 
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String]) = {
+
+      val basicFilter = filter(rec =>
+        rec.namespace === attrName.namespace &&
+          rec.name === attrName.name &&
+          rec.valueString.isDefined)
+
+      val res = (queryString match {
+        case Some(query) => basicFilter.filter(_.valueString.like(s"%${query}%"))
+        case None => basicFilter
+      }).groupBy(_.valueString).map(queryThing =>
+        (queryThing._1, queryThing._2.length))
+
+      res.sortBy(r => (r._2.desc, r._1)).map(x => (x._1.get, x._2))
+    }
+
     def deleteAttributeRecords(attributeRecords: Seq[RECORD]): DBIOAction[Int, NoStream, Write] = {
       filter(_.id inSetBind attributeRecords.map(_.id)).delete
     }
