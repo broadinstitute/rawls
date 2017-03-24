@@ -113,6 +113,24 @@ trait EntityComponent {
         concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
       }
 
+      def actionForEntityIdLevel(entityIds: EntityLevelIds): ReadAction[Seq[EntityAndAttributesResult]] = {
+        val baseSelect = sql"""#$baseEntityAndAttributeSql where e.id in ("""
+        val entityIdSql = reduceSqlActionsWithDelim(Seq(entityIds.parentId).map { id => sql"$id" }.toSeq)
+        val x = concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
+
+
+        val baseSelect2 = sql"""#$baseEntityAndAttributeSql where e.id in ("""
+        val entityIdSql2 = reduceSqlActionsWithDelim(entityIds.childrenIds.map { id => sql"$id" }.toSeq)
+        val y = concatSqlActions(baseSelect2, entityIdSql2, sql")").as[EntityAndAttributesResult]
+
+        x flatMap { foo =>
+          y map { bar =>
+            (foo ++ bar).toSeq
+          }
+
+        }
+      }
+
       def activeActionForWorkspace(workspaceContext: SlickWorkspaceContext): ReadAction[Seq[EntityAndAttributesResult]] = {
         sql"""#$baseEntityAndAttributeSql where e.deleted = false and e.workspace_id = ${workspaceContext.workspaceId}""".as[EntityAndAttributesResult]
       }
@@ -512,6 +530,8 @@ trait EntityComponent {
     case object Up extends RecursionDirection
     case object Down extends RecursionDirection
 
+    case class EntityLevelIds(parentId: Long, childrenIds: Set[Long])
+
     /**
      * Starting with entities specified by entityIds, recursively walk references accumulating all the ids
      * @param direction whether to walk Down (my object references others) or Up (my object is referenced by others) the graph
@@ -522,29 +542,29 @@ trait EntityComponent {
      * @return the ids of all the entities referred to by entityIds
      */
     //private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIdsWithParentId: Map[Long, Set[Long]]): ReadAction[Set[Long]] = {
-    private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIds: Set[Long]): ReadAction[Set[Long]] = {
-      def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[Long]] = {
+    private def recursiveGetEntityReferenceIds(direction: RecursionDirection, entityIds: Set[Long], accumulatedIds: Set[EntityLevelIds]): ReadAction[Set[EntityLevelIds]] = {
+      def oneLevelDown(idBatch: Set[Long]): ReadAction[Set[EntityLevelIds]] = {
         val query = filter(_.id inSetBind idBatch) join
-          entityAttributeQuery on { (ent, attr) => ent.id === attr.ownerId && ! attr.deleted } filter (_._2.valueEntityRef.isDefined) map (_._2.valueEntityRef.get)
-        query.result.map(_.toSet)
+          entityAttributeQuery on { (ent, attr) => ent.id === attr.ownerId && ! attr.deleted } filter (_._2.valueEntityRef.isDefined) map (x => (x._1.id, x._2.valueEntityRef.get))
+        query.result.map(x => x.groupBy(_._1).map { case (k,v) => EntityLevelIds(k, v.map(_._2).toSet)}.toSet)
       }
 
-      def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[Long]] = {
+      def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[EntityLevelIds]] = {
         val query = entityAttributeQuery filter (_.valueEntityRef.isDefined) filter (_.valueEntityRef inSetBind idBatch) join
-          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map (_._2.id)
-        query.result.map(_.toSet)
+          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map (x => (x._1.valueEntityRef.get, x._2.id))
+        query.result.map(x => x.groupBy(_._1).map { case (k,v) => EntityLevelIds(k, v.map(_._2).toSet)}.toSet)
       }
 
       // need to batch because some RDBMSes have a limit on the length of an in clause
       val batchedEntityIds: Iterable[Set[Long]] = createBatches(entityIds)
 
-      val batchActions: Iterable[ReadAction[Set[Long]]] = direction match {
+      val batchActions: Iterable[ReadAction[Set[EntityLevelIds]]] = direction match {
         case Down => batchedEntityIds map oneLevelDown
         case Up => batchedEntityIds map oneLevelUp
       }
 
       DBIO.sequence(batchActions).map(_.flatten.toSet).flatMap { refIds =>
-        val untraversedIds = refIds -- accumulatedIds
+        val untraversedIds = refIds.map(_.parentId) ++ refIds.flatMap(_.childrenIds) -- accumulatedIds.map(_.parentId)
         if (untraversedIds.isEmpty) {
           DBIO.successful(accumulatedIds)
         } else {
@@ -561,9 +581,13 @@ trait EntityComponent {
 
       startingEntityIdsAction.result.flatMap { startingEntityIds =>
         val idSet = startingEntityIds.toSet
-        recursiveGetEntityReferenceIds(Down, idSet, idSet)
+        recursiveGetEntityReferenceIds(Down, idSet, Set.empty)
       } flatMap { ids =>
-        unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
+        println(ids)
+
+        val foo = ids.flatMap(_.childrenIds) ++ ids.map(_.parentId)
+
+        unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(foo))
       }
     }
 
@@ -620,9 +644,11 @@ trait EntityComponent {
     def getAllReferringEntities(context: SlickWorkspaceContext, entities: Set[AttributeEntityReference]): ReadAction[Set[AttributeEntityReference]] = {
       lookupEntitiesByNames(context.workspaceId, entities) flatMap { entityRecs =>
         val idSet = entityRecs.map(_.id).toSet
-        recursiveGetEntityReferenceIds(Up, idSet, idSet)
+        recursiveGetEntityReferenceIds(Up, idSet, idSet.map(x => EntityLevelIds(x, Set.empty)))
       } flatMap { ids =>
-        val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(ids))
+        println(ids)
+        val foo = ids.flatMap(_.childrenIds) ++ ids.map(_.parentId)
+        val entityAction = unmarshalEntities(EntityAndAttributesRawSqlQuery.actionForIds(foo))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
     }
