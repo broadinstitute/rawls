@@ -258,7 +258,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val failureStatusUpd = dataAccess.workflowQuery.batchUpdateStatusAndExecutionServiceKey(failures.map(_._1), WorkflowStatuses.Failed, executionServiceKey)
 
         DBIO.seq((successUpdates ++ failureMessages :+ failureStatusUpd):_*)
-      } map { _ => LookForWorkflows }
+      } map { _ => ScheduleNextWorkflowQuery }
     } recoverWith {
       //If any of this fails, set all workflows to failed with whatever message we have.
       case t: Throwable =>
